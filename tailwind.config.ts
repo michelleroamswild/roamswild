@@ -53,11 +53,11 @@ export default {
   			ring: 'hsl(var(--ring))',
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
-			primary: {
-				DEFAULT: 'hsl(var(--primary))',
-				hover: 'hsl(var(--primary-hover))',
-				foreground: 'hsl(var(--primary-foreground))'
-			},
+  			primary: {
+  				DEFAULT: 'hsl(var(--primary))',
+  				hover: 'hsl(var(--primary-hover))',
+  				foreground: 'hsl(var(--primary-foreground))'
+  			},
   			secondary: {
   				DEFAULT: 'hsl(var(--secondary))',
   				foreground: 'hsl(var(--secondary-foreground))'
@@ -166,9 +166,9 @@ export default {
   			'pulse-soft': 'pulse-soft 2s ease-in-out infinite'
   		},
   		boxShadow: {
-  			'card': '0 4px 20px -4px hsl(var(--forest) / 0.1)',
+  			card: '0 4px 20px -4px hsl(var(--forest) / 0.1)',
   			'card-hover': '0 8px 30px -4px hsl(var(--forest) / 0.15)',
-  			'search': '0 8px 40px -8px hsl(var(--forest) / 0.2)'
+  			search: '0 8px 40px -8px hsl(var(--forest) / 0.2)'
   		}
   	}
   },
