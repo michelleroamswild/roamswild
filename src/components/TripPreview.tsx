@@ -77,14 +77,16 @@ export const TripPreview = () => {
           </div>
 
           <div className="flex items-center gap-3 mt-6 pt-6 border-t border-border">
-            <Link to="/route/1" className="flex-1">
+            <Link to="/create-trip" className="flex-1">
               <Button variant="hero" size="lg" className="w-full">
-                Plan This Route
+                Plan Your Own Trip
               </Button>
             </Link>
-            <Button variant="outline" size="lg">
-              Customize
-            </Button>
+            <Link to="/route/1">
+              <Button variant="outline" size="lg">
+                View Demo
+              </Button>
+            </Link>
           </div>
         </div>
       </div>
