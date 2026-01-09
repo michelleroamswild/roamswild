@@ -1,5 +1,6 @@
 import { Route, Clock, Mountain, Tent, Fuel, ArrowRight } from "lucide-react";
 import { Button } from "./ui/button";
+import { Link } from "react-router-dom";
 
 const stops = [
   { name: "Lone Pine Creek Trail", type: "hike", duration: "3h hike" },
@@ -76,9 +77,11 @@ export const TripPreview = () => {
           </div>
 
           <div className="flex items-center gap-3 mt-6 pt-6 border-t border-border">
-            <Button variant="hero" size="lg" className="flex-1">
-              Plan This Route
-            </Button>
+            <Link to="/route/1" className="flex-1">
+              <Button variant="hero" size="lg" className="w-full">
+                Plan This Route
+              </Button>
+            </Link>
             <Button variant="outline" size="lg">
               Customize
             </Button>
