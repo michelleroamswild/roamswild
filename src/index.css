@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap");
 
 @import url("https://fonts.googleapis.com/css2?family=Outfit&display=swap");
 
@@ -35,13 +35,13 @@
 
     --border: 35 20% 85%;
     --input: 35 20% 85%;
-    --ring: 152 45% 25%;
+    --ring: 84 35% 28%;
 
     --radius: 0.75rem;
 
     /* Custom overlanding tokens */
-    --forest: 152 45% 25%;
-    --forest-light: 152 35% 35%;
+    --forest: 84 35% 28%;
+    --forest-light: 84 39% 44%%;
     --sand: 35 35% 85%;
     --sand-dark: 35 25% 75%;
     --terracotta: 20 65% 55%;
@@ -109,17 +109,20 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Outfit', sans-serif;
+    font-family: "Outfit", sans-serif;
   }
 
-  h1, h2, h3, h4 {
-    font-family: 'Space Grotesk', sans-serif;
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: "Space Grotesk", sans-serif;
   }
 }
 
 @layer utilities {
   .topo-pattern {
-    background-image: 
+    background-image:
       repeating-linear-gradient(
         0deg,
         transparent,
@@ -146,19 +149,11 @@
   }
 
   .gradient-card {
-    background: linear-gradient(
-      180deg,
-      hsl(var(--card)) 0%,
-      hsl(var(--sand) / 0.5) 100%
-    );
+    background: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--sand) / 0.5) 100%);
   }
 
   .text-gradient {
-    background: linear-gradient(
-      135deg,
-      hsl(var(--forest)) 0%,
-      hsl(var(--terracotta)) 100%
-    );
+    background: linear-gradient(135deg, hsl(var(--forest)) 0%, hsl(var(--terracotta)) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
