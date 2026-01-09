@@ -2,34 +2,39 @@ import { ArrowLeft, Route, Clock, Mountain, Tent, Fuel, MapPin, Plus, GripVertic
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Link } from "react-router-dom";
+import { RouteMap } from "@/components/RouteMap";
+import { RouteStop } from "@/types/maps";
 
-const routeStops = [
-  { 
+const routeStops: RouteStop[] = [
+  {
     id: 1,
-    name: "Lone Pine Creek Trail", 
-    type: "hike", 
+    name: "Lone Pine Creek Trail",
+    type: "hike",
     duration: "3h hike",
     distance: "0 mi",
     description: "Scenic mountain trail with creek views",
-    elevation: "6,500 ft"
+    elevation: "6,500 ft",
+    coordinates: { lat: 36.6062, lng: -118.0631 }
   },
-  { 
+  {
     id: 2,
-    name: "Mobil Gas Station", 
-    type: "gas", 
+    name: "Mobil Gas Station",
+    type: "gas",
     duration: "15 min",
     distance: "12 mi",
     description: "Last gas before Alabama Hills",
-    elevation: "3,800 ft"
+    elevation: "3,800 ft",
+    coordinates: { lat: 36.5996, lng: -118.0558 }
   },
-  { 
+  {
     id: 3,
-    name: "Alabama Hills BLM", 
-    type: "camp", 
+    name: "Alabama Hills BLM",
+    type: "camp",
     duration: "Overnight",
     distance: "28 mi",
     description: "Free dispersed camping with stunning rock formations",
-    elevation: "4,400 ft"
+    elevation: "4,400 ft",
+    coordinates: { lat: 36.6089, lng: -118.1061 }
   },
 ];
 
@@ -97,22 +102,18 @@ const RouteDetail = () => {
           {/* Map Section */}
           <div className="lg:col-span-3 order-2 lg:order-1">
             <Card className="overflow-hidden h-[400px] lg:h-[calc(100vh-180px)] lg:sticky lg:top-24">
-              <div className="relative w-full h-full bg-sand topo-pattern">
-                {/* Map placeholder with route visualization */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center p-6">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Route className="w-8 h-8 text-primary" />
-                    </div>
-                    <p className="text-muted-foreground font-medium">Interactive Map</p>
-                    <p className="text-sm text-muted-foreground mt-1">Google Maps integration coming soon</p>
-                  </div>
-                </div>
+              <div className="relative w-full h-full">
+                {/* Google Maps with route */}
+                <RouteMap
+                  stops={routeStops}
+                  className="w-full h-full"
+                  showDirections={true}
+                />
 
                 {/* Route info overlay */}
-                <div className="absolute bottom-4 left-4 right-4">
+                <div className="absolute bottom-4 left-4 right-4 z-10">
                   <div className="bg-card/95 backdrop-blur-sm rounded-xl border border-border p-4 shadow-lg">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-4">
                       <div className="flex items-center gap-6">
                         <div className="flex items-center gap-2">
                           <Route className="w-4 h-4 text-terracotta" />
@@ -127,7 +128,17 @@ const RouteDetail = () => {
                           <span className="text-foreground">+4,200 ft</span>
                         </div>
                       </div>
-                      <Button variant="hero" size="sm">
+                      <Button
+                        variant="hero"
+                        size="sm"
+                        onClick={() => {
+                          // Open Google Maps with directions
+                          const waypoints = routeStops.slice(1, -1).map(s => `${s.coordinates.lat},${s.coordinates.lng}`).join('|');
+                          const origin = `${routeStops[0].coordinates.lat},${routeStops[0].coordinates.lng}`;
+                          const dest = `${routeStops[routeStops.length - 1].coordinates.lat},${routeStops[routeStops.length - 1].coordinates.lng}`;
+                          window.open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&waypoints=${waypoints}`, '_blank');
+                        }}
+                      >
                         <Navigation className="w-4 h-4 mr-2" />
                         Start Navigation
                       </Button>

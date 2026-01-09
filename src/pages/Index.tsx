@@ -1,14 +1,20 @@
+import { useState } from "react";
+import { Plus } from "lucide-react";
 import { Header } from "@/components/Header";
 import { SearchBar } from "@/components/SearchBar";
 import { FilterChips } from "@/components/FilterChips";
 import { SavedLocations } from "@/components/SavedLocations";
 import { TripPreview } from "@/components/TripPreview";
+import { TripBuilderPanel } from "@/components/TripBuilderPanel";
+import { Button } from "@/components/ui/button";
 
 const Index = () => {
+  const [tripPanelOpen, setTripPanelOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-background topo-pattern">
       <Header />
-      
+
       <main className="container px-4 md:px-6 py-8 md:py-12">
         {/* Hero Section */}
         <section className="text-center mb-12 animate-fade-in">
@@ -19,9 +25,22 @@ const Index = () => {
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
             Discover trails, find dispersed campsites, and build the perfect overlanding route from your saved locations.
           </p>
-          
+
           <SearchBar />
-          
+
+          {/* Create Trip Button */}
+          <div className="mt-6">
+            <Button
+              variant="hero"
+              size="lg"
+              onClick={() => setTripPanelOpen(true)}
+              className="gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Create New Trip
+            </Button>
+          </div>
+
           <div className="mt-8">
             <p className="text-sm text-muted-foreground mb-4">Filter your search by:</p>
             <FilterChips />
@@ -61,6 +80,9 @@ const Index = () => {
           </div>
         </div>
       </footer>
+
+      {/* Trip Builder Panel */}
+      <TripBuilderPanel open={tripPanelOpen} onOpenChange={setTripPanelOpen} />
     </div>
   );
 };
