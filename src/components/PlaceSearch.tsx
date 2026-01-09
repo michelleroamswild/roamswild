@@ -7,13 +7,15 @@ import { PlaceResult } from '@/types/maps';
 const libraries: ("places")[] = ["places"];
 
 interface PlaceSearchProps {
-  onPlaceSelect: (place: PlaceResult) => void;
+  onPlaceSelect: (place: PlaceResult | google.maps.places.PlaceResult) => void;
   placeholder?: string;
   className?: string;
+  defaultValue?: string;
 }
 
-export function PlaceSearch({ onPlaceSelect, placeholder = "Search for a place...", className }: PlaceSearchProps) {
+export function PlaceSearch({ onPlaceSelect, placeholder = "Search for a place...", className, defaultValue }: PlaceSearchProps) {
   const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
+  const [inputValue, setInputValue] = useState(defaultValue || '');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { isLoaded } = useLoadScript({
@@ -30,21 +32,8 @@ export function PlaceSearch({ onPlaceSelect, placeholder = "Search for a place..
       const place = autocomplete.getPlace();
 
       if (place.geometry?.location && place.place_id) {
-        const result: PlaceResult = {
-          placeId: place.place_id,
-          name: place.name || '',
-          address: place.formatted_address || '',
-          coordinates: {
-            lat: place.geometry.location.lat(),
-            lng: place.geometry.location.lng(),
-          },
-        };
-        onPlaceSelect(result);
-
-        // Clear input after selection
-        if (inputRef.current) {
-          inputRef.current.value = '';
-        }
+        setInputValue(place.name || place.formatted_address || '');
+        onPlaceSelect(place);
       }
     }
   };
@@ -75,6 +64,8 @@ export function PlaceSearch({ onPlaceSelect, placeholder = "Search for a place..
       >
         <Input
           ref={inputRef}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
           placeholder={placeholder}
           className="pl-12 pr-4 h-12 rounded-full bg-card border-border focus:border-primary focus:ring-2 focus:ring-primary/20"
         />

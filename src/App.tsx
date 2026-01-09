@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import RouteDetail from "./pages/RouteDetail";
 import LocationDetail from "./pages/LocationDetail";
 import SavedLocations from "./pages/SavedLocations";
+import CreateTrip from "./pages/CreateTrip";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/route/:id" element={<RouteDetail />} />
           <Route path="/location/:id" element={<LocationDetail />} />
           <Route path="/saved" element={<SavedLocations />} />
+          <Route path="/create-trip" element={<CreateTrip />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
