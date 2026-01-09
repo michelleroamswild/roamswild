@@ -1,98 +1,125 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, MapPin, Plus, X, Compass, Calendar, RotateCcw, Loader2, GripVertical } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Autocomplete } from '@react-google-maps/api';
-import { useTrip } from '@/context/TripContext';
-import { useTripGenerator } from '@/hooks/use-trip-generator';
-import { TripDestination } from '@/types/trip';
+import { useState } from "react";
+import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
+import { ArrowLeft, MapPin, Car, Tent, Camera, Mountain, Compass } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { toast } from "sonner";
+import { PlaceSearch } from "@/components/PlaceSearch";
+
+interface LocationState {
+  startLocation?: {
+    name: string;
+    lat: number;
+    lng: number;
+    placeId: string;
+  };
+}
+
+const CAR_CAPABILITIES = [
+  { id: "4wd", label: "4WD", description: "Four-wheel drive capable" },
+  { id: "2wd", label: "2WD", description: "Two-wheel drive only" },
+  { id: "high-clearance", label: "High Clearance", description: "High ground clearance vehicle" },
+];
+
+const LODGING_OPTIONS = [
+  { id: "dispersed", label: "Dispersed Camping", description: "Free camping on public lands" },
+  { id: "established", label: "Established Camping", description: "Campgrounds with amenities" },
+];
+
+const ACTIVITIES = [
+  { id: "photography", label: "Photography", icon: Camera },
+  { id: "hiking", label: "Hiking", icon: Mountain },
+  { id: "offroading", label: "Offroading", icon: Car },
+];
 
 const CreateTrip = () => {
   const navigate = useNavigate();
-  const { setTripConfig, setGeneratedTrip } = useTrip();
-  const { generateTrip, generating, error } = useTripGenerator();
+  const routerLocation = useLocation();
+  const stateLocation = routerLocation.state as LocationState | null;
 
-  const [tripName, setTripName] = useState('');
-  const [duration, setDuration] = useState(3);
-  const [startLocation, setStartLocation] = useState<TripDestination | null>(null);
-  const [destinations, setDestinations] = useState<TripDestination[]>([]);
-  const [returnToStart, setReturnToStart] = useState(false);
+  // Form state
+  const [startLocation, setStartLocation] = useState<{ name: string; lat: number; lng: number; placeId: string } | null>(
+    stateLocation?.startLocation || null
+  );
+  const [endLocation, setEndLocation] = useState<{ name: string; lat: number; lng: number; placeId: string } | null>(null);
+  const [duration, setDuration] = useState<number[]>([3]);
+  const [useDuration, setUseDuration] = useState(false);
+  const [carCapabilities, setCarCapabilities] = useState<string[]>([]);
+  const [lodging, setLodging] = useState<string>("dispersed");
+  const [activities, setActivities] = useState<string[]>([]);
 
-  const [startAutocomplete, setStartAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-  const [destAutocomplete, setDestAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-
-  const handleStartPlaceChanged = () => {
-    if (startAutocomplete) {
-      const place = startAutocomplete.getPlace();
-      if (place.geometry?.location && place.place_id) {
-        setStartLocation({
-          id: `start-${Date.now()}`,
-          placeId: place.place_id,
-          name: place.name || '',
-          address: place.formatted_address || '',
-          coordinates: {
-            lat: place.geometry.location.lat(),
-            lng: place.geometry.location.lng(),
-          },
-        });
-      }
+  const handleCarCapabilityChange = (capabilityId: string, checked: boolean) => {
+    if (checked) {
+      setCarCapabilities([...carCapabilities, capabilityId]);
+    } else {
+      setCarCapabilities(carCapabilities.filter(id => id !== capabilityId));
     }
   };
 
-  const handleDestPlaceChanged = () => {
-    if (destAutocomplete) {
-      const place = destAutocomplete.getPlace();
-      if (place.geometry?.location && place.place_id) {
-        const newDest: TripDestination = {
-          id: `dest-${Date.now()}`,
-          placeId: place.place_id,
-          name: place.name || '',
-          address: place.formatted_address || '',
-          coordinates: {
-            lat: place.geometry.location.lat(),
-            lng: place.geometry.location.lng(),
-          },
-        };
-        setDestinations([...destinations, newDest]);
-        // Clear the input
-        const input = document.getElementById('dest-input') as HTMLInputElement;
-        if (input) input.value = '';
-      }
+  const handleActivityChange = (activityId: string, checked: boolean) => {
+    if (checked) {
+      setActivities([...activities, activityId]);
+    } else {
+      setActivities(activities.filter(id => id !== activityId));
     }
   };
 
-  const removeDestination = (id: string) => {
-    setDestinations(destinations.filter((d) => d.id !== id));
+  const handleStartLocationSelect = (place: google.maps.places.PlaceResult) => {
+    if (place.geometry?.location && place.place_id) {
+      setStartLocation({
+        name: place.name || place.formatted_address || "Selected Location",
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng(),
+        placeId: place.place_id,
+      });
+    }
   };
 
-  const handleGenerateTrip = async () => {
-    if (!startLocation) return;
+  const handleEndLocationSelect = (place: google.maps.places.PlaceResult) => {
+    if (place.geometry?.location && place.place_id) {
+      setEndLocation({
+        name: place.name || place.formatted_address || "Selected Location",
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng(),
+        placeId: place.place_id,
+      });
+    }
+  };
 
-    const config = {
-      name: tripName || 'My Adventure',
-      duration,
+  const handleCreateTrip = () => {
+    if (!startLocation) {
+      toast.error("Please select a start location");
+      return;
+    }
+    if (!endLocation) {
+      toast.error("Please select an end location");
+      return;
+    }
+
+    const tripData = {
       startLocation,
-      destinations,
-      returnToStart,
+      endLocation,
+      duration: useDuration ? duration[0] : null,
+      carCapabilities,
+      lodging,
+      activities,
     };
 
-    setTripConfig(config);
+    console.log("Trip data:", tripData);
+    toast.success("Trip created!", {
+      description: `${startLocation.name} → ${endLocation.name}`,
+    });
 
-    const trip = await generateTrip(config);
-    if (trip) {
-      setGeneratedTrip(trip);
-      navigate(`/trip/${trip.id}`);
-    }
+    // TODO: Save trip data and navigate to trip detail page
+    navigate("/");
   };
 
-  const canGenerate = startLocation && destinations.length > 0;
-
   return (
-    <div className="min-h-screen bg-background topo-pattern">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
         <div className="container px-4 md:px-6 py-4">
@@ -104,223 +131,194 @@ const CreateTrip = () => {
             </Link>
             <div>
               <h1 className="text-xl font-display font-bold text-foreground">Create Trip</h1>
-              <p className="text-sm text-muted-foreground">Plan your next adventure</p>
+              <p className="text-sm text-muted-foreground">Plan your adventure</p>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="container px-4 md:px-6 py-8 max-w-2xl mx-auto">
+      <main className="container px-4 md:px-6 py-6 max-w-2xl">
         <div className="space-y-6">
-          {/* Trip Name */}
+          {/* Start & End Locations */}
           <Card>
-            <CardContent className="p-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Compass className="w-5 h-5 text-primary" />
+                Route
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="trip-name">Trip Name</Label>
-                <Input
-                  id="trip-name"
-                  placeholder="e.g., Eastern Sierra Adventure"
-                  value={tripName}
-                  onChange={(e) => setTripName(e.target.value)}
+                <Label htmlFor="start-location">Start Location</Label>
+                <PlaceSearch
+                  onPlaceSelect={handleStartLocationSelect}
+                  placeholder="Search for start location..."
+                  defaultValue={startLocation?.name}
                 />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Duration */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-primary" />
-                  <Label>Trip Duration</Label>
-                </div>
-                <div className="flex items-center gap-4">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setDuration(Math.max(1, duration - 1))}
-                    disabled={duration <= 1}
-                  >
-                    -
-                  </Button>
-                  <div className="flex-1 text-center">
-                    <span className="text-3xl font-bold text-foreground">{duration}</span>
-                    <span className="text-muted-foreground ml-2">
-                      {duration === 1 ? 'day' : 'days'}
-                    </span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setDuration(Math.min(14, duration + 1))}
-                    disabled={duration >= 14}
-                  >
-                    +
-                  </Button>
-                </div>
-                <p className="text-sm text-muted-foreground text-center">
-                  {duration === 1
-                    ? 'A quick day trip'
-                    : duration <= 3
-                    ? 'A weekend getaway'
-                    : duration <= 7
-                    ? 'A week-long adventure'
-                    : 'An extended expedition'}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Start Location */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Compass className="w-5 h-5 text-primary" />
-                  <Label>Starting Point</Label>
-                </div>
-                {startLocation ? (
-                  <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
-                    <div className="flex items-center justify-center w-10 h-10 bg-primary/10 rounded-lg">
-                      <MapPin className="w-5 h-5 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-foreground truncate">{startLocation.name}</p>
-                      <p className="text-sm text-muted-foreground truncate">{startLocation.address}</p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="flex-shrink-0"
-                      onClick={() => setStartLocation(null)}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <Autocomplete
-                    onLoad={setStartAutocomplete}
-                    onPlaceChanged={handleStartPlaceChanged}
-                  >
-                    <Input placeholder="Search for starting location..." />
-                  </Autocomplete>
+                {startLocation && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    {startLocation.name}
+                  </p>
                 )}
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Destinations */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-5 h-5 text-terracotta" />
-                    <Label>Destinations</Label>
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {destinations.length} {destinations.length === 1 ? 'stop' : 'stops'}
-                  </span>
-                </div>
-
-                {/* Destination List */}
-                {destinations.length > 0 && (
-                  <div className="space-y-2">
-                    {destinations.map((dest, index) => (
-                      <div
-                        key={dest.id}
-                        className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg group"
-                      >
-                        <GripVertical className="w-4 h-4 text-muted-foreground/50 cursor-grab" />
-                        <div className="flex items-center justify-center w-8 h-8 bg-terracotta/10 rounded-full">
-                          <span className="text-sm font-medium text-terracotta">{index + 1}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-foreground truncate">{dest.name}</p>
-                          <p className="text-sm text-muted-foreground truncate">{dest.address}</p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => removeDestination(dest.id)}
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Add Destination */}
-                <Autocomplete onLoad={setDestAutocomplete} onPlaceChanged={handleDestPlaceChanged}>
-                  <div className="relative">
-                    <Input id="dest-input" placeholder="Add a destination..." className="pr-10" />
-                    <Plus className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  </div>
-                </Autocomplete>
-
-                {destinations.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Add at least one destination to generate your trip
+              <div className="space-y-2">
+                <Label htmlFor="end-location">End Location</Label>
+                <PlaceSearch
+                  onPlaceSelect={handleEndLocationSelect}
+                  placeholder="Search for destination..."
+                />
+                {endLocation && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    {endLocation.name}
                   </p>
                 )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Options */}
+          {/* Duration Slider */}
           <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <RotateCcw className="w-5 h-5 text-muted-foreground" />
-                  <div>
-                    <Label>Return to Start</Label>
-                    <p className="text-sm text-muted-foreground">
-                      End the trip back where you started
-                    </p>
-                  </div>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center justify-between">
+                <span>Trip Duration</span>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="use-duration"
+                    checked={useDuration}
+                    onCheckedChange={(checked) => setUseDuration(checked as boolean)}
+                  />
+                  <Label htmlFor="use-duration" className="text-sm font-normal cursor-pointer">
+                    Set duration
+                  </Label>
                 </div>
-                <Switch checked={returnToStart} onCheckedChange={setReturnToStart} />
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className={useDuration ? "" : "opacity-50 pointer-events-none"}>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-sm text-muted-foreground">Days</span>
+                  <span className="text-2xl font-bold text-foreground">{duration[0]}</span>
+                </div>
+                <Slider
+                  value={duration}
+                  onValueChange={setDuration}
+                  min={1}
+                  max={14}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                  <span>1 day</span>
+                  <span>14 days</span>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Error */}
-          {error && (
-            <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
-          )}
+          {/* Car Capabilities */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Car className="w-5 h-5 text-primary" />
+                Vehicle Capabilities
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3">
+                {CAR_CAPABILITIES.map((capability) => (
+                  <div
+                    key={capability.id}
+                    className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                  >
+                    <Checkbox
+                      id={capability.id}
+                      checked={carCapabilities.includes(capability.id)}
+                      onCheckedChange={(checked) => handleCarCapabilityChange(capability.id, checked as boolean)}
+                    />
+                    <div className="space-y-0.5">
+                      <Label htmlFor={capability.id} className="cursor-pointer font-medium">
+                        {capability.label}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">{capability.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
-          {/* Generate Button */}
+          {/* Lodging Options */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Tent className="w-5 h-5 text-primary" />
+                Lodging Preference
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup value={lodging} onValueChange={setLodging} className="grid gap-3">
+                {LODGING_OPTIONS.map((option) => (
+                  <div
+                    key={option.id}
+                    className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                  >
+                    <RadioGroupItem value={option.id} id={option.id} className="mt-0.5" />
+                    <div className="space-y-0.5">
+                      <Label htmlFor={option.id} className="cursor-pointer font-medium">
+                        {option.label}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">{option.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </RadioGroup>
+            </CardContent>
+          </Card>
+
+          {/* Activities */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Camera className="w-5 h-5 text-primary" />
+                Activities
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {ACTIVITIES.map((activity) => {
+                  const Icon = activity.icon;
+                  const isSelected = activities.includes(activity.id);
+                  return (
+                    <button
+                      key={activity.id}
+                      type="button"
+                      onClick={() => handleActivityChange(activity.id, !isSelected)}
+                      className={`flex flex-col items-center gap-2 p-4 rounded-lg border transition-all ${
+                        isSelected
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:bg-muted/50 text-foreground"
+                      }`}
+                    >
+                      <Icon className="w-6 h-6" />
+                      <span className="text-sm font-medium">{activity.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Create Button */}
           <Button
             variant="hero"
             size="lg"
             className="w-full"
-            onClick={handleGenerateTrip}
-            disabled={!canGenerate || generating}
+            onClick={handleCreateTrip}
           >
-            {generating ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Generating Trip...
-              </>
-            ) : (
-              <>
-                <Compass className="w-5 h-5 mr-2" />
-                Generate Trip
-              </>
-            )}
+            Create Trip
           </Button>
-
-          {!canGenerate && (
-            <p className="text-sm text-muted-foreground text-center">
-              Add a starting point and at least one destination to continue
-            </p>
-          )}
         </div>
       </main>
     </div>

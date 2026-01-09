@@ -4,21 +4,20 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SavedLocationsProvider } from "@/context/SavedLocationsContext";
-import { TripProvider } from "@/context/TripContext";
+import { GoogleMapsProvider } from "@/components/GoogleMapsProvider";
 import Index from "./pages/Index";
 import RouteDetail from "./pages/RouteDetail";
 import LocationDetail from "./pages/LocationDetail";
 import SavedLocations from "./pages/SavedLocations";
 import CreateTrip from "./pages/CreateTrip";
-import TripDetail from "./pages/TripDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <SavedLocationsProvider>
-      <TripProvider>
+    <GoogleMapsProvider>
+      <SavedLocationsProvider>
         <TooltipProvider>
           <Toaster />
           <Sonner />
@@ -29,14 +28,13 @@ const App = () => (
               <Route path="/location/:id" element={<LocationDetail />} />
               <Route path="/saved" element={<SavedLocations />} />
               <Route path="/create-trip" element={<CreateTrip />} />
-              <Route path="/trip/:id" element={<TripDetail />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
         </TooltipProvider>
-      </TripProvider>
-    </SavedLocationsProvider>
+      </SavedLocationsProvider>
+    </GoogleMapsProvider>
   </QueryClientProvider>
 );
 

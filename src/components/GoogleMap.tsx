@@ -1,7 +1,6 @@
-import { useLoadScript, GoogleMap as GoogleMapComponent } from '@react-google-maps/api';
+import { GoogleMap as GoogleMapComponent } from '@react-google-maps/api';
 import { ReactNode } from 'react';
-
-const libraries: ("places" | "geometry" | "drawing")[] = ["places"];
+import { useGoogleMaps } from './GoogleMapsProvider';
 
 // Earth-tone styled map to match the app theme
 const mapStyles = [
@@ -52,10 +51,7 @@ interface GoogleMapProps {
 }
 
 export function GoogleMap({ center, zoom = 10, children, className, onClick, onLoad }: GoogleMapProps) {
-  const { isLoaded, loadError } = useLoadScript({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
-    libraries
-  });
+  const { isLoaded, loadError } = useGoogleMaps();
 
   if (loadError) {
     return (

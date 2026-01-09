@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { useParams, Link, useLocation } from "react-router-dom";
-import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass, Plus, Trash2, Footprints } from "lucide-react";
+import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
+import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass, Plus, Trash2, Footprints, Route } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
@@ -47,6 +47,7 @@ const BOOT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
 
 const LocationDetail = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const routerLocation = useLocation();
   const { locations, addLocation, removeLocation, isLocationSaved } = useSavedLocations();
   const [selectedPlace, setSelectedPlace] = useState<NearbyPlace | null>(null);
@@ -182,6 +183,19 @@ const LocationDetail = () => {
     });
   };
 
+  const handleCreateTrip = () => {
+    navigate('/create-trip', {
+      state: {
+        startLocation: {
+          name: location.name,
+          lat: location.lat,
+          lng: location.lng,
+          placeId: location.placeId,
+        },
+      },
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -200,6 +214,24 @@ const LocationDetail = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCreateTrip}
+                className="hidden sm:flex"
+              >
+                <Route className="w-4 h-4 mr-2" />
+                Create Trip
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full sm:hidden"
+                onClick={handleCreateTrip}
+                title="Create Trip"
+              >
+                <Route className="w-5 h-5" />
+              </Button>
               {isSaved ? (
                 <Button
                   variant="ghost"
