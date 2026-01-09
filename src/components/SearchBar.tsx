@@ -1,23 +1,14 @@
-import { Search, MapPin, Plus, X } from "lucide-react";
+import { Search, MapPin } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useLoadScript, Autocomplete } from "@react-google-maps/api";
-import { PlaceResult } from "@/types/maps";
-import { useSavedLocations } from "@/context/SavedLocationsContext";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 
 const libraries: ("places")[] = ["places"];
 
-interface SearchBarProps {
-  onPlaceSelect?: (place: PlaceResult) => void;
-}
-
-export const SearchBar = ({ onPlaceSelect }: SearchBarProps) => {
+export const SearchBar = () => {
   const [isFocused, setIsFocused] = useState(false);
   const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-  const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
-
-  const { addLocation, isLocationSaved } = useSavedLocations();
+  const navigate = useNavigate();
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
@@ -33,55 +24,19 @@ export const SearchBar = ({ onPlaceSelect }: SearchBarProps) => {
       const place = autocomplete.getPlace();
 
       if (place.geometry?.location && place.place_id) {
-        const result: PlaceResult = {
-          placeId: place.place_id,
-          name: place.name || "",
-          address: place.formatted_address || "",
-          coordinates: {
+        // Navigate to location detail with place data in state
+        navigate(`/location/${place.place_id}`, {
+          state: {
+            placeId: place.place_id,
+            name: place.name || "",
+            address: place.formatted_address || "",
             lat: place.geometry.location.lat(),
             lng: place.geometry.location.lng(),
-          },
-        };
-
-        setSelectedPlace(result);
-
-        if (onPlaceSelect) {
-          onPlaceSelect(result);
-        }
+          }
+        });
       }
     }
   };
-
-  const handleSaveLocation = () => {
-    if (!selectedPlace) return;
-
-    const added = addLocation({
-      placeId: selectedPlace.placeId,
-      name: selectedPlace.name,
-      address: selectedPlace.address,
-      type: "Saved Place",
-      lat: selectedPlace.coordinates.lat,
-      lng: selectedPlace.coordinates.lng,
-    });
-
-    if (added) {
-      toast.success(`Saved ${selectedPlace.name}`, {
-        description: "Added to your saved locations",
-      });
-    } else {
-      toast.info("Already saved", {
-        description: "This location is already in your saved places",
-      });
-    }
-
-    setSelectedPlace(null);
-  };
-
-  const handleDismiss = () => {
-    setSelectedPlace(null);
-  };
-
-  const alreadySaved = selectedPlace ? isLocationSaved(selectedPlace.placeId) : false;
 
   return (
     <div className="relative w-full max-w-2xl mx-auto">
@@ -130,43 +85,6 @@ export const SearchBar = ({ onPlaceSelect }: SearchBarProps) => {
           </button>
         </div>
       </div>
-
-      {/* Selected Place Popup */}
-      {selectedPlace && (
-        <div className="absolute top-full left-0 right-0 mt-3 bg-card border border-border rounded-xl shadow-lg p-4 z-50 animate-fade-in">
-          <button
-            onClick={handleDismiss}
-            className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
-          >
-            <X className="w-4 h-4" />
-          </button>
-
-          <div className="flex items-start gap-3 pr-6">
-            <div className="flex items-center justify-center w-10 h-10 bg-primary/10 rounded-lg flex-shrink-0">
-              <MapPin className="w-5 h-5 text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-foreground">{selectedPlace.name}</h3>
-              <p className="text-sm text-muted-foreground mt-0.5 truncate">
-                {selectedPlace.address}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-2 mt-4">
-            <Button
-              onClick={handleSaveLocation}
-              variant={alreadySaved ? "outline" : "hero"}
-              size="sm"
-              className="flex-1 gap-2"
-              disabled={alreadySaved}
-            >
-              <Plus className="w-4 h-4" />
-              {alreadySaved ? "Already Saved" : "Save Location"}
-            </Button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

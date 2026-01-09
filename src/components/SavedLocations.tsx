@@ -42,8 +42,12 @@ export const SavedLocations = () => {
     });
   };
 
-  const handleLocationClick = (id: string) => {
-    navigate(`/location/${id}`);
+  const handleLocationClick = (placeId: string) => {
+    navigate(`/location/${placeId}`);
+  };
+
+  const handleViewAll = () => {
+    navigate('/saved');
   };
 
   // Combine user-saved locations with defaults if no saved locations
@@ -71,8 +75,8 @@ export const SavedLocations = () => {
             }
           </p>
         </div>
-        {locations.length > 4 && (
-          <Button variant="ghost" className="text-primary font-medium">
+        {locations.length > 0 && (
+          <Button variant="ghost" className="text-primary font-medium" onClick={handleViewAll}>
             View All
             <ChevronRight className="w-4 h-4" />
           </Button>
@@ -83,7 +87,7 @@ export const SavedLocations = () => {
         {displayLocations.slice(0, 4).map((location, index) => (
           <div
             key={location.id}
-            onClick={() => isUserLocation && handleLocationClick(location.id)}
+            onClick={() => isUserLocation && handleLocationClick(location.placeId)}
             className="group flex items-center gap-4 p-4 bg-card rounded-xl border border-border hover:border-primary/30 hover:shadow-card transition-all duration-300 cursor-pointer animate-fade-in"
             style={{ animationDelay: `${index * 100}ms` }}
           >

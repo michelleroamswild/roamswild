@@ -1,14 +1,24 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass } from "lucide-react";
+import { useParams, Link, useLocation } from "react-router-dom";
+import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass, Plus, Trash2, Footprints } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
 import { GoogleMap } from "@/components/GoogleMap";
-import { Marker, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
+import { Marker, InfoWindow } from "@react-google-maps/api";
 import { useNearbyPlaces, GoogleSavedPlace } from "@/hooks/use-nearby-places";
+import { useNearbyHikes, HikeResult } from "@/hooks/use-nearby-hikes";
+import { toast } from "sonner";
 
 type NearbyPlace = GoogleSavedPlace & { distance: number };
+
+interface LocationState {
+  placeId: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+}
 
 // Helper to get weather message based on elevation in feet
 function getElevationMessage(elevationFeet: number): string | null {
@@ -18,21 +28,68 @@ function getElevationMessage(elevationFeet: number): string | null {
   return null;
 }
 
+// SVG icons for map markers
+const CAR_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#c9a227" stroke="#ffffff" stroke-width="1.5">
+  <circle cx="12" cy="12" r="11" fill="#c9a227"/>
+  <path d="M7 13l1.5-4.5h7L17 13M7 13h10M7 13v3h2v-2h6v2h2v-3" stroke="#ffffff" stroke-width="1.5" fill="none" transform="translate(0, 1)"/>
+  <circle cx="8.5" cy="15" r="1" fill="#ffffff"/>
+  <circle cx="15.5" cy="15" r="1" fill="#ffffff"/>
+</svg>
+`)}`;
+
+const BOOT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#10b981" stroke="#ffffff" stroke-width="1.5">
+  <circle cx="12" cy="12" r="11" fill="#10b981"/>
+  <path d="M8 7v6l-2 2v2h10v-2l-1-1v-3h-3V8l-1-1H8z" stroke="#ffffff" stroke-width="1.2" fill="none" transform="translate(1, 0)"/>
+</svg>
+`)}`;
+
 const LocationDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const { locations } = useSavedLocations();
+  const routerLocation = useLocation();
+  const { locations, addLocation, removeLocation, isLocationSaved } = useSavedLocations();
   const [selectedPlace, setSelectedPlace] = useState<NearbyPlace | null>(null);
+  const [selectedHike, setSelectedHike] = useState<HikeResult | null>(null);
   const [selectedPlaceElevation, setSelectedPlaceElevation] = useState<number | null>(null);
   const [elevation, setElevation] = useState<number | null>(null);
   const [mapsLoaded, setMapsLoaded] = useState(false);
 
-  const location = locations.find(l => l.id === id);
+  // Get location from router state (search) or from saved locations
+  const stateLocation = routerLocation.state as LocationState | null;
+  const savedLocation = locations.find(l => l.placeId === id || l.id === id);
+
+  // Combine into a unified location object
+  const location = savedLocation ? {
+    placeId: savedLocation.placeId,
+    name: savedLocation.name,
+    address: savedLocation.address,
+    type: savedLocation.type,
+    lat: savedLocation.lat,
+    lng: savedLocation.lng,
+  } : stateLocation ? {
+    placeId: stateLocation.placeId,
+    name: stateLocation.name,
+    address: stateLocation.address,
+    type: "Place",
+    lat: stateLocation.lat,
+    lng: stateLocation.lng,
+  } : null;
+
+  const isSaved = location ? isLocationSaved(location.placeId) : false;
 
   // Get nearby places from Google Takeout data (50 mile radius)
   const { nearbyPlaces, loading: nearbyLoading } = useNearbyPlaces(
     location?.lat ?? 0,
     location?.lng ?? 0,
     50
+  );
+
+  // Get nearby hikes from Google Places and Hiking Project
+  const { hikes, loading: hikesLoading } = useNearbyHikes(
+    location?.lat ?? 0,
+    location?.lng ?? 0,
+    30
   );
 
   // Fetch elevation when Google Maps is loaded
@@ -97,6 +154,34 @@ const LocationDetail = () => {
     );
   };
 
+  const handleSaveLocation = () => {
+    if (!location) return;
+
+    const added = addLocation({
+      placeId: location.placeId,
+      name: location.name,
+      address: location.address,
+      type: location.type,
+      lat: location.lat,
+      lng: location.lng,
+    });
+
+    if (added) {
+      toast.success(`Saved ${location.name}`, {
+        description: "Added to your saved locations",
+      });
+    }
+  };
+
+  const handleRemoveLocation = () => {
+    if (!savedLocation) return;
+
+    removeLocation(savedLocation.id);
+    toast.success(`Removed ${location.name}`, {
+      description: "Removed from saved locations",
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -115,9 +200,27 @@ const LocationDetail = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <Star className="w-5 h-5 text-terracotta fill-terracotta" />
-              </Button>
+              {isSaved ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full"
+                  onClick={handleRemoveLocation}
+                  title="Remove from favorites"
+                >
+                  <Star className="w-5 h-5 text-terracotta fill-terracotta" />
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full"
+                  onClick={handleSaveLocation}
+                  title="Add to favorites"
+                >
+                  <Star className="w-5 h-5" />
+                </Button>
+              )}
               <Button variant="ghost" size="icon" className="rounded-full">
                 <Share2 className="w-5 h-5" />
               </Button>
@@ -150,21 +253,38 @@ const LocationDetail = () => {
                       scale: 12,
                     }}
                   />
-                  {/* Nearby saved places markers */}
+                  {/* Nearby camp spots markers (car icon) */}
                   {nearbyPlaces.map((place) => (
                     <Marker
                       key={place.id}
                       position={{ lat: place.lat, lng: place.lng }}
                       title={`${place.name} (${place.distance.toFixed(1)} mi)`}
                       icon={{
-                        path: google.maps.SymbolPath.CIRCLE,
-                        fillColor: '#c9a227',
-                        fillOpacity: 0.9,
-                        strokeColor: '#ffffff',
-                        strokeWeight: 2,
-                        scale: 8,
+                        url: CAR_ICON_SVG,
+                        scaledSize: new google.maps.Size(28, 28),
+                        anchor: new google.maps.Point(14, 14),
                       }}
-                      onClick={() => setSelectedPlace(place)}
+                      onClick={() => {
+                        setSelectedPlace(place);
+                        setSelectedHike(null);
+                      }}
+                    />
+                  ))}
+                  {/* Nearby hikes markers (boot icon) */}
+                  {hikes.map((hike) => (
+                    <Marker
+                      key={hike.id}
+                      position={{ lat: hike.lat, lng: hike.lng }}
+                      title={hike.name}
+                      icon={{
+                        url: BOOT_ICON_SVG,
+                        scaledSize: new google.maps.Size(28, 28),
+                        anchor: new google.maps.Point(14, 14),
+                      }}
+                      onClick={() => {
+                        setSelectedHike(hike);
+                        setSelectedPlace(null);
+                      }}
                     />
                   ))}
                   {/* Info popup for selected place */}
@@ -215,6 +335,55 @@ const LocationDetail = () => {
                             onClick={() => {
                               window.open(
                                 `https://www.google.com/maps/search/?api=1&query=${selectedPlace.lat},${selectedPlace.lng}`,
+                                '_blank'
+                              );
+                            }}
+                            className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-100 transition-colors"
+                          >
+                            View
+                          </button>
+                        </div>
+                      </div>
+                    </InfoWindow>
+                  )}
+                  {/* Info popup for selected hike */}
+                  {selectedHike && (
+                    <InfoWindow
+                      position={{ lat: selectedHike.lat, lng: selectedHike.lng }}
+                      onCloseClick={() => setSelectedHike(null)}
+                    >
+                      <div className="p-1 min-w-[200px]">
+                        <h4 className="font-semibold text-gray-900 text-base mb-1">
+                          {selectedHike.name}
+                        </h4>
+                        {selectedHike.rating && (
+                          <div className="flex items-center gap-1 text-sm text-gray-600 mb-2">
+                            <span className="text-amber-500">★</span>
+                            <span>{selectedHike.rating.toFixed(1)}</span>
+                            {selectedHike.reviewCount && (
+                              <span className="text-gray-400">({selectedHike.reviewCount})</span>
+                            )}
+                          </div>
+                        )}
+                        {selectedHike.location && (
+                          <p className="text-gray-500 text-sm mb-3">{selectedHike.location}</p>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              window.open(
+                                `https://www.google.com/maps/dir/?api=1&destination=${selectedHike.lat},${selectedHike.lng}`,
+                                '_blank'
+                              );
+                            }}
+                            className="flex-1 px-3 py-1.5 bg-emerald-600 text-white text-sm rounded hover:bg-emerald-700 transition-colors"
+                          >
+                            Directions
+                          </button>
+                          <button
+                            onClick={() => {
+                              window.open(
+                                `https://www.google.com/maps/search/?api=1&query=${selectedHike.lat},${selectedHike.lng}`,
                                 '_blank'
                               );
                             }}
@@ -368,6 +537,68 @@ const LocationDetail = () => {
                   <div className="text-center py-4 text-muted-foreground">
                     <Compass className="w-8 h-8 mx-auto mb-2 opacity-30" />
                     <p>No camp spots within 50 miles</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Nearby Hikes */}
+            <Card>
+              <CardContent className="p-6">
+                <h3 className="text-lg font-display font-semibold text-foreground mb-4">
+                  Nearby Hikes
+                </h3>
+                {hikesLoading ? (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <p>Finding nearby trails...</p>
+                  </div>
+                ) : hikes.length > 0 ? (
+                  <div className="space-y-3">
+                    {hikes.slice(0, 5).map((hike) => (
+                      <div
+                        key={hike.id}
+                        className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors cursor-pointer"
+                        onClick={() => {
+                          window.open(
+                            `https://www.google.com/maps/search/?api=1&query=${hike.lat},${hike.lng}`,
+                            '_blank'
+                          );
+                        }}
+                      >
+                        <div className="flex items-center justify-center w-10 h-10 bg-emerald-500/10 rounded-lg flex-shrink-0">
+                          <Footprints className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-foreground truncate">
+                            {hike.name}
+                          </p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            {hike.rating ? (
+                              <span className="flex items-center gap-1">
+                                <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                                {hike.rating.toFixed(1)}
+                                {hike.reviewCount && (
+                                  <span className="text-xs">({hike.reviewCount})</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span>{hike.location}</span>
+                            )}
+                          </div>
+                        </div>
+                        <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      </div>
+                    ))}
+                    {hikes.length > 5 && (
+                      <p className="text-sm text-muted-foreground text-center pt-2">
+                        +{hikes.length - 5} more hikes nearby
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <Footprints className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p>No hikes found within 30 miles</p>
                   </div>
                 )}
               </CardContent>
