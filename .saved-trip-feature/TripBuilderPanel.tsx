@@ -14,7 +14,8 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { useLoadScript, Autocomplete } from '@react-google-maps/api';
+import { Autocomplete } from '@react-google-maps/api';
+import { useGoogleMaps } from '@/components/GoogleMapsProvider';
 import { MapPin, Plus, X, Loader2 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -25,8 +26,6 @@ import { AmenityPicker } from './AmenityPicker';
 import { useCreateTrip, useAddStop, useRemoveStop, useReorderStops } from '@/hooks/use-trip-store';
 import { TripStop, StopType } from '@/types/trip';
 import { toast } from 'sonner';
-
-const libraries: ("places")[] = ["places"];
 
 interface TripBuilderPanelProps {
   open: boolean;
@@ -40,10 +39,7 @@ export function TripBuilderPanel({ open, onOpenChange }: TripBuilderPanelProps) 
   const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
   const [searchingAmenity, setSearchingAmenity] = useState<{ type: StopType; query: string } | null>(null);
 
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
-    libraries,
-  });
+  const { isLoaded } = useGoogleMaps();
 
   const createTrip = useCreateTrip();
   const addStop = useAddStop();

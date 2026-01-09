@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useLoadScript, Autocomplete } from '@react-google-maps/api';
 import { MapPin, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';

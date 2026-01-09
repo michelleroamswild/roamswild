@@ -48,9 +48,10 @@ interface GoogleMapProps {
   children?: ReactNode;
   className?: string;
   onClick?: (e: google.maps.MapMouseEvent) => void;
+  onLoad?: (map: google.maps.Map) => void;
 }
 
-export function GoogleMap({ center, zoom = 10, children, className, onClick }: GoogleMapProps) {
+export function GoogleMap({ center, zoom = 10, children, className, onClick, onLoad }: GoogleMapProps) {
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
     libraries
@@ -86,6 +87,7 @@ export function GoogleMap({ center, zoom = 10, children, className, onClick }: G
         fullscreenControl: true,
       }}
       onClick={onClick}
+      onLoad={onLoad}
     >
       {children}
     </GoogleMapComponent>

@@ -1,16 +1,10 @@
-import { useState } from "react";
-import { Plus } from "lucide-react";
 import { Header } from "@/components/Header";
 import { SearchBar } from "@/components/SearchBar";
 import { FilterChips } from "@/components/FilterChips";
 import { SavedLocations } from "@/components/SavedLocations";
 import { TripPreview } from "@/components/TripPreview";
-import { TripBuilderPanel } from "@/components/TripBuilderPanel";
-import { Button } from "@/components/ui/button";
 
 const Index = () => {
-  const [tripPanelOpen, setTripPanelOpen] = useState(false);
-
   return (
     <div className="min-h-screen bg-background topo-pattern">
       <Header />
@@ -27,19 +21,6 @@ const Index = () => {
           </p>
 
           <SearchBar />
-
-          {/* Create Trip Button */}
-          <div className="mt-6">
-            <Button
-              variant="hero"
-              size="lg"
-              onClick={() => setTripPanelOpen(true)}
-              className="gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              Create New Trip
-            </Button>
-          </div>
 
           <div className="mt-8">
             <p className="text-sm text-muted-foreground mb-4">Filter your search by:</p>
@@ -80,9 +61,6 @@ const Index = () => {
           </div>
         </div>
       </footer>
-
-      {/* Trip Builder Panel */}
-      <TripBuilderPanel open={tripPanelOpen} onOpenChange={setTripPanelOpen} />
     </div>
   );
 };
