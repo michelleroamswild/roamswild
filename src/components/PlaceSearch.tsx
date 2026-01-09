@@ -1,10 +1,9 @@
 import { useRef, useState } from 'react';
-import { useLoadScript, Autocomplete } from '@react-google-maps/api';
+import { Autocomplete } from '@react-google-maps/api';
 import { MapPin, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { PlaceResult } from '@/types/maps';
-
-const libraries: ("places")[] = ["places"];
+import { useGoogleMaps } from './GoogleMapsProvider';
 
 interface PlaceSearchProps {
   onPlaceSelect: (place: PlaceResult | google.maps.places.PlaceResult) => void;
@@ -17,11 +16,8 @@ export function PlaceSearch({ onPlaceSelect, placeholder = "Search for a place..
   const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
   const [inputValue, setInputValue] = useState(defaultValue || '');
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
-    libraries
-  });
+  
+  const { isLoaded } = useGoogleMaps();
 
   const onLoad = (autocompleteInstance: google.maps.places.Autocomplete) => {
     setAutocomplete(autocompleteInstance);
