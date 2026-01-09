@@ -17,8 +17,17 @@
     --popover: 40 25% 97%;
     --popover-foreground: 150 25% 15%;
 
+<<<<<<< Updated upstream
     --primary: 84 35% 28%;
     --primary-hover: 82 61% 15%;
+=======
+<<<<<<< HEAD
+    --primary: 84 59% 15%;
+=======
+    --primary: 84 35% 28%;
+    --primary-hover: 82 61% 15%;
+>>>>>>> 88bef9ac0c9b325659f4056aba29cd1e06b25a0f
+>>>>>>> Stashed changes
     --primary-foreground: 40 25% 97%;
 
     --secondary: 51 37% 89%;
@@ -35,13 +44,13 @@
 
     --border: 35 20% 85%;
     --input: 35 20% 85%;
-    --ring: 152 45% 25%;
+    --ring: 84 59% 15%;
 
     --radius: 0.75rem;
 
     /* Custom overlanding tokens */
-    --forest: 152 45% 25%;
-    --forest-light: 152 35% 35%;
+    --forest: 84 59% 15%;
+    --forest-light: 84 39% 44%;
     --sand: 35 35% 85%;
     --sand-dark: 35 25% 75%;
     --terracotta: 20 65% 55%;
@@ -91,7 +100,15 @@
     --ring: 152 45% 45%;
 
     --forest: 152 45% 45%;
+<<<<<<< Updated upstream
     --forest-light: 184 39% 44%;
+=======
+<<<<<<< HEAD
+    --forest-light: 84 39% 44%;
+=======
+    --forest-light: 184 39% 44%;
+>>>>>>> 88bef9ac0c9b325659f4056aba29cd1e06b25a0f
+>>>>>>> Stashed changes
     --sand: 35 20% 25%;
     --sand-dark: 35 15% 20%;
     --terracotta: 20 65% 55%;
