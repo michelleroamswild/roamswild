@@ -43,7 +43,7 @@ const Index = () => {
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-bold text-white mb-4">
               Plan Your Next
               <span
-                className={`block mt-1 transition-all duration-300 text-amber-400 ${
+                className={`text-gradient-light block mt-1 transition-all duration-300 ${
                   isAnimating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
                 }`}
               >
