@@ -1,11 +1,37 @@
+import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { SearchBar } from "@/components/SearchBar";
 import { FilterChips } from "@/components/FilterChips";
 import { SavedLocations } from "@/components/SavedLocations";
-import { TripPreview } from "@/components/TripPreview";
 import { Suggestions } from "@/components/Suggestions";
 
+const rotatingWords = [
+  "Adventure",
+  "Road Trip",
+  "Camping Trip",
+  "Photo Adventure",
+  "Offroad Trip",
+  "Guys Trip",
+  "Ladies Weekend",
+  "Overlanding Expedition",
+];
+
 const Index = () => {
+  const [currentWordIndex, setCurrentWordIndex] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsAnimating(true);
+      setTimeout(() => {
+        setCurrentWordIndex((prev) => (prev + 1) % rotatingWords.length);
+        setIsAnimating(false);
+      }, 300);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="min-h-screen bg-background topo-pattern">
       <Header />
@@ -15,7 +41,13 @@ const Index = () => {
         <section className="text-center mb-12 animate-fade-in">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-bold text-foreground mb-4">
             Plan Your Next
-            <span className="text-gradient block mt-1">Adventure</span>
+            <span
+              className={`text-gradient block mt-1 transition-all duration-300 ${
+                isAnimating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
+              }`}
+            >
+              {rotatingWords[currentWordIndex]}
+            </span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
             Discover trails, find dispersed campsites, and build the perfect overlanding route from your saved locations.
@@ -23,10 +55,12 @@ const Index = () => {
 
           <SearchBar />
 
+          {/* TODO: Re-enable filters when functionality is implemented
           <div className="mt-8">
             <p className="text-sm text-muted-foreground mb-4">Filter your search by:</p>
             <FilterChips />
           </div>
+          */}
         </section>
 
         {/* Divider */}
@@ -44,9 +78,6 @@ const Index = () => {
         <div className="mb-12">
           <Suggestions />
         </div>
-
-        {/* Trip Preview */}
-        <TripPreview />
       </main>
 
       {/* Footer */}

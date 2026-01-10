@@ -8,6 +8,7 @@ export interface PhotoHotspot {
   photoCount: number;
   woeid?: string; // Flickr's "Where On Earth ID"
   placeUrl?: string;
+  samplePhotoUrl?: string; // URL to a sample photo from this hotspot
 }
 
 interface FlickrPlace {
@@ -44,6 +45,8 @@ async function searchPhotoHotspots(
     return [];
   }
 
+  console.log('Searching Flickr for photo hotspots at:', { lat, lng, radiusKm });
+
   try {
     // Use flickr.places.findByLatLon to find nearby places
     const placesUrl = new URL(FLICKR_API_BASE);
@@ -74,7 +77,7 @@ async function searchPhotoHotspots(
     photosUrl.searchParams.set('radius', Math.min(radiusKm, 32).toString()); // Max 32km
     photosUrl.searchParams.set('radius_units', 'km');
     photosUrl.searchParams.set('has_geo', '1');
-    photosUrl.searchParams.set('extras', 'geo,place_url');
+    photosUrl.searchParams.set('extras', 'geo,place_url,url_m,url_s');
     photosUrl.searchParams.set('per_page', '250');
     photosUrl.searchParams.set('sort', 'interestingness-desc');
     photosUrl.searchParams.set('format', 'json');
@@ -99,6 +102,7 @@ async function searchPhotoHotspots(
           lat: cluster.lat,
           lng: cluster.lng,
           photoCount: cluster.count,
+          samplePhotoUrl: cluster.samplePhotoUrl,
         });
       }
     }
@@ -119,6 +123,7 @@ interface PhotoCluster {
   lng: number;
   count: number;
   placeName?: string;
+  samplePhotoUrl?: string;
 }
 
 interface FlickrPhoto {
@@ -127,6 +132,8 @@ interface FlickrPhoto {
   longitude?: string;
   place_url?: string;
   title?: string;
+  url_m?: string; // Medium size photo URL (500px)
+  url_s?: string; // Small size photo URL (240px)
 }
 
 // Cluster photos that are within ~1km of each other
@@ -139,6 +146,7 @@ function clusterPhotosByLocation(photos: FlickrPhoto[]): PhotoCluster[] {
 
     const lat = parseFloat(photo.latitude);
     const lng = parseFloat(photo.longitude);
+    const photoUrl = photo.url_m || photo.url_s;
 
     // Find existing cluster within radius
     let foundCluster = false;
@@ -156,6 +164,11 @@ function clusterPhotosByLocation(photos: FlickrPhoto[]): PhotoCluster[] {
           cluster.placeName = extractPlaceName(photo.place_url);
         }
 
+        // Keep the first (most interesting) photo as sample
+        if (!cluster.samplePhotoUrl && photoUrl) {
+          cluster.samplePhotoUrl = photoUrl;
+        }
+
         foundCluster = true;
         break;
       }
@@ -168,6 +181,7 @@ function clusterPhotosByLocation(photos: FlickrPhoto[]): PhotoCluster[] {
         lng,
         count: 1,
         placeName: photo.place_url ? extractPlaceName(photo.place_url) : undefined,
+        samplePhotoUrl: photoUrl,
       });
     }
   }
@@ -209,18 +223,23 @@ export function usePhotoHotspots(lat: number, lng: number, radiusKm: number = 50
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!lat || !lng) return;
+    // Check for valid coordinates (not just truthy - 0 is a valid coordinate)
+    if (lat === 0 && lng === 0) return;
+    if (typeof lat !== 'number' || typeof lng !== 'number') return;
+    if (isNaN(lat) || isNaN(lng)) return;
 
     const fetchHotspots = async () => {
       setLoading(true);
       setError(null);
 
       try {
+        console.log('Fetching photo hotspots for:', { lat, lng, radiusKm });
         const results = await searchPhotoHotspots(lat, lng, radiusKm);
+        console.log('Photo hotspots found:', results.length);
         setHotspots(results);
       } catch (err) {
         setError('Failed to fetch photo hotspots');
-        console.error(err);
+        console.error('Photo hotspots error:', err);
       } finally {
         setLoading(false);
       }

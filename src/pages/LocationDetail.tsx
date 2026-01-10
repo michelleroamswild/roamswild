@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass, Plus, Trash2, Footprints, Route, Calendar, Tent, Loader2 } from "lucide-react";
+import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass, Plus, Trash2, Footprints, Route, Calendar, Tent, Loader2, Flame, Camera, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
 import { GoogleMap } from "@/components/GoogleMap";
 import { Marker, InfoWindow } from "@react-google-maps/api";
 import { useNearbyPlaces, GoogleSavedPlace } from "@/hooks/use-nearby-places";
 import { useNearbyHikes, HikeResult } from "@/hooks/use-nearby-hikes";
+import { usePhotoHotspots, PhotoHotspot } from "@/hooks/use-photo-hotspots";
 import { toast } from "sonner";
 import { useTrip } from "@/context/TripContext";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
@@ -32,14 +34,11 @@ function getElevationMessage(elevationFeet: number): string | null {
 }
 
 // SVG icons for map markers (larger than default Google markers)
-const CAR_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+const TENT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
-  <circle cx="20" cy="20" r="18" fill="#c9a227" stroke="#ffffff" stroke-width="2"/>
-  <g transform="translate(8, 10)">
-    <path d="M4 10h16M6 10l2-6h8l2 6M4 10v4h3v-2h10v2h3v-4" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="7" cy="13" r="1.5" fill="#ffffff"/>
-    <circle cx="17" cy="13" r="1.5" fill="#ffffff"/>
-  </g>
+  <circle cx="20" cy="20" r="18" fill="#f59e0b" stroke="#ffffff" stroke-width="2"/>
+  <path d="M20 10L10 27h20L20 10z" fill="#ffffff" stroke="none"/>
+  <path d="M20 10L10 27h20L20 10z M17 27l3-7 3 7" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linejoin="round"/>
 </svg>
 `)}`;
 
@@ -51,6 +50,14 @@ const BOOT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
     <path d="M6 8L10 8" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
     <path d="M6 11L10 11" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
   </g>
+</svg>
+`)}`;
+
+const PHOTO_HOTSPOT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <circle cx="20" cy="20" r="18" fill="#f97316" stroke="#ffffff" stroke-width="2"/>
+  <path d="M20 10c-1.5 3-4 6-4 10 0 4 2 6 4 8 2-2 4-4 4-8 0-4-2.5-7-4-10z" fill="#ffffff"/>
+  <circle cx="20" cy="22" r="2.5" fill="#f97316"/>
 </svg>
 `)}`;
 
@@ -111,6 +118,19 @@ const LocationDetail = () => {
     location?.lng ?? 0,
     30
   );
+
+  // Get photo hotspots from Flickr
+  const { hotspots: photoHotspots, loading: photoHotspotsLoading } = usePhotoHotspots(
+    location?.lat ?? 0,
+    location?.lng ?? 0,
+    50
+  );
+
+  // Photo hotspots UI state
+  const [showPhotoHotspots, setShowPhotoHotspots] = useState(false);
+  const [photoHotspotsExpanded, setPhotoHotspotsExpanded] = useState(false);
+  const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoHotspot | null>(null);
+  const [enlargedPhoto, setEnlargedPhoto] = useState<{ url: string; name: string } | null>(null);
 
   // Fetch elevation when Google Maps is loaded
   useEffect(() => {
@@ -332,20 +352,21 @@ const LocationDetail = () => {
                       scale: 12,
                     }}
                   />
-                  {/* Nearby camp spots markers (car icon) */}
+                  {/* Nearby camp spots markers (tent icon) */}
                   {nearbyPlaces.map((place) => (
                     <Marker
                       key={place.id}
                       position={{ lat: place.lat, lng: place.lng }}
                       title={`${place.name} (${place.distance.toFixed(1)} mi)`}
                       icon={{
-                        url: CAR_ICON_SVG,
+                        url: TENT_ICON_SVG,
                         scaledSize: new google.maps.Size(MARKER_SIZE, MARKER_SIZE),
                         anchor: new google.maps.Point(MARKER_SIZE / 2, MARKER_SIZE / 2),
                       }}
                       onClick={() => {
                         setSelectedPlace(place);
                         setSelectedHike(null);
+                        setSelectedPhotoHotspot(null);
                       }}
                     />
                   ))}
@@ -363,9 +384,58 @@ const LocationDetail = () => {
                       onClick={() => {
                         setSelectedHike(hike);
                         setSelectedPlace(null);
+                        setSelectedPhotoHotspot(null);
                       }}
                     />
                   ))}
+                  {/* Photo hotspot markers */}
+                  {showPhotoHotspots && photoHotspots.map((hotspot) => (
+                    <Marker
+                      key={hotspot.id}
+                      position={{ lat: hotspot.lat, lng: hotspot.lng }}
+                      title={`${hotspot.name} (${hotspot.photoCount} photos)`}
+                      icon={{
+                        url: PHOTO_HOTSPOT_ICON_SVG,
+                        scaledSize: new google.maps.Size(MARKER_SIZE - 4, MARKER_SIZE - 4),
+                        anchor: new google.maps.Point((MARKER_SIZE - 4) / 2, (MARKER_SIZE - 4) / 2),
+                      }}
+                      onClick={() => {
+                        setSelectedPhotoHotspot(hotspot);
+                        setSelectedPlace(null);
+                        setSelectedHike(null);
+                      }}
+                    />
+                  ))}
+                  {/* Info popup for selected photo hotspot */}
+                  {selectedPhotoHotspot && (
+                    <InfoWindow
+                      position={{ lat: selectedPhotoHotspot.lat, lng: selectedPhotoHotspot.lng }}
+                      onCloseClick={() => setSelectedPhotoHotspot(null)}
+                    >
+                      <div className="min-w-[200px]">
+                        {selectedPhotoHotspot.samplePhotoUrl && (
+                          <button
+                            onClick={() => setEnlargedPhoto({ url: selectedPhotoHotspot.samplePhotoUrl!, name: selectedPhotoHotspot.name })}
+                            className="w-full h-32 overflow-hidden rounded-t-lg cursor-pointer"
+                          >
+                            <img
+                              src={selectedPhotoHotspot.samplePhotoUrl}
+                              alt={selectedPhotoHotspot.name}
+                              className="w-full h-full object-cover hover:scale-105 transition-transform"
+                            />
+                          </button>
+                        )}
+                        <div className="p-2">
+                          <h4 className="font-semibold text-gray-900 text-sm">
+                            {selectedPhotoHotspot.name}
+                          </h4>
+                          <p className="text-gray-500 text-xs mt-0.5">
+                            {selectedPhotoHotspot.photoCount.toLocaleString()} photos
+                          </p>
+                        </div>
+                      </div>
+                    </InfoWindow>
+                  )}
                   {/* Info popup for selected place */}
                   {selectedPlace && (
                     <InfoWindow
@@ -807,6 +877,93 @@ const LocationDetail = () => {
               </CardContent>
             </Card>
 
+            {/* Photo Hotspots */}
+            {photoHotspots.length > 0 && (
+              <Card>
+                <CardContent className="p-4">
+                  <button
+                    onClick={() => setPhotoHotspotsExpanded(!photoHotspotsExpanded)}
+                    className="w-full flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Flame className="w-5 h-5 text-orange-500" />
+                      <h3 className="font-semibold text-foreground">Photo Hotspots</h3>
+                      <span className="text-xs text-muted-foreground">({photoHotspots.length})</span>
+                    </div>
+                    {photoHotspotsExpanded ? (
+                      <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                    )}
+                  </button>
+
+                  {photoHotspotsExpanded && (
+                    <div className="mt-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">via Flickr</span>
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="show-hotspots-loc" className="text-sm text-muted-foreground">
+                            Show on map
+                          </Label>
+                          <Switch
+                            id="show-hotspots-loc"
+                            checked={showPhotoHotspots}
+                            onCheckedChange={setShowPhotoHotspots}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {photoHotspots.slice(0, 5).map((hotspot) => (
+                          <div
+                            key={hotspot.id}
+                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-orange-500/10 transition-colors"
+                          >
+                            {hotspot.samplePhotoUrl ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEnlargedPhoto({ url: hotspot.samplePhotoUrl!, name: hotspot.name });
+                                }}
+                                className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-orange-500 transition-all"
+                              >
+                                <img
+                                  src={hotspot.samplePhotoUrl}
+                                  alt={hotspot.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </button>
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                                <Flame className="w-5 h-5 text-orange-500" />
+                              </div>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedPlace(null);
+                                setSelectedHike(null);
+                                setSelectedPhotoHotspot(hotspot);
+                                setShowPhotoHotspots(true);
+                              }}
+                              className="flex-1 min-w-0 text-left"
+                            >
+                              <p className="font-medium text-foreground text-sm truncate">
+                                {hotspot.name}
+                              </p>
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Camera className="w-3 h-3" />
+                                <span>{hotspot.photoCount.toLocaleString()} photos</span>
+                              </div>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Actions */}
             <div className="flex gap-3">
               <Button variant="hero" size="lg" className="flex-1" onClick={handleGetDirections}>
@@ -820,6 +977,35 @@ const LocationDetail = () => {
           </div>
         </div>
       </main>
+
+      {/* Photo Lightbox */}
+      {enlargedPhoto && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setEnlargedPhoto(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors"
+            onClick={() => setEnlargedPhoto(null)}
+          >
+            <X className="w-8 h-8" />
+          </button>
+          <div className="max-w-4xl max-h-[90vh] relative" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={enlargedPhoto.url}
+              alt={enlargedPhoto.name}
+              className="max-w-full max-h-[85vh] object-contain rounded-lg"
+            />
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 rounded-b-lg">
+              <p className="text-white font-medium">{enlargedPhoto.name}</p>
+              <p className="text-white/70 text-sm flex items-center gap-1">
+                <Flame className="w-3 h-3" />
+                Photo Hotspot via Flickr
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

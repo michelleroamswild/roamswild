@@ -78,6 +78,19 @@ const getMarkerColor = (type: string) => {
   }
 };
 
+// Consistent tent icon SVG for campsite markers
+const getTentMarkerIcon = (isActive: boolean = false) => ({
+  url: `data:image/svg+xml,${encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="11" fill="#f59e0b" stroke="${isActive ? '#000000' : '#ffffff'}" stroke-width="${isActive ? 2.5 : 2}"/>
+      <path d="M12 6L6 16h12L12 6z" fill="#ffffff" stroke="none"/>
+      <path d="M12 6L6 16h12L12 6z M10 16l2-4 2 4" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-linejoin="round"/>
+    </svg>
+  `)}`,
+  scaledSize: new google.maps.Size(isActive ? 40 : 32, isActive ? 40 : 32),
+  anchor: new google.maps.Point(isActive ? 20 : 16, isActive ? 20 : 16),
+});
+
 const TripDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -94,6 +107,7 @@ const TripDetail = () => {
   const [showPhotoHotspots, setShowPhotoHotspots] = useState(false);
   const [photoHotspotsExpanded, setPhotoHotspotsExpanded] = useState(false);
   const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoHotspot | null>(null);
+  const [enlargedPhoto, setEnlargedPhoto] = useState<{ url: string; name: string } | null>(null);
 
   // Calculate center point of trip for photo hotspots search
   const tripCenter = generatedTrip ? (() => {
@@ -473,15 +487,18 @@ const TripDetail = () => {
                     <Marker
                       key={stop.id}
                       position={stop.coordinates}
-                      icon={{
-                        path: google.maps.SymbolPath.CIRCLE,
-                        fillColor: getMarkerColor(stop.type),
-                        fillOpacity: 1,
-                        strokeColor: activeDay ? '#000000' : '#ffffff',
-                        strokeWeight: activeDay ? 3 : 2,
-                        scale: activeDay ? 10 : 8,
-                      }}
-                      label={activeDay ? {
+                      icon={stop.type === 'camp'
+                        ? getTentMarkerIcon(!!activeDay)
+                        : {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            fillColor: getMarkerColor(stop.type),
+                            fillOpacity: 1,
+                            strokeColor: activeDay ? '#000000' : '#ffffff',
+                            strokeWeight: activeDay ? 3 : 2,
+                            scale: activeDay ? 10 : 8,
+                          }
+                      }
+                      label={activeDay && stop.type !== 'camp' ? {
                         text: String(index + 1),
                         color: '#ffffff',
                         fontSize: '12px',
@@ -522,32 +539,27 @@ const TripDetail = () => {
                       position={{ lat: selectedPhotoHotspot.lat, lng: selectedPhotoHotspot.lng }}
                       onCloseClick={() => setSelectedPhotoHotspot(null)}
                     >
-                      <div className="p-1 min-w-[180px]">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center">
-                            <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M10 2c-1.5 3-4 6-4 10 0 4 2 6 4 7 2-1 4-3 4-7 0-4-2.5-7-4-10z"/>
-                            </svg>
-                          </div>
-                          <span className="text-xs font-medium text-orange-600">Photo Hotspot</span>
+                      <div className="min-w-[200px]">
+                        {selectedPhotoHotspot.samplePhotoUrl && (
+                          <button
+                            onClick={() => setEnlargedPhoto({ url: selectedPhotoHotspot.samplePhotoUrl!, name: selectedPhotoHotspot.name })}
+                            className="w-full h-32 overflow-hidden rounded-t-lg cursor-pointer"
+                          >
+                            <img
+                              src={selectedPhotoHotspot.samplePhotoUrl}
+                              alt={selectedPhotoHotspot.name}
+                              className="w-full h-full object-cover hover:scale-105 transition-transform"
+                            />
+                          </button>
+                        )}
+                        <div className="p-2">
+                          <h4 className="font-semibold text-gray-900 text-sm">
+                            {selectedPhotoHotspot.name}
+                          </h4>
+                          <p className="text-gray-500 text-xs mt-0.5">
+                            {selectedPhotoHotspot.photoCount.toLocaleString()} photos
+                          </p>
                         </div>
-                        <h4 className="font-semibold text-gray-900 text-base mb-1">
-                          {selectedPhotoHotspot.name}
-                        </h4>
-                        <p className="text-gray-600 text-sm mb-3">
-                          {selectedPhotoHotspot.photoCount.toLocaleString()} photos taken here
-                        </p>
-                        <button
-                          onClick={() => {
-                            window.open(
-                              `https://www.flickr.com/search/?lat=${selectedPhotoHotspot.lat}&lon=${selectedPhotoHotspot.lng}&radius=1`,
-                              '_blank'
-                            );
-                          }}
-                          className="w-full px-3 py-1.5 bg-orange-500 text-white text-sm rounded hover:bg-orange-600 transition-colors"
-                        >
-                          View on Flickr
-                        </button>
                       </div>
                     </InfoWindow>
                   )}
@@ -731,20 +743,38 @@ const TripDetail = () => {
                       </div>
                       <div className="space-y-2">
                         {photoHotspots.slice(0, 5).map((hotspot) => (
-                          <button
+                          <div
                             key={hotspot.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedStop(null);
-                              setSelectedPhotoHotspot(hotspot);
-                              setShowPhotoHotspots(true);
-                            }}
-                            className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-orange-500/10 transition-colors text-left"
+                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-orange-500/10 transition-colors"
                           >
-                            <div className="w-8 h-8 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                              <Flame className="w-4 h-4 text-orange-500" />
-                            </div>
-                            <div className="flex-1 min-w-0">
+                            {hotspot.samplePhotoUrl ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEnlargedPhoto({ url: hotspot.samplePhotoUrl!, name: hotspot.name });
+                                }}
+                                className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-orange-500 transition-all"
+                              >
+                                <img
+                                  src={hotspot.samplePhotoUrl}
+                                  alt={hotspot.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </button>
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                                <Flame className="w-5 h-5 text-orange-500" />
+                              </div>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedStop(null);
+                                setSelectedPhotoHotspot(hotspot);
+                                setShowPhotoHotspots(true);
+                              }}
+                              className="flex-1 min-w-0 text-left"
+                            >
                               <p className="font-medium text-foreground text-sm truncate">
                                 {hotspot.name}
                               </p>
@@ -752,8 +782,8 @@ const TripDetail = () => {
                                 <Camera className="w-3 h-3" />
                                 <span>{hotspot.photoCount.toLocaleString()} photos</span>
                               </div>
-                            </div>
-                          </button>
+                            </button>
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -810,6 +840,35 @@ const TripDetail = () => {
           searchLng={selectedHikeForSwap.coordinates.lng}
           onSelectHike={handleSwapHike}
         />
+      )}
+
+      {/* Photo Lightbox */}
+      {enlargedPhoto && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setEnlargedPhoto(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors"
+            onClick={() => setEnlargedPhoto(null)}
+          >
+            <X className="w-8 h-8" />
+          </button>
+          <div className="max-w-4xl max-h-[90vh] relative" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={enlargedPhoto.url}
+              alt={enlargedPhoto.name}
+              className="max-w-full max-h-[85vh] object-contain rounded-lg"
+            />
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 rounded-b-lg">
+              <p className="text-white font-medium">{enlargedPhoto.name}</p>
+              <p className="text-white/70 text-sm flex items-center gap-1">
+                <Flame className="w-3 h-3" />
+                Photo Hotspot via Flickr
+              </p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
