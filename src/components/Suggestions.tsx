@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { MapPin, Tent, Mountain, Star, Loader2, Navigation, ChevronRight, Search } from "lucide-react";
+import { MapPin, Tent, Mountain, Star, Loader2, Navigation, ChevronRight, Search, Flame, Camera } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { useNearbyPlaces, GoogleSavedPlace } from "@/hooks/use-nearby-places";
+import { usePhotoHotspots, PhotoHotspot } from "@/hooks/use-photo-hotspots";
 import { PlaceSearch } from "./PlaceSearch";
 
 interface HotSpot {
@@ -104,6 +105,13 @@ export const Suggestions = () => {
 
   // Fetch campsites using the existing hook
   const { nearbyPlaces: campsites, loading: loadingCampsites } = useNearbyPlaces(
+    userLocation?.lat || 0,
+    userLocation?.lng || 0,
+    50
+  );
+
+  // Fetch photo hotspots from Flickr
+  const { hotspots: photoHotspots, loading: loadingPhotoHotspots } = usePhotoHotspots(
     userLocation?.lat || 0,
     userLocation?.lng || 0,
     50
@@ -211,7 +219,8 @@ export const Suggestions = () => {
 
   const topCampsites = campsites.slice(0, 4);
   const topHotSpots = hotSpots.slice(0, 4);
-  const isLoading = loadingCampsites || loadingHotSpots;
+  const topPhotoHotspots = photoHotspots.slice(0, 4);
+  const isLoading = loadingCampsites || loadingHotSpots || loadingPhotoHotspots;
 
   return (
     <section className="w-full max-w-4xl mx-auto space-y-10">
@@ -262,7 +271,25 @@ export const Suggestions = () => {
             </div>
           )}
 
-          {topCampsites.length === 0 && topHotSpots.length === 0 && (
+          {/* Photo Hotspots - Popular photography locations */}
+          {topPhotoHotspots.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-5 h-5 text-orange-500" />
+                  <h3 className="text-lg font-semibold text-foreground">Popular Photo Spots</h3>
+                </div>
+                <span className="text-xs text-muted-foreground">via Flickr</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {topPhotoHotspots.map((hotspot, index) => (
+                  <PhotoHotspotCard key={hotspot.id} hotspot={hotspot} index={index} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {topCampsites.length === 0 && topHotSpots.length === 0 && topPhotoHotspots.length === 0 && (
             <div className="text-center py-8">
               <MapPin className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-50" />
               <p className="text-muted-foreground">No suggestions found near your location</p>
@@ -358,5 +385,39 @@ const HotSpotCard = ({ spot, index }: HotSpotCardProps) => {
         </CardContent>
       </Card>
     </Link>
+  );
+};
+
+interface PhotoHotspotCardProps {
+  hotspot: PhotoHotspot;
+  index: number;
+}
+
+const PhotoHotspotCard = ({ hotspot, index }: PhotoHotspotCardProps) => {
+  return (
+    <Card
+      className="group hover:border-orange-500/30 hover:shadow-card transition-all duration-300 animate-fade-in"
+      style={{ animationDelay: `${index * 100}ms` }}
+    >
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex items-center justify-center w-10 h-10 bg-orange-500/10 rounded-lg flex-shrink-0">
+            <Flame className="w-5 h-5 text-orange-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="font-semibold text-foreground truncate group-hover:text-orange-500 transition-colors">
+              {hotspot.name}
+            </h4>
+            <div className="flex items-center gap-1 mt-1">
+              <Camera className="w-3 h-3 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                {hotspot.photoCount.toLocaleString()} photos
+              </span>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
+      </CardContent>
+    </Card>
   );
 };

@@ -20,6 +20,8 @@ import {
   Eye,
   Trash2,
   RefreshCw,
+  Flame,
+  Camera,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -29,6 +31,9 @@ import { Marker, InfoWindow, DirectionsRenderer } from '@react-google-maps/api';
 import { TripStop, TripDay } from '@/types/trip';
 import { toast } from 'sonner';
 import { AlternativeHikesModal } from '@/components/AlternativeHikesModal';
+import { usePhotoHotspots, PhotoHotspot } from '@/hooks/use-photo-hotspots';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 const getIcon = (type: string) => {
   switch (type) {
@@ -86,6 +91,27 @@ const TripDetail = () => {
   const [activeDay, setActiveDay] = useState<number | null>(null);
   const [hikeModalOpen, setHikeModalOpen] = useState(false);
   const [selectedHikeForSwap, setSelectedHikeForSwap] = useState<TripStop | null>(null);
+  const [showPhotoHotspots, setShowPhotoHotspots] = useState(true);
+  const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoHotspot | null>(null);
+
+  // Calculate center point of trip for photo hotspots search
+  const tripCenter = generatedTrip ? (() => {
+    const allStops = generatedTrip.days.flatMap(day => day.stops);
+    if (allStops.length === 0) return { lat: 0, lng: 0 };
+    const sumLat = allStops.reduce((sum, stop) => sum + stop.coordinates.lat, 0);
+    const sumLng = allStops.reduce((sum, stop) => sum + stop.coordinates.lng, 0);
+    return {
+      lat: sumLat / allStops.length,
+      lng: sumLng / allStops.length,
+    };
+  })() : { lat: 0, lng: 0 };
+
+  // Fetch photo hotspots near the trip route
+  const { hotspots: photoHotspots, loading: loadingPhotoHotspots } = usePhotoHotspots(
+    tripCenter.lat,
+    tripCenter.lng,
+    80 // 80km radius to cover trip area
+  );
 
   // Check if this trip is saved
   const isSaved = generatedTrip ? isTripSaved(generatedTrip.id) : false;
@@ -400,6 +426,66 @@ const TripDetail = () => {
                     />
                   ))}
 
+                  {/* Photo hotspot markers */}
+                  {showPhotoHotspots && photoHotspots.map((hotspot) => (
+                    <Marker
+                      key={hotspot.id}
+                      position={{ lat: hotspot.lat, lng: hotspot.lng }}
+                      icon={{
+                        url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+                            <circle cx="16" cy="16" r="14" fill="#f97316" stroke="#ffffff" stroke-width="2"/>
+                            <path d="M16 8c-1.5 3-3 5-3 8 0 3 1.5 5 3 6 1.5-1 3-3 3-6 0-3-1.5-5-3-8z" fill="#ffffff"/>
+                            <circle cx="16" cy="18" r="2" fill="#f97316"/>
+                          </svg>
+                        `)}`,
+                        scaledSize: new google.maps.Size(28, 28),
+                        anchor: new google.maps.Point(14, 14),
+                      }}
+                      title={`${hotspot.name} (${hotspot.photoCount} photos)`}
+                      onClick={() => {
+                        setSelectedStop(null);
+                        setSelectedPhotoHotspot(hotspot);
+                      }}
+                    />
+                  ))}
+
+                  {/* Info window for selected photo hotspot */}
+                  {selectedPhotoHotspot && (
+                    <InfoWindow
+                      position={{ lat: selectedPhotoHotspot.lat, lng: selectedPhotoHotspot.lng }}
+                      onCloseClick={() => setSelectedPhotoHotspot(null)}
+                    >
+                      <div className="p-1 min-w-[180px]">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center">
+                            <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M10 2c-1.5 3-4 6-4 10 0 4 2 6 4 7 2-1 4-3 4-7 0-4-2.5-7-4-10z"/>
+                            </svg>
+                          </div>
+                          <span className="text-xs font-medium text-orange-600">Photo Hotspot</span>
+                        </div>
+                        <h4 className="font-semibold text-gray-900 text-base mb-1">
+                          {selectedPhotoHotspot.name}
+                        </h4>
+                        <p className="text-gray-600 text-sm mb-3">
+                          {selectedPhotoHotspot.photoCount.toLocaleString()} photos taken here
+                        </p>
+                        <button
+                          onClick={() => {
+                            window.open(
+                              `https://www.flickr.com/search/?lat=${selectedPhotoHotspot.lat}&lon=${selectedPhotoHotspot.lng}&radius=1`,
+                              '_blank'
+                            );
+                          }}
+                          className="w-full px-3 py-1.5 bg-orange-500 text-white text-sm rounded hover:bg-orange-600 transition-colors"
+                        >
+                          View on Flickr
+                        </button>
+                      </div>
+                    </InfoWindow>
+                  )}
+
                   {/* Info window for selected stop */}
                   {selectedStop && (
                     <InfoWindow
@@ -541,6 +627,56 @@ const TripDetail = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Photo Hotspots */}
+            {photoHotspots.length > 0 && (
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Flame className="w-5 h-5 text-orange-500" />
+                      <h3 className="font-semibold text-foreground">Photo Hotspots</h3>
+                      <span className="text-xs text-muted-foreground">via Flickr</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="show-hotspots" className="text-sm text-muted-foreground">
+                        Show on map
+                      </Label>
+                      <Switch
+                        id="show-hotspots"
+                        checked={showPhotoHotspots}
+                        onCheckedChange={setShowPhotoHotspots}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {photoHotspots.slice(0, 5).map((hotspot) => (
+                      <button
+                        key={hotspot.id}
+                        onClick={() => {
+                          setSelectedStop(null);
+                          setSelectedPhotoHotspot(hotspot);
+                        }}
+                        className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-orange-500/10 transition-colors text-left"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                          <Flame className="w-4 h-4 text-orange-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-foreground text-sm truncate">
+                            {hotspot.name}
+                          </p>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Camera className="w-3 h-3" />
+                            <span>{hotspot.photoCount.toLocaleString()} photos</span>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Day-by-Day Itinerary */}
             <div className="space-y-3">
