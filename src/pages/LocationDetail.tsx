@@ -3,12 +3,15 @@ import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass, Plus, Trash2, Footprints, Route } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
 import { GoogleMap } from "@/components/GoogleMap";
 import { Marker, InfoWindow } from "@react-google-maps/api";
 import { useNearbyPlaces, GoogleSavedPlace } from "@/hooks/use-nearby-places";
 import { useNearbyHikes, HikeResult } from "@/hooks/use-nearby-hikes";
 import { toast } from "sonner";
+import { useTrip } from "@/context/TripContext";
+import { useTripGenerator } from "@/hooks/use-trip-generator";
 
 type NearbyPlace = GoogleSavedPlace & { distance: number };
 
@@ -28,33 +31,50 @@ function getElevationMessage(elevationFeet: number): string | null {
   return null;
 }
 
-// SVG icons for map markers
+// SVG icons for map markers (larger than default Google markers)
 const CAR_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#c9a227" stroke="#ffffff" stroke-width="1.5">
-  <circle cx="12" cy="12" r="11" fill="#c9a227"/>
-  <path d="M7 13l1.5-4.5h7L17 13M7 13h10M7 13v3h2v-2h6v2h2v-3" stroke="#ffffff" stroke-width="1.5" fill="none" transform="translate(0, 1)"/>
-  <circle cx="8.5" cy="15" r="1" fill="#ffffff"/>
-  <circle cx="15.5" cy="15" r="1" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <circle cx="20" cy="20" r="18" fill="#c9a227" stroke="#ffffff" stroke-width="2"/>
+  <g transform="translate(8, 10)">
+    <path d="M4 10h16M6 10l2-6h8l2 6M4 10v4h3v-2h10v2h3v-4" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="7" cy="13" r="1.5" fill="#ffffff"/>
+    <circle cx="17" cy="13" r="1.5" fill="#ffffff"/>
+  </g>
 </svg>
 `)}`;
 
 const BOOT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#10b981" stroke="#ffffff" stroke-width="1.5">
-  <circle cx="12" cy="12" r="11" fill="#10b981"/>
-  <path d="M8 7v6l-2 2v2h10v-2l-1-1v-3h-3V8l-1-1H8z" stroke="#ffffff" stroke-width="1.2" fill="none" transform="translate(1, 0)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <circle cx="20" cy="20" r="18" fill="#10b981" stroke="#ffffff" stroke-width="2"/>
+  <g transform="translate(10, 8)">
+    <path d="M6 4C6 4 6 8 6 12C6 14 4 16 4 18C4 20 6 20 8 20L16 20C18 20 18 18 18 16L18 14L12 14L12 8C12 6 10 4 8 4L6 4Z" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M6 8L10 8" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M6 11L10 11" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
 </svg>
 `)}`;
+
+const MARKER_SIZE = 38;
 
 const LocationDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const routerLocation = useLocation();
+  const navigate = useNavigate();
   const { locations, addLocation, removeLocation, isLocationSaved } = useSavedLocations();
+  const { setTripConfig, setGeneratedTrip } = useTrip();
+  const { generateTrip, generating, error: tripError } = useTripGenerator();
+
   const [selectedPlace, setSelectedPlace] = useState<NearbyPlace | null>(null);
   const [selectedHike, setSelectedHike] = useState<HikeResult | null>(null);
   const [selectedPlaceElevation, setSelectedPlaceElevation] = useState<number | null>(null);
   const [elevation, setElevation] = useState<number | null>(null);
   const [mapsLoaded, setMapsLoaded] = useState(false);
+
+  // Trip planning state
+  const [tripDuration, setTripDuration] = useState(3);
+  const [activitiesPerDay, setActivitiesPerDay] = useState(1);
+  const [sameCampsite, setSameCampsite] = useState(false);
 
   // Get location from router state (search) or from saved locations
   const stateLocation = routerLocation.state as LocationState | null;
@@ -293,8 +313,8 @@ const LocationDetail = () => {
                       title={`${place.name} (${place.distance.toFixed(1)} mi)`}
                       icon={{
                         url: CAR_ICON_SVG,
-                        scaledSize: new google.maps.Size(28, 28),
-                        anchor: new google.maps.Point(14, 14),
+                        scaledSize: new google.maps.Size(MARKER_SIZE, MARKER_SIZE),
+                        anchor: new google.maps.Point(MARKER_SIZE / 2, MARKER_SIZE / 2),
                       }}
                       onClick={() => {
                         setSelectedPlace(place);
@@ -310,8 +330,8 @@ const LocationDetail = () => {
                       title={hike.name}
                       icon={{
                         url: BOOT_ICON_SVG,
-                        scaledSize: new google.maps.Size(28, 28),
-                        anchor: new google.maps.Point(14, 14),
+                        scaledSize: new google.maps.Size(MARKER_SIZE, MARKER_SIZE),
+                        anchor: new google.maps.Point(MARKER_SIZE / 2, MARKER_SIZE / 2),
                       }}
                       onClick={() => {
                         setSelectedHike(hike);
@@ -512,6 +532,130 @@ const LocationDetail = () => {
                     <p className="text-sm font-bold text-foreground">{location.lat.toFixed(4)}</p>
                     <p className="text-sm font-bold text-foreground">{location.lng.toFixed(4)}</p>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Plan a Trip */}
+            <Card className="bg-gradient-to-br from-primary/5 to-terracotta/5 border-primary/20">
+              <CardContent className="p-6">
+                <h3 className="text-lg font-display font-semibold text-foreground mb-4 flex items-center gap-2">
+                  <Compass className="w-5 h-5 text-primary" />
+                  Plan a Trip Here
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Create an itinerary based around this location with nearby hikes and campsites.
+                </p>
+
+                <div className="space-y-4">
+                  {/* Duration */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-sm font-medium text-foreground flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-muted-foreground" />
+                        Duration
+                      </label>
+                      <span className="text-sm text-muted-foreground">
+                        {tripDuration} {tripDuration === 1 ? 'day' : 'days'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setTripDuration(Math.max(1, tripDuration - 1))}
+                        disabled={tripDuration <= 1}
+                      >
+                        -
+                      </Button>
+                      <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all"
+                          style={{ width: `${(tripDuration / 7) * 100}%` }}
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setTripDuration(Math.min(7, tripDuration + 1))}
+                        disabled={tripDuration >= 7}
+                      >
+                        +
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Activities per day */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-sm font-medium text-foreground flex items-center gap-2">
+                        <Footprints className="w-4 h-4 text-muted-foreground" />
+                        Hikes per day
+                      </label>
+                      <span className="text-sm text-muted-foreground">
+                        {activitiesPerDay} {activitiesPerDay === 1 ? 'hike' : 'hikes'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setActivitiesPerDay(Math.max(1, activitiesPerDay - 1))}
+                        disabled={activitiesPerDay <= 1}
+                      >
+                        -
+                      </Button>
+                      <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 transition-all"
+                          style={{ width: `${(activitiesPerDay / 3) * 100}%` }}
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setActivitiesPerDay(Math.min(3, activitiesPerDay + 1))}
+                        disabled={activitiesPerDay >= 3}
+                      >
+                        +
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Same campsite toggle */}
+                  <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Tent className="w-4 h-4 text-amber-500" />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Base Camp Mode</p>
+                        <p className="text-xs text-muted-foreground">Stay at the same campsite each night</p>
+                      </div>
+                    </div>
+                    <Switch checked={sameCampsite} onCheckedChange={setSameCampsite} />
+                  </div>
+
+                  {tripError && (
+                    <p className="text-sm text-destructive">{tripError}</p>
+                  )}
+
+                  <Button
+                    variant="hero"
+                    className="w-full"
+                    onClick={handleGenerateTrip}
+                    disabled={generating}
+                  >
+                    {generating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Generating Trip...
+                      </>
+                    ) : (
+                      <>
+                        <Compass className="w-4 h-4 mr-2" />
+                        Generate {tripDuration}-Day Itinerary
+                      </>
+                    )}
+                  </Button>
                 </div>
               </CardContent>
             </Card>

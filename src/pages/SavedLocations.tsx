@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { ArrowLeft, MapPin, Trash2, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,18 +7,14 @@ import { toast } from "sonner";
 
 const SavedLocations = () => {
   const { locations, removeLocation } = useSavedLocations();
-  const navigate = useNavigate();
 
   const handleRemove = (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
+    e.preventDefault();
     removeLocation(id);
     toast.success(`Removed ${name}`, {
       description: "Removed from saved locations",
     });
-  };
-
-  const handleLocationClick = (placeId: string) => {
-    navigate(`/location/${placeId}`);
   };
 
   return (
@@ -46,42 +42,44 @@ const SavedLocations = () => {
         {locations.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {locations.map((location, index) => (
-              <Card
+              <Link
                 key={location.id}
-                onClick={() => handleLocationClick(location.placeId)}
-                className="group cursor-pointer hover:border-primary/30 hover:shadow-card transition-all duration-300 animate-fade-in"
+                to={`/location/${location.placeId}`}
+                className="block group animate-fade-in"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex items-center justify-center w-12 h-12 bg-primary/10 rounded-lg flex-shrink-0 group-hover:bg-primary/20 transition-colors">
-                      <MapPin className="w-5 h-5 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                          {location.name}
-                        </h3>
-                        <Star className="w-4 h-4 text-terracotta fill-terracotta flex-shrink-0" />
+                <Card className="h-full hover:border-primary/30 hover:shadow-card transition-all duration-300">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex items-center justify-center w-12 h-12 bg-primary/10 rounded-lg flex-shrink-0 group-hover:bg-primary/20 transition-colors">
+                        <MapPin className="w-5 h-5 text-primary" />
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1 truncate">
-                        {location.address}
-                      </p>
-                      <div className="flex items-center justify-between mt-3">
-                        <span className="text-xs px-2 py-1 bg-secondary rounded-full text-muted-foreground">
-                          {location.type}
-                        </span>
-                        <button
-                          onClick={(e) => handleRemove(e, location.id, location.name)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-destructive/10 rounded-lg"
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                            {location.name}
+                          </h3>
+                          <Star className="w-4 h-4 text-terracotta fill-terracotta flex-shrink-0" />
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1 truncate">
+                          {location.address}
+                        </p>
+                        <div className="flex items-center justify-between mt-3">
+                          <span className="text-xs px-2 py-1 bg-secondary rounded-full text-muted-foreground">
+                            {location.type}
+                          </span>
+                          <button
+                            onClick={(e) => handleRemove(e, location.id, location.name)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-destructive/10 rounded-lg"
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
           </div>
         ) : (

@@ -307,6 +307,143 @@ const CreateTrip = () => {
                   );
                 })}
               </div>
+
+              <div className="border-t border-border pt-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Tent className="w-5 h-5 text-amber-500" />
+                    <div>
+                      <Label>Base Camp Mode</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {destinations.length > 1
+                          ? 'Stay at one campsite per destination area'
+                          : 'Stay at the same campsite each night'}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch checked={baseCampMode} onCheckedChange={setBaseCampMode} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Vehicle Type */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Car className="w-5 h-5 text-primary" />
+                  <Label>Vehicle Type</Label>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: 'sedan', label: 'Sedan', desc: 'Paved roads only' },
+                    { value: 'suv', label: 'SUV/Crossover', desc: 'Light dirt roads' },
+                    { value: '4wd', label: '4WD/Off-road', desc: 'Rough terrain' },
+                    { value: 'rv', label: 'RV/Camper', desc: 'Large vehicle access' },
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setVehicleType(option.value)}
+                      className={`p-3 rounded-lg border text-left transition-all ${
+                        vehicleType === option.value
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                    >
+                      <p className="font-medium text-foreground text-sm">{option.label}</p>
+                      <p className="text-xs text-muted-foreground">{option.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Lodging Preference */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Home className="w-5 h-5 text-primary" />
+                  <Label>Lodging Preference</Label>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: 'dispersed', label: 'Dispersed Camping', desc: 'Free, remote sites' },
+                    { value: 'campground', label: 'Campground', desc: 'Paid sites with amenities' },
+                    { value: 'cabin', label: 'Cabin/Glamping', desc: 'Rustic comfort' },
+                    { value: 'hotel', label: 'Hotel/Motel', desc: 'Full amenities' },
+                    { value: 'mixed', label: 'Mix It Up', desc: 'Variety of options' },
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setLodgingPreference(option.value)}
+                      className={`p-3 rounded-lg border text-left transition-all ${
+                        lodgingPreference === option.value
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border hover:border-primary/50'
+                      } ${option.value === 'mixed' ? 'col-span-2' : ''}`}
+                    >
+                      <p className="font-medium text-foreground text-sm">{option.label}</p>
+                      <p className="text-xs text-muted-foreground">{option.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Activities */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Mountain className="w-5 h-5 text-primary" />
+                    <Label>Activities</Label>
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {activities.length} selected
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: 'hiking', label: 'Hiking', emoji: '🥾' },
+                    { value: 'biking', label: 'Mountain Biking', emoji: '🚵' },
+                    { value: 'climbing', label: 'Rock Climbing', emoji: '🧗' },
+                    { value: 'fishing', label: 'Fishing', emoji: '🎣' },
+                    { value: 'photography', label: 'Photography', emoji: '📷' },
+                    { value: 'wildlife', label: 'Wildlife Viewing', emoji: '🦌' },
+                  ] as const).map((option) => {
+                    const isSelected = activities.includes(option.value);
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setActivities(activities.filter((a) => a !== option.value));
+                          } else {
+                            setActivities([...activities, option.value]);
+                          }
+                        }}
+                        className={`p-3 rounded-lg border text-left transition-all flex items-center gap-2 ${
+                          isSelected
+                            ? 'border-primary bg-primary/10'
+                            : 'border-border hover:border-primary/50'
+                        }`}
+                      >
+                        <span className="text-lg">{option.emoji}</span>
+                        <p className="font-medium text-foreground text-sm flex-1">{option.label}</p>
+                        {isSelected && <Check className="w-4 h-4 text-primary" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </CardContent>
           </Card>
 
