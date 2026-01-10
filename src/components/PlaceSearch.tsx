@@ -41,7 +41,7 @@ export function PlaceSearch({ onPlaceSelect, placeholder = "Search for a place..
         <Input
           disabled
           placeholder="Loading..."
-          className="pl-12 pr-4 h-12 rounded-full bg-card border-border"
+          className="pl-12"
         />
       </div>
     );
@@ -63,7 +63,7 @@ export function PlaceSearch({ onPlaceSelect, placeholder = "Search for a place..
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           placeholder={placeholder}
-          className="pl-12 pr-4 h-12 rounded-full bg-card border-border focus:border-primary focus:ring-2 focus:ring-primary/20"
+          className="pl-12"
         />
       </Autocomplete>
     </div>
