@@ -590,7 +590,7 @@ const LocationDetail = () => {
                                 '_blank'
                               );
                             }}
-                            className="flex-1 px-3 py-1.5 bg-emerald-600 text-white text-sm rounded hover:bg-emerald-700 transition-colors"
+                            className="flex-1 px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded hover:bg-primary-hover transition-colors"
                           >
                             Directions
                           </button>
@@ -654,7 +654,7 @@ const LocationDetail = () => {
                                 '_blank'
                               );
                             }}
-                            className="flex-1 px-3 py-1.5 bg-emerald-600 text-white text-sm rounded hover:bg-emerald-700 transition-colors"
+                            className="flex-1 px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded hover:bg-primary-hover transition-colors"
                           >
                             Directions
                           </button>
@@ -952,8 +952,8 @@ const LocationDetail = () => {
                           );
                         }}
                       >
-                        <div className="flex items-center justify-center w-10 h-10 bg-emerald-500/10 rounded-lg flex-shrink-0">
-                          <Footprints className="w-5 h-5 text-emerald-600" />
+                        <div className="flex items-center justify-center w-10 h-10 bg-primary/10 rounded-lg flex-shrink-0">
+                          <Footprints className="w-5 h-5 text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-foreground truncate">

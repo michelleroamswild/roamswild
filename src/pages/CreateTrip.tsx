@@ -298,9 +298,9 @@ const CreateTrip = () => {
                   defaultValue={startLocation?.name}
                 />
                 {startLocation && (
-                  <div className="flex items-center justify-between p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                  <div className="flex items-center justify-between p-3 bg-primary/10 rounded-lg border border-primary/20">
                     <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-emerald-500" />
+                      <MapPin className="w-4 h-4 text-primary" />
                       <span className="text-sm font-medium">{startLocation.name}</span>
                     </div>
                     <Button
