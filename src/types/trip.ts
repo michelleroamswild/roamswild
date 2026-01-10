@@ -38,6 +38,7 @@ export interface TripDay {
 export type VehicleType = 'sedan' | 'suv' | '4wd' | 'rv';
 export type LodgingType = 'dispersed' | 'campground' | 'cabin' | 'hotel' | 'mixed';
 export type ActivityType = 'hiking' | 'biking' | 'climbing' | 'fishing' | 'photography' | 'wildlife';
+export type PacePreference = 'relaxed' | 'moderate' | 'packed';
 
 export interface TripConfig {
   name: string;
@@ -53,6 +54,15 @@ export interface TripConfig {
   vehicleType?: VehicleType;
   lodgingPreference?: LodgingType;
   activities?: ActivityType[];
+  // Hiking preferences
+  hikingPreference?: 'none' | 'surprise' | 'daily'; // none = no hikes, surprise = AI picks best days, daily = hike every day
+  // Advanced options
+  startDate?: string; // ISO date string (YYYY-MM-DD)
+  endDate?: string; // ISO date string (YYYY-MM-DD)
+  departureTime?: string; // Time to leave starting location (HH:MM)
+  dailyStartTime?: string; // Time to start activities each day (HH:MM)
+  pacePreference?: PacePreference;
+  maxDrivingHoursPerDay?: number; // Maximum hours of driving per day
 }
 
 export interface GeneratedTrip {

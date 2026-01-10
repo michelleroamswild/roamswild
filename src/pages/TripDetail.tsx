@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Flame,
   Camera,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -34,6 +35,9 @@ import { AlternativeHikesModal } from '@/components/AlternativeHikesModal';
 import { usePhotoHotspots, PhotoHotspot } from '@/hooks/use-photo-hotspots';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { createMarkerIcon, getTypeStyles } from '@/utils/mapMarkers';
+import { estimateDayTime } from '@/utils/tripValidation';
+import { getAllTrailsUrl, estimateTrailLength } from '@/utils/hikeUtils';
 
 const getIcon = (type: string) => {
   switch (type) {
@@ -49,47 +53,6 @@ const getIcon = (type: string) => {
       return MapPin;
   }
 };
-
-const getTypeStyles = (type: string) => {
-  switch (type) {
-    case 'hike':
-      return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
-    case 'gas':
-      return 'bg-terracotta/10 text-terracotta border-terracotta/20';
-    case 'camp':
-      return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
-    case 'viewpoint':
-      return 'bg-primary/10 text-primary border-primary/20';
-    default:
-      return 'bg-muted text-muted-foreground border-border';
-  }
-};
-
-const getMarkerColor = (type: string) => {
-  switch (type) {
-    case 'hike':
-      return '#10b981';
-    case 'camp':
-      return '#f59e0b';
-    case 'viewpoint':
-      return '#2d5a3d';
-    default:
-      return '#6b7280';
-  }
-};
-
-// Consistent tent icon SVG for campsite markers
-const getTentMarkerIcon = (isActive: boolean = false) => ({
-  url: `data:image/svg+xml,${encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="11" fill="#f59e0b" stroke="${isActive ? '#000000' : '#ffffff'}" stroke-width="${isActive ? 2.5 : 2}"/>
-      <path d="M12 6L6 16h12L12 6z" fill="#ffffff" stroke="none"/>
-      <path d="M12 6L6 16h12L12 6z M10 16l2-4 2 4" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-linejoin="round"/>
-    </svg>
-  `)}`,
-  scaledSize: new google.maps.Size(isActive ? 40 : 32, isActive ? 40 : 32),
-  anchor: new google.maps.Point(isActive ? 20 : 16, isActive ? 20 : 16),
-});
 
 const TripDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -131,9 +94,9 @@ const TripDetail = () => {
   // Check if this trip is saved
   const isSaved = generatedTrip ? isTripSaved(generatedTrip.id) : false;
 
-  // Try to load saved trip if no generated trip
+  // Load saved trip if no generated trip or if the URL id doesn't match the current trip
   useEffect(() => {
-    if (!generatedTrip && id) {
+    if (id && (!generatedTrip || generatedTrip.id !== id)) {
       const loaded = loadSavedTrip(id);
       if (!loaded) {
         navigate('/create-trip');
@@ -147,6 +110,7 @@ const TripDetail = () => {
       toast.success('Trip saved!', {
         description: 'You can find it in My Trips',
       });
+      navigate('/trips');
     }
   };
 
@@ -213,25 +177,48 @@ const TripDetail = () => {
     }
 
     const day = generatedTrip.days.find(d => d.day === activeDay);
-    if (!day || day.stops.length < 2) {
+    if (!day || day.stops.length === 0) {
       setDayDirections(null);
       return;
     }
 
     const directionsService = new google.maps.DirectionsService();
-    const dayStops = day.stops;
+    const startLocation = generatedTrip.config.startLocation?.coordinates;
+    const baseLocation = generatedTrip.config.baseLocation?.coordinates;
 
-    const origin = dayStops[0].coordinates;
-    const destination = dayStops[dayStops.length - 1].coordinates;
-    const waypoints = dayStops.slice(1, -1).map(stop => ({
+    // Determine where this day starts from
+    let dayOrigin: google.maps.LatLngLiteral;
+
+    if (activeDay === 1) {
+      // Day 1 starts from trip start or base location
+      dayOrigin = startLocation || baseLocation || day.stops[0].coordinates;
+    } else {
+      // Other days start from previous night's campsite
+      const prevDay = generatedTrip.days.find(d => d.day === activeDay - 1);
+      const prevCampsite = prevDay?.stops.find(s => s.type === 'camp');
+      dayOrigin = prevCampsite?.coordinates || day.stops[0].coordinates;
+    }
+
+    // Day ends at this day's campsite, or last activity if no camp
+    const dayCampsite = day.stops.find(s => s.type === 'camp');
+    const dayActivities = day.stops.filter(s => s.type === 'hike' || s.type === 'viewpoint');
+    const dayDestination = dayCampsite?.coordinates || dayActivities[dayActivities.length - 1]?.coordinates;
+
+    if (!dayDestination) {
+      setDayDirections(null);
+      return;
+    }
+
+    // Waypoints are the activities for this day
+    const waypoints = dayActivities.map(stop => ({
       location: stop.coordinates,
       stopover: true,
     }));
 
     directionsService.route(
       {
-        origin,
-        destination,
+        origin: dayOrigin,
+        destination: dayDestination,
         waypoints,
         travelMode: google.maps.TravelMode.DRIVING,
         optimizeWaypoints: false,
@@ -245,7 +232,7 @@ const TripDetail = () => {
   }, [mapsLoaded, generatedTrip, activeDay]);
 
   // Fetch driving directions when map loads or trip changes
-  // Simplified route: start/base → first stop → last stop (skip complex waypoints to avoid ZERO_RESULTS)
+  // For trips with start/end: Show route through campsites only (Start → Camp1 → Camp2 → End)
   useEffect(() => {
     if (!mapsLoaded || !generatedTrip) {
       return;
@@ -259,64 +246,59 @@ const TripDetail = () => {
     // Get the start/base location from the config
     const startLocation = generatedTrip.config.startLocation?.coordinates;
     const baseLocation = generatedTrip.config.baseLocation?.coordinates;
+    const isLocationBased = !!baseLocation && !startLocation;
 
-    // Get all stops in order
-    const allStops = generatedTrip.days.flatMap(day => day.stops);
-
-    if (allStops.length === 0) {
-      console.log('No stops for route');
+    // For location-based trips, handle differently (will be done in a future update)
+    if (isLocationBased) {
+      // For now, skip full route for location-based trips - use day previews instead
       return;
     }
 
-    // Determine origin: start location, base location, or first stop
-    const origin = startLocation || baseLocation || allStops[0].coordinates;
-
-    // Determine destination: last stop, or back to start if returnToStart
-    const lastStop = allStops[allStops.length - 1].coordinates;
-    const destination = (generatedTrip.config.returnToStart && startLocation)
-      ? startLocation
-      : lastStop;
-
-    // Build simple waypoint list - just the key stops (camps and main activities)
-    // Filter to unique locations and limit waypoints to avoid ZERO_RESULTS
-    const keyStops = allStops
-      .filter(s => s.type === 'camp' || s.type === 'hike' || s.type === 'viewpoint')
-      .map(s => s.coordinates);
-
-    // Remove consecutive duplicates
-    const uniqueStops: google.maps.LatLngLiteral[] = [];
-    for (const stop of keyStops) {
-      const last = uniqueStops[uniqueStops.length - 1];
-      if (!last || Math.abs(last.lat - stop.lat) > 0.001 || Math.abs(last.lng - stop.lng) > 0.001) {
-        uniqueStops.push(stop);
+    // Get all campsites from the trip (one per day)
+    const campsites: google.maps.LatLngLiteral[] = [];
+    for (const day of generatedTrip.days) {
+      const campsite = day.stops.find(s => s.type === 'camp');
+      if (campsite) {
+        campsites.push(campsite.coordinates);
       }
     }
 
-    // Skip first if it's the origin, skip last if it's the destination
-    let waypointStops = uniqueStops;
-    if (waypointStops.length > 0) {
-      const first = waypointStops[0];
-      if (Math.abs(first.lat - origin.lat) < 0.001 && Math.abs(first.lng - origin.lng) < 0.001) {
-        waypointStops = waypointStops.slice(1);
-      }
-    }
-    if (waypointStops.length > 0) {
-      const last = waypointStops[waypointStops.length - 1];
-      if (Math.abs(last.lat - destination.lat) < 0.001 && Math.abs(last.lng - destination.lng) < 0.001) {
-        waypointStops = waypointStops.slice(0, -1);
-      }
+    // Determine origin: start location or first campsite
+    const origin = startLocation || (campsites.length > 0 ? campsites[0] : null);
+    if (!origin) {
+      console.log('No origin for route');
+      return;
     }
 
-    // Limit to 10 waypoints to reduce chance of ZERO_RESULTS
-    const limitedWaypoints = waypointStops.slice(0, 10);
-    const waypoints = limitedWaypoints.map(coord => ({
+    // Determine destination: back to start if returnToStart, otherwise last campsite
+    let destination: google.maps.LatLngLiteral;
+    if (generatedTrip.config.returnToStart && startLocation) {
+      destination = startLocation;
+    } else if (campsites.length > 0) {
+      destination = campsites[campsites.length - 1];
+    } else {
+      console.log('No destination for route');
+      return;
+    }
+
+    // Waypoints are the campsites (excluding the last one if it's the destination)
+    let waypointCampsites = campsites;
+
+    // If we have a start location, all campsites are waypoints
+    // If returning to start, include all campsites; otherwise exclude the last one
+    if (!generatedTrip.config.returnToStart && waypointCampsites.length > 0) {
+      waypointCampsites = waypointCampsites.slice(0, -1);
+    }
+
+    const waypoints = waypointCampsites.map(coord => ({
       location: coord,
       stopover: true,
     }));
 
-    console.log('Fetching directions:', {
+    console.log('Fetching trip route (campsites only):', {
       origin,
       destination,
+      campsiteCount: campsites.length,
       waypointCount: waypoints.length
     });
 
@@ -336,7 +318,7 @@ const TripDetail = () => {
           console.error('Directions failed:', status);
           // Try without waypoints as fallback
           if (waypoints.length > 0) {
-            console.log('Retrying with fewer waypoints...');
+            console.log('Retrying without waypoints...');
             directionsService.route(
               {
                 origin,
@@ -346,7 +328,7 @@ const TripDetail = () => {
               },
               (fallbackResult, fallbackStatus) => {
                 if (fallbackStatus === google.maps.DirectionsStatus.OK && fallbackResult) {
-                  console.log('Fallback directions loaded (origin to destination only)');
+                  console.log('Fallback directions loaded (start to end only)');
                   setDirections(fallbackResult);
                 }
               }
@@ -485,9 +467,9 @@ const TripDetail = () => {
                       options={{
                         suppressMarkers: true,
                         polylineOptions: {
-                          strokeColor: activeDay ? '#10b981' : '#2d5a3d',
-                          strokeWeight: activeDay ? 5 : 4,
-                          strokeOpacity: activeDay ? 1 : 0.8,
+                          strokeColor: '#2d5a3d', // Forest green for all routes
+                          strokeWeight: 5,
+                          strokeOpacity: 1,
                         },
                       }}
                     />
@@ -497,14 +479,7 @@ const TripDetail = () => {
                   {!activeDay && (tripConfig.startLocation || tripConfig.baseLocation) && (
                     <Marker
                       position={(tripConfig.startLocation || tripConfig.baseLocation)!.coordinates}
-                      icon={{
-                        path: google.maps.SymbolPath.CIRCLE,
-                        fillColor: '#2d5a3d',
-                        fillOpacity: 1,
-                        strokeColor: '#ffffff',
-                        strokeWeight: 3,
-                        scale: 10,
-                      }}
+                      icon={createMarkerIcon('start', { size: 36 })}
                       title={tripConfig.startLocation
                         ? `Start: ${tripConfig.startLocation.name}`
                         : `Base: ${tripConfig.baseLocation!.name}`
@@ -513,27 +488,11 @@ const TripDetail = () => {
                   )}
 
                   {/* Show only active day's stops when day is selected, otherwise all stops */}
-                  {(activeDay ? generatedTrip.days.find(d => d.day === activeDay)?.stops || [] : allStops).map((stop, index) => (
+                  {(activeDay ? generatedTrip.days.find(d => d.day === activeDay)?.stops || [] : allStops).map((stop) => (
                     <Marker
                       key={stop.id}
                       position={stop.coordinates}
-                      icon={stop.type === 'camp'
-                        ? getTentMarkerIcon(!!activeDay)
-                        : {
-                            path: google.maps.SymbolPath.CIRCLE,
-                            fillColor: getMarkerColor(stop.type),
-                            fillOpacity: 1,
-                            strokeColor: activeDay ? '#000000' : '#ffffff',
-                            strokeWeight: activeDay ? 3 : 2,
-                            scale: activeDay ? 10 : 8,
-                          }
-                      }
-                      label={activeDay && stop.type !== 'camp' ? {
-                        text: String(index + 1),
-                        color: '#ffffff',
-                        fontSize: '12px',
-                        fontWeight: 'bold',
-                      } : undefined}
+                      icon={createMarkerIcon(stop.type, { isActive: !!activeDay, size: 36 })}
                       title={stop.name}
                       onClick={() => setSelectedStop(stop)}
                     />
@@ -715,21 +674,54 @@ const TripDetail = () => {
             {/* Trip Summary */}
             <Card className="bg-gradient-card">
               <CardContent className="p-4">
-                <div className="grid grid-cols-3 gap-4 text-center">
+                <h1 className="text-2xl font-display font-bold text-foreground mb-4">
+                  {tripConfig.name || 'My Trip'}
+                </h1>
+                <div className="grid grid-cols-5 gap-2 text-center">
                   <div>
-                    <p className="text-2xl font-bold text-foreground">
+                    <p className="text-xl font-bold text-foreground">
                       {generatedTrip.totalDistance.replace(' mi', '')}
                     </p>
-                    <p className="text-xs text-muted-foreground">Total Miles</p>
+                    <p className="text-xs text-muted-foreground">Miles</p>
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-foreground">
+                    <p className="text-xl font-bold text-foreground">
                       {generatedTrip.totalDrivingTime.split('h')[0]}h
                     </p>
-                    <p className="text-xs text-muted-foreground">Drive Time</p>
+                    <p className="text-xs text-muted-foreground">Driving</p>
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-foreground">{generatedTrip.days.length}</p>
+                    <p className="text-xl font-bold text-foreground">
+                      {(() => {
+                        // Calculate total hiking time from all days
+                        let totalHikingMinutes = 0;
+                        generatedTrip.days.forEach(day => {
+                          const estimate = estimateDayTime(day);
+                          totalHikingMinutes += estimate.hikingHours * 60;
+                        });
+                        const hours = Math.floor(totalHikingMinutes / 60);
+                        return hours > 0 ? `${hours}h` : '0h';
+                      })()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Hiking</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-foreground">
+                      {(() => {
+                        // Calculate total hiking miles (~1.8 mph average)
+                        let totalHikingMinutes = 0;
+                        generatedTrip.days.forEach(day => {
+                          const estimate = estimateDayTime(day);
+                          totalHikingMinutes += estimate.hikingHours * 60;
+                        });
+                        const hikingMiles = Math.round((totalHikingMinutes / 60) * 1.8);
+                        return hikingMiles > 0 ? `~${hikingMiles}` : '0';
+                      })()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Trail Mi</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-foreground">{generatedTrip.days.length}</p>
                     <p className="text-xs text-muted-foreground">Days</p>
                   </div>
                 </div>
@@ -830,6 +822,7 @@ const TripDetail = () => {
                 <DayCard
                   key={day.day}
                   day={day}
+                  tripId={generatedTrip.id}
                   expanded={expandedDays.includes(day.day)}
                   isActive={activeDay === day.day}
                   onToggle={() => toggleDay(day.day)}
@@ -907,6 +900,7 @@ const TripDetail = () => {
 
 interface DayCardProps {
   day: TripDay;
+  tripId: string;
   expanded: boolean;
   isActive: boolean;
   onToggle: () => void;
@@ -917,7 +911,9 @@ interface DayCardProps {
   onRemoveStop: (dayNumber: number, stop: TripStop) => void;
 }
 
-const DayCard = ({ day, expanded, isActive, onToggle, onStartDay, onExitDay, onStopClick, onSwapHike, onRemoveStop }: DayCardProps) => {
+const DayCard = ({ day, tripId, expanded, isActive, onToggle, onStartDay, onExitDay, onStopClick, onSwapHike, onRemoveStop }: DayCardProps) => {
+  const timeEstimate = estimateDayTime(day);
+
   return (
     <Card className={`overflow-hidden ${isActive ? 'ring-2 ring-emerald-500 border-emerald-500' : ''}`}>
       {/* Day Header */}
@@ -947,6 +943,12 @@ const DayCard = ({ day, expanded, isActive, onToggle, onStartDay, onExitDay, onS
           </div>
         </button>
         <div className="flex items-center gap-2">
+          {timeEstimate.warningMessage && (
+            <AlertTriangle
+              className={`w-4 h-4 ${timeEstimate.isOverloaded ? 'text-amber-500' : 'text-blue-500'}`}
+              title={timeEstimate.warningMessage}
+            />
+          )}
           {day.hike && <Footprints className="w-4 h-4 text-emerald-500" />}
           {day.campsite && <Tent className="w-4 h-4 text-amber-500" />}
           <Button
@@ -1032,6 +1034,12 @@ const DayCard = ({ day, expanded, isActive, onToggle, onStartDay, onExitDay, onS
                         <Clock className="w-3 h-3" />
                         {stop.duration}
                       </span>
+                      {stop.type === 'hike' && estimateTrailLength(stop.duration) && (
+                        <span className="flex items-center gap-1">
+                          <Mountain className="w-3 h-3" />
+                          {estimateTrailLength(stop.duration)}
+                        </span>
+                      )}
                       {stop.distance && (
                         <span className="flex items-center gap-1">
                           <Route className="w-3 h-3" />
@@ -1050,12 +1058,31 @@ const DayCard = ({ day, expanded, isActive, onToggle, onStartDay, onExitDay, onS
                           {stop.rating.toFixed(1)}
                         </span>
                       )}
+                      {stop.type === 'hike' && (
+                        <a
+                          href={getAllTrailsUrl(stop.name, stop.coordinates.lat, stop.coordinates.lng)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 hover:underline"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          AllTrails
+                        </a>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
             );
           })}
+          {/* View Day Details Link */}
+          <Link
+            to={`/trip/${tripId}/day/${day.day}`}
+            className="block p-3 text-center text-sm font-medium text-primary hover:bg-primary/5 transition-colors"
+          >
+            View Day Details →
+          </Link>
         </div>
       )}
     </Card>

@@ -138,11 +138,98 @@ async function findNearbyCampsites(
   return ridbCampsites;
 }
 
-// Find hikes near a point using Google Places
+// Get actual driving distance and time between two points
+interface DrivingInfo {
+  distanceMiles: number;
+  durationMinutes: number;
+  isReachable: boolean;
+}
+
+async function getDrivingInfo(
+  originLat: number,
+  originLng: number,
+  destLat: number,
+  destLng: number,
+  destName?: string
+): Promise<DrivingInfo> {
+  // Fallback values using straight-line distance with mountain road multiplier
+  const straightLineDistance = getDistanceMiles(originLat, originLng, destLat, destLng);
+  // In mountainous areas, roads can be 2-4x longer than straight line
+  // Use 2.5x as a conservative estimate for mountain/rural areas
+  const estimatedRoadDistance = straightLineDistance * 2.5;
+  const fallback: DrivingInfo = {
+    distanceMiles: estimatedRoadDistance,
+    durationMinutes: Math.round((estimatedRoadDistance / 30) * 60), // Estimate 30mph on mountain roads
+    isReachable: true,
+  };
+
+  if (!window.google?.maps) {
+    console.log(`[getDrivingInfo] Google Maps not loaded, using fallback for ${destName || 'destination'}`);
+    return fallback;
+  }
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      console.log(`[getDrivingInfo] Timeout for ${destName || 'destination'}, using fallback: ${Math.round(estimatedRoadDistance)} mi`);
+      resolve(fallback);
+    }, 8000); // Increased timeout
+
+    try {
+      const directionsService = new google.maps.DirectionsService();
+
+      directionsService.route(
+        {
+          origin: { lat: originLat, lng: originLng },
+          destination: { lat: destLat, lng: destLng },
+          travelMode: google.maps.TravelMode.DRIVING,
+        },
+        (result, status) => {
+          clearTimeout(timeout);
+          if (status === google.maps.DirectionsStatus.OK && result?.routes[0]?.legs[0]) {
+            const leg = result.routes[0].legs[0];
+            const miles = (leg.distance?.value || 0) / 1609.34;
+            const mins = (leg.duration?.value || 0) / 60;
+            console.log(`[getDrivingInfo] SUCCESS for ${destName || 'destination'}: ${Math.round(miles)} mi, ${Math.round(mins)} min`);
+            resolve({
+              distanceMiles: miles,
+              durationMinutes: mins,
+              isReachable: true,
+            });
+          } else if (status === google.maps.DirectionsStatus.ZERO_RESULTS) {
+            console.log(`[getDrivingInfo] No route for ${destName || 'destination'}`);
+            resolve({ ...fallback, isReachable: false });
+          } else {
+            console.log(`[getDrivingInfo] API status ${status} for ${destName || 'destination'}, using fallback: ${Math.round(estimatedRoadDistance)} mi`);
+            resolve(fallback);
+          }
+        }
+      );
+    } catch (err) {
+      clearTimeout(timeout);
+      console.error(`[getDrivingInfo] Error for ${destName || 'destination'}:`, err);
+      resolve(fallback);
+    }
+  });
+}
+
+// Check if a location is reachable by driving from an origin (legacy function for compatibility)
+async function isReachableByDriving(
+  originLat: number,
+  originLng: number,
+  destLat: number,
+  destLng: number
+): Promise<boolean> {
+  const info = await getDrivingInfo(originLat, originLng, destLat, destLng);
+  return info.isReachable;
+}
+
+// Find hikes near a point using Google Places, filtered by actual driving time
+// maxDrivingMinutes: maximum one-way driving time to consider (default 60 min)
 async function findNearbyHikes(
   lat: number,
   lng: number,
-  radiusMeters: number = 48280
+  radiusMeters: number = 48280,
+  maxDrivingMinutes: number = 60
 ): Promise<TripStop[]> {
   if (!window.google?.maps?.places) return [];
 
@@ -156,13 +243,53 @@ async function findNearbyHikes(
       type: 'tourist_attraction',
     };
 
-    service.nearbySearch(request, (results, status) => {
+    service.nearbySearch(request, async (results, status) => {
       if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-        const hikes: TripStop[] = results
+        const candidates = results
           .filter((place) => place.geometry?.location)
-          .slice(0, 5)
-          .map((place, index) => ({
-            id: `hike-${place.place_id}-${index}`,
+          .slice(0, 10); // Limit candidates to avoid too many API calls
+
+        console.log(`[findNearbyHikes] Found ${candidates.length} candidates, checking driving distances...`);
+
+        // Get actual driving info for each candidate
+        const hikesWithDrivingInfo: TripStop[] = [];
+
+        for (const place of candidates) {
+          if (hikesWithDrivingInfo.length >= 5) break; // Stop once we have enough
+
+          // Add small delay between API calls to avoid rate limiting
+          if (hikesWithDrivingInfo.length > 0) {
+            await new Promise(r => setTimeout(r, 200));
+          }
+
+          const drivingInfo = await getDrivingInfo(
+            lat, lng,
+            place.geometry!.location!.lat(),
+            place.geometry!.location!.lng(),
+            place.name // Pass name for logging
+          );
+
+          // Filter out unreachable or too-far hikes
+          if (!drivingInfo.isReachable) {
+            console.log(`[findNearbyHikes] Filtered unreachable: ${place.name}`);
+            continue;
+          }
+
+          if (drivingInfo.durationMinutes > maxDrivingMinutes) {
+            console.log(`[findNearbyHikes] Filtered too far (${Math.round(drivingInfo.durationMinutes)} min, ${Math.round(drivingInfo.distanceMiles)} mi): ${place.name}`);
+            continue;
+          }
+
+          // Format driving time string
+          const mins = Math.round(drivingInfo.durationMinutes);
+          const drivingTimeStr = mins < 60
+            ? `${mins} min each way`
+            : `${Math.floor(mins / 60)}h ${mins % 60}m each way`;
+
+          console.log(`[findNearbyHikes] INCLUDED: ${place.name} - ${Math.round(drivingInfo.distanceMiles)} mi, ${mins} min`);
+
+          hikesWithDrivingInfo.push({
+            id: `hike-${place.place_id}`,
             name: place.name || 'Unknown Trail',
             type: 'hike' as const,
             coordinates: {
@@ -170,15 +297,73 @@ async function findNearbyHikes(
               lng: place.geometry!.location!.lng(),
             },
             duration: '2-4h hike',
-            distance: `${getDistanceMiles(lat, lng, place.geometry!.location!.lat(), place.geometry!.location!.lng()).toFixed(1)} mi from camp`,
+            distance: `${Math.round(drivingInfo.distanceMiles)} mi drive`,
+            drivingTime: drivingTimeStr,
             description: place.vicinity || '',
             day: 0,
             placeId: place.place_id,
             rating: place.rating,
             reviewCount: place.user_ratings_total,
-          }));
-        resolve(hikes);
+          });
+        }
+
+        // Sort by driving time (closest first)
+        hikesWithDrivingInfo.sort((a, b) => {
+          const aTime = parseInt(a.drivingTime?.split(' ')[0] || '0');
+          const bTime = parseInt(b.drivingTime?.split(' ')[0] || '0');
+          return aTime - bTime;
+        });
+
+        if (hikesWithDrivingInfo.length === 0) {
+          console.log('[findNearbyHikes] No hikes found within driving time limit. Returning hikes with accurate distances but marked as far.');
+          // Instead of using estimated distances, get accurate distances for the closest candidates
+          // but mark them clearly as being far away
+          const farHikes: TripStop[] = [];
+          for (const place of candidates.slice(0, 5)) {
+            const drivingInfo = await getDrivingInfo(
+              lat, lng,
+              place.geometry!.location!.lat(),
+              place.geometry!.location!.lng(),
+              place.name
+            );
+
+            if (!drivingInfo.isReachable) continue;
+
+            const mins = Math.round(drivingInfo.durationMinutes);
+            const drivingTimeStr = mins < 60
+              ? `${mins} min each way`
+              : `${Math.floor(mins / 60)}h ${mins % 60}m each way`;
+
+            farHikes.push({
+              id: `hike-${place.place_id}`,
+              name: place.name || 'Unknown Trail',
+              type: 'hike' as const,
+              coordinates: {
+                lat: place.geometry!.location!.lat(),
+                lng: place.geometry!.location!.lng(),
+              },
+              duration: '2-4h hike',
+              distance: `${Math.round(drivingInfo.distanceMiles)} mi drive`,
+              drivingTime: drivingTimeStr,
+              description: place.vicinity || '',
+              day: 0,
+              placeId: place.place_id,
+              rating: place.rating,
+              reviewCount: place.user_ratings_total,
+            });
+          }
+          // Sort by driving time
+          farHikes.sort((a, b) => {
+            const aMatch = a.drivingTime?.match(/(\d+)/);
+            const bMatch = b.drivingTime?.match(/(\d+)/);
+            return (aMatch ? parseInt(aMatch[1]) : 999) - (bMatch ? parseInt(bMatch[1]) : 999);
+          });
+          resolve(farHikes);
+        } else {
+          resolve(hikesWithDrivingInfo);
+        }
       } else {
+        console.log('[findNearbyHikes] Places API returned:', status);
         resolve([]);
       }
     });
@@ -249,46 +434,72 @@ export function useTripGenerator() {
         };
       }
 
-      for (let day = 1; day <= numDays; day++) {
-        const dayStops: TripStop[] = [];
-        let dayDistanceMiles = 0;
+      // Determine which days should have hikes based on preference
+      const hikingPreference = config.hikingPreference || 'daily';
+      let hikingDays: Set<number> = new Set();
 
-        // Find hikes for this day
-        const dayHikes: TripStop[] = [];
-        const nearbyHikes = await findNearbyHikes(
+      if (hikingPreference === 'daily') {
+        // Hike every day
+        for (let d = 1; d <= numDays; d++) hikingDays.add(d);
+      } else if (hikingPreference === 'surprise') {
+        // Pick ~50-60% of days for hiking, spread out
+        const numHikingDays = Math.max(1, Math.ceil(numDays * 0.55));
+        // Spread hikes evenly across the trip
+        const interval = numDays / numHikingDays;
+        for (let i = 0; i < numHikingDays; i++) {
+          const dayNum = Math.min(numDays, Math.round(1 + i * interval));
+          hikingDays.add(dayNum);
+        }
+      }
+      // For 'none', hikingDays stays empty
+
+      // Pre-fetch all hikes if we need any
+      let allNearbyHikes: TripStop[] = [];
+      if (hikingPreference !== 'none') {
+        console.log(`[generateLocationBasedTrip] Fetching hikes near ${baseLocation.name}...`);
+        allNearbyHikes = await findNearbyHikes(
           baseLocation.coordinates.lat,
           baseLocation.coordinates.lng,
           50000 // 50km radius
         );
+        console.log(`[generateLocationBasedTrip] Found ${allNearbyHikes.length} hikes after filtering:`);
+        allNearbyHikes.forEach(h => console.log(`  - ${h.name}: ${h.distance}, ${h.drivingTime}`));
+        // For surprise mode, sort by rating to get best hikes
+        if (hikingPreference === 'surprise') {
+          allNearbyHikes.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+        }
+      }
 
-        // Get unique hikes for this day
-        const availableHikes = nearbyHikes.filter(h => !usedHikeIds.has(h.placeId || h.id));
-        for (let i = 0; i < activitiesPerDay && i < availableHikes.length; i++) {
-          // Calculate distance and driving time from base/camp to trailhead
-          const hikeDist = getDistanceMiles(
-            baseLocation.coordinates.lat,
-            baseLocation.coordinates.lng,
-            availableHikes[i].coordinates.lat,
-            availableHikes[i].coordinates.lng
-          );
-          // Estimate driving time at 25 mph on back roads
-          const hikeDrivingMinutes = Math.round((hikeDist / 25) * 60);
-          const drivingTimeStr = hikeDrivingMinutes < 60
-            ? `${hikeDrivingMinutes} min each way`
-            : `${Math.floor(hikeDrivingMinutes / 60)}h ${hikeDrivingMinutes % 60}m each way`;
+      for (let day = 1; day <= numDays; day++) {
+        const dayStops: TripStop[] = [];
+        let dayDistanceMiles = 0;
 
-          const hike = {
-            ...availableHikes[i],
-            day,
-            id: `hike-${day}-${i}`,
-            distance: `${hikeDist.toFixed(1)} mi from camp`,
-            drivingTime: drivingTimeStr,
-          };
-          usedHikeIds.add(availableHikes[i].placeId || availableHikes[i].id);
-          dayHikes.push(hike);
-          dayStops.push(hike);
+        // Find hikes for this day (only if this day should have hiking)
+        const dayHikes: TripStop[] = [];
+        const shouldHikeToday = hikingDays.has(day);
 
-          dayDistanceMiles += hikeDist * 2; // Round trip
+        if (shouldHikeToday) {
+          // Get unique hikes for this day
+          const availableHikes = allNearbyHikes.filter(h => !usedHikeIds.has(h.placeId || h.id));
+          console.log(`[generateLocationBasedTrip] Day ${day}: ${availableHikes.length} available hikes`);
+          for (let i = 0; i < activitiesPerDay && i < availableHikes.length; i++) {
+            // Use the driving info already calculated in findNearbyHikes
+            // The hike object already has accurate distance and drivingTime from Google Directions API
+            console.log(`[generateLocationBasedTrip] Assigning hike "${availableHikes[i].name}" with distance: ${availableHikes[i].distance}, drivingTime: ${availableHikes[i].drivingTime}`);
+            const hike = {
+              ...availableHikes[i],
+              day,
+              id: `hike-${day}-${i}`,
+            };
+            usedHikeIds.add(availableHikes[i].placeId || availableHikes[i].id);
+            dayHikes.push(hike);
+            dayStops.push(hike);
+
+            // Extract miles from distance string for totals (e.g., "45 mi drive" -> 45)
+            const distanceMatch = availableHikes[i].distance?.match(/(\d+)/);
+            const hikeMiles = distanceMatch ? parseInt(distanceMatch[1], 10) : 0;
+            dayDistanceMiles += hikeMiles * 2; // Round trip
+          }
         }
 
         // Find campsite for this night
@@ -434,12 +645,37 @@ export function useTripGenerator() {
         }
       }
 
-      // Pre-fetch multiple hikes for each destination (for multi-day stays)
+      // Determine hiking preference
+      const hikingPreference = config.hikingPreference || 'daily';
+
+      // Pre-fetch multiple hikes for each destination (for multi-day stays) - skip if no hikes wanted
       const destinationHikes: Map<string, TripStop[]> = new Map();
-      for (const dest of config.destinations) {
-        const hikes = await findNearbyHikes(dest.coordinates.lat, dest.coordinates.lng, 50000);
-        destinationHikes.set(dest.id, hikes);
+      if (hikingPreference !== 'none') {
+        for (const dest of config.destinations) {
+          let hikes = await findNearbyHikes(dest.coordinates.lat, dest.coordinates.lng, 50000);
+          // For surprise mode, sort by rating to get best hikes
+          if (hikingPreference === 'surprise') {
+            hikes = hikes.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+          }
+          destinationHikes.set(dest.id, hikes);
+        }
       }
+
+      // For surprise mode, determine which days to include hikes
+      let hikingDays: Set<number> = new Set();
+      if (hikingPreference === 'daily') {
+        // All days get hikes (added during iteration)
+        // We'll use a flag instead since we don't know total days yet
+      } else if (hikingPreference === 'surprise') {
+        // Pick ~50-60% of days for hiking
+        const numHikingDays = Math.max(1, Math.ceil(numDays * 0.55));
+        const interval = numDays / numHikingDays;
+        for (let i = 0; i < numHikingDays; i++) {
+          const dayNum = Math.min(numDays, Math.round(1 + i * interval));
+          hikingDays.add(dayNum);
+        }
+      }
+      // For 'none', hikingDays stays empty
 
       // Generate days
       const days: TripDay[] = [];
@@ -504,46 +740,46 @@ export function useTripGenerator() {
             dayStops.push(exploreStop);
           }
 
-          // Find a unique hike for this day
+          // Find a unique hike for this day (based on hiking preference)
           let hike: TripStop | undefined;
-          for (const h of availableHikes) {
-            const hikeKey = h.placeId || h.id;
-            if (!usedHikeIds.has(hikeKey)) {
-              usedHikeIds.add(hikeKey);
-              // Calculate driving time from destination to trailhead
-              const hikeDist = getDistanceMiles(
-                dest.coordinates.lat,
-                dest.coordinates.lng,
-                h.coordinates.lat,
-                h.coordinates.lng
-              );
-              const hikeDrivingMinutes = Math.round((hikeDist / 25) * 60);
-              const drivingTimeStr = hikeDrivingMinutes < 60
-                ? `${hikeDrivingMinutes} min each way`
-                : `${Math.floor(hikeDrivingMinutes / 60)}h ${hikeDrivingMinutes % 60}m each way`;
+          const shouldHikeToday = hikingPreference === 'daily' || hikingDays.has(dayNumber);
 
-              hike = {
-                ...h,
-                day: dayNumber,
-                id: `hike-${dayNumber}`,
-                distance: `${hikeDist.toFixed(1)} mi from ${dest.name}`,
-                drivingTime: drivingTimeStr,
-              };
-              break;
+          if (shouldHikeToday && availableHikes.length > 0) {
+            for (const h of availableHikes) {
+              const hikeKey = h.placeId || h.id;
+              if (!usedHikeIds.has(hikeKey)) {
+                usedHikeIds.add(hikeKey);
+                // Use the driving info already calculated in findNearbyHikes
+                // The hike object already has accurate distance and drivingTime from Google Directions API
+                console.log(`[generateTrip] Assigning hike "${h.name}" with distance: ${h.distance}, drivingTime: ${h.drivingTime}`);
+                hike = {
+                  ...h,
+                  day: dayNumber,
+                  id: `hike-${dayNumber}`,
+                };
+                break;
+              }
             }
-          }
 
-          if (hike) {
-            dayStops.push(hike);
-            // Add hike round-trip driving to day totals
-            const hikeDist = getDistanceMiles(
-              dest.coordinates.lat,
-              dest.coordinates.lng,
-              hike.coordinates.lat,
-              hike.coordinates.lng
-            );
-            dayDistanceMiles += hikeDist * 2;
-            dayDrivingMinutes += (hikeDist * 2 / 25) * 60;
+            if (hike) {
+              console.log(`[generateTrip] Added hike to day ${dayNumber}: ${hike.name}, distance: ${hike.distance}`);
+              dayStops.push(hike);
+              // Extract miles from distance string for totals (e.g., "45 mi drive" -> 45)
+              const distanceMatch = hike.distance?.match(/(\d+)/);
+              const hikeMiles = distanceMatch ? parseInt(distanceMatch[1], 10) : 0;
+              dayDistanceMiles += hikeMiles * 2; // Round trip
+              // Extract driving time from drivingTime string for totals
+              const timeMatch = hike.drivingTime?.match(/(\d+)\s*min|(\d+)h\s*(\d+)?m?/);
+              let hikeMinutes = 0;
+              if (timeMatch) {
+                if (timeMatch[1]) {
+                  hikeMinutes = parseInt(timeMatch[1], 10);
+                } else if (timeMatch[2]) {
+                  hikeMinutes = parseInt(timeMatch[2], 10) * 60 + (parseInt(timeMatch[3] || '0', 10));
+                }
+              }
+              dayDrivingMinutes += hikeMinutes * 2; // Round trip
+            }
           }
 
           // Add campsite (except on last day of trip if returning home)

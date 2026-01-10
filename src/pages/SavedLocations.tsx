@@ -1,18 +1,29 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, MapPin, Trash2, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
 import { toast } from "sonner";
+import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
 
 const SavedLocations = () => {
   const { locations, removeLocation } = useSavedLocations();
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string; name: string }>({
+    isOpen: false,
+    id: '',
+    name: '',
+  });
 
-  const handleRemove = (e: React.MouseEvent, id: string, name: string) => {
+  const handleRemoveClick = (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
     e.preventDefault();
-    removeLocation(id);
-    toast.success(`Removed ${name}`, {
+    setDeleteModal({ isOpen: true, id, name });
+  };
+
+  const handleConfirmDelete = () => {
+    removeLocation(deleteModal.id);
+    toast.success(`Removed ${deleteModal.name}`, {
       description: "Removed from saved locations",
     });
   };
@@ -76,7 +87,7 @@ const SavedLocations = () => {
                             {location.type}
                           </span>
                           <button
-                            onClick={(e) => handleRemove(e, location.id, location.name)}
+                            onClick={(e) => handleRemoveClick(e, location.id, location.name)}
                             className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-destructive/10 rounded-lg"
                           >
                             <Trash2 className="w-4 h-4 text-destructive" />
@@ -108,6 +119,16 @@ const SavedLocations = () => {
           </div>
         )}
       </main>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, id: '', name: '' })}
+        onConfirm={handleConfirmDelete}
+        title="Remove Location"
+        description="Are you sure you want to remove this saved location?"
+        itemName={deleteModal.name}
+      />
     </div>
   );
 };

@@ -14,6 +14,7 @@ import LocationDetail from "./pages/LocationDetail";
 import SavedLocations from "./pages/SavedLocations";
 import CreateTrip from "./pages/CreateTrip";
 import TripDetail from "./pages/TripDetail";
+import DayDetail from "./pages/DayDetail";
 import MyTrips from "./pages/MyTrips";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -47,6 +48,8 @@ const App = () => (
                   <Route path="/saved" element={<ProtectedRoute><SavedLocations /></ProtectedRoute>} />
                   <Route path="/create-trip" element={<ProtectedRoute><CreateTrip /></ProtectedRoute>} />
                   <Route path="/trip/:id" element={<ProtectedRoute><TripDetail /></ProtectedRoute>} />
+                  <Route path="/trip/:tripId/day/:dayNumber" element={<ProtectedRoute><DayDetail /></ProtectedRoute>} />
+                  <Route path="/trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
                   <Route path="/my-trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
 
                   {/* Catch-all */}

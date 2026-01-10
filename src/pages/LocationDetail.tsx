@@ -16,6 +16,7 @@ import { usePublicLands, PublicLand } from "@/hooks/use-public-lands";
 import { toast } from "sonner";
 import { useTrip } from "@/context/TripContext";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
+import { createMarkerIcon } from "@/utils/mapMarkers";
 
 type NearbyPlace = GoogleSavedPlace & { distance: number };
 
@@ -35,35 +36,7 @@ function getElevationMessage(elevationFeet: number): string | null {
   return null;
 }
 
-// SVG icons for map markers (larger than default Google markers)
-const TENT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
-  <circle cx="20" cy="20" r="18" fill="#f59e0b" stroke="#ffffff" stroke-width="2"/>
-  <path d="M20 10L10 27h20L20 10z" fill="#ffffff" stroke="none"/>
-  <path d="M20 10L10 27h20L20 10z M17 27l3-7 3 7" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linejoin="round"/>
-</svg>
-`)}`;
-
-// RIDB campsite icon (dark blue)
-const TENT_RIDB_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
-  <circle cx="20" cy="20" r="18" fill="#213D5C" stroke="#ffffff" stroke-width="2"/>
-  <path d="M20 10L10 27h20L20 10z" fill="#ffffff" stroke="none"/>
-  <path d="M20 10L10 27h20L20 10z M17 27l3-7 3 7" fill="none" stroke="#213D5C" stroke-width="2" stroke-linejoin="round"/>
-</svg>
-`)}`;
-
-const BOOT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
-  <circle cx="20" cy="20" r="18" fill="#10b981" stroke="#ffffff" stroke-width="2"/>
-  <g transform="translate(10, 8)">
-    <path d="M6 4C6 4 6 8 6 12C6 14 4 16 4 18C4 20 6 20 8 20L16 20C18 20 18 18 18 16L18 14L12 14L12 8C12 6 10 4 8 4L6 4Z" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M6 8L10 8" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M6 11L10 11" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
-  </g>
-</svg>
-`)}`;
-
+// Photo hotspot icon (special - not in shared utils)
 const PHOTO_HOTSPOT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
   <circle cx="20" cy="20" r="18" fill="#f97316" stroke="#ffffff" stroke-width="2"/>
@@ -72,7 +45,7 @@ const PHOTO_HOTSPOT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComp
 </svg>
 `)}`;
 
-// Public lands icon (forest green)
+// Public lands icon (forest green with tree)
 const PUBLIC_LAND_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
   <circle cx="20" cy="20" r="18" fill="#166534" stroke="#ffffff" stroke-width="2"/>
@@ -382,14 +355,7 @@ const LocationDetail = () => {
                   {/* Main location marker */}
                   <Marker
                     position={{ lat: location.lat, lng: location.lng }}
-                    icon={{
-                      path: google.maps.SymbolPath.CIRCLE,
-                      fillColor: '#2d5a3d',
-                      fillOpacity: 1,
-                      strokeColor: '#ffffff',
-                      strokeWeight: 3,
-                      scale: 12,
-                    }}
+                    icon={createMarkerIcon('viewpoint', { size: 40 })}
                   />
                   {/* Nearby camp spots markers (tent icon) */}
                   {nearbyPlaces.map((place) => (
@@ -397,11 +363,7 @@ const LocationDetail = () => {
                       key={place.id}
                       position={{ lat: place.lat, lng: place.lng }}
                       title={`${place.name} (${place.distance.toFixed(1)} mi)`}
-                      icon={{
-                        url: place.source === 'ridb' ? TENT_RIDB_ICON_SVG : TENT_ICON_SVG,
-                        scaledSize: new google.maps.Size(MARKER_SIZE, MARKER_SIZE),
-                        anchor: new google.maps.Point(MARKER_SIZE / 2, MARKER_SIZE / 2),
-                      }}
+                      icon={createMarkerIcon('camp', { size: MARKER_SIZE })}
                       onClick={() => {
                         setSelectedPlace(place);
                         setSelectedHike(null);
@@ -416,11 +378,7 @@ const LocationDetail = () => {
                       key={hike.id}
                       position={{ lat: hike.lat, lng: hike.lng }}
                       title={hike.name}
-                      icon={{
-                        url: BOOT_ICON_SVG,
-                        scaledSize: new google.maps.Size(MARKER_SIZE, MARKER_SIZE),
-                        anchor: new google.maps.Point(MARKER_SIZE / 2, MARKER_SIZE / 2),
-                      }}
+                      icon={createMarkerIcon('hike', { size: MARKER_SIZE })}
                       onClick={() => {
                         setSelectedHike(hike);
                         setSelectedPlace(null);

@@ -1,13 +1,10 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Car, Tent, Camera, Mountain, Compass, Loader2, Plus, GripVertical, X, RotateCcw } from "lucide-react";
+import { ArrowLeft, MapPin, Car, Camera, Mountain, Compass, Loader2, Plus, GripVertical, X, Sparkles, Footprints, Ban, ChevronDown, Clock, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { PlaceSearch } from "@/components/PlaceSearch";
@@ -72,7 +69,16 @@ const CreateTrip = () => {
   const [lodging, setLodging] = useState<string>("dispersed");
   const [activities, setActivities] = useState<string[]>([]);
   const [baseCampMode, setBaseCampMode] = useState(false);
+  const [hikingPreference, setHikingPreference] = useState<'none' | 'surprise' | 'daily'>('daily');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  // Advanced options state
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [startDate, setStartDate] = useState<string>('');
+  const [departureTime, setDepartureTime] = useState<string>('08:00');
+  const [dailyStartTime, setDailyStartTime] = useState<string>('08:00');
+  const [pacePreference, setPacePreference] = useState<'relaxed' | 'moderate' | 'packed'>('moderate');
+  const [maxDrivingHours, setMaxDrivingHours] = useState<number[]>([4]);
 
   const handleCarCapabilityChange = (capabilityId: string, checked: boolean) => {
     if (checked) {
@@ -201,6 +207,13 @@ const CreateTrip = () => {
     const generatedName = tripName.trim() ||
       `${startLocation.name} to ${destinations[destinations.length - 1].name}`;
 
+    // Calculate end date from start date and duration
+    const endDate = startDate ? (() => {
+      const start = new Date(startDate);
+      start.setDate(start.getDate() + duration[0] - 1);
+      return start.toISOString().split('T')[0];
+    })() : undefined;
+
     // Build trip config
     const tripConfig: TripConfig = {
       name: generatedName,
@@ -213,6 +226,14 @@ const CreateTrip = () => {
       vehicleType: carCapabilities.includes("4wd") ? "4wd" : carCapabilities.includes("high-clearance") ? "suv" : "sedan",
       lodgingPreference: lodging as any,
       activities: activities as any[],
+      hikingPreference: hikingPreference,
+      // Advanced options
+      startDate: startDate || undefined,
+      endDate: endDate,
+      departureTime: departureTime,
+      dailyStartTime: dailyStartTime,
+      pacePreference: pacePreference,
+      maxDrivingHoursPerDay: maxDrivingHours[0],
     };
 
     console.log("Creating trip with config:", tripConfig);
@@ -269,7 +290,7 @@ const CreateTrip = () => {
           {/* Trip Name */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-xl">Trip Details</CardTitle>
+              <CardTitle className="text-2xl">Trip Details</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
@@ -284,12 +305,12 @@ const CreateTrip = () => {
             </CardContent>
           </Card>
 
-          {/* Start Location */}
+          {/* Start & End Location */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-xl">Start Location</CardTitle>
+              <CardTitle className="text-2xl">Start & End Location</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Where does your trip begin?</Label>
                 <PlaceSearch
@@ -314,13 +335,54 @@ const CreateTrip = () => {
                   </div>
                 )}
               </div>
+
+              {/* Return to Start Checkbox */}
+              <div className="flex items-center space-x-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="return-to-start"
+                  checked={returnToStart}
+                  onChange={(e) => setReturnToStart(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                />
+                <label htmlFor="return-to-start" className="cursor-pointer text-sm">
+                  Return to start location
+                </label>
+              </div>
+
+              {/* End Location (only if not returning to start) */}
+              {!returnToStart && (
+                <div className="space-y-2 pt-2 animate-fade-in">
+                  <Label>Where does your trip end?</Label>
+                  <PlaceSearch
+                    onPlaceSelect={handleEndLocationSelect}
+                    placeholder="Search for end point..."
+                  />
+                  {endLocation && (
+                    <div className="flex items-center justify-between p-3 bg-terracotta/10 rounded-lg border border-terracotta/20">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-terracotta" />
+                        <span className="text-sm font-medium">{endLocation.name}</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEndLocation(null)}
+                        className="h-6 w-6 p-0"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
           {/* Destinations */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-xl">Destinations</CardTitle>
+              <CardTitle className="text-2xl">Destinations</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -371,87 +433,70 @@ const CreateTrip = () => {
                 </div>
               )}
 
-              {destinations.length === 0 && (
-                <div className="text-center py-6 border-2 border-dashed border-border rounded-lg">
-                  <Plus className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Search above to add destinations
-                  </p>
-                </div>
-              )}
+              {/* Same Campsite Option */}
+              <div className="flex items-center space-x-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="base-camp-mode"
+                  checked={baseCampMode}
+                  onChange={(e) => setBaseCampMode(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                />
+                <label htmlFor="base-camp-mode" className="cursor-pointer text-sm">
+                  Stay at the same campsite at each destination
+                </label>
+              </div>
             </CardContent>
           </Card>
 
-          {/* End Location */}
+          {/* Duration & Date */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-xl">End Location</CardTitle>
+              <CardTitle className="text-2xl">Trip Duration</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Return to Start Toggle */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <RotateCcw className="w-5 h-5 text-muted-foreground" />
-                  <div>
-                    <Label>Return to start</Label>
-                    <p className="text-sm text-muted-foreground">
-                      End the trip where you started
-                    </p>
-                  </div>
+            <CardContent className="space-y-6">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-sm text-muted-foreground">Days</span>
+                  <span className="text-lg font-semibold text-foreground">{duration[0]}</span>
                 </div>
-                <Switch checked={returnToStart} onCheckedChange={setReturnToStart} />
+                <Slider
+                  value={duration}
+                  onValueChange={setDuration}
+                  min={1}
+                  max={14}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                  <span>1 day</span>
+                  <span>14 days</span>
+                </div>
               </div>
 
-              {/* End Location Search (only if not returning to start) */}
-              {!returnToStart && (
-                <div className="space-y-2 pt-4 border-t border-border animate-fade-in">
-                  <Label>Where does your trip end?</Label>
-                  <PlaceSearch
-                    onPlaceSelect={handleEndLocationSelect}
-                    placeholder="Search for end point..."
+              {/* Start Date */}
+              <div className="space-y-3 pt-2 border-t border-border">
+                <Label className="text-sm font-medium">Start Date</Label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="flexible-date"
+                    checked={!startDate}
+                    onChange={(e) => setStartDate(e.target.checked ? '' : new Date().toISOString().split('T')[0])}
+                    className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
                   />
-                  {endLocation && (
-                    <div className="flex items-center justify-between p-3 bg-terracotta/10 rounded-lg border border-terracotta/20">
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-terracotta" />
-                        <span className="text-sm font-medium">{endLocation.name}</span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEndLocation(null)}
-                        className="h-6 w-6 p-0"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  )}
+                  <label htmlFor="flexible-date" className="cursor-pointer text-sm">
+                    I'm flexible
+                  </label>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Duration Slider */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl">Trip Duration</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-sm text-muted-foreground">Days</span>
-                <span className="text-2xl font-bold text-foreground">{duration[0]}</span>
-              </div>
-              <Slider
-                value={duration}
-                onValueChange={setDuration}
-                min={1}
-                max={14}
-                step={1}
-                className="w-full"
-              />
-              <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                <span>1 day</span>
-                <span>14 days</span>
+                {startDate && (
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full max-w-[200px]"
+                  />
+                )}
               </div>
             </CardContent>
           </Card>
@@ -459,27 +504,32 @@ const CreateTrip = () => {
           {/* Car Capabilities */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-xl">Vehicle Capabilities</CardTitle>
+              <CardTitle className="text-2xl">Vehicle Capabilities</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-3">
                 {CAR_CAPABILITIES.map((capability) => (
-                  <div
+                  <label
                     key={capability.id}
-                    className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                    htmlFor={capability.id}
+                    className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                      carCapabilities.includes(capability.id) ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                    }`}
                   >
-                    <Checkbox
+                    <input
+                      type="checkbox"
                       id={capability.id}
                       checked={carCapabilities.includes(capability.id)}
-                      onCheckedChange={(checked) => handleCarCapabilityChange(capability.id, checked as boolean)}
+                      onChange={(e) => handleCarCapabilityChange(capability.id, e.target.checked)}
+                      className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
                     />
                     <div className="space-y-0.5">
-                      <Label htmlFor={capability.id} className="cursor-pointer font-medium">
+                      <span className="font-medium text-sm">
                         {capability.label}
-                      </Label>
+                      </span>
                       <p className="text-xs text-muted-foreground">{capability.description}</p>
                     </div>
-                  </div>
+                  </label>
                 ))}
               </div>
             </CardContent>
@@ -488,32 +538,43 @@ const CreateTrip = () => {
           {/* Lodging Options */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-xl">Lodging Preference</CardTitle>
+              <CardTitle className="text-2xl">Lodging Preference</CardTitle>
             </CardHeader>
             <CardContent>
-              <RadioGroup value={lodging} onValueChange={setLodging} className="grid gap-3">
+              <div className="grid gap-3">
                 {LODGING_OPTIONS.map((option) => (
-                  <div
+                  <label
                     key={option.id}
-                    className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                    htmlFor={`lodging-${option.id}`}
+                    className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                      lodging === option.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                    }`}
                   >
-                    <RadioGroupItem value={option.id} id={option.id} className="mt-0.5" />
+                    <input
+                      type="radio"
+                      id={`lodging-${option.id}`}
+                      name="lodging"
+                      value={option.id}
+                      checked={lodging === option.id}
+                      onChange={(e) => setLodging(e.target.value)}
+                      className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
+                    />
                     <div className="space-y-0.5">
-                      <Label htmlFor={option.id} className="cursor-pointer font-medium">
+                      <span className="font-medium text-sm">
                         {option.label}
-                      </Label>
+                      </span>
                       <p className="text-xs text-muted-foreground">{option.description}</p>
                     </div>
-                  </div>
+                  </label>
                 ))}
-              </RadioGroup>
+              </div>
             </CardContent>
           </Card>
 
           {/* Activities */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-xl">Activities</CardTitle>
+              <CardTitle className="text-2xl">Activities</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -538,21 +599,234 @@ const CreateTrip = () => {
                 })}
               </div>
 
-              <div className="border-t border-border pt-4 mt-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Tent className="w-5 h-5 text-amber-500" />
-                    <div>
-                      <Label>Base Camp Mode</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Stay at the same campsite each night
-                      </p>
+            </CardContent>
+          </Card>
+
+          {/* Hiking Preferences */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-2xl">Hiking Preferences</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3">
+                <label
+                  htmlFor="hiking-daily"
+                  className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                    hikingPreference === 'daily' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    id="hiking-daily"
+                    name="hiking-preference"
+                    value="daily"
+                    checked={hikingPreference === 'daily'}
+                    onChange={(e) => setHikingPreference(e.target.value as 'none' | 'surprise' | 'daily')}
+                    className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
+                  />
+                  <div className="flex-1 space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Footprints className="w-4 h-4 text-emerald-500" />
+                      <span className="font-medium text-sm">Daily Hikes</span>
                     </div>
+                    <p className="text-xs text-muted-foreground">Include a hike every day of the trip</p>
                   </div>
-                  <Switch checked={baseCampMode} onCheckedChange={setBaseCampMode} />
-                </div>
+                </label>
+
+                <label
+                  htmlFor="hiking-surprise"
+                  className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                    hikingPreference === 'surprise' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    id="hiking-surprise"
+                    name="hiking-preference"
+                    value="surprise"
+                    checked={hikingPreference === 'surprise'}
+                    onChange={(e) => setHikingPreference(e.target.value as 'none' | 'surprise' | 'daily')}
+                    className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
+                  />
+                  <div className="flex-1 space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <span className="font-medium text-sm">Surprise Me</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Let us pick the best hiking days with top-rated trails</p>
+                  </div>
+                </label>
+
+                <label
+                  htmlFor="hiking-none"
+                  className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                    hikingPreference === 'none' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    id="hiking-none"
+                    name="hiking-preference"
+                    value="none"
+                    checked={hikingPreference === 'none'}
+                    onChange={(e) => setHikingPreference(e.target.value as 'none' | 'surprise' | 'daily')}
+                    className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
+                  />
+                  <div className="flex-1 space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Ban className="w-4 h-4 text-muted-foreground" />
+                      <span className="font-medium text-sm">No Hikes</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Skip hiking, focus on scenic drives and viewpoints</p>
+                  </div>
+                </label>
               </div>
             </CardContent>
+          </Card>
+
+          {/* Advanced Options */}
+          <Card>
+            <CardHeader
+              className="cursor-pointer"
+              onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+            >
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-2xl">Advanced Options</CardTitle>
+                <ChevronDown
+                  className={`w-5 h-5 text-muted-foreground transition-transform ${
+                    showAdvancedOptions ? 'rotate-180' : ''
+                  }`}
+                />
+              </div>
+            </CardHeader>
+            {showAdvancedOptions && (
+              <CardContent className="space-y-6 animate-fade-in">
+                {/* Departure Time */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-primary" />
+                    <Label className="font-medium">Departure Time</Label>
+                  </div>
+                  <p className="text-sm text-muted-foreground">What time do you want to leave your starting location?</p>
+                  <Input
+                    type="time"
+                    value={departureTime}
+                    onChange={(e) => setDepartureTime(e.target.value)}
+                    className="w-full max-w-[150px]"
+                  />
+                </div>
+
+                {/* Daily Start Time */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-500" />
+                    <Label className="font-medium">Daily Activity Start Time</Label>
+                  </div>
+                  <p className="text-sm text-muted-foreground">What time do you typically start your day on the road?</p>
+                  <Input
+                    type="time"
+                    value={dailyStartTime}
+                    onChange={(e) => setDailyStartTime(e.target.value)}
+                    className="w-full max-w-[150px]"
+                  />
+                </div>
+
+                {/* Pace Preference */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Gauge className="w-4 h-4 text-primary" />
+                    <Label className="font-medium">Trip Pace</Label>
+                  </div>
+                  <div className="grid gap-2">
+                    <label
+                      htmlFor="pace-relaxed"
+                      className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                        pacePreference === 'relaxed' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        id="pace-relaxed"
+                        name="pace-preference"
+                        value="relaxed"
+                        checked={pacePreference === 'relaxed'}
+                        onChange={(e) => setPacePreference(e.target.value as 'relaxed' | 'moderate' | 'packed')}
+                        className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                      />
+                      <div className="space-y-0.5">
+                        <span className="font-medium text-sm">Relaxed</span>
+                        <p className="text-xs text-muted-foreground">Fewer activities, more downtime</p>
+                      </div>
+                    </label>
+                    <label
+                      htmlFor="pace-moderate"
+                      className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                        pacePreference === 'moderate' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        id="pace-moderate"
+                        name="pace-preference"
+                        value="moderate"
+                        checked={pacePreference === 'moderate'}
+                        onChange={(e) => setPacePreference(e.target.value as 'relaxed' | 'moderate' | 'packed')}
+                        className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                      />
+                      <div className="space-y-0.5">
+                        <span className="font-medium text-sm">Moderate</span>
+                        <p className="text-xs text-muted-foreground">Balanced activity and rest</p>
+                      </div>
+                    </label>
+                    <label
+                      htmlFor="pace-packed"
+                      className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                        pacePreference === 'packed' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        id="pace-packed"
+                        name="pace-preference"
+                        value="packed"
+                        checked={pacePreference === 'packed'}
+                        onChange={(e) => setPacePreference(e.target.value as 'relaxed' | 'moderate' | 'packed')}
+                        className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                      />
+                      <div className="space-y-0.5">
+                        <span className="font-medium text-sm">Packed</span>
+                        <p className="text-xs text-muted-foreground">Maximum activities each day</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Max Driving Hours */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Car className="w-4 h-4 text-primary" />
+                    <Label className="font-medium">Max Driving Per Day</Label>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Limit daily driving time to prevent fatigue</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">Hours</span>
+                    <span className="text-lg font-bold text-foreground">{maxDrivingHours[0]}</span>
+                  </div>
+                  <Slider
+                    value={maxDrivingHours}
+                    onValueChange={setMaxDrivingHours}
+                    min={2}
+                    max={10}
+                    step={1}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>2 hours</span>
+                    <span>10 hours</span>
+                  </div>
+                </div>
+              </CardContent>
+            )}
           </Card>
 
           {/* Create Button */}

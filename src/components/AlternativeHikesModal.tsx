@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, Star, MapPin, Loader2, Footprints, Check } from 'lucide-react';
+import { X, Star, MapPin, Loader2, Footprints, Check, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TripStop } from '@/types/trip';
+import { getAllTrailsUrl } from '@/utils/hikeUtils';
 
 interface AlternativeHikesModalProps {
   isOpen: boolean;
@@ -23,7 +24,32 @@ interface HikeOption {
   placeId?: string;
 }
 
-// Fetch hikes from Google Places API
+// Check if a location is reachable by driving
+async function isReachableByDriving(
+  originLat: number,
+  originLng: number,
+  destLat: number,
+  destLng: number
+): Promise<boolean> {
+  if (!window.google?.maps) return true;
+
+  return new Promise((resolve) => {
+    const directionsService = new google.maps.DirectionsService();
+
+    directionsService.route(
+      {
+        origin: { lat: originLat, lng: originLng },
+        destination: { lat: destLat, lng: destLng },
+        travelMode: google.maps.TravelMode.DRIVING,
+      },
+      (result, status) => {
+        resolve(status === google.maps.DirectionsStatus.OK);
+      }
+    );
+  });
+}
+
+// Fetch hikes from Google Places API, filtered to only include drivable locations
 async function fetchAlternativeHikes(
   lat: number,
   lng: number,
@@ -41,11 +67,11 @@ async function fetchAlternativeHikes(
       type: 'tourist_attraction',
     };
 
-    service.nearbySearch(request, (results, status) => {
+    service.nearbySearch(request, async (results, status) => {
       if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-        const hikes: HikeOption[] = results
+        const potentialHikes = results
           .filter((place) => place.geometry?.location && place.place_id !== excludePlaceId)
-          .slice(0, 5)
+          .slice(0, 10) // Get more candidates since some may be filtered out
           .map((place) => ({
             id: `hike-alt-${place.place_id}`,
             name: place.name || 'Unknown Trail',
@@ -56,7 +82,21 @@ async function fetchAlternativeHikes(
             lng: place.geometry!.location!.lng(),
             placeId: place.place_id,
           }));
-        resolve(hikes);
+
+        // Filter to only include hikes reachable by driving
+        const reachableHikes: HikeOption[] = [];
+        for (const hike of potentialHikes) {
+          if (reachableHikes.length >= 5) break;
+
+          const isReachable = await isReachableByDriving(lat, lng, hike.lat, hike.lng);
+          if (isReachable) {
+            reachableHikes.push(hike);
+          } else {
+            console.log(`Filtered out unreachable hike: ${hike.name}`);
+          }
+        }
+
+        resolve(reachableHikes);
       } else {
         resolve([]);
       }
@@ -176,19 +216,31 @@ export function AlternativeHikesModal({
                         <MapPin className="w-3.5 h-3.5" />
                         <span className="truncate">{hike.location}</span>
                       </div>
-                      {hike.rating && (
-                        <div className="flex items-center gap-1.5 mt-2">
-                          <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                          <span className="text-sm font-medium text-foreground">
-                            {hike.rating.toFixed(1)}
-                          </span>
-                          {hike.reviewCount && (
-                            <span className="text-sm text-muted-foreground">
-                              ({hike.reviewCount.toLocaleString()} reviews)
+                      <div className="flex items-center gap-4 mt-2 flex-wrap">
+                        {hike.rating && (
+                          <div className="flex items-center gap-1.5">
+                            <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                            <span className="text-sm font-medium text-foreground">
+                              {hike.rating.toFixed(1)}
                             </span>
-                          )}
-                        </div>
-                      )}
+                            {hike.reviewCount && (
+                              <span className="text-sm text-muted-foreground">
+                                ({hike.reviewCount.toLocaleString()})
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        <a
+                          href={getAllTrailsUrl(hike.name, hike.lat, hike.lng)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700 hover:underline"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          AllTrails
+                        </a>
+                      </div>
                     </div>
                   </div>
                 </button>

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -13,20 +14,30 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useTrip } from '@/context/TripContext';
 import { toast } from 'sonner';
+import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
 
 const MyTrips = () => {
   const navigate = useNavigate();
   const { savedTrips, loadSavedTrip, deleteSavedTrip } = useTrip();
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; tripId: string; tripName: string }>({
+    isOpen: false,
+    tripId: '',
+    tripName: '',
+  });
 
   const handleTripClick = (tripId: string) => {
     loadSavedTrip(tripId);
     navigate(`/trip/${tripId}`);
   };
 
-  const handleDelete = (e: React.MouseEvent, tripId: string, tripName: string) => {
+  const handleDeleteClick = (e: React.MouseEvent, tripId: string, tripName: string) => {
     e.stopPropagation();
-    deleteSavedTrip(tripId);
-    toast.success(`Deleted "${tripName}"`, {
+    setDeleteModal({ isOpen: true, tripId, tripName: tripName || 'Untitled Trip' });
+  };
+
+  const handleConfirmDelete = () => {
+    deleteSavedTrip(deleteModal.tripId);
+    toast.success(`Deleted "${deleteModal.tripName}"`, {
       description: 'Trip removed from your saved trips',
     });
   };
@@ -150,7 +161,7 @@ const MyTrips = () => {
                             variant="ghost"
                             size="icon"
                             className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={(e) => handleDelete(e, trip.id, trip.config.name)}
+                            onClick={(e) => handleDeleteClick(e, trip.id, trip.config.name)}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -165,6 +176,16 @@ const MyTrips = () => {
           </div>
         )}
       </main>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, tripId: '', tripName: '' })}
+        onConfirm={handleConfirmDelete}
+        title="Delete Trip"
+        description="Are you sure you want to delete this trip? This action cannot be undone."
+        itemName={deleteModal.tripName}
+      />
     </div>
   );
 };
