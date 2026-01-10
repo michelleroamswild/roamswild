@@ -257,211 +257,231 @@ export function useTripGenerator() {
   }, []);
 
   const generateTrip = useCallback(async (config: TripConfig): Promise<GeneratedTrip | null> => {
+    console.log('generateTrip called with config:', config);
+
     // Check if this is a location-based trip
     if (config.baseLocation) {
+      console.log('Using location-based trip generation');
       return generateLocationBasedTrip(config);
     }
 
     // Regular trip mode requires start location and destinations
-    if (!config.startLocation?.coordinates.lat || config.destinations.length === 0) {
-      setError('Please provide a start location and at least one destination');
+    if (!config.startLocation || config.startLocation.coordinates.lat === undefined || config.destinations.length === 0) {
+      const errorMsg = 'Please provide a start location and at least one destination';
+      console.error('Trip generation validation failed:', errorMsg, { startLocation: config.startLocation, destinations: config.destinations });
+      setError(errorMsg);
       return null;
     }
 
+    console.log('Starting regular trip generation');
     setGenerating(true);
     setError(null);
 
     try {
       // Load all campsites
       const allCampsites = await loadAllCampsites();
-
-      // Build the route points (start -> destinations -> optionally back to start)
-      const routePoints: TripDestination[] = [
-        config.startLocation,
-        ...config.destinations,
-      ];
-
-      if (config.returnToStart) {
-        routePoints.push(config.startLocation);
-      }
-
-      // Calculate how to distribute destinations across days
       const numDays = config.duration;
-      const numLegs = routePoints.length - 1;
-      const stopsPerDay = Math.max(1, Math.ceil(numLegs / numDays));
+      const numDestinations = config.destinations.length;
       const baseCampMode = config.sameCampsite || false;
 
-      // Pre-compute base campsites for each destination if baseCampMode is enabled
+      // Calculate how many days to spend at each destination
+      // If trip is longer than destinations, distribute extra days
+      const daysPerDestination: number[] = new Array(numDestinations).fill(1);
+      let extraDays = numDays - numDestinations - 1; // -1 for travel day back if returning
+
+      if (!config.returnToStart) {
+        extraDays = numDays - numDestinations;
+      }
+
+      // Distribute extra days among destinations (round-robin, prioritizing first destinations)
+      let destIndex = 0;
+      while (extraDays > 0) {
+        daysPerDestination[destIndex % numDestinations]++;
+        destIndex++;
+        extraDays--;
+      }
+
+      console.log('Days per destination:', daysPerDestination);
+
+      // Pre-compute campsites for each destination
       const destinationCampsites: Map<string, TripStop> = new Map();
-      if (baseCampMode) {
-        for (const dest of config.destinations) {
-          const nearbyCamps = await findNearbyCampsites(
-            dest.coordinates.lat,
-            dest.coordinates.lng,
-            allCampsites,
-            50
-          );
-          if (nearbyCamps.length > 0) {
-            const bestCamp = nearbyCamps[0];
-            destinationCampsites.set(dest.id, {
-              id: `camp-base-${dest.id}`,
-              name: bestCamp.name,
-              type: 'camp',
-              coordinates: { lat: bestCamp.lat, lng: bestCamp.lng },
-              duration: 'Overnight',
-              distance: `${bestCamp.distance.toFixed(1)} mi from ${dest.name}`,
-              description: bestCamp.note || 'Dispersed camping (base camp)',
-              day: 0,
-              note: bestCamp.note,
-            });
-          }
+      for (const dest of config.destinations) {
+        const nearbyCamps = await findNearbyCampsites(
+          dest.coordinates.lat,
+          dest.coordinates.lng,
+          allCampsites,
+          50
+        );
+        if (nearbyCamps.length > 0) {
+          const bestCamp = nearbyCamps[0];
+          destinationCampsites.set(dest.id, {
+            id: `camp-base-${dest.id}`,
+            name: bestCamp.name,
+            type: 'camp',
+            coordinates: { lat: bestCamp.lat, lng: bestCamp.lng },
+            duration: 'Overnight',
+            distance: `${bestCamp.distance.toFixed(1)} mi from ${dest.name}`,
+            description: bestCamp.note || 'Dispersed camping',
+            day: 0,
+            note: bestCamp.note,
+          });
         }
+      }
+
+      // Pre-fetch multiple hikes for each destination (for multi-day stays)
+      const destinationHikes: Map<string, TripStop[]> = new Map();
+      for (const dest of config.destinations) {
+        const hikes = await findNearbyHikes(dest.coordinates.lat, dest.coordinates.lng, 50000);
+        destinationHikes.set(dest.id, hikes);
       }
 
       // Generate days
       const days: TripDay[] = [];
-      let currentPointIndex = 0;
       let totalDistanceMiles = 0;
       let totalDrivingMinutes = 0;
-      let lastDestinationId: string | null = null;
+      let dayNumber = 1;
+      let usedHikeIds = new Set<string>();
 
-      for (let day = 1; day <= numDays; day++) {
-        const dayStops: TripStop[] = [];
-        let dayDistanceMiles = 0;
-        let dayDrivingMinutes = 0;
+      // Process each destination
+      for (let destIdx = 0; destIdx < numDestinations; destIdx++) {
+        const dest = config.destinations[destIdx];
+        const daysAtDest = daysPerDestination[destIdx];
+        const prevPoint = destIdx === 0 ? config.startLocation : config.destinations[destIdx - 1];
+        const campsite = destinationCampsites.get(dest.id);
+        const availableHikes = destinationHikes.get(dest.id) || [];
 
-        // Start point for the day
-        const startPoint = routePoints[currentPointIndex];
+        for (let dayAtDest = 0; dayAtDest < daysAtDest; dayAtDest++) {
+          const dayStops: TripStop[] = [];
+          let dayDistanceMiles = 0;
+          let dayDrivingMinutes = 0;
+          const isArrivalDay = dayAtDest === 0;
+          const isLastDayAtDest = dayAtDest === daysAtDest - 1;
 
-        // Calculate how many legs to cover today
-        const legsToday = day === numDays
-          ? numLegs - currentPointIndex
-          : Math.min(stopsPerDay, numLegs - currentPointIndex);
-
-        // Track current destination for base camp
-        let currentDestinationId: string | null = null;
-
-        // Add destinations for this day
-        for (let leg = 0; leg < legsToday && currentPointIndex < routePoints.length - 1; leg++) {
-          const from = routePoints[currentPointIndex];
-          const to = routePoints[currentPointIndex + 1];
-
-          const legDistance = getDistanceMiles(
-            from.coordinates.lat,
-            from.coordinates.lng,
-            to.coordinates.lat,
-            to.coordinates.lng
-          );
-
-          // Estimate driving time (assume average 45 mph with stops)
-          const legDrivingMinutes = (legDistance / 45) * 60;
-
-          dayDistanceMiles += legDistance;
-          dayDrivingMinutes += legDrivingMinutes;
-
-          // Add destination stop
-          const destinationStop: TripStop = {
-            id: `dest-${day}-${leg}`,
-            name: to.name,
-            type: 'viewpoint',
-            coordinates: to.coordinates,
-            duration: '1-2h explore',
-            distance: `${legDistance.toFixed(0)} mi`,
-            description: to.address,
-            day,
-            placeId: to.placeId,
-          };
-
-          dayStops.push(destinationStop);
-          currentPointIndex++;
-
-          // Track the destination we're at
-          const matchingDest = config.destinations.find(d => d.placeId === to.placeId);
-          if (matchingDest) {
-            currentDestinationId = matchingDest.id;
-          }
-        }
-
-        // Find the endpoint for today (where we'll camp)
-        const endPoint = routePoints[Math.min(currentPointIndex, routePoints.length - 1)];
-
-        // Find nearby campsite for this night (except last day if returning home)
-        let campsite: TripStop | undefined;
-        if (day < numDays || !config.returnToStart) {
-          if (baseCampMode && currentDestinationId && destinationCampsites.has(currentDestinationId)) {
-            // Use the base camp for this destination
-            const baseCamp = destinationCampsites.get(currentDestinationId)!;
-            campsite = {
-              ...baseCamp,
-              id: `camp-${day}`,
-              day,
-            };
-          } else {
-            // Find new campsite
-            const nearbyCamps = await findNearbyCampsites(
-              endPoint.coordinates.lat,
-              endPoint.coordinates.lng,
-              allCampsites,
-              50
+          // On arrival day, add travel from previous point
+          if (isArrivalDay) {
+            const legDistance = getDistanceMiles(
+              prevPoint.coordinates.lat,
+              prevPoint.coordinates.lng,
+              dest.coordinates.lat,
+              dest.coordinates.lng
             );
+            const legDrivingMinutes = (legDistance / 45) * 60;
+            dayDistanceMiles += legDistance;
+            dayDrivingMinutes += legDrivingMinutes;
 
-            if (nearbyCamps.length > 0) {
-              const bestCamp = nearbyCamps[0];
-              campsite = {
-                id: `camp-${day}`,
-                name: bestCamp.name,
-                type: 'camp',
-                coordinates: { lat: bestCamp.lat, lng: bestCamp.lng },
-                duration: 'Overnight',
-                distance: `${bestCamp.distance.toFixed(1)} mi from ${endPoint.name}`,
-                description: bestCamp.note || 'Dispersed camping',
-                day,
-                note: bestCamp.note,
+            // Add destination as a viewpoint stop
+            const destinationStop: TripStop = {
+              id: `dest-${dayNumber}`,
+              name: dest.name,
+              type: 'viewpoint',
+              coordinates: dest.coordinates,
+              duration: daysAtDest > 1 ? `Exploring (Day 1 of ${daysAtDest})` : '1-2h explore',
+              distance: `${legDistance.toFixed(0)} mi from ${prevPoint.name}`,
+              description: dest.address,
+              day: dayNumber,
+              placeId: dest.placeId,
+            };
+            dayStops.push(destinationStop);
+          } else {
+            // Extra day at destination - add an "explore" stop
+            const exploreStop: TripStop = {
+              id: `explore-${dayNumber}`,
+              name: `Explore ${dest.name}`,
+              type: 'viewpoint',
+              coordinates: dest.coordinates,
+              duration: `Day ${dayAtDest + 1} of ${daysAtDest} at ${dest.name}`,
+              distance: 'Staying in area',
+              description: `Recommended extra day to explore the ${dest.name} area`,
+              day: dayNumber,
+              placeId: dest.placeId,
+            };
+            dayStops.push(exploreStop);
+          }
+
+          // Find a unique hike for this day
+          let hike: TripStop | undefined;
+          for (const h of availableHikes) {
+            const hikeKey = h.placeId || h.id;
+            if (!usedHikeIds.has(hikeKey)) {
+              usedHikeIds.add(hikeKey);
+              hike = {
+                ...h,
+                day: dayNumber,
+                id: `hike-${dayNumber}`,
               };
+              break;
             }
           }
 
-          if (campsite) {
-            dayStops.push(campsite);
-          }
-        }
-
-        lastDestinationId = currentDestinationId;
-
-        // Find nearby hike for this day
-        let hike: TripStop | undefined;
-        const hikeSearchPoint = campsite?.coordinates || endPoint.coordinates;
-        const nearbyHikes = await findNearbyHikes(
-          hikeSearchPoint.lat,
-          hikeSearchPoint.lng,
-          30000 // 30km radius
-        );
-
-        if (nearbyHikes.length > 0) {
-          hike = {
-            ...nearbyHikes[0],
-            day,
-            id: `hike-${day}`,
-          };
-          // Insert hike before campsite
-          const campsiteIndex = dayStops.findIndex(s => s.type === 'camp');
-          if (campsiteIndex >= 0) {
-            dayStops.splice(campsiteIndex, 0, hike);
-          } else {
+          if (hike) {
             dayStops.push(hike);
           }
-        }
 
-        totalDistanceMiles += dayDistanceMiles;
-        totalDrivingMinutes += dayDrivingMinutes;
+          // Add campsite (except on last day of trip if returning home)
+          const isLastDayOfTrip = destIdx === numDestinations - 1 && isLastDayAtDest;
+          if (!isLastDayOfTrip || !config.returnToStart) {
+            if (campsite) {
+              const campsiteForDay: TripStop = {
+                ...campsite,
+                id: `camp-${dayNumber}`,
+                day: dayNumber,
+                description: daysAtDest > 1
+                  ? `${campsite.note || 'Dispersed camping'} (same camp for ${daysAtDest} nights)`
+                  : campsite.note || 'Dispersed camping',
+              };
+              dayStops.push(campsiteForDay);
+            }
+          }
+
+          totalDistanceMiles += dayDistanceMiles;
+          totalDrivingMinutes += dayDrivingMinutes;
+
+          days.push({
+            day: dayNumber,
+            stops: dayStops,
+            campsite: dayStops.find(s => s.type === 'camp'),
+            hike,
+            drivingDistance: `${Math.round(dayDistanceMiles)} mi`,
+            drivingTime: dayDistanceMiles > 0
+              ? `${Math.round(dayDrivingMinutes / 60)}h ${Math.round(dayDrivingMinutes % 60)}m`
+              : 'No driving',
+          });
+
+          dayNumber++;
+        }
+      }
+
+      // Add return day if needed
+      if (config.returnToStart && dayNumber <= numDays) {
+        const lastDest = config.destinations[numDestinations - 1];
+        const returnDistance = getDistanceMiles(
+          lastDest.coordinates.lat,
+          lastDest.coordinates.lng,
+          config.startLocation.coordinates.lat,
+          config.startLocation.coordinates.lng
+        );
+        const returnDrivingMinutes = (returnDistance / 45) * 60;
+
+        const returnStop: TripStop = {
+          id: `return-${dayNumber}`,
+          name: `Return to ${config.startLocation.name}`,
+          type: 'viewpoint',
+          coordinates: config.startLocation.coordinates,
+          duration: 'Trip complete',
+          distance: `${returnDistance.toFixed(0)} mi`,
+          description: `Return drive from ${lastDest.name}`,
+          day: dayNumber,
+          placeId: config.startLocation.placeId,
+        };
+
+        totalDistanceMiles += returnDistance;
+        totalDrivingMinutes += returnDrivingMinutes;
 
         days.push({
-          day,
-          stops: dayStops,
-          campsite,
-          hike,
-          drivingDistance: `${Math.round(dayDistanceMiles)} mi`,
-          drivingTime: `${Math.round(dayDrivingMinutes / 60)}h ${Math.round(dayDrivingMinutes % 60)}m`,
+          day: dayNumber,
+          stops: [returnStop],
+          drivingDistance: `${Math.round(returnDistance)} mi`,
+          drivingTime: `${Math.round(returnDrivingMinutes / 60)}h ${Math.round(returnDrivingMinutes % 60)}m`,
         });
       }
 
@@ -474,9 +494,11 @@ export function useTripGenerator() {
         createdAt: new Date().toISOString(),
       };
 
+      console.log('Trip generation successful:', generatedTrip);
       setGenerating(false);
       return generatedTrip;
     } catch (err) {
+      console.error('Trip generation error:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate trip');
       setGenerating(false);
       return null;

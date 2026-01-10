@@ -91,7 +91,8 @@ const TripDetail = () => {
   const [activeDay, setActiveDay] = useState<number | null>(null);
   const [hikeModalOpen, setHikeModalOpen] = useState(false);
   const [selectedHikeForSwap, setSelectedHikeForSwap] = useState<TripStop | null>(null);
-  const [showPhotoHotspots, setShowPhotoHotspots] = useState(true);
+  const [showPhotoHotspots, setShowPhotoHotspots] = useState(false);
+  const [photoHotspotsExpanded, setPhotoHotspotsExpanded] = useState(false);
   const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoHotspot | null>(null);
 
   // Calculate center point of trip for photo hotspots search
@@ -222,44 +223,89 @@ const TripDetail = () => {
     setDayDirections(null);
   };
 
-  // Fetch driving directions when map loads
+  // Clear directions when trip changes
   useEffect(() => {
-    if (!mapsLoaded || !tripConfig || tripConfig.destinations.length === 0) {
+    setDirections(null);
+    setDayDirections(null);
+    setActiveDay(null);
+    setSelectedStop(null);
+  }, [generatedTrip?.id]);
+
+  // Fetch driving directions when map loads or trip changes
+  useEffect(() => {
+    if (!mapsLoaded || !generatedTrip) {
+      console.log('Directions skipped: mapsLoaded=', mapsLoaded, 'generatedTrip=', !!generatedTrip);
       return;
     }
 
+    // Clear old directions first
+    setDirections(null);
+
     const directionsService = new google.maps.DirectionsService();
 
-    const origin = tripConfig.startLocation.coordinates;
-    const finalDestination = tripConfig.returnToStart
-      ? tripConfig.startLocation.coordinates
-      : tripConfig.destinations[tripConfig.destinations.length - 1].coordinates;
+    // Get the start location from the config
+    const startLocation = generatedTrip.config.startLocation?.coordinates;
 
-    // Build waypoints from all destinations (except the last one if not returning to start)
-    const waypointDestinations = tripConfig.returnToStart
-      ? tripConfig.destinations
-      : tripConfig.destinations.slice(0, -1);
+    // Get all viewpoint/destination stops from the trip
+    const allStops = generatedTrip.days.flatMap(day => day.stops);
+    const routeStops = allStops.filter(stop =>
+      stop.type === 'viewpoint' || stop.type === 'camp'
+    );
 
-    const waypoints = waypointDestinations.map((dest) => ({
-      location: dest.coordinates,
+    // Determine origin - use start location if available, otherwise first stop
+    const origin = startLocation || (routeStops.length > 0 ? routeStops[0].coordinates : null);
+
+    if (!origin) {
+      console.log('No origin for route');
+      return;
+    }
+
+    // Determine destination - if returning to start, use start location; otherwise last stop
+    const returnToStart = generatedTrip.config.returnToStart;
+    const lastStop = routeStops.length > 0 ? routeStops[routeStops.length - 1].coordinates : null;
+    const destination = returnToStart && startLocation ? startLocation : lastStop;
+
+    if (!destination) {
+      console.log('No destination for route');
+      return;
+    }
+
+    // Build waypoints from all route stops (limit to 23 - Google's limit is 25 total)
+    // If we have a start location, all route stops become waypoints
+    // If returning to start, don't include start as a waypoint at the end
+    const waypointStops = startLocation ? routeStops : routeStops.slice(1);
+    const finalWaypointStops = returnToStart ? waypointStops : waypointStops.slice(0, -1);
+    const waypoints = finalWaypointStops.slice(0, 23).map((stop) => ({
+      location: stop.coordinates,
       stopover: true,
     }));
+
+    console.log('Fetching directions for trip:', generatedTrip.id, {
+      origin,
+      destination,
+      waypointCount: waypoints.length,
+      returnToStart,
+      totalStops: routeStops.length
+    });
 
     directionsService.route(
       {
         origin,
-        destination: finalDestination,
+        destination,
         waypoints,
         travelMode: google.maps.TravelMode.DRIVING,
         optimizeWaypoints: false,
       },
       (result, status) => {
         if (status === google.maps.DirectionsStatus.OK && result) {
+          console.log('Directions loaded for trip:', generatedTrip.id);
           setDirections(result);
+        } else {
+          console.error('Directions failed:', status, { origin, destination, waypoints });
         }
       }
     );
-  }, [mapsLoaded, tripConfig]);
+  }, [mapsLoaded, generatedTrip]);
 
   if (!generatedTrip || !tripConfig) {
     return null;
@@ -278,17 +324,37 @@ const TripDetail = () => {
         lat: allStops.reduce((sum, s) => sum + s.coordinates.lat, 0) / allStops.length,
         lng: allStops.reduce((sum, s) => sum + s.coordinates.lng, 0) / allStops.length,
       }
-    : tripConfig.startLocation.coordinates;
+    : { lat: 37.7749, lng: -122.4194 }; // Default to SF if no stops
 
   const handleStartNavigation = () => {
-    const waypoints = tripConfig.destinations
-      .slice(0, -1)
-      .map((d) => `${d.coordinates.lat},${d.coordinates.lng}`)
+    // Get start location from config
+    const startLocation = generatedTrip.config.startLocation?.coordinates;
+
+    // Get route stops from the trip
+    const routeStops = allStops.filter(stop =>
+      stop.type === 'viewpoint' || stop.type === 'camp'
+    );
+
+    // Determine origin
+    const originCoords = startLocation || (routeStops.length > 0 ? routeStops[0].coordinates : null);
+    if (!originCoords) return;
+
+    // Determine destination
+    const returnToStart = generatedTrip.config.returnToStart;
+    const lastStopCoords = routeStops.length > 0 ? routeStops[routeStops.length - 1].coordinates : null;
+    const destCoords = returnToStart && startLocation ? startLocation : lastStopCoords;
+    if (!destCoords) return;
+
+    const origin = `${originCoords.lat},${originCoords.lng}`;
+    const dest = `${destCoords.lat},${destCoords.lng}`;
+
+    // Build waypoints
+    const waypointStops = startLocation ? routeStops : routeStops.slice(1);
+    const finalWaypointStops = returnToStart ? waypointStops : waypointStops.slice(0, -1);
+    const waypoints = finalWaypointStops
+      .map((s) => `${s.coordinates.lat},${s.coordinates.lng}`)
       .join('|');
-    const origin = `${tripConfig.startLocation.coordinates.lat},${tripConfig.startLocation.coordinates.lng}`;
-    const dest = tripConfig.destinations.length > 0
-      ? `${tripConfig.destinations[tripConfig.destinations.length - 1].coordinates.lat},${tripConfig.destinations[tripConfig.destinations.length - 1].coordinates.lng}`
-      : origin;
+
     window.open(
       `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}${waypoints ? `&waypoints=${waypoints}` : ''}`,
       '_blank'
@@ -632,48 +698,66 @@ const TripDetail = () => {
             {photoHotspots.length > 0 && (
               <Card>
                 <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-3">
+                  <button
+                    onClick={() => setPhotoHotspotsExpanded(!photoHotspotsExpanded)}
+                    className="w-full flex items-center justify-between"
+                  >
                     <div className="flex items-center gap-2">
                       <Flame className="w-5 h-5 text-orange-500" />
                       <h3 className="font-semibold text-foreground">Photo Hotspots</h3>
-                      <span className="text-xs text-muted-foreground">via Flickr</span>
+                      <span className="text-xs text-muted-foreground">({photoHotspots.length})</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor="show-hotspots" className="text-sm text-muted-foreground">
-                        Show on map
-                      </Label>
-                      <Switch
-                        id="show-hotspots"
-                        checked={showPhotoHotspots}
-                        onCheckedChange={setShowPhotoHotspots}
-                      />
+                    {photoHotspotsExpanded ? (
+                      <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                    )}
+                  </button>
+
+                  {photoHotspotsExpanded && (
+                    <div className="mt-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">via Flickr</span>
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="show-hotspots" className="text-sm text-muted-foreground">
+                            Show on map
+                          </Label>
+                          <Switch
+                            id="show-hotspots"
+                            checked={showPhotoHotspots}
+                            onCheckedChange={setShowPhotoHotspots}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {photoHotspots.slice(0, 5).map((hotspot) => (
+                          <button
+                            key={hotspot.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedStop(null);
+                              setSelectedPhotoHotspot(hotspot);
+                              setShowPhotoHotspots(true);
+                            }}
+                            className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-orange-500/10 transition-colors text-left"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                              <Flame className="w-4 h-4 text-orange-500" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-foreground text-sm truncate">
+                                {hotspot.name}
+                              </p>
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Camera className="w-3 h-3" />
+                                <span>{hotspot.photoCount.toLocaleString()} photos</span>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    {photoHotspots.slice(0, 5).map((hotspot) => (
-                      <button
-                        key={hotspot.id}
-                        onClick={() => {
-                          setSelectedStop(null);
-                          setSelectedPhotoHotspot(hotspot);
-                        }}
-                        className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-orange-500/10 transition-colors text-left"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                          <Flame className="w-4 h-4 text-orange-500" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-foreground text-sm truncate">
-                            {hotspot.name}
-                          </p>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Camera className="w-3 h-3" />
-                            <span>{hotspot.photoCount.toLocaleString()} photos</span>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             )}

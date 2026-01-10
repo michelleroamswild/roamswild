@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Car, Tent, Camera, Mountain, Compass, Home, Check } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ArrowLeft, MapPin, Car, Tent, Camera, Mountain, Compass, Loader2, Plus, GripVertical, X, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
@@ -8,8 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { PlaceSearch } from "@/components/PlaceSearch";
+import { useTripGenerator } from "@/hooks/use-trip-generator";
+import { useTrip } from "@/context/TripContext";
+import { TripConfig, TripDestination } from "@/types/trip";
 
 interface LocationState {
   startLocation?: {
@@ -18,6 +22,14 @@ interface LocationState {
     lng: number;
     placeId: string;
   };
+}
+
+interface LocationData {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  placeId: string;
 }
 
 const CAR_CAPABILITIES = [
@@ -41,18 +53,26 @@ const CreateTrip = () => {
   const navigate = useNavigate();
   const routerLocation = useLocation();
   const stateLocation = routerLocation.state as LocationState | null;
+  const { generateTrip, generating, error: generatorError } = useTripGenerator();
+  const { setGeneratedTrip } = useTrip();
 
   // Form state
-  const [startLocation, setStartLocation] = useState<{ name: string; lat: number; lng: number; placeId: string } | null>(
-    stateLocation?.startLocation || null
+  const [tripName, setTripName] = useState("");
+  const [startLocation, setStartLocation] = useState<LocationData | null>(
+    stateLocation?.startLocation ? {
+      id: `start-${stateLocation.startLocation.placeId}`,
+      ...stateLocation.startLocation
+    } : null
   );
-  const [endLocation, setEndLocation] = useState<{ name: string; lat: number; lng: number; placeId: string } | null>(null);
+  const [destinations, setDestinations] = useState<LocationData[]>([]);
+  const [returnToStart, setReturnToStart] = useState(true);
+  const [endLocation, setEndLocation] = useState<LocationData | null>(null);
   const [duration, setDuration] = useState<number[]>([3]);
-  const [useDuration, setUseDuration] = useState(false);
   const [carCapabilities, setCarCapabilities] = useState<string[]>([]);
   const [lodging, setLodging] = useState<string>("dispersed");
   const [activities, setActivities] = useState<string[]>([]);
   const [baseCampMode, setBaseCampMode] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   const handleCarCapabilityChange = (capabilityId: string, checked: boolean) => {
     if (checked) {
@@ -73,17 +93,36 @@ const CreateTrip = () => {
   const handleStartLocationSelect = (place: google.maps.places.PlaceResult) => {
     if (place.geometry?.location && place.place_id) {
       setStartLocation({
+        id: `start-${place.place_id}`,
         name: place.name || place.formatted_address || "Selected Location",
         lat: place.geometry.location.lat(),
         lng: place.geometry.location.lng(),
         placeId: place.place_id,
       });
     }
+  };
+
+  const handleAddDestination = (place: google.maps.places.PlaceResult) => {
+    if (place.geometry?.location && place.place_id) {
+      const newDest: LocationData = {
+        id: `dest-${place.place_id}-${Date.now()}`,
+        name: place.name || place.formatted_address || "Selected Location",
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng(),
+        placeId: place.place_id,
+      };
+      setDestinations([...destinations, newDest]);
+    }
+  };
+
+  const handleRemoveDestination = (id: string) => {
+    setDestinations(destinations.filter(d => d.id !== id));
   };
 
   const handleEndLocationSelect = (place: google.maps.places.PlaceResult) => {
     if (place.geometry?.location && place.place_id) {
       setEndLocation({
+        id: `end-${place.place_id}`,
         name: place.name || place.formatted_address || "Selected Location",
         lat: place.geometry.location.lat(),
         lng: place.geometry.location.lng(),
@@ -92,32 +131,118 @@ const CreateTrip = () => {
     }
   };
 
-  const handleCreateTrip = () => {
+  // Drag and drop handlers
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const newDestinations = [...destinations];
+    const draggedItem = newDestinations[draggedIndex];
+    newDestinations.splice(draggedIndex, 1);
+    newDestinations.splice(index, 0, draggedItem);
+    setDestinations(newDestinations);
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
+  const handleCreateTrip = async () => {
     if (!startLocation) {
       toast.error("Please select a start location");
       return;
     }
-    if (!endLocation) {
-      toast.error("Please select an end location");
+
+    if (destinations.length === 0) {
+      toast.error("Please add at least one destination");
       return;
     }
 
-    const tripData = {
-      startLocation,
-      endLocation,
-      duration: useDuration ? duration[0] : null,
-      carCapabilities,
-      lodging,
-      activities,
+    if (!returnToStart && !endLocation) {
+      toast.error("Please select an end location or enable 'Return to start'");
+      return;
+    }
+
+    // Build start location as TripDestination
+    const start: TripDestination = {
+      id: startLocation.id,
+      placeId: startLocation.placeId,
+      name: startLocation.name,
+      address: startLocation.name,
+      coordinates: { lat: startLocation.lat, lng: startLocation.lng },
     };
 
-    console.log("Trip data:", tripData);
-    toast.success("Trip created!", {
-      description: `${startLocation.name} → ${endLocation.name}`,
-    });
+    // Build destinations as TripDestination[]
+    const tripDestinations: TripDestination[] = destinations.map(dest => ({
+      id: dest.id,
+      placeId: dest.placeId,
+      name: dest.name,
+      address: dest.name,
+      coordinates: { lat: dest.lat, lng: dest.lng },
+    }));
 
-    // TODO: Save trip data and navigate to trip detail page
-    navigate("/");
+    // Add end location as final destination if not returning to start
+    if (!returnToStart && endLocation) {
+      tripDestinations.push({
+        id: endLocation.id,
+        placeId: endLocation.placeId,
+        name: endLocation.name,
+        address: endLocation.name,
+        coordinates: { lat: endLocation.lat, lng: endLocation.lng },
+      });
+    }
+
+    // Generate trip name if not provided
+    const generatedName = tripName.trim() ||
+      `${startLocation.name} to ${destinations[destinations.length - 1].name}`;
+
+    // Build trip config
+    const tripConfig: TripConfig = {
+      name: generatedName,
+      duration: duration[0],
+      startLocation: start,
+      destinations: tripDestinations,
+      returnToStart: returnToStart,
+      sameCampsite: baseCampMode,
+      activitiesPerDay: 1,
+      vehicleType: carCapabilities.includes("4wd") ? "4wd" : carCapabilities.includes("high-clearance") ? "suv" : "sedan",
+      lodgingPreference: lodging as any,
+      activities: activities as any[],
+    };
+
+    console.log("Creating trip with config:", tripConfig);
+    toast.loading("Generating your trip...", { id: "generating" });
+
+    try {
+      const trip = await generateTrip(tripConfig);
+      console.log("Generated trip:", trip);
+
+      if (trip) {
+        setGeneratedTrip(trip);
+        toast.success("Trip created!", {
+          id: "generating",
+          description: generatedName,
+        });
+        navigate(`/trip/${trip.id}`);
+      } else {
+        console.error("Trip generation returned null, error:", generatorError);
+        toast.error("Failed to generate trip", {
+          id: "generating",
+          description: generatorError || "Please try again",
+        });
+      }
+    } catch (err) {
+      console.error("Trip generation error:", err);
+      toast.error("Failed to generate trip", {
+        id: "generating",
+        description: err instanceof Error ? err.message : "Please try again",
+      });
+    }
   };
 
   return (
@@ -141,80 +266,204 @@ const CreateTrip = () => {
 
       <main className="container px-4 md:px-6 py-6 max-w-2xl">
         <div className="space-y-6">
-          {/* Start & End Locations */}
+          {/* Trip Name */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Compass className="w-5 h-5 text-primary" />
-                Route
+                Trip Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <Label htmlFor="trip-name">Trip Name</Label>
+                <Input
+                  id="trip-name"
+                  placeholder="e.g., Southwest Desert Adventure"
+                  value={tripName}
+                  onChange={(e) => setTripName(e.target.value)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Start Location */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <MapPin className="w-5 h-5 text-emerald-500" />
+                Start Location
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <Label>Where does your trip begin?</Label>
+                <PlaceSearch
+                  onPlaceSelect={handleStartLocationSelect}
+                  placeholder="Search for starting point..."
+                  defaultValue={startLocation?.name}
+                />
+                {startLocation && (
+                  <div className="flex items-center justify-between p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-emerald-500" />
+                      <span className="text-sm font-medium">{startLocation.name}</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setStartLocation(null)}
+                      className="h-6 w-6 p-0"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Destinations */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <MapPin className="w-5 h-5 text-primary" />
+                Destinations
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="start-location">Start Location</Label>
+                <Label>Add places you want to visit</Label>
                 <PlaceSearch
-                  onPlaceSelect={handleStartLocationSelect}
-                  placeholder="Search for start location..."
-                  defaultValue={startLocation?.name}
+                  onPlaceSelect={handleAddDestination}
+                  placeholder="Search and add destinations..."
+                  key={destinations.length} // Reset input after adding
                 />
-                {startLocation && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    {startLocation.name}
-                  </p>
-                )}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="end-location">End Location</Label>
-                <PlaceSearch
-                  onPlaceSelect={handleEndLocationSelect}
-                  placeholder="Search for destination..."
-                />
-                {endLocation && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    {endLocation.name}
+
+              {/* Destination List */}
+              {destinations.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-xs">
+                    Drag to reorder • {destinations.length} destination{destinations.length !== 1 ? 's' : ''}
+                  </Label>
+                  <div className="space-y-2">
+                    {destinations.map((dest, index) => (
+                      <div
+                        key={dest.id}
+                        draggable
+                        onDragStart={() => handleDragStart(index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDragEnd={handleDragEnd}
+                        className={`flex items-center gap-2 p-3 bg-card rounded-lg border border-border hover:border-primary/30 transition-all cursor-move ${
+                          draggedIndex === index ? 'opacity-50 border-primary' : ''
+                        }`}
+                      >
+                        <GripVertical className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <div className="flex items-center justify-center w-6 h-6 bg-primary/10 rounded-full flex-shrink-0">
+                          <span className="text-xs font-semibold text-primary">{index + 1}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium truncate block">{dest.name}</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveDestination(dest.id)}
+                          className="h-6 w-6 p-0 flex-shrink-0 hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {destinations.length === 0 && (
+                <div className="text-center py-6 border-2 border-dashed border-border rounded-lg">
+                  <Plus className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Search above to add destinations
                   </p>
-                )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* End Location */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <MapPin className="w-5 h-5 text-terracotta" />
+                End Location
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Return to Start Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <RotateCcw className="w-5 h-5 text-muted-foreground" />
+                  <div>
+                    <Label>Return to start</Label>
+                    <p className="text-sm text-muted-foreground">
+                      End the trip where you started
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={returnToStart} onCheckedChange={setReturnToStart} />
               </div>
+
+              {/* End Location Search (only if not returning to start) */}
+              {!returnToStart && (
+                <div className="space-y-2 pt-4 border-t border-border animate-fade-in">
+                  <Label>Where does your trip end?</Label>
+                  <PlaceSearch
+                    onPlaceSelect={handleEndLocationSelect}
+                    placeholder="Search for end point..."
+                  />
+                  {endLocation && (
+                    <div className="flex items-center justify-between p-3 bg-terracotta/10 rounded-lg border border-terracotta/20">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-terracotta" />
+                        <span className="text-sm font-medium">{endLocation.name}</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEndLocation(null)}
+                        className="h-6 w-6 p-0"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
           {/* Duration Slider */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg flex items-center justify-between">
-                <span>Trip Duration</span>
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="use-duration"
-                    checked={useDuration}
-                    onCheckedChange={(checked) => setUseDuration(checked as boolean)}
-                  />
-                  <Label htmlFor="use-duration" className="text-sm font-normal cursor-pointer">
-                    Set duration
-                  </Label>
-                </div>
-              </CardTitle>
+              <CardTitle className="text-lg">Trip Duration</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className={useDuration ? "" : "opacity-50 pointer-events-none"}>
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm text-muted-foreground">Days</span>
-                  <span className="text-2xl font-bold text-foreground">{duration[0]}</span>
-                </div>
-                <Slider
-                  value={duration}
-                  onValueChange={setDuration}
-                  min={1}
-                  max={14}
-                  step={1}
-                  className="w-full"
-                />
-                <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                  <span>1 day</span>
-                  <span>14 days</span>
-                </div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-muted-foreground">Days</span>
+                <span className="text-2xl font-bold text-foreground">{duration[0]}</span>
+              </div>
+              <Slider
+                value={duration}
+                onValueChange={setDuration}
+                min={1}
+                max={14}
+                step={1}
+                className="w-full"
+              />
+              <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                <span>1 day</span>
+                <span>14 days</span>
               </div>
             </CardContent>
           </Card>
@@ -333,8 +582,16 @@ const CreateTrip = () => {
             size="lg"
             className="w-full"
             onClick={handleCreateTrip}
+            disabled={generating}
           >
-            Create Trip
+            {generating ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Generating Trip...
+              </>
+            ) : (
+              "Create Trip"
+            )}
           </Button>
         </div>
       </main>

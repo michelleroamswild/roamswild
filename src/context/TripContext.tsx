@@ -46,10 +46,23 @@ const defaultConfig: TripConfig = {
 
 export function TripProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [tripConfig, setTripConfig] = useState<TripConfig | null>(null);
-  const [generatedTrip, setGeneratedTrip] = useState<GeneratedTrip | null>(null);
+  const [tripConfig, setTripConfigState] = useState<TripConfig | null>(null);
+  const [generatedTrip, setGeneratedTripState] = useState<GeneratedTrip | null>(null);
   const [savedTrips, setSavedTrips] = useState<GeneratedTrip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Wrapper to update both generatedTrip and tripConfig together
+  const setGeneratedTrip = useCallback((trip: GeneratedTrip | null) => {
+    console.log('Setting generated trip:', trip?.id);
+    setGeneratedTripState(trip);
+    if (trip) {
+      setTripConfigState(trip.config);
+    }
+  }, []);
+
+  const setTripConfig = useCallback((config: TripConfig | null) => {
+    setTripConfigState(config);
+  }, []);
 
   // Fetch saved trips from Supabase when user changes
   const fetchSavedTrips = useCallback(async () => {
@@ -233,8 +246,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
   const loadSavedTrip = (tripId: string): GeneratedTrip | null => {
     const trip = savedTrips.find(t => t.id === tripId);
     if (trip) {
-      setGeneratedTrip(trip);
-      setTripConfig(trip.config);
+      setGeneratedTrip(trip); // This also sets tripConfig
       return trip;
     }
     return null;
