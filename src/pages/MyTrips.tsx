@@ -101,25 +101,31 @@ const MyTrips = () => {
                             {trip.config.name || 'Untitled Trip'}
                           </h3>
 
-                          {/* Start location */}
+                          {/* Start/Base location */}
                           <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
                             <MapPin className="w-4 h-4 flex-shrink-0" />
                             <span className="truncate">
-                              From {trip.config.startLocation.name}
+                              {trip.config.baseLocation
+                                ? `Exploring ${trip.config.baseLocation.name}`
+                                : trip.config.startLocation?.name
+                                  ? `From ${trip.config.startLocation.name}`
+                                  : 'Trip'}
                             </span>
                           </div>
 
                           {/* Destinations */}
-                          <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                            <Route className="w-4 h-4 flex-shrink-0" />
-                            <span className="truncate">
-                              {trip.config.destinations.length}{' '}
-                              {trip.config.destinations.length === 1
-                                ? 'destination'
-                                : 'destinations'}
-                              {trip.config.returnToStart && ' (round trip)'}
-                            </span>
-                          </div>
+                          {trip.config.destinations && trip.config.destinations.length > 0 && (
+                            <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                              <Route className="w-4 h-4 flex-shrink-0" />
+                              <span className="truncate">
+                                {trip.config.destinations.length}{' '}
+                                {trip.config.destinations.length === 1
+                                  ? 'destination'
+                                  : 'destinations'}
+                                {trip.config.returnToStart && ' (round trip)'}
+                              </span>
+                            </div>
+                          )}
 
                           {/* Stats */}
                           <div className="flex items-center gap-4 mt-3 text-sm">
