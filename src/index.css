@@ -1,5 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Inter&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -110,14 +109,14 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: "Outfit", sans-serif;
+    font-family: "Inter", sans-serif;
   }
 
   h1,
   h2,
   h3,
   h4 {
-    font-family: "Space Grotesk", sans-serif;
+    font-family: "Inter", sans-serif;
   }
 }
 
