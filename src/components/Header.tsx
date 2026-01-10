@@ -1,4 +1,4 @@
-import { Compass, Menu, User, Plus, LogOut } from "lucide-react";
+import { Compass, Menu, User, Route, LogOut } from "lucide-react";
 import { Button } from "./ui/button";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -43,7 +43,7 @@ export const Header = () => {
         <div className="flex items-center gap-2">
           <Link to="/create-trip">
             <Button variant="hero" size="sm" className="hidden md:flex">
-              <Plus className="w-4 h-4 mr-1" />
+              <Route className="w-4 h-4 mr-1" />
               Create Trip
             </Button>
           </Link>

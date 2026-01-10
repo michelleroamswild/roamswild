@@ -282,7 +282,7 @@ const LocationDetail = () => {
             </div>
             <div className="flex items-center gap-2">
               <Button
-                variant="outline"
+                variant="hero"
                 size="sm"
                 onClick={handleCreateTrip}
                 className="hidden sm:flex"
@@ -291,7 +291,7 @@ const LocationDetail = () => {
                 Create Trip
               </Button>
               <Button
-                variant="ghost"
+                variant="hero"
                 size="icon"
                 className="rounded-full sm:hidden"
                 onClick={handleCreateTrip}
