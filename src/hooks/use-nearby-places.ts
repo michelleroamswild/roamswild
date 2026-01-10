@@ -152,9 +152,9 @@ export function useNearbyPlaces(centerLat: number, centerLng: number, radiusMile
           return;
         }
 
-        // Fallback to RIDB API with 100 mile radius for testing
+        // Fallback to RIDB API
         console.log('No saved places nearby, searching RIDB...');
-        const ridbPlaces = await searchRIDBCampsites(centerLat, centerLng, 100);
+        const ridbPlaces = await searchRIDBCampsites(centerLat, centerLng, 50);
 
         if (ridbPlaces.length > 0) {
           console.log(`Using ${ridbPlaces.length} RIDB campsites`);

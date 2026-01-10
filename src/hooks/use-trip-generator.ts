@@ -223,12 +223,12 @@ export function useTripGenerator() {
       const sameCampsite = config.sameCampsite || false;
 
       // Find all nearby campsites and hikes upfront
-      console.log('Searching for campsites within 100 miles of:', baseLocation.name, baseLocation.coordinates);
+      console.log('Searching for campsites within 50 miles of:', baseLocation.name, baseLocation.coordinates);
       const nearbyCamps = await findNearbyCampsites(
         baseLocation.coordinates.lat,
         baseLocation.coordinates.lng,
         allCampsites,
-        100  // Increased radius for RIDB testing
+        50
       );
       console.log('Found nearby camps:', nearbyCamps.length, nearbyCamps.slice(0, 3).map(c => c.name));
 

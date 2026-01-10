@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass, Plus, Trash2, Footprints, Route, Calendar, Tent, Loader2, Flame, Camera, ChevronDown, ChevronUp, X } from "lucide-react";
+import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass, Plus, Trash2, Footprints, Route, Calendar, Tent, Loader2, Flame, Camera, ChevronDown, ChevronUp, X, Trees } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -8,10 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
 import { GoogleMap } from "@/components/GoogleMap";
-import { Marker, InfoWindow } from "@react-google-maps/api";
+import { Marker, InfoWindow, Polygon } from "@react-google-maps/api";
 import { useNearbyPlaces, GoogleSavedPlace } from "@/hooks/use-nearby-places";
 import { useNearbyHikes, HikeResult } from "@/hooks/use-nearby-hikes";
 import { usePhotoHotspots, PhotoHotspot } from "@/hooks/use-photo-hotspots";
+import { usePublicLands, PublicLand } from "@/hooks/use-public-lands";
 import { toast } from "sonner";
 import { useTrip } from "@/context/TripContext";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
@@ -68,6 +69,14 @@ const PHOTO_HOTSPOT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComp
   <circle cx="20" cy="20" r="18" fill="#f97316" stroke="#ffffff" stroke-width="2"/>
   <path d="M20 10c-1.5 3-4 6-4 10 0 4 2 6 4 8 2-2 4-4 4-8 0-4-2.5-7-4-10z" fill="#ffffff"/>
   <circle cx="20" cy="22" r="2.5" fill="#f97316"/>
+</svg>
+`)}`;
+
+// Public lands icon (forest green)
+const PUBLIC_LAND_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <circle cx="20" cy="20" r="18" fill="#166534" stroke="#ffffff" stroke-width="2"/>
+  <path d="M20 8l-8 12h4v8h8v-8h4L20 8z" fill="#ffffff"/>
 </svg>
 `)}`;
 
@@ -136,11 +145,31 @@ const LocationDetail = () => {
     50
   );
 
+  // Get nearby public lands (BLM, USFS) for dispersed camping
+  const { publicLands, loading: publicLandsLoading } = usePublicLands(
+    location?.lat ?? 0,
+    location?.lng ?? 0,
+    50
+  );
+
   // Photo hotspots UI state
   const [showPhotoHotspots, setShowPhotoHotspots] = useState(false);
   const [photoHotspotsExpanded, setPhotoHotspotsExpanded] = useState(false);
   const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoHotspot | null>(null);
   const [enlargedPhoto, setEnlargedPhoto] = useState<{ url: string; name: string } | null>(null);
+
+  // Public lands UI state
+  const [showPublicLands, setShowPublicLands] = useState(false);
+  const [publicLandsExpanded, setPublicLandsExpanded] = useState(false);
+  const [selectedPublicLand, setSelectedPublicLand] = useState<PublicLand | null>(null);
+
+  // Auto-show public lands on map when they're found and no campsites
+  useEffect(() => {
+    if (publicLands.length > 0 && nearbyPlaces.length === 0 && !nearbyLoading) {
+      setShowPublicLands(true);
+      setPublicLandsExpanded(true);
+    }
+  }, [publicLands, nearbyPlaces, nearbyLoading]);
 
   // Fetch elevation when Google Maps is loaded
   useEffect(() => {
@@ -377,6 +406,7 @@ const LocationDetail = () => {
                         setSelectedPlace(place);
                         setSelectedHike(null);
                         setSelectedPhotoHotspot(null);
+                        setSelectedPublicLand(null);
                       }}
                     />
                   ))}
@@ -395,6 +425,7 @@ const LocationDetail = () => {
                         setSelectedHike(hike);
                         setSelectedPlace(null);
                         setSelectedPhotoHotspot(null);
+                        setSelectedPublicLand(null);
                       }}
                     />
                   ))}
@@ -413,8 +444,32 @@ const LocationDetail = () => {
                         setSelectedPhotoHotspot(hotspot);
                         setSelectedPlace(null);
                         setSelectedHike(null);
+                        setSelectedPublicLand(null);
                       }}
                     />
+                  ))}
+                  {/* Public lands polygon overlays */}
+                  {showPublicLands && publicLands.map((land) => (
+                    land.polygon ? (
+                      <Polygon
+                        key={land.id}
+                        paths={land.polygon}
+                        options={{
+                          fillColor: '#EC4899',
+                          fillOpacity: 0.3,
+                          strokeColor: '#DB2777',
+                          strokeOpacity: 0.8,
+                          strokeWeight: 2,
+                          clickable: true,
+                        }}
+                        onClick={() => {
+                          setSelectedPublicLand(land);
+                          setSelectedPlace(null);
+                          setSelectedHike(null);
+                          setSelectedPhotoHotspot(null);
+                        }}
+                      />
+                    ) : null
                   ))}
                   {/* Info popup for selected photo hotspot */}
                   {selectedPhotoHotspot && (
@@ -446,6 +501,52 @@ const LocationDetail = () => {
                       </div>
                     </InfoWindow>
                   )}
+                  {/* Info popup for selected public land */}
+                  {selectedPublicLand && (
+                    <InfoWindow
+                      position={{ lat: selectedPublicLand.lat, lng: selectedPublicLand.lng }}
+                      onCloseClick={() => setSelectedPublicLand(null)}
+                    >
+                      <div className="p-1 min-w-[220px]">
+                        <h4 className="font-semibold text-gray-900 text-base mb-1">
+                          {selectedPublicLand.name}
+                        </h4>
+                        <p className="text-xs text-green-700 mb-1">
+                          {selectedPublicLand.managingAgency === 'BLM' ? 'Bureau of Land Management' : 'US Forest Service'}
+                        </p>
+                        <div className="flex items-center gap-3 text-gray-500 text-sm mb-2">
+                          <span>{selectedPublicLand.distance.toFixed(1)} mi away</span>
+                        </div>
+                        <p className="text-xs bg-green-50 text-green-700 px-2 py-1.5 rounded mb-3">
+                          Dispersed camping typically allowed - check local regulations
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              window.open(
+                                `https://www.google.com/maps/dir/?api=1&destination=${selectedPublicLand.lat},${selectedPublicLand.lng}`,
+                                '_blank'
+                              );
+                            }}
+                            className="flex-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+                          >
+                            Directions
+                          </button>
+                          <button
+                            onClick={() => {
+                              window.open(
+                                `https://www.google.com/maps/search/?api=1&query=${selectedPublicLand.lat},${selectedPublicLand.lng}`,
+                                '_blank'
+                              );
+                            }}
+                            className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-100 transition-colors"
+                          >
+                            View
+                          </button>
+                        </div>
+                      </div>
+                    </InfoWindow>
+                  )}
                   {/* Info popup for selected place */}
                   {selectedPlace && (
                     <InfoWindow
@@ -456,6 +557,9 @@ const LocationDetail = () => {
                         <h4 className="font-semibold text-gray-900 text-base mb-1">
                           {selectedPlace.name}
                         </h4>
+                        {selectedPlace.source === 'ridb' && (
+                          <p className="text-xs text-blue-600 mb-1">via Recreation.gov</p>
+                        )}
                         {selectedPlace.note && (
                           <p className="text-gray-600 text-sm mb-2 italic">{selectedPlace.note}</p>
                         )}
@@ -490,17 +594,32 @@ const LocationDetail = () => {
                           >
                             Directions
                           </button>
-                          <button
-                            onClick={() => {
-                              window.open(
-                                `https://www.google.com/maps/search/?api=1&query=${selectedPlace.lat},${selectedPlace.lng}`,
-                                '_blank'
-                              );
-                            }}
-                            className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-100 transition-colors"
-                          >
-                            View
-                          </button>
+                          {selectedPlace.source === 'ridb' ? (
+                            <button
+                              onClick={() => {
+                                const facilityId = selectedPlace.id.replace('ridb-', '');
+                                window.open(
+                                  `https://www.recreation.gov/camping/campgrounds/${facilityId}`,
+                                  '_blank'
+                                );
+                              }}
+                              className="px-3 py-1.5 border border-blue-300 text-blue-700 text-sm rounded hover:bg-blue-50 transition-colors"
+                            >
+                              Book
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                window.open(
+                                  `https://www.google.com/maps/search/?api=1&query=${selectedPlace.lat},${selectedPlace.lng}`,
+                                  '_blank'
+                                );
+                              }}
+                              className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-100 transition-colors"
+                            >
+                              View
+                            </button>
+                          )}
                         </div>
                       </div>
                     </InfoWindow>
@@ -767,28 +886,30 @@ const LocationDetail = () => {
                         key={place.id}
                         className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors cursor-pointer"
                         onClick={() => {
-                          window.open(
-                            `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`,
-                            '_blank'
-                          );
+                          if (place.source === 'ridb') {
+                            const facilityId = place.id.replace('ridb-', '');
+                            window.open(
+                              `https://www.recreation.gov/camping/campgrounds/${facilityId}`,
+                              '_blank'
+                            );
+                          } else {
+                            window.open(
+                              `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`,
+                              '_blank'
+                            );
+                          }
                         }}
                       >
-                        <div className="flex items-center justify-center w-10 h-10 bg-primary/10 rounded-lg flex-shrink-0">
-                          <Compass className="w-5 h-5 text-primary" />
+                        <div className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 ${place.source === 'ridb' ? 'bg-[#213D5C]/10' : 'bg-primary/10'}`}>
+                          <Tent className={`w-5 h-5 ${place.source === 'ridb' ? 'text-[#213D5C]' : 'text-primary'}`} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-foreground truncate">
                             {place.name}
                           </p>
-                          {place.note ? (
-                            <p className="text-sm text-muted-foreground truncate italic">
-                              {place.note}
-                            </p>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">
-                              {place.distance.toFixed(1)} miles away
-                            </p>
-                          )}
+                          <p className="text-sm text-muted-foreground">
+                            {place.distance.toFixed(1)} miles away
+                          </p>
                         </div>
                         <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                       </div>
@@ -802,7 +923,7 @@ const LocationDetail = () => {
                 ) : (
                   <div className="text-center py-4 text-muted-foreground">
                     <Compass className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p>No camp spots within 100 miles</p>
+                    <p>No camp spots within 50 miles</p>
                   </div>
                 )}
               </CardContent>
@@ -956,6 +1077,94 @@ const LocationDetail = () => {
                 </CardContent>
               </Card>
             )}
+
+            {/* Public Lands for Dispersed Camping */}
+            <Card>
+                <CardContent className="p-4">
+                  <button
+                    onClick={() => setPublicLandsExpanded(!publicLandsExpanded)}
+                    className="w-full flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Trees className="w-5 h-5 text-green-600" />
+                      <h3 className="font-semibold text-foreground">Dispersed Camping Areas</h3>
+                      {publicLands.length > 0 && (
+                        <span className="text-xs text-muted-foreground">({publicLands.length})</span>
+                      )}
+                    </div>
+                    {publicLandsExpanded ? (
+                      <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                    )}
+                  </button>
+
+                  {publicLandsExpanded && (
+                    <div className="mt-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">BLM & US Forest Service lands</span>
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="show-lands" className="text-sm text-muted-foreground">
+                            Show on map
+                          </Label>
+                          <Switch
+                            id="show-lands"
+                            checked={showPublicLands}
+                            onCheckedChange={setShowPublicLands}
+                          />
+                        </div>
+                      </div>
+
+                      {publicLandsLoading ? (
+                        <div className="text-center py-4 text-muted-foreground">
+                          <p>Finding nearby public lands...</p>
+                        </div>
+                      ) : publicLands.length > 0 ? (
+                        <div className="space-y-2">
+                          {publicLands.slice(0, 5).map((land) => (
+                            <div
+                              key={land.id}
+                              className="flex items-center gap-3 p-2 rounded-lg hover:bg-green-500/10 transition-colors cursor-pointer"
+                              onClick={() => {
+                                setSelectedPublicLand(land);
+                                setShowPublicLands(true);
+                              }}
+                            >
+                              <div className="w-10 h-10 rounded-lg bg-green-600/10 flex items-center justify-center flex-shrink-0">
+                                <Trees className="w-5 h-5 text-green-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-foreground text-sm truncate">
+                                  {land.name}
+                                </p>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span>{land.managingAgency}</span>
+                                  <span>•</span>
+                                  <span>{land.distance.toFixed(1)} mi</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          {publicLands.length > 5 && (
+                            <p className="text-sm text-muted-foreground text-center pt-2">
+                              +{publicLands.length - 5} more areas nearby
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-4 text-muted-foreground">
+                          <Trees className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                          <p>No BLM or Forest Service lands within 50 miles</p>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-muted-foreground bg-secondary/50 p-2 rounded">
+                        Dispersed camping is generally allowed on BLM and National Forest lands. Always check local regulations and fire restrictions.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+            </Card>
 
             {/* Actions */}
             <div className="flex gap-3">

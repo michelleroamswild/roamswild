@@ -14,6 +14,11 @@ export default defineConfig(({ mode }) => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/ridb/, '/api/v1'),
       },
+      '/api/blm-sma': {
+        target: 'https://gis.blm.gov/arcgis/rest/services/lands',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/blm-sma/, ''),
+      },
     },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
