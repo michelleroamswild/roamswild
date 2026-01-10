@@ -22,6 +22,7 @@ export interface TripStop {
   rating?: number;
   reviewCount?: number;
   note?: string;
+  drivingTime?: string; // Driving time to this stop (e.g., "15 min each way")
 }
 
 export interface TripDay {

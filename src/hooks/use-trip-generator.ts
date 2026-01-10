@@ -264,22 +264,30 @@ export function useTripGenerator() {
         // Get unique hikes for this day
         const availableHikes = nearbyHikes.filter(h => !usedHikeIds.has(h.placeId || h.id));
         for (let i = 0; i < activitiesPerDay && i < availableHikes.length; i++) {
+          // Calculate distance and driving time from base/camp to trailhead
+          const hikeDist = getDistanceMiles(
+            baseLocation.coordinates.lat,
+            baseLocation.coordinates.lng,
+            availableHikes[i].coordinates.lat,
+            availableHikes[i].coordinates.lng
+          );
+          // Estimate driving time at 25 mph on back roads
+          const hikeDrivingMinutes = Math.round((hikeDist / 25) * 60);
+          const drivingTimeStr = hikeDrivingMinutes < 60
+            ? `${hikeDrivingMinutes} min each way`
+            : `${Math.floor(hikeDrivingMinutes / 60)}h ${hikeDrivingMinutes % 60}m each way`;
+
           const hike = {
             ...availableHikes[i],
             day,
             id: `hike-${day}-${i}`,
+            distance: `${hikeDist.toFixed(1)} mi from camp`,
+            drivingTime: drivingTimeStr,
           };
           usedHikeIds.add(availableHikes[i].placeId || availableHikes[i].id);
           dayHikes.push(hike);
           dayStops.push(hike);
 
-          // Calculate distance from base
-          const hikeDist = getDistanceMiles(
-            baseLocation.coordinates.lat,
-            baseLocation.coordinates.lng,
-            hike.coordinates.lat,
-            hike.coordinates.lng
-          );
           dayDistanceMiles += hikeDist * 2; // Round trip
         }
 
@@ -502,10 +510,24 @@ export function useTripGenerator() {
             const hikeKey = h.placeId || h.id;
             if (!usedHikeIds.has(hikeKey)) {
               usedHikeIds.add(hikeKey);
+              // Calculate driving time from destination to trailhead
+              const hikeDist = getDistanceMiles(
+                dest.coordinates.lat,
+                dest.coordinates.lng,
+                h.coordinates.lat,
+                h.coordinates.lng
+              );
+              const hikeDrivingMinutes = Math.round((hikeDist / 25) * 60);
+              const drivingTimeStr = hikeDrivingMinutes < 60
+                ? `${hikeDrivingMinutes} min each way`
+                : `${Math.floor(hikeDrivingMinutes / 60)}h ${hikeDrivingMinutes % 60}m each way`;
+
               hike = {
                 ...h,
                 day: dayNumber,
                 id: `hike-${dayNumber}`,
+                distance: `${hikeDist.toFixed(1)} mi from ${dest.name}`,
+                drivingTime: drivingTimeStr,
               };
               break;
             }
@@ -513,6 +535,15 @@ export function useTripGenerator() {
 
           if (hike) {
             dayStops.push(hike);
+            // Add hike round-trip driving to day totals
+            const hikeDist = getDistanceMiles(
+              dest.coordinates.lat,
+              dest.coordinates.lng,
+              hike.coordinates.lat,
+              hike.coordinates.lng
+            );
+            dayDistanceMiles += hikeDist * 2;
+            dayDrivingMinutes += (hikeDist * 2 / 25) * 60;
           }
 
           // Add campsite (except on last day of trip if returning home)

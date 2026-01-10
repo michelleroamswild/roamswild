@@ -182,30 +182,47 @@ const TripDetail = () => {
 
   // Start a specific day - show its route on the map
   const handleStartDay = (dayNumber: number) => {
-    if (!mapsLoaded || !generatedTrip) return;
+    if (!generatedTrip) return;
 
     const day = generatedTrip.days.find(d => d.day === dayNumber);
     if (!day || day.stops.length === 0) return;
 
-    // Set active day and expand it
+    // Set active day and expand it - useEffect will handle fetching directions
     setActiveDay(dayNumber);
     setExpandedDays(prev => prev.includes(dayNumber) ? prev : [...prev, dayNumber]);
+  };
 
-    // Get stops in order for this day
-    const dayStops = day.stops;
-    if (dayStops.length < 2) {
-      // Not enough stops for a route, just center on the stop
+  // Exit day mode and show full trip
+  const handleExitDayMode = () => {
+    setActiveDay(null);
+    setDayDirections(null);
+  };
+
+  // Clear directions when trip ID changes (new trip loaded)
+  useEffect(() => {
+    setDirections(null);
+    setDayDirections(null);
+    setActiveDay(null);
+    setSelectedStop(null);
+  }, [generatedTrip?.id]);
+
+  // Refresh day directions when active day's stops change (e.g., hike swapped)
+  useEffect(() => {
+    if (!mapsLoaded || !generatedTrip || activeDay === null) {
+      return;
+    }
+
+    const day = generatedTrip.days.find(d => d.day === activeDay);
+    if (!day || day.stops.length < 2) {
       setDayDirections(null);
       return;
     }
 
     const directionsService = new google.maps.DirectionsService();
+    const dayStops = day.stops;
 
-    // First stop is origin, last stop is destination
     const origin = dayStops[0].coordinates;
     const destination = dayStops[dayStops.length - 1].coordinates;
-
-    // Middle stops are waypoints
     const waypoints = dayStops.slice(1, -1).map(stop => ({
       location: stop.coordinates,
       stopover: true,
@@ -225,30 +242,12 @@ const TripDetail = () => {
         }
       }
     );
-
-    toast.success(`Day ${dayNumber} started`, {
-      description: 'Showing route on map',
-    });
-  };
-
-  // Exit day mode and show full trip
-  const handleExitDayMode = () => {
-    setActiveDay(null);
-    setDayDirections(null);
-  };
-
-  // Clear directions when trip changes
-  useEffect(() => {
-    setDirections(null);
-    setDayDirections(null);
-    setActiveDay(null);
-    setSelectedStop(null);
-  }, [generatedTrip?.id]);
+  }, [mapsLoaded, generatedTrip, activeDay]);
 
   // Fetch driving directions when map loads or trip changes
+  // Simplified route: start/base → first stop → last stop (skip complex waypoints to avoid ZERO_RESULTS)
   useEffect(() => {
     if (!mapsLoaded || !generatedTrip) {
-      console.log('Directions skipped: mapsLoaded=', mapsLoaded, 'generatedTrip=', !!generatedTrip);
       return;
     }
 
@@ -261,51 +260,64 @@ const TripDetail = () => {
     const startLocation = generatedTrip.config.startLocation?.coordinates;
     const baseLocation = generatedTrip.config.baseLocation?.coordinates;
 
-    // Get all viewpoint/destination stops from the trip
+    // Get all stops in order
     const allStops = generatedTrip.days.flatMap(day => day.stops);
-    const routeStops = allStops.filter(stop =>
-      stop.type === 'viewpoint' || stop.type === 'camp' || stop.type === 'hike'
-    );
 
-    // Determine origin - use start location, base location, or first stop
-    const origin = startLocation || baseLocation || (routeStops.length > 0 ? routeStops[0].coordinates : null);
-
-    if (!origin) {
-      console.log('No origin for route');
+    if (allStops.length === 0) {
+      console.log('No stops for route');
       return;
     }
 
-    // Determine destination - if returning to start/base, use that; otherwise last stop
-    const returnToStart = generatedTrip.config.returnToStart;
-    const isLocationBased = !!baseLocation;
-    const lastStop = routeStops.length > 0 ? routeStops[routeStops.length - 1].coordinates : null;
-    // For location-based trips, return to base; for regular trips, check returnToStart
-    const destination = isLocationBased
-      ? (lastStop || baseLocation)
-      : (returnToStart && startLocation ? startLocation : lastStop);
+    // Determine origin: start location, base location, or first stop
+    const origin = startLocation || baseLocation || allStops[0].coordinates;
 
-    if (!destination) {
-      console.log('No destination for route');
-      return;
+    // Determine destination: last stop, or back to start if returnToStart
+    const lastStop = allStops[allStops.length - 1].coordinates;
+    const destination = (generatedTrip.config.returnToStart && startLocation)
+      ? startLocation
+      : lastStop;
+
+    // Build simple waypoint list - just the key stops (camps and main activities)
+    // Filter to unique locations and limit waypoints to avoid ZERO_RESULTS
+    const keyStops = allStops
+      .filter(s => s.type === 'camp' || s.type === 'hike' || s.type === 'viewpoint')
+      .map(s => s.coordinates);
+
+    // Remove consecutive duplicates
+    const uniqueStops: google.maps.LatLngLiteral[] = [];
+    for (const stop of keyStops) {
+      const last = uniqueStops[uniqueStops.length - 1];
+      if (!last || Math.abs(last.lat - stop.lat) > 0.001 || Math.abs(last.lng - stop.lng) > 0.001) {
+        uniqueStops.push(stop);
+      }
     }
 
-    // Build waypoints from all route stops (limit to 23 - Google's limit is 25 total)
-    // If we have a start/base location, all route stops become waypoints
-    // If returning to start, don't include start as a waypoint at the end
-    const hasOriginLocation = startLocation || baseLocation;
-    const waypointStops = hasOriginLocation ? routeStops : routeStops.slice(1);
-    const finalWaypointStops = returnToStart ? waypointStops : waypointStops.slice(0, -1);
-    const waypoints = finalWaypointStops.slice(0, 23).map((stop) => ({
-      location: stop.coordinates,
+    // Skip first if it's the origin, skip last if it's the destination
+    let waypointStops = uniqueStops;
+    if (waypointStops.length > 0) {
+      const first = waypointStops[0];
+      if (Math.abs(first.lat - origin.lat) < 0.001 && Math.abs(first.lng - origin.lng) < 0.001) {
+        waypointStops = waypointStops.slice(1);
+      }
+    }
+    if (waypointStops.length > 0) {
+      const last = waypointStops[waypointStops.length - 1];
+      if (Math.abs(last.lat - destination.lat) < 0.001 && Math.abs(last.lng - destination.lng) < 0.001) {
+        waypointStops = waypointStops.slice(0, -1);
+      }
+    }
+
+    // Limit to 10 waypoints to reduce chance of ZERO_RESULTS
+    const limitedWaypoints = waypointStops.slice(0, 10);
+    const waypoints = limitedWaypoints.map(coord => ({
+      location: coord,
       stopover: true,
     }));
 
-    console.log('Fetching directions for trip:', generatedTrip.id, {
+    console.log('Fetching directions:', {
       origin,
       destination,
-      waypointCount: waypoints.length,
-      returnToStart,
-      totalStops: routeStops.length
+      waypointCount: waypoints.length
     });
 
     directionsService.route(
@@ -318,10 +330,28 @@ const TripDetail = () => {
       },
       (result, status) => {
         if (status === google.maps.DirectionsStatus.OK && result) {
-          console.log('Directions loaded for trip:', generatedTrip.id);
+          console.log('Directions loaded successfully');
           setDirections(result);
         } else {
-          console.error('Directions failed:', status, { origin, destination, waypoints });
+          console.error('Directions failed:', status);
+          // Try without waypoints as fallback
+          if (waypoints.length > 0) {
+            console.log('Retrying with fewer waypoints...');
+            directionsService.route(
+              {
+                origin,
+                destination,
+                waypoints: [],
+                travelMode: google.maps.TravelMode.DRIVING,
+              },
+              (fallbackResult, fallbackStatus) => {
+                if (fallbackStatus === google.maps.DirectionsStatus.OK && fallbackResult) {
+                  console.log('Fallback directions loaded (origin to destination only)');
+                  setDirections(fallbackResult);
+                }
+              }
+            );
+          }
         }
       }
     );
@@ -447,31 +477,17 @@ const TripDetail = () => {
                   className="w-full h-full"
                   onLoad={() => setMapsLoaded(true)}
                 >
-                  {/* Day-specific route when a day is active */}
-                  {activeDay && dayDirections && (
+                  {/* Route directions - show day route if active, otherwise full trip */}
+                  {(activeDay ? dayDirections : directions) && (
                     <DirectionsRenderer
-                      directions={dayDirections}
+                      key={activeDay ? `day-${activeDay}-route` : 'full-trip-route'}
+                      directions={(activeDay ? dayDirections : directions)!}
                       options={{
                         suppressMarkers: true,
                         polylineOptions: {
-                          strokeColor: '#10b981',
-                          strokeWeight: 5,
-                          strokeOpacity: 1,
-                        },
-                      }}
-                    />
-                  )}
-
-                  {/* Full trip route (shown when no day is active) */}
-                  {!activeDay && directions && (
-                    <DirectionsRenderer
-                      directions={directions}
-                      options={{
-                        suppressMarkers: true,
-                        polylineOptions: {
-                          strokeColor: '#2d5a3d',
-                          strokeWeight: 4,
-                          strokeOpacity: 0.8,
+                          strokeColor: activeDay ? '#10b981' : '#2d5a3d',
+                          strokeWeight: activeDay ? 5 : 4,
+                          strokeOpacity: activeDay ? 1 : 0.8,
                         },
                       }}
                     />
@@ -818,6 +834,7 @@ const TripDetail = () => {
                   isActive={activeDay === day.day}
                   onToggle={() => toggleDay(day.day)}
                   onStartDay={() => handleStartDay(day.day)}
+                  onExitDay={handleExitDayMode}
                   onStopClick={setSelectedStop}
                   onSwapHike={handleOpenHikeSwap}
                   onRemoveStop={handleRemoveStop}
@@ -894,12 +911,13 @@ interface DayCardProps {
   isActive: boolean;
   onToggle: () => void;
   onStartDay: () => void;
+  onExitDay: () => void;
   onStopClick: (stop: TripStop) => void;
   onSwapHike: (hike: TripStop) => void;
   onRemoveStop: (dayNumber: number, stop: TripStop) => void;
 }
 
-const DayCard = ({ day, expanded, isActive, onToggle, onStartDay, onStopClick, onSwapHike, onRemoveStop }: DayCardProps) => {
+const DayCard = ({ day, expanded, isActive, onToggle, onStartDay, onExitDay, onStopClick, onSwapHike, onRemoveStop }: DayCardProps) => {
   return (
     <Card className={`overflow-hidden ${isActive ? 'ring-2 ring-emerald-500 border-emerald-500' : ''}`}>
       {/* Day Header */}
@@ -937,11 +955,15 @@ const DayCard = ({ day, expanded, isActive, onToggle, onStartDay, onStopClick, o
             className={isActive ? "bg-emerald-600 hover:bg-emerald-700" : ""}
             onClick={(e) => {
               e.stopPropagation();
-              onStartDay();
+              if (isActive) {
+                onExitDay();
+              } else {
+                onStartDay();
+              }
             }}
           >
             <Navigation className="w-3 h-3 mr-1" />
-            {isActive ? 'Active' : 'Preview'}
+            {isActive ? 'Exit Preview' : 'Preview'}
           </Button>
           <button onClick={onToggle}>
             {expanded ? (
@@ -1005,7 +1027,7 @@ const DayCard = ({ day, expanded, isActive, onToggle, onStartDay, onStopClick, o
                         </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
                         {stop.duration}
@@ -1014,6 +1036,12 @@ const DayCard = ({ day, expanded, isActive, onToggle, onStartDay, onStopClick, o
                         <span className="flex items-center gap-1">
                           <Route className="w-3 h-3" />
                           {stop.distance}
+                        </span>
+                      )}
+                      {stop.drivingTime && (
+                        <span className="flex items-center gap-1 text-primary">
+                          <Navigation className="w-3 h-3" />
+                          {stop.drivingTime}
                         </span>
                       )}
                       {stop.rating && (
