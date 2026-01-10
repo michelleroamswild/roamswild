@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback 
 import { TripConfig, GeneratedTrip, TripDestination, TripStop } from '@/types/trip';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
+import type { Tables, TablesInsert, TablesUpdate, Json } from '@/integrations/supabase/types';
 
 interface TripContextType {
   tripConfig: TripConfig | null;
@@ -72,10 +73,11 @@ export function TripProvider({ children }: { children: ReactNode }) {
       }
 
       // Transform from database format to app format
-      const transformed: GeneratedTrip[] = (data || []).map(row => ({
+      const rows = data as Tables<'saved_trips'>[] | null;
+      const transformed: GeneratedTrip[] = (rows || []).map(row => ({
         id: row.id,
-        config: row.config as TripConfig,
-        days: row.days as GeneratedTrip['days'],
+        config: row.config as unknown as TripConfig,
+        days: row.days as unknown as GeneratedTrip['days'],
         totalDistance: row.total_distance || '',
         totalDrivingTime: row.total_driving_time || '',
         createdAt: row.created_at || new Date().toISOString(),
@@ -142,16 +144,18 @@ export function TripProvider({ children }: { children: ReactNode }) {
 
       if (exists) {
         // Update existing trip
+        const updateData: TablesUpdate<'saved_trips'> = {
+          name: trip.config.name,
+          config: trip.config as unknown as Json,
+          days: trip.days as unknown as Json,
+          total_distance: trip.totalDistance,
+          total_driving_time: trip.totalDrivingTime,
+          updated_at: new Date().toISOString(),
+        };
+
         const { error } = await supabase
           .from('saved_trips')
-          .update({
-            name: trip.config.name,
-            config: trip.config,
-            days: trip.days,
-            total_distance: trip.totalDistance,
-            total_driving_time: trip.totalDrivingTime,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq('id', trip.id)
           .eq('user_id', user.id);
 
@@ -163,16 +167,18 @@ export function TripProvider({ children }: { children: ReactNode }) {
         setSavedTrips(prev => prev.map(t => t.id === trip.id ? trip : t));
       } else {
         // Insert new trip - let Supabase generate the UUID
+        const insertData: TablesInsert<'saved_trips'> = {
+          user_id: user.id,
+          name: trip.config.name,
+          config: trip.config as unknown as Json,
+          days: trip.days as unknown as Json,
+          total_distance: trip.totalDistance,
+          total_driving_time: trip.totalDrivingTime,
+        };
+
         const { data, error } = await supabase
           .from('saved_trips')
-          .insert({
-            user_id: user.id,
-            name: trip.config.name,
-            config: trip.config,
-            days: trip.days,
-            total_distance: trip.totalDistance,
-            total_driving_time: trip.totalDrivingTime,
-          })
+          .insert(insertData)
           .select()
           .single();
 
@@ -181,10 +187,16 @@ export function TripProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        if (!data) {
+          console.error('No data returned from insert');
+          return;
+        }
+
         // Update the trip with the Supabase-generated ID
+        const row = data as Tables<'saved_trips'>;
         const savedTrip: GeneratedTrip = {
           ...trip,
-          id: data.id,
+          id: row.id,
         };
 
         setSavedTrips(prev => [savedTrip, ...prev]);
@@ -201,8 +213,8 @@ export function TripProvider({ children }: { children: ReactNode }) {
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('saved_trips')
+      const { error } = await (supabase
+        .from('saved_trips') as ReturnType<typeof supabase.from>)
         .delete()
         .eq('id', tripId)
         .eq('user_id', user.id);

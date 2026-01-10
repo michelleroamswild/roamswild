@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass, Plus, Trash2, Footprints, Route } from "lucide-react";
+import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass, Plus, Trash2, Footprints, Route, Calendar, Tent, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -213,6 +213,34 @@ const LocationDetail = () => {
         },
       },
     });
+  };
+
+  const handleGenerateTrip = async () => {
+    if (!location) return;
+    
+    const tripConfig = {
+      name: `Trip to ${location.name}`,
+      duration: tripDuration,
+      destinations: [],
+      returnToStart: false,
+      baseLocation: {
+        id: location.placeId,
+        placeId: location.placeId,
+        name: location.name,
+        address: location.address,
+        coordinates: { lat: location.lat, lng: location.lng },
+      },
+      activitiesPerDay: activitiesPerDay,
+      sameCampsite: sameCampsite,
+    };
+
+    const tripResult = await generateTrip(tripConfig);
+
+    if (tripResult) {
+      setTripConfig(tripResult.config);
+      setGeneratedTrip(tripResult);
+      navigate(`/trip/${tripResult.id}`);
+    }
   };
 
   return (
