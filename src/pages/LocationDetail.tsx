@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass, Plus, Trash2, Footprints, Calendar, Loader2, Tent } from "lucide-react";
+import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass, Plus, Trash2, Footprints, Route } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -58,6 +58,7 @@ const MARKER_SIZE = 38;
 
 const LocationDetail = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const routerLocation = useLocation();
   const navigate = useNavigate();
   const { locations, addLocation, removeLocation, isLocationSaved } = useSavedLocations();
@@ -202,35 +203,17 @@ const LocationDetail = () => {
     });
   };
 
-  const handleGenerateTrip = async () => {
-    if (!location) return;
-
-    const config = {
-      name: `${location.name} Adventure`,
-      duration: tripDuration,
-      destinations: [],
-      returnToStart: false,
-      baseLocation: {
-        id: `base-${Date.now()}`,
-        placeId: location.placeId,
-        name: location.name,
-        address: location.address,
-        coordinates: {
+  const handleCreateTrip = () => {
+    navigate('/create-trip', {
+      state: {
+        startLocation: {
+          name: location.name,
           lat: location.lat,
           lng: location.lng,
+          placeId: location.placeId,
         },
       },
-      activitiesPerDay,
-      sameCampsite,
-    };
-
-    setTripConfig(config);
-
-    const trip = await generateTrip(config);
-    if (trip) {
-      setGeneratedTrip(trip);
-      navigate(`/trip/${trip.id}`);
-    }
+    });
   };
 
   return (
@@ -251,6 +234,24 @@ const LocationDetail = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCreateTrip}
+                className="hidden sm:flex"
+              >
+                <Route className="w-4 h-4 mr-2" />
+                Create Trip
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full sm:hidden"
+                onClick={handleCreateTrip}
+                title="Create Trip"
+              >
+                <Route className="w-5 h-5" />
+              </Button>
               {isSaved ? (
                 <Button
                   variant="ghost"
