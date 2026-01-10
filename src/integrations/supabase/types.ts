@@ -14,7 +14,118 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+          name: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id: string
+          name?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+          name?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      saved_locations: {
+        Row: {
+          address: string | null
+          id: string
+          lat: number
+          lng: number
+          name: string
+          place_id: string
+          saved_at: string | null
+          type: string | null
+          user_id: string
+        }
+        Insert: {
+          address?: string | null
+          id?: string
+          lat: number
+          lng: number
+          name: string
+          place_id: string
+          saved_at?: string | null
+          type?: string | null
+          user_id: string
+        }
+        Update: {
+          address?: string | null
+          id?: string
+          lat?: number
+          lng?: number
+          name?: string
+          place_id?: string
+          saved_at?: string | null
+          type?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_locations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      saved_trips: {
+        Row: {
+          config: Json
+          created_at: string | null
+          days: Json
+          id: string
+          name: string
+          total_distance: string | null
+          total_driving_time: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          config: Json
+          created_at?: string | null
+          days: Json
+          id?: string
+          name: string
+          total_distance?: string | null
+          total_driving_time?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string | null
+          days?: Json
+          id?: string
+          name?: string
+          total_distance?: string | null
+          total_driving_time?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_trips_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

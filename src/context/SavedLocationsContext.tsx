@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
-
+import type { Tables, TablesInsert } from '@/integrations/supabase/types';
 export interface SavedLocation {
   id: string;
   placeId: string;
@@ -50,7 +50,8 @@ export function SavedLocationsProvider({ children }: { children: ReactNode }) {
       }
 
       // Transform from database format to app format
-      const transformed: SavedLocation[] = (data || []).map(row => ({
+      const rows = data as Tables<'saved_locations'>[] | null;
+      const transformed: SavedLocation[] = (rows || []).map(row => ({
         id: row.id,
         placeId: row.place_id,
         name: row.name,
@@ -58,7 +59,7 @@ export function SavedLocationsProvider({ children }: { children: ReactNode }) {
         type: row.type || '',
         lat: row.lat,
         lng: row.lng,
-        savedAt: row.saved_at,
+        savedAt: row.saved_at || new Date().toISOString(),
       }));
 
       setLocations(transformed);
@@ -82,17 +83,19 @@ export function SavedLocationsProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      const insertData: TablesInsert<'saved_locations'> = {
+        user_id: user.id,
+        place_id: location.placeId,
+        name: location.name,
+        address: location.address,
+        type: location.type,
+        lat: location.lat,
+        lng: location.lng,
+      };
+
       const { data, error } = await supabase
         .from('saved_locations')
-        .insert({
-          user_id: user.id,
-          place_id: location.placeId,
-          name: location.name,
-          address: location.address,
-          type: location.type,
-          lat: location.lat,
-          lng: location.lng,
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -101,16 +104,22 @@ export function SavedLocationsProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
+      if (!data) {
+        console.error('No data returned from insert');
+        return false;
+      }
+
       // Add to local state
+      const row = data as Tables<'saved_locations'>;
       const newLocation: SavedLocation = {
-        id: data.id,
-        placeId: data.place_id,
-        name: data.name,
-        address: data.address || '',
-        type: data.type || '',
-        lat: data.lat,
-        lng: data.lng,
-        savedAt: data.saved_at,
+        id: row.id,
+        placeId: row.place_id,
+        name: row.name,
+        address: row.address || '',
+        type: row.type || '',
+        lat: row.lat,
+        lng: row.lng,
+        savedAt: row.saved_at || new Date().toISOString(),
       };
 
       setLocations(prev => [newLocation, ...prev]);
@@ -125,8 +134,8 @@ export function SavedLocationsProvider({ children }: { children: ReactNode }) {
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('saved_locations')
+      const { error } = await (supabase
+        .from('saved_locations') as ReturnType<typeof supabase.from>)
         .delete()
         .eq('id', id)
         .eq('user_id', user.id);
