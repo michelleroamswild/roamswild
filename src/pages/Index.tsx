@@ -26,8 +26,8 @@ const Index = () => {
       setTimeout(() => {
         setCurrentWordIndex((prev) => (prev + 1) % rotatingWords.length);
         setIsAnimating(false);
-      }, 300);
-    }, 3000);
+      }, 200);
+    }, 2000);
 
     return () => clearInterval(interval);
   }, []);
@@ -43,7 +43,7 @@ const Index = () => {
             <h1 className="font-display font-bold text-white mb-4 overflow-visible">
               <span className="text-2xl md:text-3xl lg:text-4xl block mb-2">Plan Your Next</span>
               <span
-                className={`text-gradient-light block text-5xl md:text-6xl lg:text-7xl transition-all duration-300 min-h-[1.2em] ${
+                className={`text-gradient-light block text-5xl md:text-6xl lg:text-7xl transition-all duration-200 min-h-[1.2em] ${
                   isAnimating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
                 }`}
               >

@@ -257,27 +257,32 @@ const TripDetail = () => {
 
     const directionsService = new google.maps.DirectionsService();
 
-    // Get the start location from the config
+    // Get the start/base location from the config
     const startLocation = generatedTrip.config.startLocation?.coordinates;
+    const baseLocation = generatedTrip.config.baseLocation?.coordinates;
 
     // Get all viewpoint/destination stops from the trip
     const allStops = generatedTrip.days.flatMap(day => day.stops);
     const routeStops = allStops.filter(stop =>
-      stop.type === 'viewpoint' || stop.type === 'camp'
+      stop.type === 'viewpoint' || stop.type === 'camp' || stop.type === 'hike'
     );
 
-    // Determine origin - use start location if available, otherwise first stop
-    const origin = startLocation || (routeStops.length > 0 ? routeStops[0].coordinates : null);
+    // Determine origin - use start location, base location, or first stop
+    const origin = startLocation || baseLocation || (routeStops.length > 0 ? routeStops[0].coordinates : null);
 
     if (!origin) {
       console.log('No origin for route');
       return;
     }
 
-    // Determine destination - if returning to start, use start location; otherwise last stop
+    // Determine destination - if returning to start/base, use that; otherwise last stop
     const returnToStart = generatedTrip.config.returnToStart;
+    const isLocationBased = !!baseLocation;
     const lastStop = routeStops.length > 0 ? routeStops[routeStops.length - 1].coordinates : null;
-    const destination = returnToStart && startLocation ? startLocation : lastStop;
+    // For location-based trips, return to base; for regular trips, check returnToStart
+    const destination = isLocationBased
+      ? (lastStop || baseLocation)
+      : (returnToStart && startLocation ? startLocation : lastStop);
 
     if (!destination) {
       console.log('No destination for route');
@@ -285,9 +290,10 @@ const TripDetail = () => {
     }
 
     // Build waypoints from all route stops (limit to 23 - Google's limit is 25 total)
-    // If we have a start location, all route stops become waypoints
+    // If we have a start/base location, all route stops become waypoints
     // If returning to start, don't include start as a waypoint at the end
-    const waypointStops = startLocation ? routeStops : routeStops.slice(1);
+    const hasOriginLocation = startLocation || baseLocation;
+    const waypointStops = hasOriginLocation ? routeStops : routeStops.slice(1);
     const finalWaypointStops = returnToStart ? waypointStops : waypointStops.slice(0, -1);
     const waypoints = finalWaypointStops.slice(0, 23).map((stop) => ({
       location: stop.coordinates,
@@ -341,29 +347,34 @@ const TripDetail = () => {
     : { lat: 37.7749, lng: -122.4194 }; // Default to SF if no stops
 
   const handleStartNavigation = () => {
-    // Get start location from config
+    // Get start/base location from config
     const startLocation = generatedTrip.config.startLocation?.coordinates;
+    const baseLocation = generatedTrip.config.baseLocation?.coordinates;
+    const isLocationBased = !!baseLocation;
 
     // Get route stops from the trip
     const routeStops = allStops.filter(stop =>
-      stop.type === 'viewpoint' || stop.type === 'camp'
+      stop.type === 'viewpoint' || stop.type === 'camp' || stop.type === 'hike'
     );
 
     // Determine origin
-    const originCoords = startLocation || (routeStops.length > 0 ? routeStops[0].coordinates : null);
+    const originCoords = startLocation || baseLocation || (routeStops.length > 0 ? routeStops[0].coordinates : null);
     if (!originCoords) return;
 
     // Determine destination
     const returnToStart = generatedTrip.config.returnToStart;
     const lastStopCoords = routeStops.length > 0 ? routeStops[routeStops.length - 1].coordinates : null;
-    const destCoords = returnToStart && startLocation ? startLocation : lastStopCoords;
+    const destCoords = isLocationBased
+      ? (lastStopCoords || baseLocation)
+      : (returnToStart && startLocation ? startLocation : lastStopCoords);
     if (!destCoords) return;
 
     const origin = `${originCoords.lat},${originCoords.lng}`;
     const dest = `${destCoords.lat},${destCoords.lng}`;
 
     // Build waypoints
-    const waypointStops = startLocation ? routeStops : routeStops.slice(1);
+    const hasOriginLocation = startLocation || baseLocation;
+    const waypointStops = hasOriginLocation ? routeStops : routeStops.slice(1);
     const finalWaypointStops = returnToStart ? waypointStops : waypointStops.slice(0, -1);
     const waypoints = finalWaypointStops
       .map((s) => `${s.coordinates.lat},${s.coordinates.lng}`)
@@ -466,10 +477,10 @@ const TripDetail = () => {
                     />
                   )}
 
-                  {/* Start marker (only shown when viewing full trip) */}
-                  {!activeDay && (
+                  {/* Start/Base marker (only shown when viewing full trip) */}
+                  {!activeDay && (tripConfig.startLocation || tripConfig.baseLocation) && (
                     <Marker
-                      position={tripConfig.startLocation.coordinates}
+                      position={(tripConfig.startLocation || tripConfig.baseLocation)!.coordinates}
                       icon={{
                         path: google.maps.SymbolPath.CIRCLE,
                         fillColor: '#2d5a3d',
@@ -478,7 +489,10 @@ const TripDetail = () => {
                         strokeWeight: 3,
                         scale: 10,
                       }}
-                      title={`Start: ${tripConfig.startLocation.name}`}
+                      title={tripConfig.startLocation
+                        ? `Start: ${tripConfig.startLocation.name}`
+                        : `Base: ${tripConfig.baseLocation!.name}`
+                      }
                     />
                   )}
 

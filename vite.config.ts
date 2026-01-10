@@ -8,6 +8,13 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      '/api/ridb': {
+        target: 'https://ridb.recreation.gov',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ridb/, '/api/v1'),
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

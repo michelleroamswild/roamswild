@@ -26,20 +26,116 @@ function getMidpoint(lat1: number, lng1: number, lat2: number, lng2: number) {
   };
 }
 
-// Find campsites near a point
+// RIDB API key
+const RIDB_API_KEY = import.meta.env.VITE_RIDB_API_KEY || '';
+
+interface RIDBFacility {
+  FacilityID: string;
+  FacilityName: string;
+  FacilityDescription: string;
+  FacilityLatitude: number;
+  FacilityLongitude: number;
+  FacilityTypeDescription: string;
+}
+
+// Search RIDB for campsites near a location
+async function searchRIDBCampsites(
+  lat: number,
+  lng: number,
+  radiusMiles: number = 50
+): Promise<(GoogleSavedPlace & { distance: number })[]> {
+  if (!RIDB_API_KEY) {
+    console.log('RIDB API key not configured');
+    return [];
+  }
+
+  try {
+    // Use proxy to avoid CORS issues
+    const url = `/api/ridb/facilities?latitude=${lat}&longitude=${lng}&radius=${radiusMiles}&limit=100`;
+
+    console.log('Fetching RIDB campsites:', url);
+
+    const response = await fetch(url, {
+      headers: {
+        'apikey': RIDB_API_KEY,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error('RIDB API error:', response.status, await response.text());
+      return [];
+    }
+
+    const data = await response.json();
+    const facilities: RIDBFacility[] = data.RECDATA || [];
+
+    console.log(`RIDB returned ${facilities.length} facilities`);
+
+    // Filter to only include campgrounds
+    const campgroundTypes = ['campground', 'camping', 'camp'];
+    const campgrounds = facilities.filter(f => {
+      if (!f.FacilityLatitude || !f.FacilityLongitude) return false;
+      const typeDesc = (f.FacilityTypeDescription || '').toLowerCase();
+      const name = (f.FacilityName || '').toLowerCase();
+      return campgroundTypes.some(type => typeDesc.includes(type) || name.includes(type));
+    });
+
+    console.log(`Found ${campgrounds.length} campgrounds from RIDB`);
+
+    return campgrounds
+      .map((facility) => {
+        const distance = getDistanceMiles(lat, lng, facility.FacilityLatitude, facility.FacilityLongitude);
+        // Clean up the description - remove HTML tags
+        const cleanDescription = facility.FacilityDescription
+          ?.replace(/<[^>]*>/g, '')
+          ?.slice(0, 200) || facility.FacilityTypeDescription;
+        return {
+          id: `ridb-${facility.FacilityID}`,
+          name: facility.FacilityName,
+          lat: facility.FacilityLatitude,
+          lng: facility.FacilityLongitude,
+          note: cleanDescription,
+          distance,
+        };
+      })
+      .sort((a, b) => a.distance - b.distance);
+  } catch (error) {
+    console.error('RIDB search error:', error);
+    return [];
+  }
+}
+
+// Find campsites near a point (from saved places, with RIDB fallback)
 async function findNearbyCampsites(
   lat: number,
   lng: number,
   allCampsites: GoogleSavedPlace[],
   radiusMiles: number = 50
 ): Promise<(GoogleSavedPlace & { distance: number })[]> {
-  return allCampsites
+  // First try saved campsites
+  const savedCampsites = allCampsites
     .map((site) => ({
       ...site,
       distance: getDistanceMiles(lat, lng, site.lat, site.lng),
     }))
     .filter((site) => site.distance <= radiusMiles)
     .sort((a, b) => a.distance - b.distance);
+
+  // If we have saved campsites, use them
+  if (savedCampsites.length > 0) {
+    return savedCampsites;
+  }
+
+  // Fallback to RIDB API
+  console.log('No saved campsites found, searching RIDB...');
+  const ridbCampsites = await searchRIDBCampsites(lat, lng, radiusMiles);
+
+  if (ridbCampsites.length > 0) {
+    console.log(`Found ${ridbCampsites.length} campsites from RIDB`);
+  }
+
+  return ridbCampsites;
 }
 
 // Find hikes near a point using Google Places
@@ -127,12 +223,14 @@ export function useTripGenerator() {
       const sameCampsite = config.sameCampsite || false;
 
       // Find all nearby campsites and hikes upfront
+      console.log('Searching for campsites within 100 miles of:', baseLocation.name, baseLocation.coordinates);
       const nearbyCamps = await findNearbyCampsites(
         baseLocation.coordinates.lat,
         baseLocation.coordinates.lng,
         allCampsites,
-        60
+        100  // Increased radius for RIDB testing
       );
+      console.log('Found nearby camps:', nearbyCamps.length, nearbyCamps.slice(0, 3).map(c => c.name));
 
       // If same campsite option, pick the best one upfront
       let fixedCampsite: TripStop | undefined;

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
 import { GoogleMap } from "@/components/GoogleMap";
 import { Marker, InfoWindow } from "@react-google-maps/api";
@@ -39,6 +40,15 @@ const TENT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
   <circle cx="20" cy="20" r="18" fill="#f59e0b" stroke="#ffffff" stroke-width="2"/>
   <path d="M20 10L10 27h20L20 10z" fill="#ffffff" stroke="none"/>
   <path d="M20 10L10 27h20L20 10z M17 27l3-7 3 7" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linejoin="round"/>
+</svg>
+`)}`;
+
+// RIDB campsite icon (dark blue)
+const TENT_RIDB_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <circle cx="20" cy="20" r="18" fill="#213D5C" stroke="#ffffff" stroke-width="2"/>
+  <path d="M20 10L10 27h20L20 10z" fill="#ffffff" stroke="none"/>
+  <path d="M20 10L10 27h20L20 10z M17 27l3-7 3 7" fill="none" stroke="#213D5C" stroke-width="2" stroke-linejoin="round"/>
 </svg>
 `)}`;
 
@@ -78,8 +88,8 @@ const LocationDetail = () => {
   const [mapsLoaded, setMapsLoaded] = useState(false);
 
   // Trip planning state
-  const [tripDuration, setTripDuration] = useState(3);
-  const [activitiesPerDay, setActivitiesPerDay] = useState(1);
+  const [tripDuration, setTripDuration] = useState<number[]>([3]);
+  const [activitiesPerDay, setActivitiesPerDay] = useState<number[]>([1]);
   const [sameCampsite, setSameCampsite] = useState(false);
 
   // Get location from router state (search) or from saved locations
@@ -240,7 +250,7 @@ const LocationDetail = () => {
     
     const tripConfig = {
       name: `Trip to ${location.name}`,
-      duration: tripDuration,
+      duration: tripDuration[0],
       destinations: [],
       returnToStart: false,
       baseLocation: {
@@ -250,7 +260,7 @@ const LocationDetail = () => {
         address: location.address,
         coordinates: { lat: location.lat, lng: location.lng },
       },
-      activitiesPerDay: activitiesPerDay,
+      activitiesPerDay: activitiesPerDay[0],
       sameCampsite: sameCampsite,
     };
 
@@ -359,7 +369,7 @@ const LocationDetail = () => {
                       position={{ lat: place.lat, lng: place.lng }}
                       title={`${place.name} (${place.distance.toFixed(1)} mi)`}
                       icon={{
-                        url: TENT_ICON_SVG,
+                        url: place.source === 'ridb' ? TENT_RIDB_ICON_SVG : TENT_ICON_SVG,
                         scaledSize: new google.maps.Size(MARKER_SIZE, MARKER_SIZE),
                         anchor: new google.maps.Point(MARKER_SIZE / 2, MARKER_SIZE / 2),
                       }}
@@ -644,78 +654,54 @@ const LocationDetail = () => {
                   Create an itinerary based around this location with nearby hikes and campsites.
                 </p>
 
-                <div className="space-y-4">
-                  {/* Duration */}
+                <div className="space-y-6">
+                  {/* Duration Slider */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-3">
                       <label className="text-sm font-medium text-foreground flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-muted-foreground" />
                         Duration
                       </label>
-                      <span className="text-sm text-muted-foreground">
-                        {tripDuration} {tripDuration === 1 ? 'day' : 'days'}
+                      <span className="text-2xl font-bold text-foreground">
+                        {tripDuration[0]} {tripDuration[0] === 1 ? 'day' : 'days'}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setTripDuration(Math.max(1, tripDuration - 1))}
-                        disabled={tripDuration <= 1}
-                      >
-                        -
-                      </Button>
-                      <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary transition-all"
-                          style={{ width: `${(tripDuration / 7) * 100}%` }}
-                        />
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setTripDuration(Math.min(7, tripDuration + 1))}
-                        disabled={tripDuration >= 7}
-                      >
-                        +
-                      </Button>
+                    <Slider
+                      value={tripDuration}
+                      onValueChange={setTripDuration}
+                      min={1}
+                      max={14}
+                      step={1}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                      <span>1 day</span>
+                      <span>14 days</span>
                     </div>
                   </div>
 
-                  {/* Activities per day */}
+                  {/* Hikes per day Slider */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-3">
                       <label className="text-sm font-medium text-foreground flex items-center gap-2">
                         <Footprints className="w-4 h-4 text-muted-foreground" />
                         Hikes per day
                       </label>
-                      <span className="text-sm text-muted-foreground">
-                        {activitiesPerDay} {activitiesPerDay === 1 ? 'hike' : 'hikes'}
+                      <span className="text-2xl font-bold text-foreground">
+                        {activitiesPerDay[0]} {activitiesPerDay[0] === 1 ? 'hike' : 'hikes'}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setActivitiesPerDay(Math.max(1, activitiesPerDay - 1))}
-                        disabled={activitiesPerDay <= 1}
-                      >
-                        -
-                      </Button>
-                      <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500 transition-all"
-                          style={{ width: `${(activitiesPerDay / 3) * 100}%` }}
-                        />
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setActivitiesPerDay(Math.min(3, activitiesPerDay + 1))}
-                        disabled={activitiesPerDay >= 3}
-                      >
-                        +
-                      </Button>
+                    <Slider
+                      value={activitiesPerDay}
+                      onValueChange={setActivitiesPerDay}
+                      min={1}
+                      max={5}
+                      step={1}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                      <span>1 hike</span>
+                      <span>5 hikes</span>
                     </div>
                   </div>
 
@@ -749,7 +735,7 @@ const LocationDetail = () => {
                     ) : (
                       <>
                         <Compass className="w-4 h-4 mr-2" />
-                        Generate {tripDuration}-Day Itinerary
+                        Generate {tripDuration[0]}-Day Itinerary
                       </>
                     )}
                   </Button>
@@ -760,9 +746,16 @@ const LocationDetail = () => {
             {/* Nearby Camp Spots */}
             <Card>
               <CardContent className="p-6">
-                <h3 className="text-lg font-display font-semibold text-foreground mb-4">
-                  Nearby Camp Spots
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-display font-semibold text-foreground">
+                    Nearby Camp Spots
+                  </h3>
+                  {nearbyPlaces.length > 0 && nearbyPlaces[0].source === 'ridb' && (
+                    <span className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded">
+                      via Recreation.gov
+                    </span>
+                  )}
+                </div>
                 {nearbyLoading ? (
                   <div className="text-center py-4 text-muted-foreground">
                     <p>Loading nearby spots...</p>
@@ -809,7 +802,7 @@ const LocationDetail = () => {
                 ) : (
                   <div className="text-center py-4 text-muted-foreground">
                     <Compass className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p>No camp spots within 50 miles</p>
+                    <p>No camp spots within 100 miles</p>
                   </div>
                 )}
               </CardContent>
