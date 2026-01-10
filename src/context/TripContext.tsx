@@ -109,19 +109,19 @@ export function TripProvider({ children }: { children: ReactNode }) {
   }, [fetchSavedTrips]);
 
   const updateTripName = (name: string) => {
-    setTripConfig(prev => prev ? { ...prev, name } : { ...defaultConfig, name });
+    setTripConfigState(prev => prev ? { ...prev, name } : { ...defaultConfig, name });
   };
 
   const updateDuration = (duration: number) => {
-    setTripConfig(prev => prev ? { ...prev, duration } : { ...defaultConfig, duration });
+    setTripConfigState(prev => prev ? { ...prev, duration } : { ...defaultConfig, duration });
   };
 
   const setStartLocation = (location: TripDestination) => {
-    setTripConfig(prev => prev ? { ...prev, startLocation: location } : { ...defaultConfig, startLocation: location });
+    setTripConfigState(prev => prev ? { ...prev, startLocation: location } : { ...defaultConfig, startLocation: location });
   };
 
   const addDestination = (destination: TripDestination) => {
-    setTripConfig(prev => {
+    setTripConfigState(prev => {
       if (!prev) {
         return { ...defaultConfig, destinations: [destination] };
       }
@@ -130,18 +130,18 @@ export function TripProvider({ children }: { children: ReactNode }) {
   };
 
   const removeDestination = (id: string) => {
-    setTripConfig(prev => {
+    setTripConfigState(prev => {
       if (!prev) return null;
       return { ...prev, destinations: prev.destinations.filter(d => d.id !== id) };
     });
   };
 
   const reorderDestinations = (destinations: TripDestination[]) => {
-    setTripConfig(prev => prev ? { ...prev, destinations } : null);
+    setTripConfigState(prev => prev ? { ...prev, destinations } : null);
   };
 
   const setReturnToStart = (returnToStart: boolean) => {
-    setTripConfig(prev => prev ? { ...prev, returnToStart } : { ...defaultConfig, returnToStart });
+    setTripConfigState(prev => prev ? { ...prev, returnToStart } : { ...defaultConfig, returnToStart });
   };
 
   const clearTrip = () => {
@@ -257,7 +257,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
   };
 
   const updateTripStop = (dayNumber: number, oldStopId: string, newStop: TripStop) => {
-    setGeneratedTrip(prev => {
+    setGeneratedTripState(prev => {
       if (!prev) return null;
 
       const updatedDays = prev.days.map(day => {
@@ -290,7 +290,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
   };
 
   const removeTripStop = (dayNumber: number, stopId: string) => {
-    setGeneratedTrip(prev => {
+    setGeneratedTripState(prev => {
       if (!prev) return null;
 
       const updatedDays = prev.days.map(day => {
@@ -317,7 +317,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
   };
 
   const addTripStop = (dayNumber: number, stop: TripStop) => {
-    setGeneratedTrip(prev => {
+    setGeneratedTripState(prev => {
       if (!prev) return null;
 
       const updatedDays = prev.days.map(day => {
