@@ -33,35 +33,33 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background topo-pattern">
-      <Header />
+    <div className="min-h-screen bg-background">
+      {/* Hero Section with dark green topo background */}
+      <div className="hero-topo">
+        <Header />
 
-      <main className="container px-4 md:px-6 py-8 md:py-12">
-        {/* Hero Section */}
-        <section className="text-center mb-12 animate-fade-in">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-bold text-foreground mb-4">
-            Plan Your Next
-            <span
-              className={`text-gradient block mt-1 transition-all duration-300 ${
-                isAnimating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
-              }`}
-            >
-              {rotatingWords[currentWordIndex]}
-            </span>
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
-            Discover trails, find dispersed campsites, and build the perfect overlanding route from your saved locations.
-          </p>
+        <div className="container px-4 md:px-6 py-8 md:py-12">
+          <section className="text-center mb-8 animate-fade-in">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-bold text-white mb-4">
+              Plan Your Next
+              <span
+                className={`block mt-1 transition-all duration-300 text-amber-400 ${
+                  isAnimating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
+                }`}
+              >
+                {rotatingWords[currentWordIndex]}
+              </span>
+            </h1>
+            <p className="text-lg md:text-xl text-white/80 max-w-2xl mx-auto mb-8">
+              Discover trails, find dispersed campsites, and build the perfect overlanding route from your saved locations.
+            </p>
 
-          <SearchBar />
+            <SearchBar />
+          </section>
+        </div>
+      </div>
 
-          {/* TODO: Re-enable filters when functionality is implemented
-          <div className="mt-8">
-            <p className="text-sm text-muted-foreground mb-4">Filter your search by:</p>
-            <FilterChips />
-          </div>
-          */}
-        </section>
+      <main className="container px-4 md:px-6 py-8 md:py-12 topo-pattern">
 
         {/* Divider */}
         <div className="w-full h-px bg-border my-12" />
