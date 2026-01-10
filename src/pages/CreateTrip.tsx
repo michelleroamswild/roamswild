@@ -269,10 +269,7 @@ const CreateTrip = () => {
           {/* Trip Name */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Compass className="w-5 h-5 text-primary" />
-                Trip Details
-              </CardTitle>
+              <CardTitle className="text-xl">Trip Details</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
@@ -290,10 +287,7 @@ const CreateTrip = () => {
           {/* Start Location */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <MapPin className="w-5 h-5 text-emerald-500" />
-                Start Location
-              </CardTitle>
+              <CardTitle className="text-xl">Start Location</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
@@ -326,10 +320,7 @@ const CreateTrip = () => {
           {/* Destinations */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <MapPin className="w-5 h-5 text-primary" />
-                Destinations
-              </CardTitle>
+              <CardTitle className="text-xl">Destinations</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -394,10 +385,7 @@ const CreateTrip = () => {
           {/* End Location */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <MapPin className="w-5 h-5 text-terracotta" />
-                End Location
-              </CardTitle>
+              <CardTitle className="text-xl">End Location</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Return to Start Toggle */}
@@ -446,7 +434,7 @@ const CreateTrip = () => {
           {/* Duration Slider */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Trip Duration</CardTitle>
+              <CardTitle className="text-xl">Trip Duration</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between mb-4">
@@ -471,10 +459,7 @@ const CreateTrip = () => {
           {/* Car Capabilities */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Car className="w-5 h-5 text-primary" />
-                Vehicle Capabilities
-              </CardTitle>
+              <CardTitle className="text-xl">Vehicle Capabilities</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-3">
@@ -503,10 +488,7 @@ const CreateTrip = () => {
           {/* Lodging Options */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Tent className="w-5 h-5 text-primary" />
-                Lodging Preference
-              </CardTitle>
+              <CardTitle className="text-xl">Lodging Preference</CardTitle>
             </CardHeader>
             <CardContent>
               <RadioGroup value={lodging} onValueChange={setLodging} className="grid gap-3">
@@ -531,10 +513,7 @@ const CreateTrip = () => {
           {/* Activities */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Camera className="w-5 h-5 text-primary" />
-                Activities
-              </CardTitle>
+              <CardTitle className="text-xl">Activities</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
