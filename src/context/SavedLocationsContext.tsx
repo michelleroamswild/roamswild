@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from './AuthContext';
 
 export interface SavedLocation {
   id: string;
@@ -13,54 +15,131 @@ export interface SavedLocation {
 
 interface SavedLocationsContextType {
   locations: SavedLocation[];
-  addLocation: (location: Omit<SavedLocation, 'id' | 'savedAt'>) => boolean;
-  removeLocation: (id: string) => void;
+  isLoading: boolean;
+  addLocation: (location: Omit<SavedLocation, 'id' | 'savedAt'>) => Promise<boolean>;
+  removeLocation: (id: string) => Promise<void>;
   isLocationSaved: (placeId: string) => boolean;
 }
 
 const SavedLocationsContext = createContext<SavedLocationsContextType | null>(null);
 
-const STORAGE_KEY = 'trailbound-saved-locations';
-
 export function SavedLocationsProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [locations, setLocations] = useState<SavedLocation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Load from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        setLocations(JSON.parse(stored));
-      } catch (e) {
-        console.error('Failed to parse saved locations', e);
-      }
+  // Load locations from Supabase when user changes
+  const fetchLocations = useCallback(async () => {
+    if (!user) {
+      setLocations([]);
+      setIsLoading(false);
+      return;
     }
-  }, []);
 
-  // Save to localStorage whenever locations change
-  const saveToStorage = (newLocations: SavedLocation[]) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newLocations));
-    setLocations(newLocations);
-  };
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('saved_locations')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('saved_at', { ascending: false });
 
-  const addLocation = (location: Omit<SavedLocation, 'id' | 'savedAt'>) => {
+      if (error) {
+        console.error('Failed to fetch saved locations:', error);
+        return;
+      }
+
+      // Transform from database format to app format
+      const transformed: SavedLocation[] = (data || []).map(row => ({
+        id: row.id,
+        placeId: row.place_id,
+        name: row.name,
+        address: row.address || '',
+        type: row.type || '',
+        lat: row.lat,
+        lng: row.lng,
+        savedAt: row.saved_at,
+      }));
+
+      setLocations(transformed);
+    } catch (e) {
+      console.error('Error fetching locations:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchLocations();
+  }, [fetchLocations]);
+
+  const addLocation = async (location: Omit<SavedLocation, 'id' | 'savedAt'>): Promise<boolean> => {
+    if (!user) return false;
+
     // Check if already saved
     if (locations.some(l => l.placeId === location.placeId)) {
       return false;
     }
 
-    const newLocation: SavedLocation = {
-      ...location,
-      id: crypto.randomUUID(),
-      savedAt: new Date().toISOString(),
-    };
+    try {
+      const { data, error } = await supabase
+        .from('saved_locations')
+        .insert({
+          user_id: user.id,
+          place_id: location.placeId,
+          name: location.name,
+          address: location.address,
+          type: location.type,
+          lat: location.lat,
+          lng: location.lng,
+        })
+        .select()
+        .single();
 
-    saveToStorage([newLocation, ...locations]);
-    return true;
+      if (error) {
+        console.error('Failed to save location:', error);
+        return false;
+      }
+
+      // Add to local state
+      const newLocation: SavedLocation = {
+        id: data.id,
+        placeId: data.place_id,
+        name: data.name,
+        address: data.address || '',
+        type: data.type || '',
+        lat: data.lat,
+        lng: data.lng,
+        savedAt: data.saved_at,
+      };
+
+      setLocations(prev => [newLocation, ...prev]);
+      return true;
+    } catch (e) {
+      console.error('Error adding location:', e);
+      return false;
+    }
   };
 
-  const removeLocation = (id: string) => {
-    saveToStorage(locations.filter(l => l.id !== id));
+  const removeLocation = async (id: string): Promise<void> => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('saved_locations')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Failed to remove location:', error);
+        return;
+      }
+
+      setLocations(prev => prev.filter(l => l.id !== id));
+    } catch (e) {
+      console.error('Error removing location:', e);
+    }
   };
 
   const isLocationSaved = (placeId: string) => {
@@ -68,7 +147,7 @@ export function SavedLocationsProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <SavedLocationsContext.Provider value={{ locations, addLocation, removeLocation, isLocationSaved }}>
+    <SavedLocationsContext.Provider value={{ locations, isLoading, addLocation, removeLocation, isLocationSaved }}>
       {children}
     </SavedLocationsContext.Provider>
   );

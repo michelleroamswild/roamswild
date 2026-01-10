@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, MapPin, Plus, X, Compass, Calendar, RotateCcw, Loader2, GripVertical } from 'lucide-react';
+import { ArrowLeft, MapPin, Plus, X, Compass, Calendar, RotateCcw, Loader2, GripVertical, Tent, Car, Home, Mountain, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Autocomplete } from '@react-google-maps/api';
 import { useTrip } from '@/context/TripContext';
 import { useTripGenerator } from '@/hooks/use-trip-generator';
-import { TripDestination } from '@/types/trip';
+import { TripDestination, VehicleType, LodgingType, ActivityType } from '@/types/trip';
 
 const CreateTrip = () => {
   const navigate = useNavigate();
@@ -21,6 +21,10 @@ const CreateTrip = () => {
   const [startLocation, setStartLocation] = useState<TripDestination | null>(null);
   const [destinations, setDestinations] = useState<TripDestination[]>([]);
   const [returnToStart, setReturnToStart] = useState(false);
+  const [baseCampMode, setBaseCampMode] = useState(false);
+  const [vehicleType, setVehicleType] = useState<VehicleType>('suv');
+  const [lodgingPreference, setLodgingPreference] = useState<LodgingType>('dispersed');
+  const [activities, setActivities] = useState<ActivityType[]>(['hiking']);
 
   const [startAutocomplete, setStartAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
   const [destAutocomplete, setDestAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
@@ -70,15 +74,33 @@ const CreateTrip = () => {
   };
 
   const handleGenerateTrip = async () => {
-    if (!startLocation) return;
+    if (destinations.length === 0) return;
 
-    const config = {
-      name: tripName || 'My Adventure',
-      duration,
-      startLocation,
-      destinations,
-      returnToStart,
-    };
+    // If no start location, use the first destination as the base location
+    const config = startLocation
+      ? {
+          name: tripName || 'My Adventure',
+          duration,
+          startLocation,
+          destinations,
+          returnToStart,
+          sameCampsite: baseCampMode,
+          vehicleType,
+          lodgingPreference,
+          activities,
+        }
+      : {
+          name: tripName || 'My Adventure',
+          duration,
+          destinations: [],
+          returnToStart: false,
+          baseLocation: destinations[0],
+          activitiesPerDay: 1,
+          sameCampsite: baseCampMode,
+          vehicleType,
+          lodgingPreference,
+          activities,
+        };
 
     setTripConfig(config);
 
@@ -89,7 +111,7 @@ const CreateTrip = () => {
     }
   };
 
-  const canGenerate = startLocation && destinations.length > 0;
+  const canGenerate = destinations.length > 0;
 
   return (
     <div className="min-h-screen bg-background topo-pattern">
@@ -176,9 +198,12 @@ const CreateTrip = () => {
           <Card>
             <CardContent className="p-6">
               <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Compass className="w-5 h-5 text-primary" />
-                  <Label>Starting Point</Label>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Compass className="w-5 h-5 text-primary" />
+                    <Label>Starting Point</Label>
+                  </div>
+                  <span className="text-xs text-muted-foreground">Optional</span>
                 </div>
                 {startLocation ? (
                   <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
@@ -272,7 +297,7 @@ const CreateTrip = () => {
 
           {/* Options */}
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <RotateCcw className="w-5 h-5 text-muted-foreground" />
@@ -284,6 +309,143 @@ const CreateTrip = () => {
                   </div>
                 </div>
                 <Switch checked={returnToStart} onCheckedChange={setReturnToStart} />
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Tent className="w-5 h-5 text-amber-500" />
+                    <div>
+                      <Label>Base Camp Mode</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {destinations.length > 1
+                          ? 'Stay at one campsite per destination area'
+                          : 'Stay at the same campsite each night'}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch checked={baseCampMode} onCheckedChange={setBaseCampMode} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Vehicle Type */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Car className="w-5 h-5 text-primary" />
+                  <Label>Vehicle Type</Label>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: 'sedan', label: 'Sedan', desc: 'Paved roads only' },
+                    { value: 'suv', label: 'SUV/Crossover', desc: 'Light dirt roads' },
+                    { value: '4wd', label: '4WD/Off-road', desc: 'Rough terrain' },
+                    { value: 'rv', label: 'RV/Camper', desc: 'Large vehicle access' },
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setVehicleType(option.value)}
+                      className={`p-3 rounded-lg border text-left transition-all ${
+                        vehicleType === option.value
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                    >
+                      <p className="font-medium text-foreground text-sm">{option.label}</p>
+                      <p className="text-xs text-muted-foreground">{option.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Lodging Preference */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Home className="w-5 h-5 text-primary" />
+                  <Label>Lodging Preference</Label>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: 'dispersed', label: 'Dispersed Camping', desc: 'Free, remote sites' },
+                    { value: 'campground', label: 'Campground', desc: 'Paid sites with amenities' },
+                    { value: 'cabin', label: 'Cabin/Glamping', desc: 'Rustic comfort' },
+                    { value: 'hotel', label: 'Hotel/Motel', desc: 'Full amenities' },
+                    { value: 'mixed', label: 'Mix It Up', desc: 'Variety of options' },
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setLodgingPreference(option.value)}
+                      className={`p-3 rounded-lg border text-left transition-all ${
+                        lodgingPreference === option.value
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border hover:border-primary/50'
+                      } ${option.value === 'mixed' ? 'col-span-2' : ''}`}
+                    >
+                      <p className="font-medium text-foreground text-sm">{option.label}</p>
+                      <p className="text-xs text-muted-foreground">{option.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Activities */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Mountain className="w-5 h-5 text-primary" />
+                    <Label>Activities</Label>
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {activities.length} selected
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: 'hiking', label: 'Hiking', emoji: '🥾' },
+                    { value: 'biking', label: 'Mountain Biking', emoji: '🚵' },
+                    { value: 'climbing', label: 'Rock Climbing', emoji: '🧗' },
+                    { value: 'fishing', label: 'Fishing', emoji: '🎣' },
+                    { value: 'photography', label: 'Photography', emoji: '📷' },
+                    { value: 'wildlife', label: 'Wildlife Viewing', emoji: '🦌' },
+                  ] as const).map((option) => {
+                    const isSelected = activities.includes(option.value);
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setActivities(activities.filter((a) => a !== option.value));
+                          } else {
+                            setActivities([...activities, option.value]);
+                          }
+                        }}
+                        className={`p-3 rounded-lg border text-left transition-all flex items-center gap-2 ${
+                          isSelected
+                            ? 'border-primary bg-primary/10'
+                            : 'border-border hover:border-primary/50'
+                        }`}
+                      >
+                        <span className="text-lg">{option.emoji}</span>
+                        <p className="font-medium text-foreground text-sm flex-1">{option.label}</p>
+                        {isSelected && <Check className="w-4 h-4 text-primary" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -318,7 +480,12 @@ const CreateTrip = () => {
 
           {!canGenerate && (
             <p className="text-sm text-muted-foreground text-center">
-              Add a starting point and at least one destination to continue
+              Add at least one destination to continue
+            </p>
+          )}
+          {canGenerate && !startLocation && (
+            <p className="text-sm text-muted-foreground text-center">
+              No starting point? We'll create a trip exploring around your first destination.
             </p>
           )}
         </div>

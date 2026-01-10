@@ -1,7 +1,7 @@
 import { MapPin, Star, ChevronRight, Trash2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
 
 const defaultLocations = [
@@ -42,10 +42,7 @@ export const SavedLocations = () => {
     });
   };
 
-  const handleLocationClick = (placeId: string) => {
-    navigate(`/location/${placeId}`);
-  };
-
+  
   const handleViewAll = () => {
     navigate('/saved');
   };
@@ -84,45 +81,62 @@ export const SavedLocations = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {displayLocations.slice(0, 4).map((location, index) => (
-          <div
-            key={location.id}
-            onClick={() => isUserLocation && handleLocationClick(location.placeId)}
-            className="group flex items-center gap-4 p-4 bg-card rounded-xl border border-border hover:border-primary/30 hover:shadow-card transition-all duration-300 cursor-pointer animate-fade-in"
-            style={{ animationDelay: `${index * 100}ms` }}
-          >
-            <div className="flex items-center justify-center w-12 h-12 bg-secondary rounded-lg group-hover:bg-primary/10 transition-colors duration-200">
-              <MapPin className="w-5 h-5 text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors duration-200">
-                {location.name}
-              </h3>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-sm text-muted-foreground">{location.type}</span>
-                {'address' in location && location.address && (
-                  <>
-                    <span className="text-muted-foreground">•</span>
-                    <span className="text-sm text-muted-foreground truncate">{location.address}</span>
-                  </>
-                )}
+        {displayLocations.slice(0, 4).map((location, index) => {
+          const cardContent = (
+            <>
+              <div className="flex items-center justify-center w-12 h-12 bg-secondary rounded-lg group-hover:bg-primary/10 transition-colors duration-200">
+                <MapPin className="w-5 h-5 text-primary" />
               </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors duration-200">
+                  {location.name}
+                </h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-sm text-muted-foreground">{location.type}</span>
+                  {'address' in location && location.address && (
+                    <>
+                      <span className="text-muted-foreground">•</span>
+                      <span className="text-sm text-muted-foreground truncate">{location.address}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              {isUserLocation ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    handleRemove(location.id, location.name);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-destructive/10 rounded-lg"
+                >
+                  <Trash2 className="w-4 h-4 text-destructive" />
+                </button>
+              ) : (
+                <Star className="w-5 h-5 text-terracotta fill-terracotta" />
+              )}
+            </>
+          );
+
+          return isUserLocation ? (
+            <Link
+              key={location.id}
+              to={`/location/${location.placeId}`}
+              className="group flex items-center gap-4 p-4 bg-card rounded-xl border border-border hover:border-primary/30 hover:shadow-card transition-all duration-300 animate-fade-in"
+              style={{ animationDelay: `${index * 100}ms` }}
+            >
+              {cardContent}
+            </Link>
+          ) : (
+            <div
+              key={location.id}
+              className="group flex items-center gap-4 p-4 bg-card rounded-xl border border-border hover:border-primary/30 hover:shadow-card transition-all duration-300 animate-fade-in"
+              style={{ animationDelay: `${index * 100}ms` }}
+            >
+              {cardContent}
             </div>
-            {isUserLocation ? (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRemove(location.id, location.name);
-                }}
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-destructive/10 rounded-lg"
-              >
-                <Trash2 className="w-4 h-4 text-destructive" />
-              </button>
-            ) : (
-              <Star className="w-5 h-5 text-terracotta fill-terracotta" />
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {locations.length === 0 && (
