@@ -542,7 +542,7 @@ const HotSpotCard = ({ spot, index }: HotSpotCardProps) => {
                   </div>
                 )}
                 {spot.openNow !== undefined && (
-                  <span className={`text-xs font-medium ${spot.openNow ? 'text-emerald-600' : 'text-red-500'}`}>
+                  <span className={`text-xs font-medium ${spot.openNow ? 'text-forest-light' : 'text-red-500'}`}>
                     {spot.openNow ? 'Open' : 'Closed'}
                   </span>
                 )}
