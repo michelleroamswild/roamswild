@@ -3,6 +3,7 @@ import { SearchBar } from "@/components/SearchBar";
 import { FilterChips } from "@/components/FilterChips";
 import { SavedLocations } from "@/components/SavedLocations";
 import { TripPreview } from "@/components/TripPreview";
+import { Suggestions } from "@/components/Suggestions";
 
 const Index = () => {
   return (
@@ -34,6 +35,14 @@ const Index = () => {
         {/* Saved Locations */}
         <div className="mb-12">
           <SavedLocations />
+        </div>
+
+        {/* Divider */}
+        <div className="w-full h-px bg-border my-12" />
+
+        {/* Suggestions - Near You */}
+        <div className="mb-12">
+          <Suggestions />
         </div>
 
         {/* Trip Preview */}

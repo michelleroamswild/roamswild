@@ -45,6 +45,13 @@ const SavedLocations = () => {
               <Link
                 key={location.id}
                 to={`/location/${location.placeId}`}
+                state={{
+                  placeId: location.placeId,
+                  name: location.name,
+                  address: location.address,
+                  lat: location.lat,
+                  lng: location.lng,
+                }}
                 className="block group animate-fade-in"
                 style={{ animationDelay: `${index * 50}ms` }}
               >

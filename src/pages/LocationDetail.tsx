@@ -60,7 +60,6 @@ const LocationDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const routerLocation = useLocation();
-  const navigate = useNavigate();
   const { locations, addLocation, removeLocation, isLocationSaved } = useSavedLocations();
   const { setTripConfig, setGeneratedTrip } = useTrip();
   const { generateTrip, generating, error: tripError } = useTripGenerator();

@@ -122,6 +122,13 @@ export const SavedLocations = () => {
             <Link
               key={location.id}
               to={`/location/${location.placeId}`}
+              state={{
+                placeId: location.placeId,
+                name: location.name,
+                address: location.address,
+                lat: location.lat,
+                lng: location.lng,
+              }}
               className="group flex items-center gap-4 p-4 bg-card rounded-xl border border-border hover:border-primary/30 hover:shadow-card transition-all duration-300 animate-fade-in"
               style={{ animationDelay: `${index * 100}ms` }}
             >
