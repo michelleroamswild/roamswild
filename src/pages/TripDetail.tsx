@@ -53,7 +53,7 @@ const getIcon = (type: string) => {
 const getTypeStyles = (type: string) => {
   switch (type) {
     case 'hike':
-      return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
+      return 'bg-primary/10 text-primary border-primary/20';
     case 'gas':
       return 'bg-terracotta/10 text-terracotta border-terracotta/20';
     case 'camp':
@@ -68,7 +68,7 @@ const getTypeStyles = (type: string) => {
 const getMarkerColor = (type: string) => {
   switch (type) {
     case 'hike':
-      return '#10b981';
+      return '#4a7a3c'; // forest-light color
     case 'camp':
       return '#f59e0b';
     case 'viewpoint':
@@ -485,7 +485,7 @@ const TripDetail = () => {
                       options={{
                         suppressMarkers: true,
                         polylineOptions: {
-                          strokeColor: activeDay ? '#10b981' : '#2d5a3d',
+                          strokeColor: activeDay ? '#4a7a3c' : '#2d5a3d',
                           strokeWeight: activeDay ? 5 : 4,
                           strokeOpacity: activeDay ? 1 : 0.8,
                         },
@@ -617,7 +617,7 @@ const TripDetail = () => {
                               '_blank'
                             );
                           }}
-                          className="w-full px-3 py-1.5 bg-emerald-600 text-white text-sm rounded hover:bg-emerald-700 transition-colors"
+                          className="w-full px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded hover:bg-primary-hover transition-colors"
                         >
                           Get Directions
                         </button>
@@ -633,8 +633,8 @@ const TripDetail = () => {
                       // Day-specific info
                       <div className="flex items-center justify-between flex-wrap gap-4">
                         <div className="flex items-center gap-4">
-                          <div className="flex items-center justify-center w-10 h-10 bg-emerald-500/10 rounded-full">
-                            <span className="text-lg font-bold text-emerald-600">{activeDay}</span>
+                          <div className="flex items-center justify-center w-10 h-10 bg-primary/10 rounded-full">
+                            <span className="text-lg font-bold text-primary">{activeDay}</span>
                           </div>
                           <div>
                             <p className="font-semibold text-foreground">Day {activeDay}</p>
@@ -919,20 +919,20 @@ interface DayCardProps {
 
 const DayCard = ({ day, expanded, isActive, onToggle, onStartDay, onExitDay, onStopClick, onSwapHike, onRemoveStop }: DayCardProps) => {
   return (
-    <Card className={`overflow-hidden ${isActive ? 'ring-2 ring-emerald-500 border-emerald-500' : ''}`}>
+    <Card className={`overflow-hidden ${isActive ? 'ring-2 ring-primary border-primary' : ''}`}>
       {/* Day Header */}
       <div className="flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors">
         <button
           onClick={onToggle}
           className="flex items-center gap-3 flex-1"
         >
-          <div className={`flex items-center justify-center w-10 h-10 rounded-full ${isActive ? 'bg-emerald-500/20' : 'bg-primary/10'}`}>
-            <span className={`text-lg font-bold ${isActive ? 'text-emerald-600' : 'text-primary'}`}>{day.day}</span>
+          <div className={`flex items-center justify-center w-10 h-10 rounded-full ${isActive ? 'bg-primary/20' : 'bg-primary/10'}`}>
+            <span className={`text-lg font-bold ${isActive ? 'text-forest-light' : 'text-primary'}`}>{day.day}</span>
           </div>
           <div className="text-left">
             <p className="font-medium text-foreground">
               Day {day.day}
-              {isActive && <span className="ml-2 text-xs text-emerald-600 font-normal">(Active)</span>}
+              {isActive && <span className="ml-2 text-xs text-forest-light font-normal">(Active)</span>}
             </p>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
@@ -947,12 +947,12 @@ const DayCard = ({ day, expanded, isActive, onToggle, onStartDay, onExitDay, onS
           </div>
         </button>
         <div className="flex items-center gap-2">
-          {day.hike && <Footprints className="w-4 h-4 text-emerald-500" />}
+          {day.hike && <Footprints className="w-4 h-4 text-forest-light" />}
           {day.campsite && <Tent className="w-4 h-4 text-amber-500" />}
           <Button
             variant={isActive ? "default" : "outline"}
             size="sm"
-            className={isActive ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+            className={isActive ? "bg-primary hover:bg-primary-hover" : ""}
             onClick={(e) => {
               e.stopPropagation();
               if (isActive) {

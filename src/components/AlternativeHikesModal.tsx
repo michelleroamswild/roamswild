@@ -161,7 +161,7 @@ export function AlternativeHikesModal({
                       className={`flex items-center justify-center w-10 h-10 rounded-lg ${
                         selectedId === hike.id
                           ? 'bg-primary text-primary-foreground'
-                          : 'bg-emerald-500/10 text-emerald-600'
+                          : 'bg-primary/10 text-primary'
                       }`}
                     >
                       {selectedId === hike.id ? (
