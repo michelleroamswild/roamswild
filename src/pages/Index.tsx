@@ -38,12 +38,12 @@ const Index = () => {
       <div className="hero-topo">
         <Header />
 
-        <div className="container px-4 md:px-6 py-8 md:py-12">
-          <section className="text-center mb-8 animate-fade-in">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-bold text-white mb-4">
+        <div className="container px-4 md:px-6 py-16 md:py-24">
+          <section className="text-center animate-fade-in">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-bold text-white mb-4 overflow-visible">
               Plan Your Next
               <span
-                className={`text-gradient-light block mt-1 transition-all duration-300 ${
+                className={`text-gradient-light block mt-1 transition-all duration-300 min-h-[1.2em] ${
                   isAnimating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
                 }`}
               >
