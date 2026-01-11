@@ -6,10 +6,10 @@
 
 @layer base {
   :root {
-    --background: 50 33% 96%;
-    --foreground: 150 25% 15%;
+    --background: 90 14% 97%;
+    --foreground: 69 17% 21%;
 
-    --card: 40 20% 95%;
+    --card: 36 23% 91%;
     --card-foreground: 150 25% 15%;
 
     --popover: 40 25% 97%;
@@ -25,7 +25,7 @@
     --muted: 35 20% 90%;
     --muted-foreground: 84 35% 28%;
 
-    --accent: 43 89% 61%;
+    --accent: 74 68% 56%;
     --accent-foreground: 40 25% 97%;
 
     --destructive: 0 84.2% 60.2%;
@@ -35,7 +35,7 @@
     --input: 35 20% 85%;
     --ring: 152 45% 25%;
 
-    --radius: 0.75rem;
+    --radius: 0.5rem;
 
     /* Custom overlanding tokens */
     --forest: 152 45% 25%;
@@ -44,7 +44,7 @@
     --sand-dark: 35 25% 75%;
     --terracotta: 20 65% 55%;
     --terracotta-dark: 20 65% 45%;
-    --earth: 25 30% 35%;
+    --earth: 355 8% 71%;
     --cream: 40 25% 97%;
     --topo-line: 150 15% 80%;
 
@@ -140,7 +140,7 @@
   }
 
   .hero-topo {
-    background-color: hsl(var(--forest));
+    background-color: #2C3F10;
     position: relative;
   }
 
