@@ -11,6 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getTripUrl } from "@/utils/slugify";
 
+// Hero photos
+import heroPhoto1 from "@/images/herophotos/DJI_0693.jpg";
+import heroPhoto2 from "@/images/herophotos/DSC09190.jpg";
+import heroPhoto3 from "@/images/herophotos/DJI_0879.jpg";
+import heroPhoto4 from "@/images/herophotos/DSC09645.jpg";
+
 const rotatingWords = [
   "Adventure",
   "Road Trip",
@@ -25,6 +31,7 @@ const rotatingWords = [
 const Index = () => {
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [scrollY, setScrollY] = useState(0);
   const { savedTrips, isLoading: tripsLoading } = useTrip();
 
   useEffect(() => {
@@ -39,18 +46,66 @@ const Index = () => {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollY(window.scrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Hero Section with dark green topo background */}
-      <div className="hero-topo">
+      <div className="hero-topo overflow-x-clip">
         <Header />
 
-        <div className="container px-4 md:px-6 py-16 md:py-24">
-          <section className="text-center animate-fade-in">
+        <div className="container px-4 md:px-6 py-40 relative">
+          {/* Left Photo Collage - Hidden on mobile */}
+          <div
+            className="hidden lg:block absolute left-0 top-8 w-[400px] xl:w-[500px] pointer-events-none transition-transform duration-100 ease-out"
+            style={{ transform: `translateX(${-scrollY * 0.5}px)` }}
+          >
+            <div
+              className="absolute top-0 -left-48 xl:-left-64 w-96 xl:w-[450px] h-64 xl:h-80 overflow-hidden shadow-2xl rotate-[-6deg] animate-float-slow z-10"
+              style={{ animationDelay: '0s' }}
+            >
+              <img src={heroPhoto1} alt="" className="w-full h-full object-cover" />
+            </div>
+            <div
+              className="absolute top-64 xl:top-72 -left-40 xl:-left-56 w-[420px] xl:w-[500px] h-72 xl:h-80 overflow-hidden shadow-2xl rotate-[4deg] animate-float-medium z-20"
+              style={{ animationDelay: '0.5s' }}
+            >
+              <img src={heroPhoto2} alt="" className="w-full h-full object-cover" />
+            </div>
+          </div>
+
+          {/* Right Photo Collage - Hidden on mobile */}
+          <div
+            className="hidden lg:block absolute right-0 top-8 w-[400px] xl:w-[500px] pointer-events-none transition-transform duration-100 ease-out"
+            style={{ transform: `translateX(${scrollY * 0.5}px)` }}
+          >
+            <div
+              className="absolute top-0 -right-48 xl:-right-64 w-96 xl:w-[450px] h-64 xl:h-72 overflow-hidden shadow-2xl rotate-[5deg] animate-float-medium z-10"
+              style={{ animationDelay: '0.3s' }}
+            >
+              <img src={heroPhoto3} alt="" className="w-full h-full object-cover" />
+            </div>
+            <div
+              className="absolute top-60 xl:top-72 -right-36 xl:-right-48 w-[420px] xl:w-[500px] h-72 xl:h-80 overflow-hidden shadow-2xl rotate-[-3deg] animate-float-slow z-20"
+              style={{ animationDelay: '0.8s' }}
+            >
+              <img src={heroPhoto4} alt="" className="w-full h-full object-cover" />
+            </div>
+          </div>
+
+          {/* Center Content */}
+          <section className="text-center animate-fade-in relative z-10 max-w-3xl mx-auto">
             <h1 className="font-display font-bold text-primary mb-4 overflow-visible">
               <span className="text-2xl md:text-3xl lg:text-4xl block mb-2">Plan Your Next</span>
               <span
-                className={`text-gradient-forest block text-5xl md:text-6xl lg:text-7xl transition-all duration-200 min-h-[1.2em] ${
+                className={`text-gradient-forest block text-5xl md:text-6xl lg:text-7xl transition-all duration-200 whitespace-nowrap ${
                   isAnimating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
                 }`}
               >
