@@ -78,7 +78,7 @@ const MyTrips = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background topo-pattern">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
         <div className="container px-4 md:px-6 py-4">

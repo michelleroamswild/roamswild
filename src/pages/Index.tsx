@@ -66,7 +66,7 @@ const Index = () => {
         </div>
       </div>
 
-      <main className="container px-4 md:px-6 py-8 md:py-12 topo-pattern">
+      <main className="container px-4 md:px-6 py-8 md:py-12">
 
         {/* My Trips Section */}
         {savedTrips.length > 0 && (

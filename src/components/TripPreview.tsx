@@ -33,7 +33,7 @@ export const TripPreview = () => {
 
       <div className="relative bg-gradient-card rounded-2xl border border-border overflow-hidden shadow-card">
         {/* Map placeholder */}
-        <div className="relative h-48 bg-sand topo-pattern overflow-hidden">
+        <div className="relative h-48 bg-sand overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-card/80" />
           <div className="absolute bottom-4 left-4 flex items-center gap-2 text-sm text-muted-foreground">
             <Path className="w-4 h-4 text-terracotta" />
