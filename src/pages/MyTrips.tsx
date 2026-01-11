@@ -12,9 +12,17 @@ import {
   Users,
   ShareNetwork,
   SpinnerGap,
+  SortAscending,
 } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useTrip } from '@/context/TripContext';
 import { toast } from 'sonner';
 import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
@@ -35,30 +43,57 @@ const MyTrips = () => {
     tripId: '',
     tripName: '',
   });
+  const [sortBy, setSortBy] = useState<'trip-date' | 'name-asc' | 'name-desc' | 'created-newest' | 'created-oldest'>('trip-date');
 
   // Combine and sort all trips
   const allTrips = useMemo(() => {
     const owned: TripWithMeta[] = savedTrips.map(t => ({ ...t, isShared: false }));
     const shared: TripWithMeta[] = sharedTrips.map(t => ({ ...t, isShared: true }));
+    const combined = [...owned, ...shared];
 
-    return [...owned, ...shared].sort((a, b) => {
-      // Sort by start date first (upcoming trips first)
-      const aDate = a.config.startDate ? new Date(a.config.startDate).getTime() : null;
-      const bDate = b.config.startDate ? new Date(b.config.startDate).getTime() : null;
+    return combined.sort((a, b) => {
+      switch (sortBy) {
+        case 'name-asc': {
+          const aName = (a.config.name || 'Untitled Trip').toLowerCase();
+          const bName = (b.config.name || 'Untitled Trip').toLowerCase();
+          return aName.localeCompare(bName);
+        }
+        case 'name-desc': {
+          const aName = (a.config.name || 'Untitled Trip').toLowerCase();
+          const bName = (b.config.name || 'Untitled Trip').toLowerCase();
+          return bName.localeCompare(aName);
+        }
+        case 'created-newest': {
+          const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bCreated - aCreated;
+        }
+        case 'created-oldest': {
+          const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return aCreated - bCreated;
+        }
+        case 'trip-date':
+        default: {
+          // Sort by start date first (upcoming trips first)
+          const aDate = a.config.startDate ? new Date(a.config.startDate).getTime() : null;
+          const bDate = b.config.startDate ? new Date(b.config.startDate).getTime() : null;
 
-      // Trips with start dates come before trips without
-      if (aDate && !bDate) return -1;
-      if (!aDate && bDate) return 1;
+          // Trips with start dates come before trips without
+          if (aDate && !bDate) return -1;
+          if (!aDate && bDate) return 1;
 
-      // Both have start dates - sort by date (ascending - upcoming first)
-      if (aDate && bDate) return aDate - bDate;
+          // Both have start dates - sort by date (ascending - upcoming first)
+          if (aDate && bDate) return aDate - bDate;
 
-      // Neither has start date - sort by creation date (newest first)
-      const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return bCreated - aCreated;
+          // Neither has start date - sort by creation date (newest first)
+          const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bCreated - aCreated;
+        }
+      }
     });
-  }, [savedTrips, sharedTrips]);
+  }, [savedTrips, sharedTrips, sortBy]);
 
   const handleTripClick = (trip: TripWithMeta) => {
     loadSavedTrip(trip.id);
@@ -98,8 +133,8 @@ const MyTrips = () => {
             </div>
             <Link to="/create-trip">
               <Button variant="primary" size="sm">
-                <Plus className="w-4 h-4 mr-1" weight="bold" />
-                New Trip
+                <Path className="w-4 h-4 mr-1" weight="bold" />
+                Create Trip
               </Button>
             </Link>
           </div>
@@ -137,6 +172,28 @@ const MyTrips = () => {
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Sort controls */}
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                {allTrips.length} {allTrips.length === 1 ? 'trip' : 'trips'}
+              </p>
+              <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
+                  <SelectTrigger className="w-[180px] h-10 text-sm border-2 border-primary rounded-md">
+                    <div className="flex items-center gap-2">
+                      <SortAscending className="w-4 h-4 text-muted-foreground" />
+                      <SelectValue />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="trip-date">Trip Date</SelectItem>
+                    <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+                    <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+                    <SelectItem value="created-newest">Newest First</SelectItem>
+                    <SelectItem value="created-oldest">Oldest First</SelectItem>
+                  </SelectContent>
+                </Select>
+            </div>
+
             {allTrips.map((trip, index) => (
               <Card
                 key={trip.id}

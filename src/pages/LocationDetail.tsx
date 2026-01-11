@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Mountains, NavigationArrow, Star, ShareNetwork, ArrowSquareOut, Compass, Plus, Trash, Sneaker, Path, Calendar, Tent, SpinnerGap, Camera, CaretDown, CaretUp, X, Tree, Sun, Cloud, CloudRain, Snowflake, Wind } from "@phosphor-icons/react";
+import { ArrowLeft, MapPin, Mountains, NavigationArrow, Star, ShareNetwork, ArrowSquareOut, Compass, Plus, Trash, Sneaker, Path, Calendar, Tent, SpinnerGap, Camera, CaretDown, CaretUp, X, Tree, TreeEvergreen, Sun, Cloud, CloudRain, Snowflake, Wind } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -348,12 +348,11 @@ const LocationDetail = () => {
         </div>
       </header>
 
-      <main className="container px-4 md:px-6 py-6">
-        <div className="grid lg:grid-cols-5 gap-6">
+      <main className="w-full">
+        <div className="grid lg:grid-cols-2">
           {/* Map Section */}
-          <div className="lg:col-span-3 order-2 lg:order-1">
-            <Card className="overflow-hidden h-[400px] lg:h-[calc(100vh-180px)] lg:sticky lg:top-24">
-              <div className="relative w-full h-full">
+          <div className="order-2 lg:order-1 h-[400px] lg:h-[calc(100vh-73px)] lg:sticky lg:top-[73px]">
+            <div className="relative w-full h-full">
                 <GoogleMap
                   center={{ lat: location.lat, lng: location.lng }}
                   zoom={nearbyPlaces.length > 0 ? 10 : 14}
@@ -421,9 +420,9 @@ const LocationDetail = () => {
                         key={land.id}
                         paths={land.polygon}
                         options={{
-                          fillColor: '#EC4899',
+                          fillColor: '#4ba391',
                           fillOpacity: 0.3,
-                          strokeColor: '#DB2777',
+                          strokeColor: '#3c8a79',
                           strokeOpacity: 0.8,
                           strokeWeight: 2,
                           clickable: true,
@@ -667,11 +666,10 @@ const LocationDetail = () => {
                   </div>
                 </div>
               </div>
-            </Card>
           </div>
 
           {/* Info Panel */}
-          <div className="lg:col-span-2 order-1 lg:order-2 space-y-4">
+          <div className="order-1 lg:order-2 space-y-4 p-6 lg:h-[calc(100vh-73px)] lg:overflow-y-auto">
             {/* Location Info */}
             <Card className="bg-gradient-card">
               <CardContent className="p-6">
@@ -1088,7 +1086,7 @@ const LocationDetail = () => {
                     className="w-full flex items-center justify-between"
                   >
                     <div className="flex items-center gap-2">
-                      <Tree className="w-5 h-5 text-green-600" />
+                      <TreeEvergreen className="w-5 h-5 text-pinesoft" />
                       <h3 className="font-semibold text-foreground">Dispersed Camping Areas</h3>
                       {publicLands.length > 0 && (
                         <span className="text-xs text-muted-foreground">({publicLands.length})</span>
@@ -1126,14 +1124,14 @@ const LocationDetail = () => {
                           {publicLands.slice(0, 5).map((land) => (
                             <div
                               key={land.id}
-                              className="flex items-center gap-3 p-2 rounded-lg hover:bg-green-500/10 transition-colors cursor-pointer"
+                              className="flex items-center gap-3 p-2 rounded-lg hover:bg-pinesoft/10 transition-colors cursor-pointer"
                               onClick={() => {
                                 setSelectedPublicLand(land);
                                 setShowPublicLands(true);
                               }}
                             >
-                              <div className="w-10 h-10 rounded-lg bg-green-600/10 flex items-center justify-center flex-shrink-0">
-                                <Tree className="w-5 h-5 text-green-600" />
+                              <div className="w-10 h-10 rounded-lg bg-pinesoft/10 flex items-center justify-center flex-shrink-0">
+                                <TreeEvergreen className="w-5 h-5 text-pinesoft" />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-foreground text-sm truncate">
@@ -1155,7 +1153,7 @@ const LocationDetail = () => {
                         </div>
                       ) : (
                         <div className="text-center py-4 text-muted-foreground">
-                          <Tree className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                          <TreeEvergreen className="w-8 h-8 mx-auto mb-2 opacity-30" />
                           <p>No BLM or Forest Service lands within 50 miles</p>
                         </div>
                       )}

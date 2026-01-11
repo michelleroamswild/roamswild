@@ -14,6 +14,131 @@ export type Database = {
   }
   public: {
     Tables: {
+      campsite_photos: {
+        Row: {
+          campsite_id: string
+          caption: string | null
+          created_at: string | null
+          id: string
+          is_primary: boolean | null
+          url: string
+          user_id: string
+        }
+        Insert: {
+          campsite_id: string
+          caption?: string | null
+          created_at?: string | null
+          id?: string
+          is_primary?: boolean | null
+          url: string
+          user_id: string
+        }
+        Update: {
+          campsite_id?: string
+          caption?: string | null
+          created_at?: string | null
+          id?: string
+          is_primary?: boolean | null
+          url?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campsite_photos_campsite_id_fkey"
+            columns: ["campsite_id"]
+            isOneToOne: false
+            referencedRelation: "campsites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campsite_photos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campsites: {
+        Row: {
+          cell_coverage: number | null
+          created_at: string | null
+          description: string | null
+          fee_amount: string | null
+          fee_required: boolean | null
+          id: string
+          lat: number
+          lng: number
+          max_stay_days: number | null
+          max_vehicles: number | null
+          metadata: Json | null
+          name: string
+          notes: string | null
+          place_id: string | null
+          road_access: string | null
+          seasonal_access: string | null
+          type: string | null
+          updated_at: string | null
+          user_id: string
+          visibility: string
+          water_available: boolean | null
+        }
+        Insert: {
+          cell_coverage?: number | null
+          created_at?: string | null
+          description?: string | null
+          fee_amount?: string | null
+          fee_required?: boolean | null
+          id?: string
+          lat: number
+          lng: number
+          max_stay_days?: number | null
+          max_vehicles?: number | null
+          metadata?: Json | null
+          name: string
+          notes?: string | null
+          place_id?: string | null
+          road_access?: string | null
+          seasonal_access?: string | null
+          type?: string | null
+          updated_at?: string | null
+          user_id: string
+          visibility?: string
+          water_available?: boolean | null
+        }
+        Update: {
+          cell_coverage?: number | null
+          created_at?: string | null
+          description?: string | null
+          fee_amount?: string | null
+          fee_required?: boolean | null
+          id?: string
+          lat?: number
+          lng?: number
+          max_stay_days?: number | null
+          max_vehicles?: number | null
+          metadata?: Json | null
+          name?: string
+          notes?: string | null
+          place_id?: string | null
+          road_access?: string | null
+          seasonal_access?: string | null
+          type?: string | null
+          updated_at?: string | null
+          user_id?: string
+          visibility?: string
+          water_available?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campsites_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null

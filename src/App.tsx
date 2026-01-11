@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { SavedLocationsProvider } from "@/context/SavedLocationsContext";
 import { TripProvider } from "@/context/TripContext";
+import { CampsitesProvider } from "@/context/CampsitesContext";
 import { GoogleMapsProvider } from "@/components/GoogleMapsProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
@@ -22,6 +23,8 @@ import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
+import Campsites from "./pages/Campsites";
+import CampsiteDetail from "./pages/CampsiteDetail";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +33,7 @@ const App = () => (
     <AuthProvider>
       <GoogleMapsProvider>
         <SavedLocationsProvider>
+          <CampsitesProvider>
           <TripProvider>
             <TooltipProvider>
               <Toaster />
@@ -53,6 +57,8 @@ const App = () => (
                   <Route path="/trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
                   <Route path="/my-trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
                   <Route path="/join/:token" element={<ProtectedRoute><JoinTrip /></ProtectedRoute>} />
+                  <Route path="/campsites" element={<ProtectedRoute><Campsites /></ProtectedRoute>} />
+                  <Route path="/campsites/:id" element={<ProtectedRoute><CampsiteDetail /></ProtectedRoute>} />
 
                   {/* Catch-all */}
                   <Route path="*" element={<NotFound />} />
@@ -60,6 +66,7 @@ const App = () => (
               </BrowserRouter>
             </TooltipProvider>
           </TripProvider>
+          </CampsitesProvider>
         </SavedLocationsProvider>
       </GoogleMapsProvider>
     </AuthProvider>

@@ -808,8 +808,8 @@ const TripDetail = () => {
 
       {/* Trip Timeline Overview */}
       {(tripConfig.startLocation || tripConfig.baseLocation) && (
-        <div className="bg-secondary/50 border-b border-border">
-          <div className="container px-4 md:px-6 py-3">
+        <div className="sticky top-[73px] z-40 bg-secondary/50 border-b border-border">
+          <div className="px-4 md:px-6 py-3">
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
               {/* Start Location */}
               {tripConfig.startLocation && (
@@ -902,11 +902,10 @@ const TripDetail = () => {
         </DialogContent>
       </Dialog>
 
-      <main className="container px-4 md:px-6 py-6">
-        <div className="grid lg:grid-cols-5 gap-6">
+      <main className="w-full">
+        <div className="grid lg:grid-cols-2">
           {/* Map Section */}
-          <div className="lg:col-span-3 order-2 lg:order-1">
-            <Card className="overflow-hidden h-[400px] lg:h-[calc(100vh-180px)] lg:sticky lg:top-24">
+          <div className="order-2 lg:order-1 h-[400px] lg:h-[calc(100vh-120px)] lg:sticky lg:top-[120px]">
               <div className="relative w-full h-full">
                 <GoogleMap
                   center={mapCenter}
@@ -1158,11 +1157,10 @@ const TripDetail = () => {
                   </div>
                 </div>
               </div>
-            </Card>
           </div>
 
           {/* Itinerary Panel */}
-          <div className="lg:col-span-2 order-1 lg:order-2 space-y-4">
+          <div className="order-1 lg:order-2 space-y-4 p-6 lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
             {/* Trip Summary */}
             <Card className="bg-gradient-card">
               <CardContent className="p-4">

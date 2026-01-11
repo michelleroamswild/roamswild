@@ -1,0 +1,164 @@
+export type CampsiteType = 'dispersed' | 'established' | 'blm' | 'usfs' | 'private';
+export type RoadAccess = '2wd' | '4wd_easy' | '4wd_moderate' | '4wd_hard';
+export type CampsiteVisibility = 'private' | 'public' | 'friends';
+
+export interface Campsite {
+  id: string;
+  userId: string;
+  name: string;
+  lat: number;
+  lng: number;
+  placeId?: string;
+  type: CampsiteType;
+  description?: string;
+  notes?: string;
+  roadAccess?: RoadAccess;
+  cellCoverage?: number;
+  waterAvailable?: boolean;
+  feeRequired?: boolean;
+  feeAmount?: string;
+  seasonalAccess?: string;
+  maxVehicles?: number;
+  maxStayDays?: number;
+  visibility: CampsiteVisibility;
+  photos?: CampsitePhoto[];
+  createdAt: string;
+  updatedAt: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CampsitePhoto {
+  id: string;
+  campsiteId: string;
+  userId: string;
+  url: string;
+  caption?: string;
+  isPrimary: boolean;
+  createdAt: string;
+}
+
+// Database row types (snake_case)
+export interface CampsiteRow {
+  id: string;
+  user_id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  place_id: string | null;
+  type: string;
+  description: string | null;
+  notes: string | null;
+  road_access: string | null;
+  cell_coverage: number | null;
+  water_available: boolean | null;
+  fee_required: boolean | null;
+  fee_amount: string | null;
+  seasonal_access: string | null;
+  max_vehicles: number | null;
+  max_stay_days: number | null;
+  visibility: string;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface CampsitePhotoRow {
+  id: string;
+  campsite_id: string;
+  user_id: string;
+  url: string;
+  caption: string | null;
+  is_primary: boolean;
+  created_at: string;
+}
+
+// Google Takeout format
+export interface GoogleTakeoutFeature {
+  type: 'Feature';
+  geometry: {
+    type: 'Point';
+    coordinates: [number, number]; // [lng, lat]
+  };
+  properties: {
+    Title?: string;
+    'Google Maps URL'?: string;
+    Location?: {
+      Address?: string;
+    };
+  };
+}
+
+export interface GoogleTakeoutGeoJSON {
+  type: 'FeatureCollection';
+  features: GoogleTakeoutFeature[];
+}
+
+// Form data for creating/editing campsites
+export interface CampsiteFormData {
+  name: string;
+  lat: number;
+  lng: number;
+  placeId?: string;
+  type: CampsiteType;
+  description?: string;
+  notes?: string;
+  roadAccess?: RoadAccess;
+  cellCoverage?: number;
+  waterAvailable?: boolean;
+  feeRequired?: boolean;
+  feeAmount?: string;
+  seasonalAccess?: string;
+  maxVehicles?: number;
+  maxStayDays?: number;
+  visibility: CampsiteVisibility;
+}
+
+// Helper functions to convert between row and model
+export function campsiteFromRow(row: CampsiteRow): Campsite {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+    placeId: row.place_id ?? undefined,
+    type: row.type as CampsiteType,
+    description: row.description ?? undefined,
+    notes: row.notes ?? undefined,
+    roadAccess: row.road_access as RoadAccess | undefined,
+    cellCoverage: row.cell_coverage ?? undefined,
+    waterAvailable: row.water_available ?? undefined,
+    feeRequired: row.fee_required ?? undefined,
+    feeAmount: row.fee_amount ?? undefined,
+    seasonalAccess: row.seasonal_access ?? undefined,
+    maxVehicles: row.max_vehicles ?? undefined,
+    maxStayDays: row.max_stay_days ?? undefined,
+    visibility: row.visibility as CampsiteVisibility,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    metadata: row.metadata ?? undefined,
+  };
+}
+
+export function campsiteToRow(campsite: CampsiteFormData, userId: string): Omit<CampsiteRow, 'id' | 'created_at' | 'updated_at'> {
+  return {
+    user_id: userId,
+    name: campsite.name,
+    lat: campsite.lat,
+    lng: campsite.lng,
+    place_id: campsite.placeId ?? null,
+    type: campsite.type,
+    description: campsite.description ?? null,
+    notes: campsite.notes ?? null,
+    road_access: campsite.roadAccess ?? null,
+    cell_coverage: campsite.cellCoverage ?? null,
+    water_available: campsite.waterAvailable ?? null,
+    fee_required: campsite.feeRequired ?? null,
+    fee_amount: campsite.feeAmount ?? null,
+    seasonal_access: campsite.seasonalAccess ?? null,
+    max_vehicles: campsite.maxVehicles ?? null,
+    max_stay_days: campsite.maxStayDays ?? null,
+    visibility: campsite.visibility,
+    metadata: null,
+  };
+}

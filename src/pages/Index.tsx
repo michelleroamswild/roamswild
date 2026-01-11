@@ -16,6 +16,17 @@ import heroPhoto1 from "@/images/herophotos/DJI_0693.jpg";
 import heroPhoto2 from "@/images/herophotos/DSC09190.jpg";
 import heroPhoto3 from "@/images/herophotos/DJI_0879.jpg";
 import heroPhoto4 from "@/images/herophotos/DSC09645.jpg";
+import heroPhoto5 from "@/images/herophotos/DJI_0671.jpg";
+import heroPhoto6 from "@/images/herophotos/DSC03022.jpg";
+import heroPhoto7 from "@/images/herophotos/DSC05769.jpg";
+
+const allHeroPhotos = [heroPhoto1, heroPhoto2, heroPhoto3, heroPhoto4, heroPhoto5, heroPhoto6, heroPhoto7];
+
+// Shuffle array and pick first 4
+const getRandomPhotos = () => {
+  const shuffled = [...allHeroPhotos].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 4);
+};
 
 const rotatingWords = [
   "Adventure",
@@ -32,6 +43,7 @@ const Index = () => {
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [scrollY, setScrollY] = useState(0);
+  const [heroPhotos] = useState(() => getRandomPhotos());
   const { savedTrips, loadSavedTrip, isLoading: tripsLoading } = useTrip();
   const navigate = useNavigate();
 
@@ -77,13 +89,13 @@ const Index = () => {
               className="absolute top-0 -left-48 xl:-left-64 w-96 xl:w-[450px] h-64 xl:h-80 overflow-hidden shadow-2xl rotate-[-6deg] animate-float-slow z-10"
               style={{ animationDelay: '0s' }}
             >
-              <img src={heroPhoto1} alt="" className="w-full h-full object-cover" />
+              <img src={heroPhotos[0]} alt="" className="w-full h-full object-cover" />
             </div>
             <div
               className="absolute top-64 xl:top-72 -left-40 xl:-left-56 w-[420px] xl:w-[500px] h-72 xl:h-80 overflow-hidden shadow-2xl rotate-[4deg] animate-float-medium z-20"
               style={{ animationDelay: '0.5s' }}
             >
-              <img src={heroPhoto2} alt="" className="w-full h-full object-cover" />
+              <img src={heroPhotos[1]} alt="" className="w-full h-full object-cover" />
             </div>
           </div>
 
@@ -96,13 +108,13 @@ const Index = () => {
               className="absolute top-0 -right-48 xl:-right-64 w-96 xl:w-[450px] h-64 xl:h-72 overflow-hidden shadow-2xl rotate-[5deg] animate-float-medium z-10"
               style={{ animationDelay: '0.3s' }}
             >
-              <img src={heroPhoto3} alt="" className="w-full h-full object-cover" />
+              <img src={heroPhotos[2]} alt="" className="w-full h-full object-cover" />
             </div>
             <div
               className="absolute top-60 xl:top-72 -right-36 xl:-right-48 w-[420px] xl:w-[500px] h-72 xl:h-80 overflow-hidden shadow-2xl rotate-[-3deg] animate-float-slow z-20"
               style={{ animationDelay: '0.8s' }}
             >
-              <img src={heroPhoto4} alt="" className="w-full h-full object-cover" />
+              <img src={heroPhotos[3]} alt="" className="w-full h-full object-cover" />
             </div>
           </div>
 

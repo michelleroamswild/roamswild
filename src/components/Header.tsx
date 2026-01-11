@@ -43,13 +43,16 @@ export const Header = () => {
         </Link>
 
         <nav className="hidden md:flex items-center gap-6">
-          <Link to="/" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+          <Link to="/" className="text-base font-bold text-muted-foreground hover:text-foreground transition-colors">
             Explore
           </Link>
-          <Link to="/my-trips" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+          <Link to="/my-trips" className="text-base font-bold text-muted-foreground hover:text-foreground transition-colors">
             My Trips
           </Link>
-          <Link to="/saved" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+          <Link to="/campsites" className="text-base font-bold text-muted-foreground hover:text-foreground transition-colors">
+            Campsites
+          </Link>
+          <Link to="/saved" className="text-base font-bold text-muted-foreground hover:text-foreground transition-colors">
             Saved
           </Link>
         </nav>
