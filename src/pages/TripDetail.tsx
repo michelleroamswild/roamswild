@@ -8,6 +8,7 @@ import {
   Tent,
   GasPump,
   MapPin,
+  MapPinArea,
   NavigationArrow,
   ShareNetwork,
   Heart,
@@ -16,8 +17,7 @@ import {
   CaretDown,
   CaretUp,
   ArrowSquareOut,
-  Sneaker,
-  Eye,
+  Boot,
   Trash,
   ArrowsClockwise,
   Camera,
@@ -45,15 +45,13 @@ import { getTripSlug, getDayUrl } from '@/utils/slugify';
 const getIcon = (type: string) => {
   switch (type) {
     case 'hike':
-      return Sneaker;
+      return Boot;
     case 'gas':
       return GasPump;
     case 'camp':
       return Tent;
-    case 'viewpoint':
-      return Eye;
     default:
-      return MapPin;
+      return MapPinArea;
   }
 };
 
@@ -1332,7 +1330,7 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
               title={timeEstimate.warningMessage}
             />
           )}
-          {day.hike && <Sneaker className="w-4 h-4 text-emerald-500" />}
+          {day.hike && <Boot className="w-4 h-4 text-pinesoft" />}
           {day.campsite && <Tent className="w-4 h-4 text-amber-500" />}
           <Button
             variant={isActive ? "default" : "outline"}

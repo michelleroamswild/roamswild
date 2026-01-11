@@ -6,7 +6,7 @@ import { FilterChips } from "@/components/FilterChips";
 import { SavedLocations } from "@/components/SavedLocations";
 import { Suggestions } from "@/components/Suggestions";
 import { useTrip } from "@/context/TripContext";
-import { Path, Calendar, Clock, MapPin, CaretRight, Plus } from "@phosphor-icons/react";
+import { Path, Calendar, Clock, MapPinArea, CaretRight, Plus } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getTripUrl } from "@/utils/slugify";
@@ -158,7 +158,7 @@ const Index = () => {
                       </h3>
 
                       <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                        <MapPin className="w-4 h-4 flex-shrink-0" />
+                        <MapPinArea className="w-4 h-4 flex-shrink-0" />
                         <span className="truncate">
                           {trip.config.baseLocation
                             ? trip.config.baseLocation.name

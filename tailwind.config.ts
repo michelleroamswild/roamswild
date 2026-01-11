@@ -101,6 +101,13 @@ export default {
   			},
   			earth: 'hsl(var(--earth))',
   			cream: 'hsl(var(--cream))',
+  			// Custom accent colors for map markers and UI
+  			pinesoft: 'hsl(var(--accent-pinesoft))',
+  			aquateal: 'hsl(var(--accent-aquateal))',
+  			skyblue: 'hsl(var(--accent-skyblue))',
+  			lavenderslate: 'hsl(var(--accent-lavenderslate))',
+  			softamber: 'hsl(var(--accent-softamber))',
+  			blushorchid: 'hsl(var(--accent-blushorchid))',
   			sidebar: {
   				DEFAULT: 'hsl(var(--sidebar-background))',
   				foreground: 'hsl(var(--sidebar-foreground))',

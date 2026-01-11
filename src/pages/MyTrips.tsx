@@ -7,7 +7,7 @@ import {
   Clock,
   Calendar,
   Trash,
-  MapPin,
+  MapPinArea,
   CaretRight,
   Users,
   ShareNetwork,
@@ -177,7 +177,7 @@ const MyTrips = () => {
 
                           {/* Start/Base location */}
                           <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
-                            <MapPin className="w-4 h-4 flex-shrink-0" />
+                            <MapPinArea className="w-4 h-4 flex-shrink-0" />
                             <span className="truncate">
                               {trip.config.baseLocation
                                 ? `Exploring ${trip.config.baseLocation.name}`
