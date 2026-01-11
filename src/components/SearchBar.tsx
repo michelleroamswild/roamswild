@@ -48,12 +48,12 @@ export const SearchBar = () => {
       >
         <div
           className={`
-            flex items-center gap-3 bg-card border-2 rounded-2xl px-5 py-4
-            shadow-search transition-all duration-300
-            ${isFocused ? 'border-primary shadow-card-hover' : 'border-transparent'}
+            flex items-center gap-3 bg-input border rounded-md px-4 py-3
+            transition-all duration-300
+            ${isFocused ? 'border-ring ring-2 ring-ring/20' : 'border-border'}
           `}
         >
-          <MapPin className="w-5 h-5 text-terracotta flex-shrink-0" />
+          <MapPin className="w-5 h-5 text-primary flex-shrink-0" />
           {isLoaded ? (
             <Autocomplete
               onLoad={onLoad}

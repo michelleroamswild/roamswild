@@ -47,17 +47,17 @@ const Index = () => {
 
         <div className="container px-4 md:px-6 py-16 md:py-24">
           <section className="text-center animate-fade-in">
-            <h1 className="font-display font-bold text-white mb-4 overflow-visible">
+            <h1 className="font-display font-bold text-primary mb-4 overflow-visible">
               <span className="text-2xl md:text-3xl lg:text-4xl block mb-2">Plan Your Next</span>
               <span
-                className={`text-gradient-light block text-5xl md:text-6xl lg:text-7xl transition-all duration-200 min-h-[1.2em] ${
+                className={`text-gradient-forest block text-5xl md:text-6xl lg:text-7xl transition-all duration-200 min-h-[1.2em] ${
                   isAnimating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
                 }`}
               >
                 {rotatingWords[currentWordIndex]}
               </span>
             </h1>
-            <p className="text-lg md:text-xl text-white/80 max-w-2xl mx-auto mb-8">
+            <p className="text-lg md:text-xl text-primary/70 max-w-2xl mx-auto mb-8">
               Discover trails, find dispersed campsites, and build the perfect overlanding route from your saved locations.
             </p>
 

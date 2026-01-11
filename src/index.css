@@ -15,7 +15,7 @@
     --popover: 40 25% 97%;
     --popover-foreground: 150 25% 15%;
 
-    --primary: 84 35% 28%;
+    --primary: 69 17% 21%;
     --primary-hover: 82 61% 15%;
     --primary-foreground: 40 25% 97%;
 
@@ -26,26 +26,30 @@
     --muted-foreground: 84 35% 28%;
 
     --accent: 74 68% 56%;
-    --accent-foreground: 40 25% 97%;
+    --accent-foreground: var(--primary);
+
+    --secondaryaccent: 40 83% 63%;
+    --secondaryaccent-foreground: var(--primary);
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 35 20% 85%;
-    --input: 35 20% 85%;
+    --input: 90 14% 97%;
     --ring: 152 45% 25%;
 
     --radius: 0.5rem;
 
     /* Custom overlanding tokens */
-    --forest: 152 45% 25%;
+    --forest: 74 68% 35%;
     --forest-light: 84 34% 44%;
     --sand: 35 35% 85%;
     --sand-dark: 35 25% 75%;
     --terracotta: 20 65% 55%;
     --terracotta-dark: 20 65% 45%;
-    --earth: 355 8% 71%;
-    --cream: 40 25% 97%;
+    --earth: 351 7% 63%;
+    --earth-light: 355 8% 71%;
+    --cream: 36 23% 91%;
     --topo-line: 150 15% 80%;
 
     --sidebar-background: 0 0% 98%;
@@ -140,7 +144,7 @@
   }
 
   .hero-topo {
-    background-color: #2C3F10;
+    background-color: hsl(var(--cream));
     position: relative;
   }
 
@@ -148,10 +152,14 @@
     content: '';
     position: absolute;
     inset: 0;
-    background-image: url('/src/images/topography.svg');
-    background-size: 400px 400px;
-    background-repeat: repeat;
-    opacity: 0.6;
+    background-color: hsl(var(--earth));
+    -webkit-mask-image: url('/src/images/topography.svg');
+    mask-image: url('/src/images/topography.svg');
+    -webkit-mask-size: 400px 400px;
+    mask-size: 400px 400px;
+    -webkit-mask-repeat: repeat;
+    mask-repeat: repeat;
+    opacity: 0.15;
     pointer-events: none;
     z-index: 0;
   }
@@ -163,6 +171,13 @@
 
   .text-gradient-light {
     background: linear-gradient(135deg, hsl(84 50% 65%) 0%, hsl(20 70% 65%) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-forest {
+    background: linear-gradient(135deg, hsl(var(--forest)) 0%, hsl(var(--forest-light)) 50%, hsl(74 68% 45%) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
