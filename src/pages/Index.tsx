@@ -66,76 +66,73 @@ const Index = () => {
         </div>
       </div>
 
-      <main className="container px-4 md:px-6 py-8 md:py-12">
-
-        {/* My Trips Section */}
-        {savedTrips.length > 0 && (
-          <>
-            <section className="mb-12">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-2xl font-display font-bold text-foreground">My Trips</h2>
-                  <p className="text-muted-foreground mt-1">
-                    {savedTrips.length} saved {savedTrips.length === 1 ? 'trip' : 'trips'}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Link to="/create-trip">
-                    <Button variant="outline" size="sm">
-                      <Plus className="w-4 h-4 mr-1" />
-                      New Trip
-                    </Button>
-                  </Link>
-                  <Link to="/my-trips">
-                    <Button variant="ghost" size="sm">
-                      View All
-                      <CaretRight className="w-4 h-4 ml-1" />
-                    </Button>
-                  </Link>
-                </div>
+      {/* Saved Trips Section */}
+      {savedTrips.length > 0 && (
+        <section className="bg-accentdark py-16 md:py-20 min-h-[500px] flex items-center">
+          <div className="container px-4 md:px-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-display font-bold text-white">My Trips</h2>
+                <p className="text-white/70 mt-1">
+                  {savedTrips.length} saved {savedTrips.length === 1 ? 'trip' : 'trips'}
+                </p>
               </div>
+              <div className="flex gap-2">
+                <Link to="/create-trip">
+                  <Button variant="outline" size="sm" className="border-white/30 text-white hover:bg-white/10">
+                    <Plus className="w-4 h-4 mr-1" />
+                    New Trip
+                  </Button>
+                </Link>
+                <Link to="/my-trips">
+                  <Button variant="ghost" size="sm" className="text-white hover:bg-white/10">
+                    View All
+                    <CaretRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {savedTrips.slice(0, 3).map((trip) => (
-                  <Link key={trip.id} to={getTripUrl(trip.config.name)}>
-                    <Card className="group hover:border-primary/30 hover:shadow-card transition-all duration-300 cursor-pointer h-full">
-                      <CardContent className="p-5">
-                        <h3 className="font-display font-semibold text-foreground group-hover:text-primary transition-colors truncate mb-2">
-                          {trip.config.name || 'Untitled Trip'}
-                        </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {savedTrips.slice(0, 3).map((trip) => (
+                <Link key={trip.id} to={getTripUrl(trip.config.name)}>
+                  <Card className="group hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)] transition-all duration-300 cursor-pointer h-full bg-card border-border">
+                    <CardContent className="p-5">
+                      <h3 className="font-display font-semibold text-foreground group-hover:text-primary transition-colors truncate mb-2">
+                        {trip.config.name || 'Untitled Trip'}
+                      </h3>
 
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                          <MapPin className="w-4 h-4 flex-shrink-0" />
-                          <span className="truncate">
-                            {trip.config.baseLocation
-                              ? trip.config.baseLocation.name
-                              : trip.config.startLocation?.name || 'Trip'}
-                          </span>
-                        </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+                        <MapPin className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate">
+                          {trip.config.baseLocation
+                            ? trip.config.baseLocation.name
+                            : trip.config.startLocation?.name || 'Trip'}
+                        </span>
+                      </div>
 
-                        <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="flex items-center gap-1.5 text-foreground">
+                          <Calendar className="w-4 h-4 text-accentdark" />
+                          {trip.days.length} {trip.days.length === 1 ? 'day' : 'days'}
+                        </span>
+                        {trip.totalDistance && (
                           <span className="flex items-center gap-1.5 text-foreground">
-                            <Calendar className="w-4 h-4 text-primary" />
-                            {trip.days.length} {trip.days.length === 1 ? 'day' : 'days'}
+                            <Path className="w-4 h-4 text-secondaryaccent" />
+                            {trip.totalDistance}
                           </span>
-                          {trip.totalDistance && (
-                            <span className="flex items-center gap-1.5 text-foreground">
-                              <Path className="w-4 h-4 text-terracotta" />
-                              {trip.totalDistance}
-                            </span>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))}
-              </div>
-            </section>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
-            {/* Divider */}
-            <div className="w-full h-px bg-border my-12" />
-          </>
-        )}
+      <main className="container px-4 md:px-6 py-8 md:py-12">
 
         {/* Saved Locations */}
         <div className="mb-12">
