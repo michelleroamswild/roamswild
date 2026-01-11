@@ -89,6 +89,7 @@ export type Database = {
           days: Json
           id: string
           name: string
+          owner_id: string | null
           total_distance: string | null
           total_driving_time: string | null
           updated_at: string | null
@@ -100,6 +101,7 @@ export type Database = {
           days: Json
           id?: string
           name: string
+          owner_id?: string | null
           total_distance?: string | null
           total_driving_time?: string | null
           updated_at?: string | null
@@ -111,12 +113,20 @@ export type Database = {
           days?: Json
           id?: string
           name?: string
+          owner_id?: string | null
           total_distance?: string | null
           total_driving_time?: string | null
           updated_at?: string | null
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "saved_trips_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "saved_trips_user_id_fkey"
             columns: ["user_id"]
@@ -126,12 +136,167 @@ export type Database = {
           },
         ]
       }
+      trip_activity: {
+        Row: {
+          action: string
+          created_at: string | null
+          details: Json | null
+          id: string
+          trip_id: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          trip_id: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          trip_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_activity_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "saved_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_activity_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_collaborators: {
+        Row: {
+          id: string
+          invited_at: string | null
+          invited_by: string | null
+          permission: string
+          trip_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          invited_at?: string | null
+          invited_by?: string | null
+          permission: string
+          trip_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          invited_at?: string | null
+          invited_by?: string | null
+          permission?: string
+          trip_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_collaborators_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_collaborators_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "saved_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_collaborators_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_share_links: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          permission: string
+          token: string
+          trip_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          permission: string
+          token?: string
+          trip_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          permission?: string
+          token?: string
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_share_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_share_links_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "saved_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      can_edit_trip: { Args: { trip_id: string }; Returns: boolean }
+      get_trip_members: {
+        Args: { p_trip_id: string }
+        Returns: {
+          email: string
+          name: string
+          permission: string
+          user_id: string
+        }[]
+      }
+      get_trip_preview_by_token: {
+        Args: { share_token: string }
+        Returns: Json
+      }
+      is_trip_collaborator: { Args: { trip_id: string }; Returns: boolean }
+      is_trip_owner: { Args: { trip_id: string }; Returns: boolean }
+      join_trip_by_share_link: { Args: { share_token: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never
