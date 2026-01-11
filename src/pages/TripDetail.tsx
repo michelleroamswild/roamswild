@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   X,
@@ -60,7 +60,7 @@ const getIcon = (type: string) => {
 const TripDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { generatedTrip, tripConfig, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTrip, updateTripStop, removeTripStop, fetchCollaborators, isOwner } = useTrip();
+  const { generatedTrip, tripConfig, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTrip, updateTripStop, removeTripStop, fetchCollaborators, isOwner, isLoading } = useTrip();
 
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
   const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -76,6 +76,7 @@ const TripDetail = () => {
   const [photoHotspotsExpanded, setPhotoHotspotsExpanded] = useState(false);
   const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoHotspot | null>(null);
   const [enlargedPhoto, setEnlargedPhoto] = useState<{ url: string; name: string } | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
 
   // Calculate center point of trip for photo hotspots search
   const tripCenter = generatedTrip ? (() => {
@@ -101,13 +102,17 @@ const TripDetail = () => {
 
   // Load saved trip if no generated trip or if the URL id doesn't match the current trip
   useEffect(() => {
+    // Wait for trips to finish loading before attempting to load
+    if (isLoading) return;
+
     if (id && (!generatedTrip || generatedTrip.id !== id)) {
       const loaded = loadSavedTrip(id);
       if (!loaded) {
-        navigate('/create-trip');
+        // Trip not found - redirect to My Trips
+        navigate('/trips');
       }
     }
-  }, [id, generatedTrip, loadSavedTrip, navigate]);
+  }, [id, generatedTrip, loadSavedTrip, navigate, isLoading]);
 
   // Fetch collaborators when trip loads
   useEffect(() => {
@@ -245,121 +250,213 @@ const TripDetail = () => {
       (result, status) => {
         if (status === google.maps.DirectionsStatus.OK && result) {
           setDayDirections(result);
+        } else if (waypoints.length > 0) {
+          // Fallback: try without waypoints
+          directionsService.route(
+            {
+              origin: dayOrigin,
+              destination: dayDestination,
+              waypoints: [],
+              travelMode: google.maps.TravelMode.DRIVING,
+            },
+            (fallbackResult, fallbackStatus) => {
+              if (fallbackStatus === google.maps.DirectionsStatus.OK && fallbackResult) {
+                setDayDirections(fallbackResult);
+              }
+            }
+          );
         }
       }
     );
   }, [mapsLoaded, generatedTrip, activeDay]);
 
   // Fetch driving directions when map loads or trip changes
-  // For trips with start/end: Show route through campsites only (Start → Camp1 → Camp2 → End)
+  // Full trip route: Start → Camp1 → Camp2 → ... → End
   useEffect(() => {
     if (!mapsLoaded || !generatedTrip) {
       return;
     }
 
-    // Clear old directions first
     setDirections(null);
-
     const directionsService = new google.maps.DirectionsService();
 
-    // Get the start/base location from the config
+    // Get start and end locations
     const startLocation = generatedTrip.config.startLocation?.coordinates;
     const baseLocation = generatedTrip.config.baseLocation?.coordinates;
     const isLocationBased = !!baseLocation && !startLocation;
 
-    // For location-based trips, handle differently (will be done in a future update)
-    if (isLocationBased) {
-      // For now, skip full route for location-based trips - use day previews instead
-      return;
-    }
-
-    // Get all campsites from the trip (one per day)
+    // Get unique campsites in day order (avoid duplicates for multi-night stays)
     const campsites: google.maps.LatLngLiteral[] = [];
+    const seenCampsites = new Set<string>();
     for (const day of generatedTrip.days) {
-      const campsite = day.stops.find(s => s.type === 'camp');
+      // Find camp - check for both 'camp' type and day.campsite
+      const campsite = day.stops.find(s => s.type === 'camp') || day.campsite;
       if (campsite) {
-        campsites.push(campsite.coordinates);
+        const coordKey = `${campsite.coordinates.lat.toFixed(5)},${campsite.coordinates.lng.toFixed(5)}`;
+        if (!seenCampsites.has(coordKey)) {
+          seenCampsites.add(coordKey);
+          campsites.push(campsite.coordinates);
+        }
       }
     }
 
-    // Determine origin: start location or first campsite
-    const origin = startLocation || (campsites.length > 0 ? campsites[0] : null);
-    if (!origin) {
-      console.log('No origin for route');
+    // For location-based trips: just route through campsites
+    if (isLocationBased) {
+      if (campsites.length < 2) return;
+
+      const origin = campsites[0];
+      const destination = campsites[campsites.length - 1];
+      const waypoints = campsites.slice(1, -1).map(coord => ({
+        location: coord,
+        stopover: true,
+      }));
+
+      directionsService.route(
+        { origin, destination, waypoints, travelMode: google.maps.TravelMode.DRIVING, optimizeWaypoints: false },
+        (result, status) => {
+          if (status === google.maps.DirectionsStatus.OK && result) {
+            setDirections(result);
+          }
+        }
+      );
       return;
     }
 
-    // Determine destination: back to start if returnToStart, otherwise last campsite
-    let destination: google.maps.LatLngLiteral;
-    if (generatedTrip.config.returnToStart && startLocation) {
-      destination = startLocation;
-    } else if (campsites.length > 0) {
-      destination = campsites[campsites.length - 1];
-    } else {
-      console.log('No destination for route');
-      return;
-    }
+    // For trips with start/end locations
+    if (!startLocation) return;
 
-    // Waypoints are the campsites (excluding the last one if it's the destination)
-    let waypointCampsites = campsites;
+    const isRoundTrip = generatedTrip.config.returnToStart;
+    const configDestinations = generatedTrip.config.destinations || [];
 
-    // If we have a start location, all campsites are waypoints
-    // If returning to start, include all campsites; otherwise exclude the last one
-    if (!generatedTrip.config.returnToStart && waypointCampsites.length > 0) {
-      waypointCampsites = waypointCampsites.slice(0, -1);
-    }
+    const origin = { lat: startLocation.lat, lng: startLocation.lng };
+    const destination = isRoundTrip ? origin : (campsites.length > 0 ? campsites[campsites.length - 1] : origin);
 
-    const waypoints = waypointCampsites.map(coord => ({
-      location: coord,
+    // For round trips, all campsites are waypoints
+    // For one-way, all but the last campsite are waypoints (last is destination)
+    const waypointCampsites = isRoundTrip ? campsites : campsites.slice(0, -1);
+
+    const campsiteWaypoints = waypointCampsites.map(coord => ({
+      location: { lat: coord.lat, lng: coord.lng },
       stopover: true,
     }));
 
-    console.log('Fetching trip route (campsites only):', {
-      origin,
-      destination,
-      campsiteCount: campsites.length,
-      waypointCount: waypoints.length
-    });
-
+    // Try campsites first
     directionsService.route(
       {
         origin,
         destination,
-        waypoints,
+        waypoints: campsiteWaypoints,
         travelMode: google.maps.TravelMode.DRIVING,
         optimizeWaypoints: false,
       },
       (result, status) => {
         if (status === google.maps.DirectionsStatus.OK && result) {
-          console.log('Directions loaded successfully');
           setDirections(result);
-        } else {
-          console.error('Directions failed:', status);
-          // Try without waypoints as fallback
-          if (waypoints.length > 0) {
-            console.log('Retrying without waypoints...');
-            directionsService.route(
-              {
-                origin,
-                destination,
-                waypoints: [],
-                travelMode: google.maps.TravelMode.DRIVING,
-              },
-              (fallbackResult, fallbackStatus) => {
-                if (fallbackStatus === google.maps.DirectionsStatus.OK && fallbackResult) {
-                  console.log('Fallback directions loaded (start to end only)');
-                  setDirections(fallbackResult);
-                }
-              }
+        } else if (campsites.length > 0) {
+          // Try routing in segments: origin→camp1, camp1→camp2, etc.
+          const allPoints = [origin, ...campsites];
+          if (isRoundTrip) allPoints.push(origin);
+
+          const segmentPromises: Promise<google.maps.DirectionsResult | null>[] = [];
+
+          for (let i = 0; i < allPoints.length - 1; i++) {
+            segmentPromises.push(
+              new Promise((resolve) => {
+                directionsService.route(
+                  {
+                    origin: allPoints[i],
+                    destination: allPoints[i + 1],
+                    travelMode: google.maps.TravelMode.DRIVING,
+                  },
+                  (segResult, segStatus) => {
+                    resolve(segStatus === google.maps.DirectionsStatus.OK ? segResult : null);
+                  }
+                );
+              })
             );
           }
+
+          Promise.all(segmentPromises).then((segments) => {
+            const validSegments = segments.filter((s): s is google.maps.DirectionsResult => s !== null);
+            if (validSegments.length > 0) {
+              setDirections(validSegments[0]);
+            }
+          });
+        } else {
+          // Fallback: route through destinations instead
+          const destCoords = configDestinations.map(d => d.coordinates);
+          const destDestination = isRoundTrip
+            ? origin
+            : (destCoords.length > 0 ? destCoords.pop()! : origin);
+
+          const destinationWaypoints = destCoords.map(coords => ({
+            location: { lat: coords.lat, lng: coords.lng },
+            stopover: true,
+          }));
+
+          directionsService.route(
+            {
+              origin,
+              destination: destDestination,
+              waypoints: destinationWaypoints,
+              travelMode: google.maps.TravelMode.DRIVING,
+              optimizeWaypoints: false,
+            },
+            (fallbackResult, fallbackStatus) => {
+              if (fallbackStatus === google.maps.DirectionsStatus.OK && fallbackResult) {
+                setDirections(fallbackResult);
+              } else {
+                // Build route using only reachable destinations
+                const testDestination = async (dest: typeof configDestinations[0]): Promise<google.maps.LatLngLiteral | null> => {
+                  return new Promise((resolve) => {
+                    directionsService.route(
+                      { origin, destination: dest.coordinates, travelMode: google.maps.TravelMode.DRIVING },
+                      (_, testStatus) => {
+                        resolve(testStatus === google.maps.DirectionsStatus.OK ? dest.coordinates : null);
+                      }
+                    );
+                  });
+                };
+
+                Promise.all(configDestinations.map(testDestination)).then(results => {
+                  const reachable = results.filter((r): r is google.maps.LatLngLiteral => r !== null);
+                  if (reachable.length === 0) return;
+
+                  const routeDest = isRoundTrip ? origin : reachable[reachable.length - 1];
+                  const routeWaypoints = isRoundTrip ? reachable : reachable.slice(0, -1);
+
+                  directionsService.route(
+                    {
+                      origin,
+                      destination: routeDest,
+                      waypoints: routeWaypoints.map(c => ({ location: c, stopover: true })),
+                      travelMode: google.maps.TravelMode.DRIVING,
+                    },
+                    (finalResult, finalStatus) => {
+                      if (finalStatus === google.maps.DirectionsStatus.OK && finalResult) {
+                        setDirections(finalResult);
+                      }
+                    }
+                  );
+                });
+              }
+            }
+          );
         }
       }
     );
   }, [mapsLoaded, generatedTrip]);
 
-  if (!generatedTrip || !tripConfig) {
-    return null;
+  // Show loading state while fetching trips
+  if (isLoading || !generatedTrip || !tripConfig) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <span>Loading trip...</span>
+        </div>
+      </div>
+    );
   }
 
   const toggleDay = (day: number) => {
@@ -376,6 +473,50 @@ const TripDetail = () => {
         lng: allStops.reduce((sum, s) => sum + s.coordinates.lng, 0) / allStops.length,
       }
     : { lat: 37.7749, lng: -122.4194 }; // Default to SF if no stops
+
+  // Fit map bounds to show all markers
+  const fitMapBounds = useCallback((map: google.maps.Map, stopsToFit?: typeof allStops) => {
+    const stops = stopsToFit || allStops;
+    if (stops.length === 0) return;
+
+    const bounds = new google.maps.LatLngBounds();
+
+    // Add all stops to bounds
+    stops.forEach(stop => {
+      bounds.extend(stop.coordinates);
+    });
+
+    // Add start/base location if exists
+    if (tripConfig.startLocation?.coordinates) {
+      bounds.extend(tripConfig.startLocation.coordinates);
+    }
+    if (tripConfig.baseLocation?.coordinates) {
+      bounds.extend(tripConfig.baseLocation.coordinates);
+    }
+
+    // Fit bounds with padding
+    map.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
+  }, [allStops, tripConfig.startLocation, tripConfig.baseLocation]);
+
+  // Handle map load
+  const handleMapLoad = useCallback((map: google.maps.Map) => {
+    mapRef.current = map;
+    setMapsLoaded(true);
+    // Fit bounds on initial load
+    fitMapBounds(map);
+  }, [fitMapBounds]);
+
+  // Fit bounds when active day changes
+  useEffect(() => {
+    if (!mapRef.current || !mapsLoaded) return;
+
+    if (activeDay) {
+      const dayStops = generatedTrip.days.find(d => d.day === activeDay)?.stops || [];
+      fitMapBounds(mapRef.current, dayStops);
+    } else {
+      fitMapBounds(mapRef.current);
+    }
+  }, [activeDay, mapsLoaded, generatedTrip.days, fitMapBounds]);
 
   const handleStartNavigation = () => {
     // Get start/base location from config
@@ -485,26 +626,39 @@ const TripDetail = () => {
             <Card className="overflow-hidden h-[400px] lg:h-[calc(100vh-180px)] lg:sticky lg:top-24">
               <div className="relative w-full h-full">
                 <GoogleMap
-                  center={activeDay && dayDirections ? undefined : mapCenter}
-                  zoom={activeDay ? 10 : 8}
+                  center={mapCenter}
+                  zoom={8}
                   className="w-full h-full"
-                  onLoad={() => setMapsLoaded(true)}
+                  onLoad={handleMapLoad}
                 >
-                  {/* Route directions - show day route if active, otherwise full trip */}
-                  {(activeDay ? dayDirections : directions) && (
+                  {/* Route directions - show day route if day selected, otherwise full trip */}
+                  {activeDay !== null && dayDirections ? (
                     <DirectionsRenderer
-                      key={activeDay ? `day-${activeDay}-route` : 'full-trip-route'}
-                      directions={(activeDay ? dayDirections : directions)!}
+                      key={`day-${activeDay}-route`}
+                      directions={dayDirections}
                       options={{
                         suppressMarkers: true,
                         polylineOptions: {
-                          strokeColor: '#2d5a3d', // Forest green for all routes
+                          strokeColor: '#2d5a3d',
                           strokeWeight: 5,
                           strokeOpacity: 1,
                         },
                       }}
                     />
-                  )}
+                  ) : directions ? (
+                    <DirectionsRenderer
+                      key="full-trip-route"
+                      directions={directions}
+                      options={{
+                        suppressMarkers: true,
+                        polylineOptions: {
+                          strokeColor: '#2d5a3d',
+                          strokeWeight: 5,
+                          strokeOpacity: 1,
+                        },
+                      }}
+                    />
+                  ) : null}
 
                   {/* Start/Base marker (only shown when viewing full trip) */}
                   {!activeDay && (tripConfig.startLocation || tripConfig.baseLocation) && (

@@ -114,11 +114,12 @@ async function findNearbyCampsites(
   radiusMiles: number = 50
 ): Promise<(GoogleSavedPlace & { distance: number })[]> {
   // First try saved campsites
-  const savedCampsites = allCampsites
-    .map((site) => ({
-      ...site,
-      distance: getDistanceMiles(lat, lng, site.lat, site.lng),
-    }))
+  const campsitesWithDistance = allCampsites.map((site) => ({
+    ...site,
+    distance: getDistanceMiles(lat, lng, site.lat, site.lng),
+  }));
+
+  const savedCampsites = campsitesWithDistance
     .filter((site) => site.distance <= radiusMiles)
     .sort((a, b) => a.distance - b.distance);
 
@@ -128,13 +129,7 @@ async function findNearbyCampsites(
   }
 
   // Fallback to RIDB API
-  console.log('No saved campsites found, searching RIDB...');
   const ridbCampsites = await searchRIDBCampsites(lat, lng, radiusMiles);
-
-  if (ridbCampsites.length > 0) {
-    console.log(`Found ${ridbCampsites.length} campsites from RIDB`);
-  }
-
   return ridbCampsites;
 }
 
@@ -632,17 +627,27 @@ export function useTripGenerator() {
         extraDays--;
       }
 
-      console.log('Days per destination:', daysPerDestination);
-
       // Pre-compute campsites for each destination
       const destinationCampsites: Map<string, TripStop> = new Map();
       for (const dest of config.destinations) {
-        const nearbyCamps = await findNearbyCampsites(
+        // Try finding campsites, expanding search radius if needed
+        let nearbyCamps = await findNearbyCampsites(
           dest.coordinates.lat,
           dest.coordinates.lng,
           allCampsites,
           50
         );
+
+        // If no campsites within 50 miles, try 100 miles for remote destinations
+        if (nearbyCamps.length === 0) {
+          nearbyCamps = await findNearbyCampsites(
+            dest.coordinates.lat,
+            dest.coordinates.lng,
+            allCampsites,
+            100
+          );
+        }
+
         if (nearbyCamps.length > 0) {
           const bestCamp = nearbyCamps[0];
           destinationCampsites.set(dest.id, {
@@ -811,20 +816,18 @@ export function useTripGenerator() {
             }
           }
 
-          // Add campsite (except on last day of trip if returning home)
-          const isLastDayOfTrip = destIdx === numDestinations - 1 && isLastDayAtDest;
-          if (!isLastDayOfTrip || !config.returnToStart) {
-            if (campsite) {
-              const campsiteForDay: TripStop = {
-                ...campsite,
-                id: `camp-${dayNumber}`,
-                day: dayNumber,
-                description: daysAtDest > 1
-                  ? `${campsite.note || 'Dispersed camping'} (same camp for ${daysAtDest} nights)`
-                  : campsite.note || 'Dispersed camping',
-              };
-              dayStops.push(campsiteForDay);
-            }
+          // Add campsite for every night spent at a destination
+          // (The return day is handled separately and doesn't need a campsite)
+          if (campsite) {
+            const campsiteForDay: TripStop = {
+              ...campsite,
+              id: `camp-${dayNumber}`,
+              day: dayNumber,
+              description: daysAtDest > 1
+                ? `${campsite.note || 'Dispersed camping'} (same camp for ${daysAtDest} nights)`
+                : campsite.note || 'Dispersed camping',
+            };
+            dayStops.push(campsiteForDay);
           }
 
           totalDistanceMiles += dayDistanceMiles;
