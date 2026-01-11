@@ -80,8 +80,8 @@ export const SearchBar = () => {
               className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground text-lg outline-none"
             />
           )}
-          <button className="flex items-center justify-center w-12 h-12 bg-primary text-primary-foreground rounded-xl hover:bg-forest-light transition-colors duration-200 shadow-sm">
-            <MagnifyingGlass className="w-5 h-5" />
+          <button className="flex items-center justify-center w-12 h-12 bg-primary text-primary-foreground rounded-md hover:bg-forest-light transition-colors duration-200 shadow-sm">
+            <MagnifyingGlass className="w-5 h-5" weight="bold" />
           </button>
         </div>
       </div>

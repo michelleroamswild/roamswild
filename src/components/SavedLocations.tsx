@@ -41,14 +41,14 @@ export const SavedLocations = () => {
     <section className="w-full max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-display font-bold text-foreground">Saved Locations</h2>
+          <h2 className="font-display font-bold text-foreground">Saved Locations</h2>
           <p className="text-muted-foreground mt-1">
             {locations.length} saved location{locations.length !== 1 ? 's' : ''}
           </p>
         </div>
         <Button variant="ghost" className="text-primary font-medium" onClick={handleViewAll}>
           View All
-          <CaretRight className="w-4 h-4" />
+          <CaretRight className="w-4 h-4" weight="bold" />
         </Button>
       </div>
 

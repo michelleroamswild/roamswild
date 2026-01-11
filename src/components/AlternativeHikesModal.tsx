@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Star, MapPin, SpinnerGap, Sneaker, Check, ArrowSquareOut } from '@phosphor-icons/react';
+import { X, Star, MapPin, SpinnerGap, Boot, Check, ArrowSquareOut } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { TripStop } from '@/types/trip';
 import { getAllTrailsUrl } from '@/utils/hikeUtils';
@@ -168,7 +168,7 @@ export function AlternativeHikesModal({
             </p>
           </div>
           <Button variant="ghost" size="icon" className="rounded-full" onClick={onClose}>
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" weight="bold" />
           </Button>
         </div>
 
@@ -181,7 +181,7 @@ export function AlternativeHikesModal({
             </div>
           ) : alternatives.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12">
-              <Sneaker className="w-12 h-12 text-muted-foreground mb-3" />
+              <Boot className="w-12 h-12 text-muted-foreground mb-3" />
               <p className="text-muted-foreground">No alternative hikes found nearby</p>
             </div>
           ) : (
@@ -205,9 +205,9 @@ export function AlternativeHikesModal({
                       }`}
                     >
                       {selectedId === hike.id ? (
-                        <Check className="w-5 h-5" />
+                        <Check className="w-5 h-5" weight="bold" />
                       ) : (
-                        <Sneaker className="w-5 h-5" />
+                        <Boot className="w-5 h-5" weight="bold" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">

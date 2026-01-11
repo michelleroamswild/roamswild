@@ -26,7 +26,7 @@ export const TripPreview = () => {
     <section className="w-full max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-display font-bold text-foreground">Suggested Route</h2>
+          <h2 className="font-display font-bold text-foreground">Suggested Route</h2>
           <p className="text-muted-foreground mt-1">Based on your saved locations</p>
         </div>
       </div>
@@ -78,7 +78,7 @@ export const TripPreview = () => {
 
           <div className="flex items-center gap-3 mt-6 pt-6 border-t border-border">
             <Link to="/create-trip" className="flex-1">
-              <Button variant="hero" size="lg" className="w-full">
+              <Button variant="primary" size="lg" className="w-full">
                 Plan Your Own Trip
               </Button>
             </Link>

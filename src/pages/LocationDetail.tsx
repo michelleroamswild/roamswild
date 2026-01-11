@@ -193,7 +193,7 @@ const LocationDetail = () => {
           <h1 className="text-2xl font-display font-bold text-foreground mb-2">Location Not Found</h1>
           <p className="text-muted-foreground mb-6">This location may have been removed.</p>
           <Link to="/">
-            <Button variant="hero">Back to Home</Button>
+            <Button variant="primary">Back to Home</Button>
           </Link>
         </div>
       </div>
@@ -302,7 +302,7 @@ const LocationDetail = () => {
             </div>
             <div className="flex items-center gap-2">
               <Button
-                variant="hero"
+                variant="primary"
                 size="sm"
                 onClick={handleCreateTrip}
                 className="hidden sm:flex"
@@ -311,7 +311,7 @@ const LocationDetail = () => {
                 Create Trip
               </Button>
               <Button
-                variant="hero"
+                variant="primary"
                 size="icon"
                 className="rounded-full sm:hidden"
                 onClick={handleCreateTrip}
@@ -658,7 +658,7 @@ const LocationDetail = () => {
                           <ArrowSquareOut className="w-4 h-4 mr-2" />
                           Open in Maps
                         </Button>
-                        <Button variant="hero" size="sm" onClick={handleGetDirections}>
+                        <Button variant="primary" size="sm" onClick={handleGetDirections}>
                           <NavigationArrow className="w-4 h-4 mr-2" />
                           Directions
                         </Button>
@@ -843,7 +843,7 @@ const LocationDetail = () => {
                   )}
 
                   <Button
-                    variant="hero"
+                    variant="primary"
                     className="w-full"
                     onClick={handleGenerateTrip}
                     disabled={generating}
@@ -1170,7 +1170,7 @@ const LocationDetail = () => {
 
             {/* Actions */}
             <div className="flex gap-3">
-              <Button variant="hero" size="lg" className="flex-1" onClick={handleGetDirections}>
+              <Button variant="primary" size="lg" className="flex-1" onClick={handleGetDirections}>
                 <NavigationArrow className="w-4 h-4 mr-2" />
                 Get Directions
               </Button>

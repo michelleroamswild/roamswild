@@ -133,7 +133,7 @@ const ResetPassword = () => {
 
               <Button
                 type="submit"
-                variant="hero"
+                variant="primary"
                 size="lg"
                 className="w-full"
                 disabled={isLoading}

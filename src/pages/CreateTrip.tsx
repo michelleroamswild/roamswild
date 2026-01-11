@@ -318,7 +318,7 @@ const CreateTrip = () => {
           <div className="flex items-center gap-4">
             <Link to="/">
               <Button variant="ghost" size="icon" className="rounded-full">
-                <ArrowLeft className="w-5 h-5" />
+                <ArrowLeft className="w-5 h-5" weight="bold" />
               </Button>
             </Link>
             <div>
@@ -367,9 +367,9 @@ const CreateTrip = () => {
                   defaultValue={startLocation?.name}
                 />
                 {startLocation && (
-                  <div className="flex items-center justify-between p-3 bg-primary/10 rounded-lg border border-primary/20">
+                  <div className="flex items-center justify-between p-3 bg-[hsl(var(--accent-aquateal)/0.1)] rounded-lg border border-[hsl(var(--accent-aquateal)/0.2)]">
                     <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-primary" />
+                      <MapPin className="w-4 h-4 text-[hsl(var(--accent-aquateal))]" />
                       <span className="text-sm font-medium">{startLocation.name}</span>
                     </div>
                     <Button
@@ -378,7 +378,7 @@ const CreateTrip = () => {
                       onClick={() => setStartLocation(null)}
                       className="h-6 w-6 p-0"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="w-4 h-4" weight="bold" />
                     </Button>
                   </div>
                 )}
@@ -407,9 +407,9 @@ const CreateTrip = () => {
                     placeholder="Search for end point..."
                   />
                   {endLocation && (
-                    <div className="flex items-center justify-between p-3 bg-terracotta/10 rounded-lg border border-terracotta/20">
+                    <div className="flex items-center justify-between p-3 bg-[hsl(var(--accent-softamber)/0.1)] rounded-lg border border-[hsl(var(--accent-softamber)/0.2)]">
                       <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-terracotta" />
+                        <MapPin className="w-4 h-4 text-[hsl(var(--accent-softamber))]" />
                         <span className="text-sm font-medium">{endLocation.name}</span>
                       </div>
                       <Button
@@ -418,7 +418,7 @@ const CreateTrip = () => {
                         onClick={() => setEndLocation(null)}
                         className="h-6 w-6 p-0"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-4 h-4" weight="bold" />
                       </Button>
                     </div>
                   )}
@@ -552,7 +552,7 @@ const CreateTrip = () => {
                             onClick={() => handleRemoveDestination(dest.id)}
                             className="h-6 w-6 p-0 flex-shrink-0 hover:bg-destructive/10 hover:text-destructive"
                           >
-                            <X className="w-4 h-4" />
+                            <X className="w-4 h-4" weight="bold" />
                           </Button>
                         </div>
                       );
@@ -890,7 +890,7 @@ const CreateTrip = () => {
 
           {/* Create Button */}
           <Button
-            variant="hero"
+            variant="primary"
             size="lg"
             className="w-full"
             onClick={handleCreateTrip}

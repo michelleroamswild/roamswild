@@ -86,7 +86,7 @@ const MyTrips = () => {
             <div className="flex items-center gap-4">
               <Link to="/">
                 <Button variant="ghost" size="icon" className="rounded-full">
-                  <ArrowLeft className="w-5 h-5" />
+                  <ArrowLeft className="w-5 h-5" weight="bold" />
                 </Button>
               </Link>
               <div>
@@ -97,8 +97,8 @@ const MyTrips = () => {
               </div>
             </div>
             <Link to="/create-trip">
-              <Button variant="hero" size="sm">
-                <Plus className="w-4 h-4 mr-1" />
+              <Button variant="primary" size="sm">
+                <Plus className="w-4 h-4 mr-1" weight="bold" />
                 New Trip
               </Button>
             </Link>
@@ -121,7 +121,7 @@ const MyTrips = () => {
             <div className="flex items-center justify-center w-20 h-20 bg-secondary rounded-full mx-auto mb-6">
               <Path className="w-10 h-10 text-muted-foreground" />
             </div>
-            <h2 className="text-2xl font-display font-bold text-foreground mb-2">
+            <h2 className="font-display font-bold text-foreground mb-2">
               No saved trips yet
             </h2>
             <p className="text-muted-foreground mb-8 max-w-md mx-auto">
@@ -129,8 +129,8 @@ const MyTrips = () => {
               campsites, hikes, and itinerary.
             </p>
             <Link to="/create-trip">
-              <Button variant="hero" size="lg">
-                <Plus className="w-5 h-5 mr-2" />
+              <Button variant="primary" size="lg">
+                <Plus className="w-5 h-5 mr-2" weight="bold" />
                 Create Your First Trip
               </Button>
             </Link>

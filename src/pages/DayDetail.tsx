@@ -408,7 +408,7 @@ const DayDetail = () => {
                 </h1>
               </div>
             </div>
-            <Button variant="hero" size="sm" onClick={handleNavigateDay}>
+            <Button variant="primary" size="sm" onClick={handleNavigateDay}>
               <NavigationArrow className="w-4 h-4 mr-2" />
               Navigate
             </Button>

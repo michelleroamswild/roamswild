@@ -136,7 +136,7 @@ const JoinTrip = () => {
           <CardContent>
             <div className="space-y-4">
               <Link to="/auth" state={{ returnTo: `/join/${token}` }}>
-                <Button className="w-full">Sign In</Button>
+                <Button variant="primary" className="w-full">Sign In</Button>
               </Link>
               <Link to="/">
                 <Button variant="outline" className="w-full">Go to Home</Button>
@@ -208,6 +208,7 @@ const JoinTrip = () => {
           {/* Action Buttons */}
           <div className="space-y-3">
             <Button
+              variant="primary"
               className="w-full"
               onClick={handleJoin}
               disabled={joining}

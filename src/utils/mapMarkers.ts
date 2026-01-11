@@ -8,6 +8,7 @@ const MARKER_COLORS = {
   camp: { bg: '#ea9b0c', text: '#ffffff' },      // accent-softamber darkened hsl(40 83% 50%)
   viewpoint: { bg: '#4a96ed', text: '#ffffff' }, // accent-skyblue darkened hsl(212 86% 62%)
   gas: { bg: '#e85a9a', text: '#ffffff' },       // accent-blushorchid darkened hsl(332 76% 63%)
+  photo: { bg: '#e85a9a', text: '#ffffff' },     // accent-blushorchid darkened hsl(332 76% 63%)
   start: { bg: '#34b5a5', text: '#ffffff' },     // accent-aquateal darkened hsl(171 60% 51%)
   default: { bg: '#6b5ce6', text: '#ffffff' },   // accent-lavenderslate darkened hsl(249 80% 60%)
 };
@@ -32,6 +33,9 @@ const mapPinAreaPath = `M124,175a8,8,0,0,0,7.94,0c2.45-1.41,60-35,60-94.95A64,64
 // Flag icon - Phosphor fill weight (256x256 viewBox)
 const flagPath = `M232,56V176a8,8,0,0,1-2.76,6c-15.28,13.23-29.89,18-43.82,18-18.91,0-36.57-8.74-53-16.85C105.87,170,82.79,158.61,56,179.77V224a8,8,0,0,1-16,0V56a8,8,0,0,1,2.77-6h0c36-31.18,68.31-15.21,96.79-1.12C167,62.46,190.79,74.2,218.76,50A8,8,0,0,1,232,56Z`;
 
+// Camera icon - Phosphor fill weight (256x256 viewBox)
+const cameraPath = `M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm-44,76a36,36,0,1,1-36-36A36,36,0,0,1,164,132Z`;
+
 function getIconPath(type: string): string {
   switch (type) {
     case 'hike':
@@ -42,6 +46,8 @@ function getIconPath(type: string): string {
       return gasPumpPath;
     case 'start':
       return flagPath;
+    case 'photo':
+      return cameraPath;
     default:
       return mapPinAreaPath;
   }

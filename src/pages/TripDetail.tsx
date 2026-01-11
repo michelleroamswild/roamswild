@@ -12,10 +12,12 @@ import {
   NavigationArrow,
   ShareNetwork,
   Heart,
+  CheckCircle,
   Star,
   Calendar,
   CaretDown,
   CaretUp,
+  CaretRight,
   ArrowSquareOut,
   Boot,
   Trash,
@@ -23,6 +25,7 @@ import {
   Camera,
   Warning,
   Gauge,
+  PencilSimple,
 } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -41,6 +44,14 @@ import { getAllTrailsUrl, estimateTrailLength } from '@/utils/hikeUtils';
 import { ShareTripModal } from '@/components/ShareTripModal';
 import { CollaboratorAvatars } from '@/components/CollaboratorAvatars';
 import { getTripSlug, getDayUrl } from '@/utils/slugify';
+import { PlaceSearch } from '@/components/PlaceSearch';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { TripDestination } from '@/types/trip';
 
 const getIcon = (type: string) => {
   switch (type) {
@@ -58,7 +69,7 @@ const getIcon = (type: string) => {
 const TripDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { generatedTrip, tripConfig, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTripBySlug, updateTripStop, removeTripStop, fetchCollaborators, isOwner, isLoading } = useTrip();
+  const { generatedTrip, tripConfig, setTripConfig, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTripBySlug, updateTripStop, removeTripStop, fetchCollaborators, isOwner, isLoading } = useTrip();
 
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
   const [, forceUpdate] = useState({});
@@ -86,6 +97,13 @@ const TripDetail = () => {
   const [photoHotspotsExpanded, setPhotoHotspotsExpanded] = useState(false);
   const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoHotspot | null>(null);
   const [enlargedPhoto, setEnlargedPhoto] = useState<{ url: string; name: string } | null>(null);
+  const [editLocationModal, setEditLocationModal] = useState<{
+    isOpen: boolean;
+    type: 'start' | 'destination' | 'end';
+    index?: number;
+    currentName: string;
+  }>({ isOpen: false, type: 'start', currentName: '' });
+  const [exitConfirmModal, setExitConfirmModal] = useState(false);
   const mapRef = useRef<google.maps.Map | null>(null);
 
   // Calculate center point of trip for photo hotspots search
@@ -139,13 +157,37 @@ const TripDetail = () => {
       try {
         await saveTrip(generatedTrip);
         toast.success('Trip saved!');
+        return true;
       } catch (err) {
         console.error('Failed to save trip:', err);
         toast.error('Failed to save trip', {
           description: 'Please try again',
         });
+        return false;
       }
     }
+    return false;
+  };
+
+  const handleExitClick = () => {
+    if (isSaved) {
+      navigate('/trips');
+    } else {
+      setExitConfirmModal(true);
+    }
+  };
+
+  const handleSaveAndExit = async () => {
+    const saved = await handleSaveTrip();
+    if (saved) {
+      setExitConfirmModal(false);
+      navigate('/trips');
+    }
+  };
+
+  const handleExitWithoutSaving = () => {
+    setExitConfirmModal(false);
+    navigate('/trips');
   };
 
   const handleUnsaveTrip = () => {
@@ -676,6 +718,37 @@ const TripDetail = () => {
     );
   };
 
+  const handleLocationUpdate = (place: google.maps.places.PlaceResult) => {
+    if (!tripConfig || !place.geometry?.location || !place.place_id) return;
+
+    const newLocation: TripDestination = {
+      id: `loc-${place.place_id}`,
+      placeId: place.place_id,
+      name: place.name || place.formatted_address || '',
+      address: place.formatted_address || '',
+      coordinates: {
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng(),
+      },
+    };
+
+    let updatedConfig = { ...tripConfig };
+
+    if (editLocationModal.type === 'start') {
+      updatedConfig.startLocation = newLocation;
+    } else if (editLocationModal.type === 'destination' && editLocationModal.index !== undefined) {
+      const newDestinations = [...tripConfig.destinations];
+      newDestinations[editLocationModal.index] = newLocation;
+      updatedConfig.destinations = newDestinations;
+    }
+
+    setTripConfig(updatedConfig);
+    setEditLocationModal({ isOpen: false, type: 'start', currentName: '' });
+    toast.success('Location updated', {
+      description: 'Save the trip to keep your changes.',
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -683,11 +756,9 @@ const TripDetail = () => {
         <div className="container px-4 md:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link to="/trips">
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <X className="w-5 h-5" />
-                </Button>
-              </Link>
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={handleExitClick}>
+                <X className="w-5 h-5" weight="bold" />
+              </Button>
               <div>
                 <div className="flex items-center gap-3">
                   <h1 className="text-xl font-display font-bold text-foreground">
@@ -702,25 +773,23 @@ const TripDetail = () => {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {isSaved ? (
-                <Button
-                  variant="outline"
-                  size="sm"
+                <button
                   onClick={handleUnsaveTrip}
+                  className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
                 >
-                  <Heart className="w-4 h-4 mr-1.5 text-terracotta fill-terracotta" />
+                  <CheckCircle className="w-4 h-4" weight="fill" />
                   Saved
-                </Button>
+                </button>
               ) : (
-                <Button
-                  variant="hero"
-                  size="sm"
+                <button
                   onClick={handleSaveTrip}
+                  className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
                 >
-                  <Heart className="w-4 h-4 mr-1.5" />
-                  Save Trip
-                </Button>
+                  <Heart className="w-4 h-4" weight="bold" />
+                  Save
+                </button>
               )}
               {isSaved && (
                 <Button
@@ -729,13 +798,109 @@ const TripDetail = () => {
                   className="rounded-full"
                   onClick={() => setShareModalOpen(true)}
                 >
-                  <ShareNetwork className="w-5 h-5" />
+                  <ShareNetwork className="w-5 h-5" weight="bold" />
                 </Button>
               )}
             </div>
           </div>
         </div>
       </header>
+
+      {/* Trip Timeline Overview */}
+      {(tripConfig.startLocation || tripConfig.baseLocation) && (
+        <div className="bg-secondary/50 border-b border-border">
+          <div className="container px-4 md:px-6 py-3">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+              {/* Start Location */}
+              {tripConfig.startLocation && (
+                <>
+                  <button
+                    onClick={() => setEditLocationModal({
+                      isOpen: true,
+                      type: 'start',
+                      currentName: tripConfig.startLocation?.name || '',
+                    })}
+                    className="flex items-center gap-1.5 flex-shrink-0 group hover:bg-white/50 rounded-full px-2 py-1 -mx-2 -my-1 transition-colors"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-[hsl(var(--accent-aquateal))]" />
+                    <span className="text-sm font-medium text-foreground whitespace-nowrap">
+                      {tripConfig.startLocation.name.split(',')[0]}
+                    </span>
+                    <PencilSimple className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </button>
+                  {tripConfig.destinations.length > 0 && (
+                    <CaretRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  )}
+                </>
+              )}
+
+              {/* Base Location Mode */}
+              {tripConfig.baseLocation && !tripConfig.startLocation && (
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="w-2 h-2 rounded-full bg-primary" />
+                  <span className="text-sm font-medium text-foreground whitespace-nowrap">
+                    Exploring {tripConfig.baseLocation.name.split(',')[0]}
+                  </span>
+                </div>
+              )}
+
+              {/* Destinations */}
+              {tripConfig.destinations.map((dest, index) => (
+                <div key={dest.id} className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => setEditLocationModal({
+                      isOpen: true,
+                      type: 'destination',
+                      index,
+                      currentName: dest.name,
+                    })}
+                    className="flex items-center gap-1.5 group hover:bg-white/50 rounded-full px-2 py-1 -mx-2 -my-1 transition-colors"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-primary" />
+                    <span className="text-sm font-medium text-foreground whitespace-nowrap">
+                      {dest.name.split(',')[0]}
+                    </span>
+                    <PencilSimple className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </button>
+                  {(index < tripConfig.destinations.length - 1 || tripConfig.returnToStart) && (
+                    <CaretRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  )}
+                </div>
+              ))}
+
+              {/* Return to Start */}
+              {tripConfig.returnToStart && tripConfig.startLocation && (
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="w-2 h-2 rounded-full bg-[hsl(var(--accent-softamber))]" />
+                  <span className="text-sm font-medium text-foreground whitespace-nowrap">
+                    {tripConfig.startLocation.name.split(',')[0]}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Location Modal */}
+      <Dialog open={editLocationModal.isOpen} onOpenChange={(open) => !open && setEditLocationModal({ isOpen: false, type: 'start', currentName: '' })}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editLocationModal.type === 'start' ? 'Change Start Location' : 'Change Destination'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Current: <span className="font-medium text-foreground">{editLocationModal.currentName}</span>
+            </p>
+            <PlaceSearch
+              onPlaceSelect={handleLocationUpdate}
+              placeholder="Search for a new location..."
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <main className="container px-4 md:px-6 py-6">
         <div className="grid lg:grid-cols-5 gap-6">
@@ -851,17 +1016,10 @@ const TripDetail = () => {
                     <Marker
                       key={hotspot.id}
                       position={{ lat: hotspot.lat, lng: hotspot.lng }}
-                      icon={{
-                        url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-                            <circle cx="16" cy="16" r="14" fill="#f97316" stroke="#ffffff" stroke-width="2"/>
-                            <path d="M22 12h-2l-1.2-1.6h-5.6L12 12h-2c-.9 0-1.6.7-1.6 1.6v8c0 .9.7 1.6 1.6 1.6h12c.9 0 1.6-.7 1.6-1.6v-8c0-.9-.7-1.6-1.6-1.6z" fill="none" stroke="#ffffff" stroke-width="1.2"/>
-                            <circle cx="16" cy="17" r="3.2" fill="none" stroke="#ffffff" stroke-width="1.2"/>
-                          </svg>
-                        `)}`,
-                        scaledSize: new google.maps.Size(28, 28),
-                        anchor: new google.maps.Point(14, 14),
-                      }}
+                      icon={createMarkerIcon('photo', {
+                        isActive: selectedPhotoHotspot?.id === hotspot.id,
+                        size: 36
+                      })}
                       title={`${hotspot.name} (${hotspot.photoCount} photos)`}
                       onClick={() => {
                         setSelectedStop(null);
@@ -966,7 +1124,7 @@ const TripDetail = () => {
                             <X className="w-4 h-4 mr-1" />
                             Exit Day
                           </Button>
-                          <Button variant="hero" size="sm" onClick={handleNavigateDay}>
+                          <Button variant="primary" size="sm" onClick={handleNavigateDay}>
                             <NavigationArrow className="w-4 h-4 mr-2" />
                             Navigate Day {activeDay}
                           </Button>
@@ -991,7 +1149,7 @@ const TripDetail = () => {
                             <span className="text-foreground">{generatedTrip.days.length} days</span>
                           </div>
                         </div>
-                        <Button variant="hero" size="sm" onClick={handleStartNavigation}>
+                        <Button variant="primary" size="sm" onClick={handleStartNavigation}>
                           <NavigationArrow className="w-4 h-4 mr-2" />
                           Start Navigation
                         </Button>
@@ -1096,7 +1254,7 @@ const TripDetail = () => {
                     className="w-full flex items-center justify-between"
                   >
                     <div className="flex items-center gap-2">
-                      <Camera className="w-5 h-5 text-orange-500" />
+                      <Camera className="w-5 h-5 text-[hsl(var(--accent-blushorchid))]" />
                       <h3 className="font-semibold text-foreground">Photo Hotspots</h3>
                       <span className="text-xs text-muted-foreground">({photoHotspots.length})</span>
                     </div>
@@ -1126,7 +1284,7 @@ const TripDetail = () => {
                         {photoHotspots.slice(0, 5).map((hotspot) => (
                           <div
                             key={hotspot.id}
-                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-orange-500/10 transition-colors"
+                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-[hsl(var(--accent-blushorchid)/0.1)] transition-colors"
                           >
                             {hotspot.samplePhotoUrl ? (
                               <button
@@ -1134,7 +1292,7 @@ const TripDetail = () => {
                                   e.stopPropagation();
                                   setEnlargedPhoto({ url: hotspot.samplePhotoUrl!, name: hotspot.name });
                                 }}
-                                className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-orange-500 transition-all"
+                                className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-[hsl(var(--accent-blushorchid))] transition-all"
                               >
                                 <img
                                   src={hotspot.samplePhotoUrl}
@@ -1143,8 +1301,8 @@ const TripDetail = () => {
                                 />
                               </button>
                             ) : (
-                              <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                                <Camera className="w-5 h-5 text-orange-500" />
+                              <div className="w-10 h-10 rounded-lg bg-[hsl(var(--accent-blushorchid)/0.1)] flex items-center justify-center flex-shrink-0">
+                                <Camera className="w-5 h-5 text-[hsl(var(--accent-blushorchid))]" />
                               </div>
                             )}
                             <button
@@ -1200,7 +1358,7 @@ const TripDetail = () => {
 
             {/* Action Buttons */}
             <div className="flex gap-3 pt-4">
-              <Button variant="hero" size="lg" className="flex-1" onClick={handleStartNavigation}>
+              <Button variant="primary" size="lg" className="flex-1" onClick={handleStartNavigation}>
                 <NavigationArrow className="w-4 h-4 mr-2" />
                 Start Trip
               </Button>
@@ -1242,6 +1400,35 @@ const TripDetail = () => {
           }}
         />
       )}
+
+      {/* Exit Confirmation Modal */}
+      <Dialog open={exitConfirmModal} onOpenChange={setExitConfirmModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Warning className="w-5 h-5 text-amber-500" weight="fill" />
+              Unsaved Trip
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-muted-foreground">
+              This trip hasn't been saved yet. If you leave now, you'll lose all your trip details.
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button variant="primary" onClick={handleSaveAndExit}>
+                <Heart className="w-4 h-4 mr-2" weight="bold" />
+                Save & Exit
+              </Button>
+              <Button variant="outline" onClick={handleExitWithoutSaving}>
+                Exit Without Saving
+              </Button>
+              <Button variant="ghost" onClick={() => setExitConfirmModal(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Photo Lightbox */}
       {enlargedPhoto && (
@@ -1410,7 +1597,7 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
                             className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
                             title="Choose different hike"
                           >
-                            <ArrowsClockwise className="w-4 h-4" />
+                            <ArrowsClockwise className="w-4 h-4" weight="bold" />
                           </button>
                         )}
                         <button
@@ -1421,7 +1608,7 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
                           className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
                           title="Remove stop"
                         >
-                          <Trash className="w-4 h-4" />
+                          <Trash className="w-4 h-4" weight="bold" />
                         </button>
                       </div>
                     </div>

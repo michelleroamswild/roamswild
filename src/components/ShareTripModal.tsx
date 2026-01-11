@@ -117,7 +117,7 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5" />
+            <UserPlus className="w-5 h-5" weight="bold" />
             Share "{tripName}"
           </DialogTitle>
         </DialogHeader>
@@ -146,7 +146,7 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={handleInvite} disabled={isInviting} className="w-full">
+            <Button variant="primary" onClick={handleInvite} disabled={isInviting} className="w-full">
               <Envelope className="w-4 h-4 mr-2" />
               {isInviting ? 'Sending...' : 'Send Invite'}
             </Button>

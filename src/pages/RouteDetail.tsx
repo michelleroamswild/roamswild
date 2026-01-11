@@ -129,7 +129,7 @@ const RouteDetail = () => {
                         </div>
                       </div>
                       <Button
-                        variant="hero"
+                        variant="primary"
                         size="sm"
                         onClick={() => {
                           // Open Google Maps with directions
@@ -250,7 +250,7 @@ const RouteDetail = () => {
 
             {/* Action Buttons */}
             <div className="flex gap-3 pt-4">
-              <Button variant="hero" size="lg" className="flex-1">
+              <Button variant="primary" size="lg" className="flex-1">
                 <NavigationArrow className="w-4 h-4 mr-2" />
                 Start Trip
               </Button>

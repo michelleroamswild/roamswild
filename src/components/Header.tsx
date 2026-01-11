@@ -1,4 +1,4 @@
-import { Compass, List, Path, SignOut } from "@phosphor-icons/react";
+import { Jeep, List, Path, SignOut } from "@phosphor-icons/react";
 import { Button } from "./ui/button";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -38,9 +38,7 @@ export const Header = () => {
     <header className="sticky top-0 z-50 w-full border-b border-transparent">
       <div className="container flex items-center justify-between h-16 px-4 md:px-6">
         <Link to="/" className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-10 h-10 bg-primary rounded-xl">
-            <Compass className="w-5 h-5 text-primary-foreground" />
-          </div>
+          <Jeep className="w-6 h-6 text-primary" weight="regular" />
           <span className="text-xl font-display font-bold text-foreground">RoamsWild</span>
         </Link>
 
@@ -58,8 +56,8 @@ export const Header = () => {
 
         <div className="flex items-center gap-2">
           <Link to="/create-trip">
-            <Button variant="hero" size="sm" className="hidden md:flex">
-              <Path className="w-4 h-4 mr-1" />
+            <Button variant="primary" size="sm" className="hidden md:flex">
+              <Path className="w-4 h-4 mr-1" weight="bold" />
               Create Trip
             </Button>
           </Link>
@@ -81,14 +79,14 @@ export const Header = () => {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
-                <SignOut className="w-4 h-4 mr-2" />
+                <SignOut className="w-4 h-4 mr-2" weight="bold" />
                 Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
           <Button variant="ghost" size="icon" className="md:hidden">
-            <List className="w-5 h-5" />
+            <List className="w-5 h-5" weight="bold" />
           </Button>
         </div>
       </div>

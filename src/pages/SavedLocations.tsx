@@ -36,7 +36,7 @@ const SavedLocations = () => {
           <div className="flex items-center gap-4">
             <Link to="/">
               <Button variant="ghost" size="icon" className="rounded-full">
-                <ArrowLeft className="w-5 h-5" />
+                <ArrowLeft className="w-5 h-5" weight="bold" />
               </Button>
             </Link>
             <div>
@@ -105,14 +105,14 @@ const SavedLocations = () => {
             <div className="w-20 h-20 bg-secondary rounded-full flex items-center justify-center mb-6">
               <MapPin className="w-10 h-10 text-muted-foreground opacity-50" />
             </div>
-            <h2 className="text-xl font-display font-bold text-foreground mb-2">
+            <h2 className="font-display font-bold text-foreground mb-2">
               No saved locations yet
             </h2>
             <p className="text-muted-foreground mb-6 max-w-md">
               Search for destinations and save them to quickly access them later
             </p>
             <Link to="/">
-              <Button variant="hero">
+              <Button variant="primary">
                 Search Locations
               </Button>
             </Link>
