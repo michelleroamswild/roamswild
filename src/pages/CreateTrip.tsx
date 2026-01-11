@@ -739,7 +739,7 @@ const CreateTrip = () => {
             >
               <div className="flex items-center justify-between">
                 <CardTitle className="text-2xl">Advanced Options</CardTitle>
-                <ChevronDown
+                <CaretDown
                   className={`w-5 h-5 text-muted-foreground transition-transform ${
                     showAdvancedOptions ? 'rotate-180' : ''
                   }`}

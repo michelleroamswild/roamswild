@@ -15,7 +15,7 @@ export default {
   	extend: {
   		fontFamily: {
   			sans: [
-  				'Inter',
+  				'DM Sans',
   				'ui-sans-serif',
   				'system-ui',
   				'sans-serif',
@@ -25,7 +25,7 @@ export default {
   				'Noto Color Emoji'
   			],
   			display: [
-  				'Space Grotesk',
+  				'DM Sans',
   				'sans-serif'
   			],
   			serif: [
