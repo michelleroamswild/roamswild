@@ -53,6 +53,14 @@
     --cream: 36 23% 91%;
     --topo-line: 150 15% 80%;
 
+    /* Custom accent colors */
+    --accent-pinesoft: 167 39% 49%;
+    --accent-aquateal: 171 60% 64%;
+    --accent-skyblue: 212 86% 77%;
+    --accent-lavenderslate: 249 80% 75%;
+    --accent-softamber: 40 83% 63%;
+    --accent-blushorchid: 332 76% 79;
+
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 240 5.9% 10%;
