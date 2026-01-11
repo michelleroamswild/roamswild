@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MapPin, ChevronRight, Trash2 } from "lucide-react";
+import { MapPin, CaretRight, Trash } from "@phosphor-icons/react";
 import { Button } from "./ui/button";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
 import { useNavigate, Link } from "react-router-dom";
@@ -48,7 +48,7 @@ export const SavedLocations = () => {
         </div>
         <Button variant="ghost" className="text-primary font-medium" onClick={handleViewAll}>
           View All
-          <ChevronRight className="w-4 h-4" />
+          <CaretRight className="w-4 h-4" />
         </Button>
       </div>
 
@@ -88,7 +88,7 @@ export const SavedLocations = () => {
               onClick={(e) => handleRemoveClick(e, location.id, location.name)}
               className="opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-destructive/10 rounded-lg"
             >
-              <Trash2 className="w-4 h-4 text-destructive" />
+              <Trash className="w-4 h-4 text-destructive" />
             </button>
           </Link>
         ))}

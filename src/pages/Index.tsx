@@ -6,7 +6,7 @@ import { FilterChips } from "@/components/FilterChips";
 import { SavedLocations } from "@/components/SavedLocations";
 import { Suggestions } from "@/components/Suggestions";
 import { useTrip } from "@/context/TripContext";
-import { Route, Calendar, Clock, MapPin, ChevronRight, Plus } from "lucide-react";
+import { Path, Calendar, Clock, MapPin, CaretRight, Plus } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getTripUrl } from "@/utils/slugify";
@@ -89,7 +89,7 @@ const Index = () => {
                   <Link to="/my-trips">
                     <Button variant="ghost" size="sm">
                       View All
-                      <ChevronRight className="w-4 h-4 ml-1" />
+                      <CaretRight className="w-4 h-4 ml-1" />
                     </Button>
                   </Link>
                 </div>
@@ -120,7 +120,7 @@ const Index = () => {
                           </span>
                           {trip.totalDistance && (
                             <span className="flex items-center gap-1.5 text-foreground">
-                              <Route className="w-4 h-4 text-terracotta" />
+                              <Path className="w-4 h-4 text-terracotta" />
                               {trip.totalDistance}
                             </span>
                           )}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Compass, Users, Loader2, AlertCircle, Calendar, Route, MapPin } from 'lucide-react';
+import { Compass, Users, SpinnerGap, WarningCircle, Calendar, Path, MapPin } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useTrip } from '@/context/TripContext';
@@ -92,7 +92,7 @@ const JoinTrip = () => {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex items-center gap-3 text-muted-foreground">
-          <Loader2 className="w-6 h-6 animate-spin" />
+          <SpinnerGap className="w-6 h-6 animate-spin" />
           <span>Loading trip details...</span>
         </div>
       </div>
@@ -106,7 +106,7 @@ const JoinTrip = () => {
           <CardContent className="pt-6">
             <div className="text-center">
               <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertCircle className="w-8 h-8 text-destructive" />
+                <WarningCircle className="w-8 h-8 text-destructive" />
               </div>
               <h2 className="text-xl font-bold text-foreground mb-2">Unable to Join Trip</h2>
               <p className="text-muted-foreground mb-6">{error}</p>
@@ -169,7 +169,7 @@ const JoinTrip = () => {
               <p className="text-xs text-muted-foreground">Duration</p>
             </div>
             <div className="p-3 bg-secondary/50 rounded-lg">
-              <Route className="w-5 h-5 text-terracotta mx-auto mb-1" />
+              <Path className="w-5 h-5 text-terracotta mx-auto mb-1" />
               <p className="font-semibold text-foreground">{linkInfo?.totalDistance}</p>
               <p className="text-xs text-muted-foreground">Total Distance</p>
             </div>
@@ -214,7 +214,7 @@ const JoinTrip = () => {
             >
               {joining ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <SpinnerGap className="w-4 h-4 mr-2 animate-spin" />
                   Joining...
                 </>
               ) : (

@@ -2,29 +2,29 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
-  Route,
+  Path,
   Clock,
   MapPin,
-  Navigation,
+  NavigationArrow,
   Star,
-  Footprints,
+  Sneaker,
   Tent,
   Eye,
-  Fuel,
-  Trash2,
-  RefreshCw,
-  GripVertical,
+  GasPump,
+  Trash,
+  ArrowsClockwise,
+  DotsSixVertical,
   Plus,
-  AlertTriangle,
-  ExternalLink,
-  Mountain,
+  Warning,
+  ArrowSquareOut,
+  Mountains,
   Cloud,
   Sun,
   CloudRain,
-  CloudSnow,
+  Snowflake,
   Wind,
-  Loader2,
-} from 'lucide-react';
+  SpinnerGap,
+} from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useTrip } from '@/context/TripContext';
@@ -53,7 +53,7 @@ const weatherCache = new Map<string, WeatherForecast>();
 // Get weather icon based on forecast
 function getWeatherIcon(forecast: string) {
   const lower = forecast.toLowerCase();
-  if (lower.includes('snow')) return CloudSnow;
+  if (lower.includes('snow')) return Snowflake;
   if (lower.includes('rain') || lower.includes('shower')) return CloudRain;
   if (lower.includes('cloud') || lower.includes('overcast')) return Cloud;
   if (lower.includes('wind')) return Wind;
@@ -131,9 +131,9 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherForecast |
 const getIcon = (type: string) => {
   switch (type) {
     case 'hike':
-      return Footprints;
+      return Sneaker;
     case 'gas':
-      return Fuel;
+      return GasPump;
     case 'camp':
       return Tent;
     case 'viewpoint':
@@ -409,7 +409,7 @@ const DayDetail = () => {
               </div>
             </div>
             <Button variant="hero" size="sm" onClick={handleNavigateDay}>
-              <Navigation className="w-4 h-4 mr-2" />
+              <NavigationArrow className="w-4 h-4 mr-2" />
               Navigate
             </Button>
           </div>
@@ -463,7 +463,7 @@ const DayDetail = () => {
                 </p>
                 <div className="flex items-center gap-6 mt-4 pt-4 border-t border-border/50 flex-wrap">
                   <div className="flex items-center gap-2">
-                    <Route className="w-4 h-4 text-terracotta" />
+                    <Path className="w-4 h-4 text-terracotta" />
                     <span className="text-foreground font-medium">{day.drivingDistance}</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -476,7 +476,7 @@ const DayDetail = () => {
                   </div>
                   {weatherLoading && (
                     <div className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                      <SpinnerGap className="w-4 h-4 text-blue-500 animate-spin" />
                       <span className="text-muted-foreground text-sm">Loading weather...</span>
                     </div>
                   )}
@@ -576,7 +576,7 @@ const DayDetail = () => {
                                   onClick={() => handleOpenHikeSwap(stop)}
                                   title="Choose different hike"
                                 >
-                                  <RefreshCw className="w-4 h-4" />
+                                  <ArrowsClockwise className="w-4 h-4" />
                                 </Button>
                               )}
                               {stop.type === 'camp' && (
@@ -587,7 +587,7 @@ const DayDetail = () => {
                                   onClick={() => handleOpenCampsiteSwap(stop)}
                                   title="Choose different campsite"
                                 >
-                                  <RefreshCw className="w-4 h-4" />
+                                  <ArrowsClockwise className="w-4 h-4" />
                                 </Button>
                               )}
                               <Button
@@ -597,7 +597,7 @@ const DayDetail = () => {
                                 onClick={() => handleRemoveStop(stop)}
                                 title="Remove stop"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash className="w-4 h-4" />
                               </Button>
                             </div>
                           </div>
@@ -609,19 +609,19 @@ const DayDetail = () => {
                             </span>
                             {stop.type === 'hike' && estimateTrailLength(stop.duration) && (
                               <span className="flex items-center gap-1">
-                                <Mountain className="w-3.5 h-3.5" />
+                                <Mountains className="w-3.5 h-3.5" />
                                 {estimateTrailLength(stop.duration)}
                               </span>
                             )}
                             {stop.distance && (
                               <span className="flex items-center gap-1">
-                                <Route className="w-3.5 h-3.5" />
+                                <Path className="w-3.5 h-3.5" />
                                 {stop.distance}
                               </span>
                             )}
                             {stop.drivingTime && (
                               <span className="flex items-center gap-1 text-primary">
-                                <Navigation className="w-3.5 h-3.5" />
+                                <NavigationArrow className="w-3.5 h-3.5" />
                                 {stop.drivingTime}
                               </span>
                             )}
@@ -638,7 +638,7 @@ const DayDetail = () => {
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 hover:underline"
                               >
-                                <ExternalLink className="w-3.5 h-3.5" />
+                                <ArrowSquareOut className="w-3.5 h-3.5" />
                                 AllTrails
                               </a>
                             )}

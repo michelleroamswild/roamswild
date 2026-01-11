@@ -3,16 +3,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Plus,
-  Route,
+  Path,
   Clock,
   Calendar,
-  Trash2,
+  Trash,
   MapPin,
-  ChevronRight,
+  CaretRight,
   Users,
-  Share2,
-  Loader2,
-} from 'lucide-react';
+  ShareNetwork,
+  SpinnerGap,
+} from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useTrip } from '@/context/TripContext';
@@ -110,7 +110,7 @@ const MyTrips = () => {
         {isLoading ? (
           <div className="text-center py-16">
             <div className="flex items-center justify-center w-20 h-20 bg-secondary rounded-full mx-auto mb-6">
-              <Loader2 className="w-10 h-10 text-primary animate-spin" />
+              <SpinnerGap className="w-10 h-10 text-primary animate-spin" />
             </div>
             <h2 className="text-xl font-display font-medium text-muted-foreground">
               Loading your trips...
@@ -119,7 +119,7 @@ const MyTrips = () => {
         ) : allTrips.length === 0 ? (
           <div className="text-center py-16">
             <div className="flex items-center justify-center w-20 h-20 bg-secondary rounded-full mx-auto mb-6">
-              <Route className="w-10 h-10 text-muted-foreground" />
+              <Path className="w-10 h-10 text-muted-foreground" />
             </div>
             <h2 className="text-2xl font-display font-bold text-foreground mb-2">
               No saved trips yet
@@ -169,7 +169,7 @@ const MyTrips = () => {
                               </span>
                             ) : (trip.collaboratorCount && trip.collaboratorCount > 0) ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 text-emerald-600 rounded-full text-xs font-medium flex-shrink-0">
-                                <Share2 className="w-3 h-3" />
+                                <ShareNetwork className="w-3 h-3" />
                                 Sharing
                               </span>
                             ) : null}
@@ -190,7 +190,7 @@ const MyTrips = () => {
                           {/* Destinations - only show for owned trips */}
                           {!trip.isShared && trip.config.destinations && trip.config.destinations.length > 0 && (
                             <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                              <Route className="w-4 h-4 flex-shrink-0" />
+                              <Path className="w-4 h-4 flex-shrink-0" />
                               <span className="truncate">
                                 {trip.config.destinations.length}{' '}
                                 {trip.config.destinations.length === 1
@@ -218,7 +218,7 @@ const MyTrips = () => {
                               {trip.days.length} {trip.days.length === 1 ? 'day' : 'days'}
                             </span>
                             <span className="flex items-center gap-1.5 text-foreground font-medium">
-                              <Route className="w-4 h-4 text-terracotta" />
+                              <Path className="w-4 h-4 text-terracotta" />
                               {trip.totalDistance}
                             </span>
                           </div>
@@ -233,10 +233,10 @@ const MyTrips = () => {
                               className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
                               onClick={(e) => handleDeleteClick(e, trip.id, trip.config.name)}
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash className="w-4 h-4" />
                             </Button>
                           )}
-                          <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                          <CaretRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                         </div>
                       </div>
                     </div>

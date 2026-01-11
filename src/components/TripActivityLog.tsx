@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, User, MapPin, Footprints, Tent, Plus, Trash2, RefreshCw, Users } from 'lucide-react';
+import { Clock, User, MapPin, Sneaker, Tent, Plus, Trash, ArrowsClockwise, Users } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -28,9 +28,9 @@ const getActivityIcon = (action: string) => {
     case 'added_stop':
       return Plus;
     case 'removed_stop':
-      return Trash2;
+      return Trash;
     case 'swapped_hike':
-      return RefreshCw;
+      return ArrowsClockwise;
     case 'added_collaborator':
     case 'removed_collaborator':
       return Users;

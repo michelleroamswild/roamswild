@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, MapPin, Trash2, Star } from "lucide-react";
+import { ArrowLeft, MapPin, Trash, Star } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
@@ -90,7 +90,7 @@ const SavedLocations = () => {
                             onClick={(e) => handleRemoveClick(e, location.id, location.name)}
                             className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-destructive/10 rounded-lg"
                           >
-                            <Trash2 className="w-4 h-4 text-destructive" />
+                            <Trash className="w-4 h-4 text-destructive" />
                           </button>
                         </div>
                       </div>

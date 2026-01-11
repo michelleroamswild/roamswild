@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react';
+import { Warning } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 
 interface ConfirmDeleteModalProps {
@@ -35,7 +35,7 @@ export function ConfirmDeleteModal({
         <div className="p-6">
           {/* Icon */}
           <div className="flex items-center justify-center w-12 h-12 bg-destructive/10 rounded-full mx-auto mb-4">
-            <AlertTriangle className="w-6 h-6 text-destructive" />
+            <Warning className="w-6 h-6 text-destructive" />
           </div>
 
           {/* Content */}

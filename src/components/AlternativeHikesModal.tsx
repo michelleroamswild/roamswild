@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Star, MapPin, Loader2, Footprints, Check, ExternalLink } from 'lucide-react';
+import { X, Star, MapPin, SpinnerGap, Sneaker, Check, ArrowSquareOut } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { TripStop } from '@/types/trip';
 import { getAllTrailsUrl } from '@/utils/hikeUtils';
@@ -176,12 +176,12 @@ export function AlternativeHikesModal({
         <div className="p-4 overflow-y-auto max-h-[60vh]">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-primary animate-spin mb-3" />
+              <SpinnerGap className="w-8 h-8 text-primary animate-spin mb-3" />
               <p className="text-muted-foreground">Finding nearby hikes...</p>
             </div>
           ) : alternatives.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12">
-              <Footprints className="w-12 h-12 text-muted-foreground mb-3" />
+              <Sneaker className="w-12 h-12 text-muted-foreground mb-3" />
               <p className="text-muted-foreground">No alternative hikes found nearby</p>
             </div>
           ) : (
@@ -207,7 +207,7 @@ export function AlternativeHikesModal({
                       {selectedId === hike.id ? (
                         <Check className="w-5 h-5" />
                       ) : (
-                        <Footprints className="w-5 h-5" />
+                        <Sneaker className="w-5 h-5" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -237,7 +237,7 @@ export function AlternativeHikesModal({
                           onClick={(e) => e.stopPropagation()}
                           className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700 hover:underline"
                         >
-                          <ExternalLink className="w-3.5 h-3.5" />
+                          <ArrowSquareOut className="w-3.5 h-3.5" />
                           AllTrails
                         </a>
                       </div>

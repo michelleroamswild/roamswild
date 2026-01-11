@@ -2,29 +2,28 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   X,
-  Route,
+  Path,
   Clock,
-  Mountain,
+  Mountains,
   Tent,
-  Fuel,
+  GasPump,
   MapPin,
-  Navigation,
-  Share2,
+  NavigationArrow,
+  ShareNetwork,
   Heart,
   Star,
   Calendar,
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
-  Footprints,
+  CaretDown,
+  CaretUp,
+  ArrowSquareOut,
+  Sneaker,
   Eye,
-  Trash2,
-  RefreshCw,
-  Flame,
+  Trash,
+  ArrowsClockwise,
   Camera,
-  AlertTriangle,
+  Warning,
   Gauge,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useTrip, Collaborator } from '@/context/TripContext';
@@ -46,9 +45,9 @@ import { getTripSlug, getDayUrl } from '@/utils/slugify';
 const getIcon = (type: string) => {
   switch (type) {
     case 'hike':
-      return Footprints;
+      return Sneaker;
     case 'gas':
-      return Fuel;
+      return GasPump;
     case 'camp':
       return Tent;
     case 'viewpoint':
@@ -732,7 +731,7 @@ const TripDetail = () => {
                   className="rounded-full"
                   onClick={() => setShareModalOpen(true)}
                 >
-                  <Share2 className="w-5 h-5" />
+                  <ShareNetwork className="w-5 h-5" />
                 </Button>
               )}
             </div>
@@ -858,8 +857,8 @@ const TripDetail = () => {
                         url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
                             <circle cx="16" cy="16" r="14" fill="#f97316" stroke="#ffffff" stroke-width="2"/>
-                            <path d="M16 8c-1.5 3-3 5-3 8 0 3 1.5 5 3 6 1.5-1 3-3 3-6 0-3-1.5-5-3-8z" fill="#ffffff"/>
-                            <circle cx="16" cy="18" r="2" fill="#f97316"/>
+                            <path d="M22 12h-2l-1.2-1.6h-5.6L12 12h-2c-.9 0-1.6.7-1.6 1.6v8c0 .9.7 1.6 1.6 1.6h12c.9 0 1.6-.7 1.6-1.6v-8c0-.9-.7-1.6-1.6-1.6z" fill="none" stroke="#ffffff" stroke-width="1.2"/>
+                            <circle cx="16" cy="17" r="3.2" fill="none" stroke="#ffffff" stroke-width="1.2"/>
                           </svg>
                         `)}`,
                         scaledSize: new google.maps.Size(28, 28),
@@ -950,7 +949,7 @@ const TripDetail = () => {
                             <p className="font-semibold text-foreground">Day {activeDay}</p>
                             <div className="flex items-center gap-4 text-sm text-muted-foreground">
                               <span className="flex items-center gap-1">
-                                <Route className="w-3 h-3" />
+                                <Path className="w-3 h-3" />
                                 {generatedTrip.days.find(d => d.day === activeDay)?.drivingDistance}
                               </span>
                               <span className="flex items-center gap-1">
@@ -970,7 +969,7 @@ const TripDetail = () => {
                             Exit Day
                           </Button>
                           <Button variant="hero" size="sm" onClick={handleNavigateDay}>
-                            <Navigation className="w-4 h-4 mr-2" />
+                            <NavigationArrow className="w-4 h-4 mr-2" />
                             Navigate Day {activeDay}
                           </Button>
                         </div>
@@ -980,7 +979,7 @@ const TripDetail = () => {
                       <div className="flex items-center justify-between flex-wrap gap-4">
                         <div className="flex items-center gap-6">
                           <div className="flex items-center gap-2">
-                            <Route className="w-4 h-4 text-terracotta" />
+                            <Path className="w-4 h-4 text-terracotta" />
                             <span className="font-semibold text-foreground">
                               {generatedTrip.totalDistance}
                             </span>
@@ -995,7 +994,7 @@ const TripDetail = () => {
                           </div>
                         </div>
                         <Button variant="hero" size="sm" onClick={handleStartNavigation}>
-                          <Navigation className="w-4 h-4 mr-2" />
+                          <NavigationArrow className="w-4 h-4 mr-2" />
                           Start Navigation
                         </Button>
                       </div>
@@ -1099,14 +1098,14 @@ const TripDetail = () => {
                     className="w-full flex items-center justify-between"
                   >
                     <div className="flex items-center gap-2">
-                      <Flame className="w-5 h-5 text-orange-500" />
+                      <Camera className="w-5 h-5 text-orange-500" />
                       <h3 className="font-semibold text-foreground">Photo Hotspots</h3>
                       <span className="text-xs text-muted-foreground">({photoHotspots.length})</span>
                     </div>
                     {photoHotspotsExpanded ? (
-                      <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                      <CaretUp className="w-5 h-5 text-muted-foreground" />
                     ) : (
-                      <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                      <CaretDown className="w-5 h-5 text-muted-foreground" />
                     )}
                   </button>
 
@@ -1147,7 +1146,7 @@ const TripDetail = () => {
                               </button>
                             ) : (
                               <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                                <Flame className="w-5 h-5 text-orange-500" />
+                                <Camera className="w-5 h-5 text-orange-500" />
                               </div>
                             )}
                             <button
@@ -1204,7 +1203,7 @@ const TripDetail = () => {
             {/* Action Buttons */}
             <div className="flex gap-3 pt-4">
               <Button variant="hero" size="lg" className="flex-1" onClick={handleStartNavigation}>
-                <Navigation className="w-4 h-4 mr-2" />
+                <NavigationArrow className="w-4 h-4 mr-2" />
                 Start Trip
               </Button>
               <Link to="/create-trip">
@@ -1267,7 +1266,7 @@ const TripDetail = () => {
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 rounded-b-lg">
               <p className="text-white font-medium">{enlargedPhoto.name}</p>
               <p className="text-white/70 text-sm flex items-center gap-1">
-                <Flame className="w-3 h-3" />
+                <Camera className="w-3 h-3" />
                 Photo Hotspot via Flickr
               </p>
             </div>
@@ -1316,7 +1315,7 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
             </p>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
-                <Route className="w-3 h-3" />
+                <Path className="w-3 h-3" />
                 {day.drivingDistance}
               </span>
               <span className="flex items-center gap-1">
@@ -1333,7 +1332,7 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
               title={timeEstimate.warningMessage}
             />
           )}
-          {day.hike && <Footprints className="w-4 h-4 text-emerald-500" />}
+          {day.hike && <Sneaker className="w-4 h-4 text-emerald-500" />}
           {day.campsite && <Tent className="w-4 h-4 text-amber-500" />}
           <Button
             variant={isActive ? "default" : "outline"}
@@ -1348,14 +1347,14 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
               }
             }}
           >
-            <Navigation className="w-3 h-3 mr-1" />
+            <NavigationArrow className="w-3 h-3 mr-1" />
             {isActive ? 'Exit Preview' : 'Preview'}
           </Button>
           <button onClick={onToggle}>
             {expanded ? (
-              <ChevronUp className="w-5 h-5 text-muted-foreground" />
+              <CaretUp className="w-5 h-5 text-muted-foreground" />
             ) : (
-              <ChevronDown className="w-5 h-5 text-muted-foreground" />
+              <CaretDown className="w-5 h-5 text-muted-foreground" />
             )}
           </button>
         </div>
@@ -1413,7 +1412,7 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
                             className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
                             title="Choose different hike"
                           >
-                            <RefreshCw className="w-4 h-4" />
+                            <ArrowsClockwise className="w-4 h-4" />
                           </button>
                         )}
                         <button
@@ -1424,7 +1423,7 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
                           className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
                           title="Remove stop"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -1435,19 +1434,19 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
                       </span>
                       {stop.type === 'hike' && estimateTrailLength(stop.duration) && (
                         <span className="flex items-center gap-1">
-                          <Mountain className="w-3 h-3" />
+                          <Mountains className="w-3 h-3" />
                           {estimateTrailLength(stop.duration)}
                         </span>
                       )}
                       {stop.distance && (
                         <span className="flex items-center gap-1">
-                          <Route className="w-3 h-3" />
+                          <Path className="w-3 h-3" />
                           {stop.distance}
                         </span>
                       )}
                       {stop.drivingTime && (
                         <span className="flex items-center gap-1 text-primary">
-                          <Navigation className="w-3 h-3" />
+                          <NavigationArrow className="w-3 h-3" />
                           {stop.drivingTime}
                         </span>
                       )}
@@ -1465,7 +1464,7 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
                           onClick={(e) => e.stopPropagation()}
                           className="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 hover:underline"
                         >
-                          <ExternalLink className="w-3 h-3" />
+                          <ArrowSquareOut className="w-3 h-3" />
                           AllTrails
                         </a>
                       )}

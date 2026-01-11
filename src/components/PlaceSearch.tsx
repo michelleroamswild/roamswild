@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Autocomplete } from '@react-google-maps/api';
-import { MapPin, Search } from 'lucide-react';
+import { MapPin, MagnifyingGlass } from '@phosphor-icons/react';
 import { Input } from '@/components/ui/input';
 import { PlaceResult } from '@/types/maps';
 import { useGoogleMaps } from './GoogleMapsProvider';
@@ -37,7 +37,7 @@ export function PlaceSearch({ onPlaceSelect, placeholder = "Search for a place..
   if (!isLoaded) {
     return (
       <div className={`relative ${className}`}>
-        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+        <MagnifyingGlass className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
         <Input
           disabled
           placeholder="Loading..."

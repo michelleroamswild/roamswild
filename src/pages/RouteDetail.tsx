@@ -1,4 +1,4 @@
-import { ArrowLeft, Route, Clock, Mountain, Tent, Fuel, MapPin, Plus, GripVertical, MoreHorizontal, Navigation, Share2, Download, Star } from "lucide-react";
+import { ArrowLeft, Path, Clock, Mountains, Tent, GasPump, MapPin, Plus, DotsSixVertical, DotsThree, NavigationArrow, ShareNetwork, DownloadSimple, Star } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Link } from "react-router-dom";
@@ -41,9 +41,9 @@ const routeStops: RouteStop[] = [
 const getIcon = (type: string) => {
   switch (type) {
     case "hike":
-      return Mountain;
+      return Mountains;
     case "gas":
-      return Fuel;
+      return GasPump;
     case "camp":
       return Tent;
     default:
@@ -87,10 +87,10 @@ const RouteDetail = () => {
                 <Star className="w-5 h-5" />
               </Button>
               <Button variant="ghost" size="icon" className="rounded-full">
-                <Share2 className="w-5 h-5" />
+                <ShareNetwork className="w-5 h-5" />
               </Button>
               <Button variant="ghost" size="icon" className="rounded-full">
-                <Download className="w-5 h-5" />
+                <DownloadSimple className="w-5 h-5" />
               </Button>
             </div>
           </div>
@@ -116,7 +116,7 @@ const RouteDetail = () => {
                     <div className="flex items-center justify-between flex-wrap gap-4">
                       <div className="flex items-center gap-6">
                         <div className="flex items-center gap-2">
-                          <Route className="w-4 h-4 text-terracotta" />
+                          <Path className="w-4 h-4 text-terracotta" />
                           <span className="font-semibold text-foreground">285 mi</span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -124,7 +124,7 @@ const RouteDetail = () => {
                           <span className="text-foreground">5h 30m</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Mountain className="w-4 h-4 text-primary" />
+                          <Mountains className="w-4 h-4 text-primary" />
                           <span className="text-foreground">+4,200 ft</span>
                         </div>
                       </div>
@@ -139,7 +139,7 @@ const RouteDetail = () => {
                           window.open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&waypoints=${waypoints}`, '_blank');
                         }}
                       >
-                        <Navigation className="w-4 h-4 mr-2" />
+                        <NavigationArrow className="w-4 h-4 mr-2" />
                         Start Navigation
                       </Button>
                     </div>
@@ -198,7 +198,7 @@ const RouteDetail = () => {
                           <div className="flex items-start gap-3">
                             {/* Drag handle */}
                             <div className="flex flex-col items-center gap-1 pt-1">
-                              <GripVertical className="w-4 h-4 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+                              <DotsSixVertical className="w-4 h-4 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
                             </div>
                             
                             {/* Stop icon */}
@@ -214,13 +214,13 @@ const RouteDetail = () => {
                                   <p className="text-sm text-muted-foreground mt-0.5">{stop.description}</p>
                                 </div>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <MoreHorizontal className="w-4 h-4" />
+                                  <DotsThree className="w-4 h-4" />
                                 </Button>
                               </div>
                               
                               <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                                 <span className="flex items-center gap-1">
-                                  <Route className="w-3 h-3" />
+                                  <Path className="w-3 h-3" />
                                   {stop.distance}
                                 </span>
                                 <span className="flex items-center gap-1">
@@ -228,7 +228,7 @@ const RouteDetail = () => {
                                   {stop.duration}
                                 </span>
                                 <span className="flex items-center gap-1">
-                                  <Mountain className="w-3 h-3" />
+                                  <Mountains className="w-3 h-3" />
                                   {stop.elevation}
                                 </span>
                               </div>
@@ -251,7 +251,7 @@ const RouteDetail = () => {
             {/* Action Buttons */}
             <div className="flex gap-3 pt-4">
               <Button variant="hero" size="lg" className="flex-1">
-                <Navigation className="w-4 h-4 mr-2" />
+                <NavigationArrow className="w-4 h-4 mr-2" />
                 Start Trip
               </Button>
               <Button variant="outline" size="lg">

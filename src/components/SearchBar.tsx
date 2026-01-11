@@ -1,4 +1,4 @@
-import { Search, MapPin } from "lucide-react";
+import { MagnifyingGlass, MapPin } from "@phosphor-icons/react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLoadScript, Autocomplete } from "@react-google-maps/api";
@@ -81,7 +81,7 @@ export const SearchBar = () => {
             />
           )}
           <button className="flex items-center justify-center w-12 h-12 bg-primary text-primary-foreground rounded-xl hover:bg-forest-light transition-colors duration-200 shadow-sm">
-            <Search className="w-5 h-5" />
+            <MagnifyingGlass className="w-5 h-5" />
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { Route, Clock, Mountain, Tent, Fuel, ArrowRight } from "lucide-react";
+import { Path, Clock, Mountains, Tent, GasPump, ArrowRight } from "@phosphor-icons/react";
 import { Button } from "./ui/button";
 import { Link } from "react-router-dom";
 
@@ -11,13 +11,13 @@ const stops = [
 const getIcon = (type: string) => {
   switch (type) {
     case "hike":
-      return Mountain;
+      return Mountains;
     case "gas":
-      return Fuel;
+      return GasPump;
     case "camp":
       return Tent;
     default:
-      return Route;
+      return Path;
   }
 };
 
@@ -36,7 +36,7 @@ export const TripPreview = () => {
         <div className="relative h-48 bg-sand topo-pattern overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-card/80" />
           <div className="absolute bottom-4 left-4 flex items-center gap-2 text-sm text-muted-foreground">
-            <Route className="w-4 h-4 text-terracotta" />
+            <Path className="w-4 h-4 text-terracotta" />
             <span className="font-medium">285 miles total</span>
             <span className="text-muted-foreground">•</span>
             <Clock className="w-4 h-4" />

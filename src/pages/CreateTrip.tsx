@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Car, Loader2, Plus, GripVertical, X, ChevronDown, Clock, Gauge, Minus } from "lucide-react";
+import { ArrowLeft, MapPin, Car, SpinnerGap, Plus, DotsSixVertical, X, CaretDown, Clock, Gauge, Minus } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -503,7 +503,7 @@ const CreateTrip = () => {
                             draggedIndex === index ? 'opacity-50 border-primary' : ''
                           }`}
                         >
-                          <GripVertical className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                          <DotsSixVertical className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                           <div className="flex items-center justify-center w-6 h-6 bg-primary/10 rounded-full flex-shrink-0">
                             <span className="text-xs font-semibold text-primary">{index + 1}</span>
                           </div>
@@ -898,7 +898,7 @@ const CreateTrip = () => {
           >
             {generating ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <SpinnerGap className="w-4 h-4 mr-2 animate-spin" />
                 Generating Trip...
               </>
             ) : (

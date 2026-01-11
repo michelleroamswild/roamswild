@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Button } from "./ui/button";
-import { Mountain, Fuel, Tent, Droplets, Camera, Utensils, Wrench, Wifi } from "lucide-react";
+import { Mountains, GasPump, Tent, Drop, Camera, ForkKnife, Wrench, Wifi } from "@phosphor-icons/react";
 
 const filters = [
-  { id: "hikes", label: "Hikes", icon: Mountain },
-  { id: "gas", label: "Gas Stations", icon: Fuel },
+  { id: "hikes", label: "Hikes", icon: Mountains },
+  { id: "gas", label: "Gas Stations", icon: GasPump },
   { id: "campsites", label: "Campsites", icon: Tent },
-  { id: "water", label: "Water Access", icon: Droplets },
+  { id: "water", label: "Water Access", icon: Drop },
   { id: "viewpoints", label: "Viewpoints", icon: Camera },
-  { id: "food", label: "Food & Dining", icon: Utensils },
+  { id: "food", label: "Food & Dining", icon: ForkKnife },
   { id: "services", label: "Services", icon: Wrench },
   { id: "connectivity", label: "Cell Service", icon: Wifi },
 ];

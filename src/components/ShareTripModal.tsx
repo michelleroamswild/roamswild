@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Mail, Link2, Copy, Check, Trash2, UserPlus } from 'lucide-react';
+import { X, Envelope, Link, Copy, Check, Trash, UserPlus } from '@phosphor-icons/react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -147,7 +147,7 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
               </Select>
             </div>
             <Button onClick={handleInvite} disabled={isInviting} className="w-full">
-              <Mail className="w-4 h-4 mr-2" />
+              <Envelope className="w-4 h-4 mr-2" />
               {isInviting ? 'Sending...' : 'Send Invite'}
             </Button>
           </div>
@@ -175,7 +175,7 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
                 </SelectContent>
               </Select>
               <Button onClick={handleCreateLink} disabled={isCreatingLink} variant="outline" className="flex-1">
-                <Link2 className="w-4 h-4 mr-2" />
+                <Link className="w-4 h-4 mr-2" />
                 {isCreatingLink ? 'Creating...' : 'Create Link'}
               </Button>
             </div>
@@ -189,7 +189,7 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
                 {shareLinks.map((link) => (
                   <div key={link.id} className="flex items-center justify-between p-2 bg-muted rounded-lg text-sm">
                     <div className="flex items-center gap-2 min-w-0">
-                      <Link2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <Link className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                       <span className="text-muted-foreground capitalize">{link.permission}</span>
                     </div>
                     <div className="flex items-center gap-1">
@@ -211,7 +211,7 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
                         className="h-7 w-7 p-0 text-destructive hover:text-destructive"
                         onClick={() => handleRevokeLink(link.id)}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash className="w-3.5 h-3.5" />
                       </Button>
                     </div>
                   </div>

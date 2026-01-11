@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Compass, Lock, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Compass, Lock, SpinnerGap, WarningCircle, CheckCircle } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -93,7 +93,7 @@ const ResetPassword = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
                 <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <WarningCircle className="w-4 h-4 flex-shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
@@ -140,7 +140,7 @@ const ResetPassword = () => {
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <SpinnerGap className="w-4 h-4 mr-2 animate-spin" />
                     Updating...
                   </>
                 ) : (

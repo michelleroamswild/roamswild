@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, MapPin, Loader2, Tent, Check, ExternalLink, Cloud, Sun, CloudRain, CloudSnow, Wind } from 'lucide-react';
+import { X, MapPin, SpinnerGap, Tent, Check, ArrowSquareOut, Cloud, Sun, CloudRain, Snowflake, Wind } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { TripStop } from '@/types/trip';
 
@@ -17,7 +17,7 @@ const weatherCache = new Map<string, WeatherForecast>();
 // Get weather icon based on forecast
 function getWeatherIcon(forecast: string) {
   const lower = forecast.toLowerCase();
-  if (lower.includes('snow')) return CloudSnow;
+  if (lower.includes('snow')) return Snowflake;
   if (lower.includes('rain') || lower.includes('shower')) return CloudRain;
   if (lower.includes('cloud') || lower.includes('overcast')) return Cloud;
   if (lower.includes('wind')) return Wind;
@@ -341,7 +341,7 @@ export function AlternativeCampsitesModal({
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 text-sm text-primary hover:underline mt-2"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
+                  <ArrowSquareOut className="w-3.5 h-3.5" />
                   View on Maps
                 </a>
               </div>
@@ -352,7 +352,7 @@ export function AlternativeCampsitesModal({
 
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-primary animate-spin mb-3" />
+              <SpinnerGap className="w-8 h-8 text-primary animate-spin mb-3" />
               <p className="text-muted-foreground">Finding nearby campsites...</p>
             </div>
           ) : alternatives.length === 0 ? (
@@ -414,7 +414,7 @@ export function AlternativeCampsitesModal({
                           onClick={(e) => e.stopPropagation()}
                           className="flex items-center gap-1 text-sm text-primary hover:underline"
                         >
-                          <ExternalLink className="w-3.5 h-3.5" />
+                          <ArrowSquareOut className="w-3.5 h-3.5" />
                           View on Maps
                         </a>
                       </div>

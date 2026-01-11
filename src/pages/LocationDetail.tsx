@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Mountain, Navigation, Star, Share2, ExternalLink, Compass, Plus, Trash2, Footprints, Route, Calendar, Tent, Loader2, Flame, Camera, ChevronDown, ChevronUp, X, Trees } from "lucide-react";
+import { ArrowLeft, MapPin, Mountains, NavigationArrow, Star, ShareNetwork, ArrowSquareOut, Compass, Plus, Trash, Sneaker, Path, Calendar, Tent, SpinnerGap, Camera, CaretDown, CaretUp, X, Tree, Sun, Cloud, CloudRain, Snowflake, Wind } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -13,6 +13,7 @@ import { useNearbyPlaces, GoogleSavedPlace } from "@/hooks/use-nearby-places";
 import { useNearbyHikes, HikeResult } from "@/hooks/use-nearby-hikes";
 import { usePhotoHotspots, PhotoHotspot } from "@/hooks/use-photo-hotspots";
 import { usePublicLands, PublicLand } from "@/hooks/use-public-lands";
+import { useNoaaWeather, getWeatherIcon } from "@/hooks/use-noaa-weather";
 import { toast } from "sonner";
 import { useTrip } from "@/context/TripContext";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
@@ -37,12 +38,12 @@ function getElevationMessage(elevationFeet: number): string | null {
   return null;
 }
 
-// Photo hotspot icon (special - not in shared utils)
+// Photo hotspot icon (camera) - special marker for photo locations
 const PHOTO_HOTSPOT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
   <circle cx="20" cy="20" r="18" fill="#f97316" stroke="#ffffff" stroke-width="2"/>
-  <path d="M20 10c-1.5 3-4 6-4 10 0 4 2 6 4 8 2-2 4-4 4-8 0-4-2.5-7-4-10z" fill="#ffffff"/>
-  <circle cx="20" cy="22" r="2.5" fill="#f97316"/>
+  <path d="M28 15h-2.5l-1.5-2h-8l-1.5 2H12c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V17c0-1.1-.9-2-2-2z" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+  <circle cx="20" cy="21" r="4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </svg>
 `)}`;
 
@@ -124,6 +125,12 @@ const LocationDetail = () => {
     location?.lat ?? 0,
     location?.lng ?? 0,
     50
+  );
+
+  // Get NOAA weather for this location
+  const { weather, loading: weatherLoading } = useNoaaWeather(
+    location?.lat ?? null,
+    location?.lng ?? null
   );
 
   // Photo hotspots UI state
@@ -300,7 +307,7 @@ const LocationDetail = () => {
                 onClick={handleCreateTrip}
                 className="hidden sm:flex"
               >
-                <Route className="w-4 h-4 mr-2" />
+                <Path className="w-4 h-4 mr-2" />
                 Create Trip
               </Button>
               <Button
@@ -310,7 +317,7 @@ const LocationDetail = () => {
                 onClick={handleCreateTrip}
                 title="Create Trip"
               >
-                <Route className="w-5 h-5" />
+                <Path className="w-5 h-5" />
               </Button>
               {isSaved ? (
                 <Button
@@ -334,7 +341,7 @@ const LocationDetail = () => {
                 </Button>
               )}
               <Button variant="ghost" size="icon" className="rounded-full">
-                <Share2 className="w-5 h-5" />
+                <ShareNetwork className="w-5 h-5" />
               </Button>
             </div>
           </div>
@@ -648,11 +655,11 @@ const LocationDetail = () => {
                       </div>
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" onClick={handleOpenInMaps}>
-                          <ExternalLink className="w-4 h-4 mr-2" />
+                          <ArrowSquareOut className="w-4 h-4 mr-2" />
                           Open in Maps
                         </Button>
                         <Button variant="hero" size="sm" onClick={handleGetDirections}>
-                          <Navigation className="w-4 h-4 mr-2" />
+                          <NavigationArrow className="w-4 h-4 mr-2" />
                           Directions
                         </Button>
                       </div>
@@ -690,7 +697,7 @@ const LocationDetail = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 bg-secondary/50 rounded-xl">
                     <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                      <Mountain className="w-4 h-4" />
+                      <Mountains className="w-4 h-4" />
                       <span className="text-sm">Elevation</span>
                     </div>
                     {elevation !== null ? (
@@ -711,11 +718,47 @@ const LocationDetail = () => {
                   </div>
                   <div className="p-4 bg-secondary/50 rounded-xl">
                     <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                      {weatherLoading ? (
+                        <SpinnerGap className="w-4 h-4 animate-spin" />
+                      ) : weather ? (
+                        (() => {
+                          const WeatherIcon = getWeatherIcon(weather.shortForecast);
+                          return <WeatherIcon className="w-4 h-4" />;
+                        })()
+                      ) : (
+                        <Sun className="w-4 h-4" />
+                      )}
+                      <span className="text-sm">Weather</span>
+                    </div>
+                    {weatherLoading ? (
+                      <>
+                        <p className="text-xl font-bold text-foreground">--</p>
+                        <p className="text-xs text-muted-foreground">Loading...</p>
+                      </>
+                    ) : weather ? (
+                      <>
+                        <p className="text-xl font-bold text-foreground">
+                          {weather.temperature}°{weather.temperatureUnit}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate" title={weather.shortForecast}>
+                          {weather.shortForecast}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xl font-bold text-foreground">--</p>
+                        <p className="text-xs text-muted-foreground">Unavailable</p>
+                      </>
+                    )}
+                  </div>
+                  <div className="p-4 bg-secondary/50 rounded-xl col-span-2">
+                    <div className="flex items-center gap-2 text-muted-foreground mb-1">
                       <MapPin className="w-4 h-4" />
                       <span className="text-sm">Coordinates</span>
                     </div>
-                    <p className="text-sm font-bold text-foreground">{location.lat.toFixed(4)}</p>
-                    <p className="text-sm font-bold text-foreground">{location.lng.toFixed(4)}</p>
+                    <p className="text-sm font-bold text-foreground">
+                      {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -762,7 +805,7 @@ const LocationDetail = () => {
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <label className="text-sm font-medium text-foreground flex items-center gap-2">
-                        <Footprints className="w-4 h-4 text-muted-foreground" />
+                        <Sneaker className="w-4 h-4 text-muted-foreground" />
                         Hikes per day
                       </label>
                       <span className="text-2xl font-bold text-foreground">
@@ -807,7 +850,7 @@ const LocationDetail = () => {
                   >
                     {generating ? (
                       <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        <SpinnerGap className="w-4 h-4 mr-2 animate-spin" />
                         Generating Trip...
                       </>
                     ) : (
@@ -870,7 +913,7 @@ const LocationDetail = () => {
                             {place.distance.toFixed(1)} miles away
                           </p>
                         </div>
-                        <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <ArrowSquareOut className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                       </div>
                     ))}
                     {nearbyPlaces.length > 5 && (
@@ -912,7 +955,7 @@ const LocationDetail = () => {
                         }}
                       >
                         <div className="flex items-center justify-center w-10 h-10 bg-primary/10 rounded-lg flex-shrink-0">
-                          <Footprints className="w-5 h-5 text-primary" />
+                          <Sneaker className="w-5 h-5 text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-foreground truncate">
@@ -932,7 +975,7 @@ const LocationDetail = () => {
                             )}
                           </div>
                         </div>
-                        <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <ArrowSquareOut className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                       </div>
                     ))}
                     {hikes.length > 5 && (
@@ -943,7 +986,7 @@ const LocationDetail = () => {
                   </div>
                 ) : (
                   <div className="text-center py-4 text-muted-foreground">
-                    <Footprints className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <Sneaker className="w-8 h-8 mx-auto mb-2 opacity-30" />
                     <p>No hikes found within 30 miles</p>
                   </div>
                 )}
@@ -959,14 +1002,14 @@ const LocationDetail = () => {
                     className="w-full flex items-center justify-between"
                   >
                     <div className="flex items-center gap-2">
-                      <Flame className="w-5 h-5 text-orange-500" />
+                      <Camera className="w-5 h-5 text-orange-500" />
                       <h3 className="font-semibold text-foreground">Photo Hotspots</h3>
                       <span className="text-xs text-muted-foreground">({photoHotspots.length})</span>
                     </div>
                     {photoHotspotsExpanded ? (
-                      <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                      <CaretUp className="w-5 h-5 text-muted-foreground" />
                     ) : (
-                      <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                      <CaretDown className="w-5 h-5 text-muted-foreground" />
                     )}
                   </button>
 
@@ -1007,7 +1050,7 @@ const LocationDetail = () => {
                               </button>
                             ) : (
                               <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                                <Flame className="w-5 h-5 text-orange-500" />
+                                <Camera className="w-5 h-5 text-orange-500" />
                               </div>
                             )}
                             <button
@@ -1045,16 +1088,16 @@ const LocationDetail = () => {
                     className="w-full flex items-center justify-between"
                   >
                     <div className="flex items-center gap-2">
-                      <Trees className="w-5 h-5 text-green-600" />
+                      <Tree className="w-5 h-5 text-green-600" />
                       <h3 className="font-semibold text-foreground">Dispersed Camping Areas</h3>
                       {publicLands.length > 0 && (
                         <span className="text-xs text-muted-foreground">({publicLands.length})</span>
                       )}
                     </div>
                     {publicLandsExpanded ? (
-                      <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                      <CaretUp className="w-5 h-5 text-muted-foreground" />
                     ) : (
-                      <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                      <CaretDown className="w-5 h-5 text-muted-foreground" />
                     )}
                   </button>
 
@@ -1090,7 +1133,7 @@ const LocationDetail = () => {
                               }}
                             >
                               <div className="w-10 h-10 rounded-lg bg-green-600/10 flex items-center justify-center flex-shrink-0">
-                                <Trees className="w-5 h-5 text-green-600" />
+                                <Tree className="w-5 h-5 text-green-600" />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-foreground text-sm truncate">
@@ -1112,7 +1155,7 @@ const LocationDetail = () => {
                         </div>
                       ) : (
                         <div className="text-center py-4 text-muted-foreground">
-                          <Trees className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                          <Tree className="w-8 h-8 mx-auto mb-2 opacity-30" />
                           <p>No BLM or Forest Service lands within 50 miles</p>
                         </div>
                       )}
@@ -1128,11 +1171,11 @@ const LocationDetail = () => {
             {/* Actions */}
             <div className="flex gap-3">
               <Button variant="hero" size="lg" className="flex-1" onClick={handleGetDirections}>
-                <Navigation className="w-4 h-4 mr-2" />
+                <NavigationArrow className="w-4 h-4 mr-2" />
                 Get Directions
               </Button>
               <Button variant="outline" size="lg" onClick={handleOpenInMaps}>
-                <ExternalLink className="w-4 h-4" />
+                <ArrowSquareOut className="w-4 h-4" />
               </Button>
             </div>
           </div>
@@ -1160,7 +1203,7 @@ const LocationDetail = () => {
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 rounded-b-lg">
               <p className="text-white font-medium">{enlargedPhoto.name}</p>
               <p className="text-white/70 text-sm flex items-center gap-1">
-                <Flame className="w-3 h-3" />
+                <Camera className="w-3 h-3" />
                 Photo Hotspot via Flickr
               </p>
             </div>

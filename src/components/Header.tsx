@@ -1,4 +1,4 @@
-import { Compass, Menu, Route, LogOut } from "lucide-react";
+import { Compass, List, Path, SignOut } from "@phosphor-icons/react";
 import { Button } from "./ui/button";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -59,7 +59,7 @@ export const Header = () => {
         <div className="flex items-center gap-2">
           <Link to="/create-trip">
             <Button variant="hero" size="sm" className="hidden md:flex">
-              <Route className="w-4 h-4 mr-1" />
+              <Path className="w-4 h-4 mr-1" />
               Create Trip
             </Button>
           </Link>
@@ -81,14 +81,14 @@ export const Header = () => {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
-                <LogOut className="w-4 h-4 mr-2" />
+                <SignOut className="w-4 h-4 mr-2" />
                 Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
           <Button variant="ghost" size="icon" className="md:hidden">
-            <Menu className="w-5 h-5" />
+            <List className="w-5 h-5" />
           </Button>
         </div>
       </div>

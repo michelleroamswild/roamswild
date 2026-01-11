@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { MapPin, Tent, Mountain, Star, Loader2, Navigation, ChevronRight, Flame, Camera } from "lucide-react";
+import { MapPin, Tent, Mountains, Star, SpinnerGap, NavigationArrow, CaretRight, Camera } from "@phosphor-icons/react";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { useNearbyPlaces, GoogleSavedPlace } from "@/hooks/use-nearby-places";
@@ -239,7 +239,7 @@ export const Suggestions = () => {
     return (
       <section className="w-full max-w-4xl mx-auto">
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-primary mr-2" />
+          <SpinnerGap className="w-6 h-6 animate-spin text-primary mr-2" />
           <span className="text-muted-foreground">Finding places near you...</span>
         </div>
       </section>
@@ -250,7 +250,7 @@ export const Suggestions = () => {
     return (
       <section className="w-full max-w-4xl mx-auto">
         <div className="text-center py-8">
-          <Navigation className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-50" />
+          <NavigationArrow className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-50" />
           <p className="text-muted-foreground text-sm mb-4">
             {locationError || "Enable location to see suggestions near you"}
           </p>
@@ -280,13 +280,13 @@ export const Suggestions = () => {
     <section className="w-full max-w-4xl mx-auto space-y-10">
       {/* Section Header */}
       <div className="flex items-center gap-2">
-        <Navigation className="w-5 h-5 text-primary" />
+        <NavigationArrow className="w-5 h-5 text-primary" />
         <h2 className="text-2xl font-display font-bold text-foreground">Near You</h2>
       </div>
 
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-6 h-6 animate-spin text-primary mr-2" />
+          <SpinnerGap className="w-6 h-6 animate-spin text-primary mr-2" />
           <span className="text-muted-foreground">Loading suggestions...</span>
         </div>
       ) : (
@@ -388,7 +388,7 @@ export const Suggestions = () => {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <Mountain className="w-5 h-5 text-primary" />
+                  <Mountains className="w-5 h-5 text-primary" />
                   <h3 className="text-lg font-semibold text-foreground">Hot Spots</h3>
                 </div>
               </div>
@@ -405,7 +405,7 @@ export const Suggestions = () => {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <Flame className="w-5 h-5 text-orange-500" />
+                  <Camera className="w-5 h-5 text-orange-500" />
                   <h3 className="text-lg font-semibold text-foreground">Popular Photo Spots</h3>
                 </div>
                 <span className="text-xs text-muted-foreground">via Flickr</span>
@@ -468,7 +468,7 @@ const CampsiteCard = ({ campsite, index, isSelected, onClick }: CampsiteCardProp
               </p>
             )}
           </div>
-          <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+          <CaretRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
       </CardContent>
     </Card>
@@ -513,7 +513,7 @@ const HotSpotCard = ({ spot, index }: HotSpotCardProps) => {
           </div>
         ) : (
           <div className="h-24 w-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-            <Mountain className="w-10 h-10 text-primary/40" />
+            <Mountains className="w-10 h-10 text-primary/40" />
           </div>
         )}
 
@@ -548,7 +548,7 @@ const HotSpotCard = ({ spot, index }: HotSpotCardProps) => {
                 )}
               </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1" />
+            <CaretRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1" />
           </div>
         </CardContent>
       </Card>
@@ -577,13 +577,13 @@ const PhotoHotspotCard = ({ hotspot, index }: PhotoHotspotCardProps) => {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
           <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
-            <Flame className="w-3.5 h-3.5 text-orange-400" />
+            <Camera className="w-3.5 h-3.5 text-orange-400" />
             <span className="text-xs font-medium text-white">Photo Hotspot</span>
           </div>
         </div>
       ) : (
         <div className="h-24 w-full bg-gradient-to-br from-orange-500/20 to-orange-500/5 flex items-center justify-center">
-          <Flame className="w-10 h-10 text-orange-500/40" />
+          <Camera className="w-10 h-10 text-orange-500/40" />
         </div>
       )}
 
@@ -600,7 +600,7 @@ const PhotoHotspotCard = ({ hotspot, index }: PhotoHotspotCardProps) => {
               </span>
             </div>
           </div>
-          <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1" />
+          <CaretRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1" />
         </div>
       </CardContent>
     </Card>
