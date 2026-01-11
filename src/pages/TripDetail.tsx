@@ -591,6 +591,53 @@ const TripDetail = () => {
     }
   }, [activeDay, mapsLoaded, generatedTrip.days, fitMapBounds, tripConfig.startLocation, tripConfig.returnToStart]);
 
+  const handleNavigateDay = () => {
+    if (!activeDay) return;
+
+    const day = generatedTrip.days.find(d => d.day === activeDay);
+    if (!day || day.stops.length === 0) return;
+
+    const stops = day.stops;
+    const dest = `${stops[stops.length - 1].coordinates.lat},${stops[stops.length - 1].coordinates.lng}`;
+
+    // Build navigation URL with current location as origin (on mobile)
+    const buildNavUrl = (origin?: string) => {
+      let waypoints: string;
+      if (origin) {
+        // Using current location - all stops except last are waypoints
+        waypoints = stops.slice(0, -1)
+          .map(s => `${s.coordinates.lat},${s.coordinates.lng}`)
+          .join('|');
+      } else {
+        // Using first stop as origin - middle stops are waypoints
+        waypoints = stops.slice(1, -1)
+          .map(s => `${s.coordinates.lat},${s.coordinates.lng}`)
+          .join('|');
+        origin = `${stops[0].coordinates.lat},${stops[0].coordinates.lng}`;
+      }
+
+      return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}${waypoints ? `&waypoints=${waypoints}` : ''}`;
+    };
+
+    // Try to get user's current location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const origin = `${position.coords.latitude},${position.coords.longitude}`;
+          window.open(buildNavUrl(origin), '_blank');
+        },
+        () => {
+          // Geolocation failed or denied - use first stop as origin
+          window.open(buildNavUrl(), '_blank');
+        },
+        { timeout: 5000, maximumAge: 60000 }
+      );
+    } else {
+      // Geolocation not available - use first stop as origin
+      window.open(buildNavUrl(), '_blank');
+    }
+  };
+
   const handleStartNavigation = () => {
     // Get start/base location from config
     const startLocation = generatedTrip.config.startLocation?.coordinates;
@@ -921,21 +968,7 @@ const TripDetail = () => {
                             <X className="w-4 h-4 mr-1" />
                             Exit Day
                           </Button>
-                          <Button variant="hero" size="sm" onClick={() => {
-                            const day = generatedTrip.days.find(d => d.day === activeDay);
-                            if (day && day.stops.length > 0) {
-                              const stops = day.stops;
-                              const waypoints = stops.slice(1, -1)
-                                .map(s => `${s.coordinates.lat},${s.coordinates.lng}`)
-                                .join('|');
-                              const origin = `${stops[0].coordinates.lat},${stops[0].coordinates.lng}`;
-                              const dest = `${stops[stops.length - 1].coordinates.lat},${stops[stops.length - 1].coordinates.lng}`;
-                              window.open(
-                                `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}${waypoints ? `&waypoints=${waypoints}` : ''}`,
-                                '_blank'
-                              );
-                            }
-                          }}>
+                          <Button variant="hero" size="sm" onClick={handleNavigateDay}>
                             <Navigation className="w-4 h-4 mr-2" />
                             Navigate Day {activeDay}
                           </Button>

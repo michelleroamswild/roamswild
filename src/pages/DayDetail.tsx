@@ -27,6 +27,7 @@ import { Marker, DirectionsRenderer } from '@react-google-maps/api';
 import { TripStop, TripDay } from '@/types/trip';
 import { toast } from 'sonner';
 import { AlternativeHikesModal } from '@/components/AlternativeHikesModal';
+import { AlternativeCampsitesModal } from '@/components/AlternativeCampsitesModal';
 import { AddStopModal } from '@/components/AddStopModal';
 import { createMarkerIcon, getTypeStyles } from '@/utils/mapMarkers';
 import { estimateDayTime } from '@/utils/tripValidation';
@@ -56,6 +57,8 @@ const DayDetail = () => {
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [hikeModalOpen, setHikeModalOpen] = useState(false);
   const [selectedHikeForSwap, setSelectedHikeForSwap] = useState<TripStop | null>(null);
+  const [campsiteModalOpen, setCampsiteModalOpen] = useState(false);
+  const [selectedCampsiteForSwap, setSelectedCampsiteForSwap] = useState<TripStop | null>(null);
   const [addStopModalOpen, setAddStopModalOpen] = useState(false);
 
   const dayNum = parseInt(dayNumber || '1', 10);
@@ -139,6 +142,20 @@ const DayDetail = () => {
     }
   };
 
+  const handleOpenCampsiteSwap = (campsite: TripStop) => {
+    setSelectedCampsiteForSwap(campsite);
+    setCampsiteModalOpen(true);
+  };
+
+  const handleSwapCampsite = (newCampsite: TripStop) => {
+    if (selectedCampsiteForSwap) {
+      updateTripStop(selectedCampsiteForSwap.day, selectedCampsiteForSwap.id, newCampsite);
+      toast.success('Campsite updated!', {
+        description: `Changed to ${newCampsite.name}`,
+      });
+    }
+  };
+
   const handleRemoveStop = (stop: TripStop) => {
     removeTripStop(dayNum, stop.id);
     toast.success('Stop removed', {
@@ -157,16 +174,46 @@ const DayDetail = () => {
     if (!day || day.stops.length === 0) return;
 
     const stops = day.stops;
-    const waypoints = stops.slice(1, -1)
-      .map(s => `${s.coordinates.lat},${s.coordinates.lng}`)
-      .join('|');
-    const origin = `${stops[0].coordinates.lat},${stops[0].coordinates.lng}`;
     const dest = `${stops[stops.length - 1].coordinates.lat},${stops[stops.length - 1].coordinates.lng}`;
 
-    window.open(
-      `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}${waypoints ? `&waypoints=${waypoints}` : ''}`,
-      '_blank'
-    );
+    // Build navigation URL with current location as origin (on mobile)
+    const buildNavUrl = (origin?: string) => {
+      // If using current location, all stops become waypoints
+      // Otherwise, first stop is origin and rest (except last) are waypoints
+      let waypoints: string;
+      if (origin) {
+        // Using current location - all stops except last are waypoints
+        waypoints = stops.slice(0, -1)
+          .map(s => `${s.coordinates.lat},${s.coordinates.lng}`)
+          .join('|');
+      } else {
+        // Using first stop as origin - middle stops are waypoints
+        waypoints = stops.slice(1, -1)
+          .map(s => `${s.coordinates.lat},${s.coordinates.lng}`)
+          .join('|');
+        origin = `${stops[0].coordinates.lat},${stops[0].coordinates.lng}`;
+      }
+
+      return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}${waypoints ? `&waypoints=${waypoints}` : ''}`;
+    };
+
+    // Try to get user's current location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const origin = `${position.coords.latitude},${position.coords.longitude}`;
+          window.open(buildNavUrl(origin), '_blank');
+        },
+        () => {
+          // Geolocation failed or denied - use first stop as origin
+          window.open(buildNavUrl(), '_blank');
+        },
+        { timeout: 5000, maximumAge: 60000 }
+      );
+    } else {
+      // Geolocation not available - use first stop as origin
+      window.open(buildNavUrl(), '_blank');
+    }
   };
 
   if (!generatedTrip || !day) {
@@ -397,6 +444,17 @@ const DayDetail = () => {
                                   <RefreshCw className="w-4 h-4" />
                                 </Button>
                               )}
+                              {stop.type === 'camp' && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-amber-600 hover:bg-amber-500/10"
+                                  onClick={() => handleOpenCampsiteSwap(stop)}
+                                  title="Choose different campsite"
+                                >
+                                  <RefreshCw className="w-4 h-4" />
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -515,6 +573,21 @@ const DayDetail = () => {
         existingStopIds={day.stops.map(s => s.placeId || s.id).filter(Boolean)}
         onAddStop={handleAddStop}
       />
+
+      {/* Alternative Campsites Modal */}
+      {selectedCampsiteForSwap && (
+        <AlternativeCampsitesModal
+          isOpen={campsiteModalOpen}
+          onClose={() => {
+            setCampsiteModalOpen(false);
+            setSelectedCampsiteForSwap(null);
+          }}
+          currentCampsite={selectedCampsiteForSwap}
+          searchLat={selectedCampsiteForSwap.coordinates.lat}
+          searchLng={selectedCampsiteForSwap.coordinates.lng}
+          onSelectCampsite={handleSwapCampsite}
+        />
+      )}
     </div>
   );
 };
