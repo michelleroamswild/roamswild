@@ -434,24 +434,38 @@ export function useTripGenerator() {
         };
       }
 
-      // Determine which days should have hikes based on preference
+      // Determine which days should have hikes based on pace preference
       const hikingPreference = config.hikingPreference || 'daily';
+      const pacePreference = config.pacePreference || 'moderate';
       let hikingDays: Set<number> = new Set();
 
-      if (hikingPreference === 'daily') {
-        // Hike every day
-        for (let d = 1; d <= numDays; d++) hikingDays.add(d);
-      } else if (hikingPreference === 'surprise') {
-        // Pick ~50-60% of days for hiking, spread out
-        const numHikingDays = Math.max(1, Math.ceil(numDays * 0.55));
-        // Spread hikes evenly across the trip
-        const interval = numDays / numHikingDays;
-        for (let i = 0; i < numHikingDays; i++) {
-          const dayNum = Math.min(numDays, Math.round(1 + i * interval));
-          hikingDays.add(dayNum);
+      // If hiking preference is 'none', skip all hiking regardless of pace
+      if (hikingPreference !== 'none') {
+        // Determine hiking frequency based on pace
+        let hikingPercentage: number;
+        if (pacePreference === 'packed') {
+          hikingPercentage = 1.0; // 100% - hike every day
+        } else if (pacePreference === 'moderate') {
+          hikingPercentage = 0.6; // 60% of days
+        } else {
+          hikingPercentage = 0.3; // 30% of days (relaxed)
         }
+
+        const numHikingDays = Math.max(1, Math.round(numDays * hikingPercentage));
+
+        if (hikingPercentage >= 1.0) {
+          // Hike every day
+          for (let d = 1; d <= numDays; d++) hikingDays.add(d);
+        } else {
+          // Spread hikes evenly across the trip
+          const interval = numDays / numHikingDays;
+          for (let i = 0; i < numHikingDays; i++) {
+            const dayNum = Math.min(numDays, Math.round(1 + i * interval));
+            hikingDays.add(dayNum);
+          }
+        }
+        console.log(`[generateLocationBasedTrip] Pace: ${pacePreference}, hiking ${numHikingDays}/${numDays} days`);
       }
-      // For 'none', hikingDays stays empty
 
       // Pre-fetch all hikes if we need any
       let allNearbyHikes: TripStop[] = [];
@@ -661,21 +675,36 @@ export function useTripGenerator() {
         }
       }
 
-      // For surprise mode, determine which days to include hikes
+      // Determine which days to include hikes based on pace preference
+      const pacePreference = config.pacePreference || 'moderate';
       let hikingDays: Set<number> = new Set();
-      if (hikingPreference === 'daily') {
-        // All days get hikes (added during iteration)
-        // We'll use a flag instead since we don't know total days yet
-      } else if (hikingPreference === 'surprise') {
-        // Pick ~50-60% of days for hiking
-        const numHikingDays = Math.max(1, Math.ceil(numDays * 0.55));
-        const interval = numDays / numHikingDays;
-        for (let i = 0; i < numHikingDays; i++) {
-          const dayNum = Math.min(numDays, Math.round(1 + i * interval));
-          hikingDays.add(dayNum);
+
+      if (hikingPreference !== 'none') {
+        // Determine hiking frequency based on pace
+        let hikingPercentage: number;
+        if (pacePreference === 'packed') {
+          hikingPercentage = 1.0; // 100% - hike every day
+        } else if (pacePreference === 'moderate') {
+          hikingPercentage = 0.6; // 60% of days
+        } else {
+          hikingPercentage = 0.3; // 30% of days (relaxed)
         }
+
+        const numHikingDays = Math.max(1, Math.round(numDays * hikingPercentage));
+
+        if (hikingPercentage >= 1.0) {
+          // Hike every day
+          for (let d = 1; d <= numDays; d++) hikingDays.add(d);
+        } else {
+          // Spread hikes evenly across the trip
+          const interval = numDays / numHikingDays;
+          for (let i = 0; i < numHikingDays; i++) {
+            const dayNum = Math.min(numDays, Math.round(1 + i * interval));
+            hikingDays.add(dayNum);
+          }
+        }
+        console.log(`[generateTrip] Pace: ${pacePreference}, hiking ${numHikingDays}/${numDays} days`);
       }
-      // For 'none', hikingDays stays empty
 
       // Generate days
       const days: TripDay[] = [];
@@ -740,9 +769,9 @@ export function useTripGenerator() {
             dayStops.push(exploreStop);
           }
 
-          // Find a unique hike for this day (based on hiking preference)
+          // Find a unique hike for this day (based on pace preference)
           let hike: TripStop | undefined;
-          const shouldHikeToday = hikingPreference === 'daily' || hikingDays.has(dayNumber);
+          const shouldHikeToday = hikingDays.has(dayNumber);
 
           if (shouldHikeToday && availableHikes.length > 0) {
             for (const h of availableHikes) {

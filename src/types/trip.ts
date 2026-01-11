@@ -61,6 +61,7 @@ export interface TripConfig {
   endDate?: string; // ISO date string (YYYY-MM-DD)
   departureTime?: string; // Time to leave starting location (HH:MM)
   dailyStartTime?: string; // Time to start activities each day (HH:MM)
+  returnToCampTime?: string; // Time to be back at camp each day (HH:MM)
   pacePreference?: PacePreference;
   maxDrivingHoursPerDay?: number; // Maximum hours of driving per day
 }
@@ -72,4 +73,6 @@ export interface GeneratedTrip {
   totalDistance: string;
   totalDrivingTime: string;
   createdAt: string;
+  ownerId?: string; // User ID of the trip owner (for sharing)
+  collaboratorCount?: number; // Number of people this trip is shared with
 }

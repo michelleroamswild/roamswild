@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Car, Camera, Mountain, Compass, Loader2, Plus, GripVertical, X, Sparkles, Footprints, Ban, ChevronDown, Clock, Gauge } from "lucide-react";
+import { ArrowLeft, MapPin, Car, Loader2, Plus, GripVertical, X, ChevronDown, Clock, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -43,9 +43,7 @@ const LODGING_OPTIONS = [
 ];
 
 const ACTIVITIES = [
-  { id: "photography", label: "Photography", icon: Camera },
-  { id: "hiking", label: "Hiking", icon: Mountain },
-  { id: "offroading", label: "Offroading", icon: Car },
+  { id: "photography", label: "Photography", description: "Find photo hotspots along your route" },
 ];
 
 const CreateTrip = () => {
@@ -71,7 +69,7 @@ const CreateTrip = () => {
   const [lodging, setLodging] = useState<string>("dispersed");
   const [activities, setActivities] = useState<string[]>([]);
   const [baseCampMode, setBaseCampMode] = useState(false);
-  const [hikingPreference, setHikingPreference] = useState<'none' | 'surprise' | 'daily'>('daily');
+  const [includeHikes, setIncludeHikes] = useState(true);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   // Advanced options state
@@ -79,6 +77,7 @@ const CreateTrip = () => {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [departureTime, setDepartureTime] = useState<string>('08:00');
   const [dailyStartTime, setDailyStartTime] = useState<string>('08:00');
+  const [returnToCampTime, setReturnToCampTime] = useState<string>('18:00');
   const [pacePreference, setPacePreference] = useState<'relaxed' | 'moderate' | 'packed'>('moderate');
   const [maxDrivingHours, setMaxDrivingHours] = useState<number[]>([4]);
 
@@ -231,12 +230,13 @@ const CreateTrip = () => {
       vehicleType: carCapabilities.includes("4wd") ? "4wd" : carCapabilities.includes("high-clearance") ? "suv" : "sedan",
       lodgingPreference: lodging as any,
       activities: activities as any[],
-      hikingPreference: hikingPreference,
+      hikingPreference: includeHikes ? 'daily' : 'none',
       // Advanced options
       startDate: startDateStr,
       endDate: endDateStr,
       departureTime: departureTime,
       dailyStartTime: dailyStartTime,
+      returnToCampTime: returnToCampTime,
       pacePreference: pacePreference,
       maxDrivingHoursPerDay: maxDrivingHours[0],
     };
@@ -566,111 +566,56 @@ const CreateTrip = () => {
             <CardHeader>
               <CardTitle className="text-2xl">Activities</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {ACTIVITIES.map((activity) => {
-                  const Icon = activity.icon;
-                  const isSelected = activities.includes(activity.id);
-                  return (
-                    <button
-                      key={activity.id}
-                      type="button"
-                      onClick={() => handleActivityChange(activity.id, !isSelected)}
-                      className={`flex flex-col items-center gap-2 p-4 rounded-lg border transition-all ${
-                        isSelected
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border hover:bg-muted/50 text-foreground"
-                      }`}
-                    >
-                      <Icon className="w-6 h-6" />
-                      <span className="text-sm font-medium">{activity.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+            <CardContent className="space-y-4">
+              {/* Hiking */}
+              <label
+                htmlFor="include-hikes"
+                className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                  includeHikes ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  id="include-hikes"
+                  checked={includeHikes}
+                  onChange={(e) => setIncludeHikes(e.target.checked)}
+                  className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
+                />
+                <div className="flex-1 space-y-0.5">
+                  <span className="font-medium text-sm">Include hikes</span>
+                  <p className="text-xs text-muted-foreground">
+                    Frequency based on trip pace
+                  </p>
+                </div>
+              </label>
 
-            </CardContent>
-          </Card>
-
-          {/* Hiking Preferences */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">Hiking Preferences</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3">
-                <label
-                  htmlFor="hiking-daily"
-                  className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-                    hikingPreference === 'daily' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    id="hiking-daily"
-                    name="hiking-preference"
-                    value="daily"
-                    checked={hikingPreference === 'daily'}
-                    onChange={(e) => setHikingPreference(e.target.value as 'none' | 'surprise' | 'daily')}
-                    className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
-                  />
-                  <div className="flex-1 space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <Footprints className="w-4 h-4 text-emerald-500" />
-                      <span className="font-medium text-sm">Daily Hikes</span>
+              {/* Photography */}
+              {ACTIVITIES.map((activity) => {
+                const isSelected = activities.includes(activity.id);
+                return (
+                  <label
+                    key={activity.id}
+                    htmlFor={`activity-${activity.id}`}
+                    className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                      isSelected ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      id={`activity-${activity.id}`}
+                      checked={isSelected}
+                      onChange={(e) => handleActivityChange(activity.id, e.target.checked)}
+                      className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
+                    />
+                    <div className="flex-1 space-y-0.5">
+                      <span className="font-medium text-sm">{activity.label}</span>
+                      <p className="text-xs text-muted-foreground">
+                        {activity.description}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">Include a hike every day of the trip</p>
-                  </div>
-                </label>
-
-                <label
-                  htmlFor="hiking-surprise"
-                  className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-                    hikingPreference === 'surprise' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    id="hiking-surprise"
-                    name="hiking-preference"
-                    value="surprise"
-                    checked={hikingPreference === 'surprise'}
-                    onChange={(e) => setHikingPreference(e.target.value as 'none' | 'surprise' | 'daily')}
-                    className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
-                  />
-                  <div className="flex-1 space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                      <span className="font-medium text-sm">Surprise Me</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">Let us pick the best hiking days with top-rated trails</p>
-                  </div>
-                </label>
-
-                <label
-                  htmlFor="hiking-none"
-                  className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-                    hikingPreference === 'none' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    id="hiking-none"
-                    name="hiking-preference"
-                    value="none"
-                    checked={hikingPreference === 'none'}
-                    onChange={(e) => setHikingPreference(e.target.value as 'none' | 'surprise' | 'daily')}
-                    className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
-                  />
-                  <div className="flex-1 space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <Ban className="w-4 h-4 text-muted-foreground" />
-                      <span className="font-medium text-sm">No Hikes</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">Skip hiking, focus on scenic drives and viewpoints</p>
-                  </div>
-                </label>
-              </div>
+                  </label>
+                );
+              })}
             </CardContent>
           </Card>
 
@@ -715,6 +660,20 @@ const CreateTrip = () => {
                   <TimePicker
                     value={dailyStartTime}
                     onChange={setDailyStartTime}
+                    placeholder="Select time"
+                  />
+                </div>
+
+                {/* Return to Camp Time */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-orange-500" />
+                    <Label className="font-medium">Return to Camp Time</Label>
+                  </div>
+                  <p className="text-sm text-muted-foreground">What time do you want to be back at camp each day?</p>
+                  <TimePicker
+                    value={returnToCampTime}
+                    onChange={setReturnToCampTime}
                     placeholder="Select time"
                   />
                 </div>

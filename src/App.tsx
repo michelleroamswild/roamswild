@@ -16,6 +16,7 @@ import CreateTrip from "./pages/CreateTrip";
 import TripDetail from "./pages/TripDetail";
 import DayDetail from "./pages/DayDetail";
 import MyTrips from "./pages/MyTrips";
+import JoinTrip from "./pages/JoinTrip";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -51,6 +52,7 @@ const App = () => (
                   <Route path="/trip/:tripId/day/:dayNumber" element={<ProtectedRoute><DayDetail /></ProtectedRoute>} />
                   <Route path="/trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
                   <Route path="/my-trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
+                  <Route path="/join/:token" element={<ProtectedRoute><JoinTrip /></ProtectedRoute>} />
 
                   {/* Catch-all */}
                   <Route path="*" element={<NotFound />} />

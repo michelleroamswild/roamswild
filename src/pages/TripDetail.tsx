@@ -23,10 +23,11 @@ import {
   Flame,
   Camera,
   AlertTriangle,
+  Gauge,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { useTrip } from '@/context/TripContext';
+import { useTrip, Collaborator } from '@/context/TripContext';
 import { GoogleMap } from '@/components/GoogleMap';
 import { Marker, InfoWindow, DirectionsRenderer } from '@react-google-maps/api';
 import { TripStop, TripDay } from '@/types/trip';
@@ -38,6 +39,8 @@ import { Label } from '@/components/ui/label';
 import { createMarkerIcon, getTypeStyles } from '@/utils/mapMarkers';
 import { estimateDayTime } from '@/utils/tripValidation';
 import { getAllTrailsUrl, estimateTrailLength } from '@/utils/hikeUtils';
+import { ShareTripModal } from '@/components/ShareTripModal';
+import { CollaboratorAvatars } from '@/components/CollaboratorAvatars';
 
 const getIcon = (type: string) => {
   switch (type) {
@@ -57,9 +60,11 @@ const getIcon = (type: string) => {
 const TripDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { generatedTrip, tripConfig, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTrip, updateTripStop, removeTripStop } = useTrip();
+  const { generatedTrip, tripConfig, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTrip, updateTripStop, removeTripStop, fetchCollaborators, isOwner } = useTrip();
 
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [selectedStop, setSelectedStop] = useState<TripStop | null>(null);
   const [mapsLoaded, setMapsLoaded] = useState(false);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
@@ -104,13 +109,27 @@ const TripDetail = () => {
     }
   }, [id, generatedTrip, loadSavedTrip, navigate]);
 
-  const handleSaveTrip = () => {
+  // Fetch collaborators when trip loads
+  useEffect(() => {
+    if (generatedTrip?.id) {
+      fetchCollaborators(generatedTrip.id).then(setCollaborators);
+    }
+  }, [generatedTrip?.id, fetchCollaborators]);
+
+  const handleSaveTrip = async () => {
     if (generatedTrip) {
-      saveTrip(generatedTrip);
-      toast.success('Trip saved!', {
-        description: 'You can find it in My Trips',
-      });
-      navigate('/trips');
+      try {
+        await saveTrip(generatedTrip);
+        toast.success('Trip saved!', {
+          description: 'You can find it in My Trips',
+        });
+        navigate('/trips');
+      } catch (err) {
+        console.error('Failed to save trip:', err);
+        toast.error('Failed to save trip', {
+          description: 'Please try again',
+        });
+      }
     }
   };
 
@@ -411,9 +430,14 @@ const TripDetail = () => {
                 </Button>
               </Link>
               <div>
-                <h1 className="text-xl font-display font-bold text-foreground">
-                  {tripConfig.name || 'My Trip'}
-                </h1>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-xl font-display font-bold text-foreground">
+                    {tripConfig.name || 'My Trip'}
+                  </h1>
+                  {collaborators.length > 0 && (
+                    <CollaboratorAvatars collaborators={collaborators} size="sm" />
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground">
                   {generatedTrip.days.length} days • {generatedTrip.totalDistance}
                 </p>
@@ -439,9 +463,16 @@ const TripDetail = () => {
                   Save Trip
                 </Button>
               )}
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <Share2 className="w-5 h-5" />
-              </Button>
+              {isSaved && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full"
+                  onClick={() => setShareModalOpen(true)}
+                >
+                  <Share2 className="w-5 h-5" />
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -499,7 +530,7 @@ const TripDetail = () => {
                   ))}
 
                   {/* Photo hotspot markers */}
-                  {showPhotoHotspots && photoHotspots.map((hotspot) => (
+                  {showPhotoHotspots && tripConfig.activities?.includes('photography') && photoHotspots.map((hotspot) => (
                     <Marker
                       key={hotspot.id}
                       position={{ lat: hotspot.lat, lng: hotspot.lng }}
@@ -674,10 +705,15 @@ const TripDetail = () => {
             {/* Trip Summary */}
             <Card className="bg-gradient-card">
               <CardContent className="p-4">
-                <h1 className="text-2xl font-display font-bold text-foreground mb-4">
-                  {tripConfig.name || 'My Trip'}
-                </h1>
-                <div className="grid grid-cols-5 gap-2 text-center">
+                <div className="flex items-center justify-between mb-4">
+                  <h1 className="text-2xl font-display font-bold text-foreground">
+                    {tripConfig.name || 'My Trip'}
+                  </h1>
+                  {collaborators.length > 0 && (
+                    <CollaboratorAvatars collaborators={collaborators} size="md" maxDisplay={4} />
+                  )}
+                </div>
+                <div className="grid grid-cols-6 gap-2 text-center">
                   <div>
                     <p className="text-xl font-bold text-foreground">
                       {generatedTrip.totalDistance.replace(' mi', '')}
@@ -724,12 +760,32 @@ const TripDetail = () => {
                     <p className="text-xl font-bold text-foreground">{generatedTrip.days.length}</p>
                     <p className="text-xs text-muted-foreground">Days</p>
                   </div>
+                  <div>
+                    <p className="text-xl font-bold text-foreground capitalize">
+                      {tripConfig.pacePreference || 'Moderate'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Pace</p>
+                  </div>
                 </div>
+                {tripConfig.startDate && (
+                  <div className="mt-4 pt-3 border-t border-border flex items-center justify-center gap-2 text-sm">
+                    <Calendar className="w-4 h-4 text-primary" />
+                    <span className="text-muted-foreground">Starts</span>
+                    <span className="font-medium text-foreground">
+                      {new Date(tripConfig.startDate).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
+                    </span>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            {/* Photo Hotspots */}
-            {photoHotspots.length > 0 && (
+            {/* Photo Hotspots - only show if photography activity is selected */}
+            {photoHotspots.length > 0 && tripConfig.activities?.includes('photography') && (
               <Card>
                 <CardContent className="p-4">
                   <button
@@ -863,6 +919,20 @@ const TripDetail = () => {
           searchLat={selectedHikeForSwap.coordinates.lat}
           searchLng={selectedHikeForSwap.coordinates.lng}
           onSelectHike={handleSwapHike}
+        />
+      )}
+
+      {/* Share Trip Modal */}
+      {generatedTrip && (
+        <ShareTripModal
+          tripId={generatedTrip.id}
+          tripName={tripConfig.name || 'My Trip'}
+          isOpen={shareModalOpen}
+          onClose={() => {
+            setShareModalOpen(false);
+            // Refresh collaborators after modal closes
+            fetchCollaborators(generatedTrip.id).then(setCollaborators);
+          }}
         />
       )}
 

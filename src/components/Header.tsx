@@ -1,4 +1,4 @@
-import { Compass, Menu, User, Route, LogOut } from "lucide-react";
+import { Compass, Menu, Route, LogOut } from "lucide-react";
 import { Button } from "./ui/button";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -11,8 +11,24 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 
+const getInitials = (name?: string, email?: string): string => {
+  if (name) {
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  }
+  if (email) {
+    return email.slice(0, 2).toUpperCase();
+  }
+  return '?';
+};
+
 export const Header = () => {
   const { user, signOut } = useAuth();
+  const userName = user?.user_metadata?.name as string | undefined;
+  const initials = getInitials(userName, user?.email);
 
   const handleSignOut = async () => {
     await signOut();
@@ -50,14 +66,14 @@ export const Header = () => {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="hidden md:flex">
-                <User className="w-5 h-5" />
-              </Button>
+              <button className="hidden md:flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors">
+                {initials}
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium">Account</p>
+                  <p className="text-sm font-medium">{userName || 'Account'}</p>
                   <p className="text-xs text-muted-foreground truncate">
                     {user?.email}
                   </p>
