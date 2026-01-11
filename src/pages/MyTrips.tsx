@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Users,
   Share2,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -27,7 +28,7 @@ interface TripWithMeta extends GeneratedTrip {
 const MyTrips = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { savedTrips, sharedTrips, loadSavedTrip, deleteSavedTrip } = useTrip();
+  const { savedTrips, sharedTrips, loadSavedTrip, deleteSavedTrip, isLoading } = useTrip();
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; tripId: string; tripName: string }>({
     isOpen: false,
     tripId: '',
@@ -105,7 +106,16 @@ const MyTrips = () => {
       </header>
 
       <main className="container px-4 md:px-6 py-8 max-w-4xl mx-auto">
-        {allTrips.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-16">
+            <div className="flex items-center justify-center w-20 h-20 bg-secondary rounded-full mx-auto mb-6">
+              <Loader2 className="w-10 h-10 text-primary animate-spin" />
+            </div>
+            <h2 className="text-xl font-display font-medium text-muted-foreground">
+              Loading your trips...
+            </h2>
+          </div>
+        ) : allTrips.length === 0 ? (
           <div className="text-center py-16">
             <div className="flex items-center justify-center w-20 h-20 bg-secondary rounded-full mx-auto mb-6">
               <Route className="w-10 h-10 text-muted-foreground" />

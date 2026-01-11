@@ -611,21 +611,44 @@ export function useTripGenerator() {
       const baseCampMode = config.sameCampsite || false;
 
       // Calculate how many days to spend at each destination
-      // If trip is longer than destinations, distribute extra days
-      const daysPerDestination: number[] = new Array(numDestinations).fill(1);
-      let extraDays = numDays - numDestinations - 1; // -1 for travel day back if returning
+      // Support user-specified days per destination, with remaining days auto-distributed
+      const daysPerDestination: number[] = [];
+      let specifiedDays = 0;
+      let autoDestinations: number[] = []; // indices of destinations without specified days
 
-      if (!config.returnToStart) {
-        extraDays = numDays - numDestinations;
+      // First pass: collect user-specified days and identify auto destinations
+      for (let i = 0; i < numDestinations; i++) {
+        const dest = config.destinations[i];
+        if (dest.daysAtDestination && dest.daysAtDestination > 0) {
+          daysPerDestination.push(dest.daysAtDestination);
+          specifiedDays += dest.daysAtDestination;
+        } else {
+          daysPerDestination.push(0); // placeholder for auto
+          autoDestinations.push(i);
+        }
       }
 
-      // Distribute extra days among destinations (round-robin, prioritizing first destinations)
-      let destIndex = 0;
-      while (extraDays > 0) {
-        daysPerDestination[destIndex % numDestinations]++;
-        destIndex++;
-        extraDays--;
+      // Calculate remaining days for auto-distributed destinations
+      const travelDay = config.returnToStart ? 1 : 0;
+      const remainingDays = Math.max(0, numDays - specifiedDays - travelDay);
+
+      // Distribute remaining days to auto destinations
+      if (autoDestinations.length > 0 && remainingDays > 0) {
+        const basePerAuto = Math.floor(remainingDays / autoDestinations.length);
+        let extraDays = remainingDays % autoDestinations.length;
+
+        for (const idx of autoDestinations) {
+          daysPerDestination[idx] = basePerAuto + (extraDays > 0 ? 1 : 0);
+          if (extraDays > 0) extraDays--;
+        }
+      } else if (autoDestinations.length > 0) {
+        // No remaining days, give each auto destination 1 day minimum
+        for (const idx of autoDestinations) {
+          daysPerDestination[idx] = 1;
+        }
       }
+
+      console.log(`[generateTrip] Days per destination: ${daysPerDestination.join(', ')} (specified: ${specifiedDays}, auto: ${autoDestinations.length})`);
 
       // Pre-compute campsites for each destination
       const destinationCampsites: Map<string, TripStop> = new Map();

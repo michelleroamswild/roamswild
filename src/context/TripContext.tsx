@@ -101,9 +101,12 @@ export function TripProvider({ children }: { children: ReactNode }) {
     setTripConfigState(config);
   }, []);
 
+  // Memoize user ID to prevent unnecessary re-fetches when user object changes but ID is same
+  const userId = user?.id;
+
   // Fetch saved trips from Supabase when user changes
   const fetchSavedTrips = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setSavedTrips([]);
       setIsLoading(false);
       return;
@@ -119,6 +122,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error('Failed to fetch saved trips:', error);
+        setIsLoading(false);
         return;
       }
 
@@ -135,8 +139,8 @@ export function TripProvider({ children }: { children: ReactNode }) {
       }));
 
       // Separate owned trips from shared trips
-      const owned = allTrips.filter(t => t.ownerId === user.id);
-      const shared = allTrips.filter(t => t.ownerId !== user.id);
+      const owned = allTrips.filter(t => t.ownerId === userId);
+      const shared = allTrips.filter(t => t.ownerId !== userId);
 
       // Fetch collaborator counts for owned trips
       if (owned.length > 0) {
@@ -167,7 +171,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
     fetchSavedTrips();
@@ -555,7 +559,12 @@ export function TripProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const loadSavedTrip = (tripId: string): GeneratedTrip | null => {
+  const loadSavedTrip = useCallback((tripId: string): GeneratedTrip | null => {
+    // If the requested trip is already loaded, just return it
+    if (generatedTrip?.id === tripId) {
+      return generatedTrip;
+    }
+
     // Check owned trips first
     let trip = savedTrips.find(t => t.id === tripId);
     // Then check shared trips
@@ -567,7 +576,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
       return trip;
     }
     return null;
-  };
+  }, [savedTrips, sharedTrips, generatedTrip, setGeneratedTrip]);
 
   const isTripSaved = (tripId: string): boolean => {
     return savedTrips.some(t => t.id === tripId);

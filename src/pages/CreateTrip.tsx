@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Car, Loader2, Plus, GripVertical, X, ChevronDown, Clock, Gauge } from "lucide-react";
+import { ArrowLeft, MapPin, Car, Loader2, Plus, GripVertical, X, ChevronDown, Clock, Gauge, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,7 @@ interface LocationData {
   lat: number;
   lng: number;
   placeId: string;
+  days?: number; // Optional user-specified days at this destination
 }
 
 const CAR_CAPABILITIES = [
@@ -126,6 +127,19 @@ const CreateTrip = () => {
     setDestinations(destinations.filter(d => d.id !== id));
   };
 
+  const handleDestinationDaysChange = (id: string, days: number) => {
+    setDestinations(destinations.map(d =>
+      d.id === id ? { ...d, days } : d
+    ));
+  };
+
+  // Calculate available days for destinations
+  const travelDays = returnToStart ? 1 : 0;
+  const totalSpecifiedDays = destinations.reduce((sum, d) => sum + (d.days || 0), 0);
+  const availableDays = duration[0] - travelDays;
+  const remainingDays = availableDays - totalSpecifiedDays;
+  const unspecifiedDestinations = destinations.filter(d => !d.days).length;
+
   const handleEndLocationSelect = (place: google.maps.places.PlaceResult) => {
     if (place.geometry?.location && place.place_id) {
       setEndLocation({
@@ -191,6 +205,7 @@ const CreateTrip = () => {
       name: dest.name,
       address: dest.name,
       coordinates: { lat: dest.lat, lng: dest.lng },
+      daysAtDestination: dest.days || undefined, // Include user-specified days
     }));
 
     // Add end location as final destination if not returning to start
@@ -438,39 +453,108 @@ const CreateTrip = () => {
 
               {/* Destination List */}
               {destinations.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <Label className="text-muted-foreground text-xs">
                     Drag to reorder • {destinations.length} destination{destinations.length !== 1 ? 's' : ''}
                   </Label>
                   <div className="space-y-2">
-                    {destinations.map((dest, index) => (
-                      <div
-                        key={dest.id}
-                        draggable
-                        onDragStart={() => handleDragStart(index)}
-                        onDragOver={(e) => handleDragOver(e, index)}
-                        onDragEnd={handleDragEnd}
-                        className={`flex items-center gap-2 p-3 bg-card rounded-lg border border-border hover:border-primary/30 transition-all cursor-move ${
-                          draggedIndex === index ? 'opacity-50 border-primary' : ''
-                        }`}
-                      >
-                        <GripVertical className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                        <div className="flex items-center justify-center w-6 h-6 bg-primary/10 rounded-full flex-shrink-0">
-                          <span className="text-xs font-semibold text-primary">{index + 1}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm font-medium truncate block">{dest.name}</span>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveDestination(dest.id)}
-                          className="h-6 w-6 p-0 flex-shrink-0 hover:bg-destructive/10 hover:text-destructive"
+                    {destinations.map((dest, index) => {
+                      const currentDays = dest.days || 0;
+                      const maxDays = currentDays + remainingDays;
+                      const canIncrease = maxDays > currentDays;
+                      const canDecrease = currentDays > 0;
+
+                      return (
+                        <div
+                          key={dest.id}
+                          draggable
+                          onDragStart={() => handleDragStart(index)}
+                          onDragOver={(e) => handleDragOver(e, index)}
+                          onDragEnd={handleDragEnd}
+                          className={`flex items-center gap-2 p-3 bg-card rounded-lg border border-border hover:border-primary/30 transition-all cursor-move ${
+                            draggedIndex === index ? 'opacity-50 border-primary' : ''
+                          }`}
                         >
-                          <X className="w-4 h-4" />
-                        </Button>
+                          <GripVertical className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                          <div className="flex items-center justify-center w-6 h-6 bg-primary/10 rounded-full flex-shrink-0">
+                            <span className="text-xs font-semibold text-primary">{index + 1}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium truncate block">{dest.name}</span>
+                          </div>
+
+                          {/* Days Stepper */}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (canDecrease) {
+                                  handleDestinationDaysChange(dest.id, currentDays - 1);
+                                }
+                              }}
+                              disabled={!canDecrease}
+                            >
+                              <Minus className="w-3 h-3" />
+                            </Button>
+                            <span className="w-12 text-center text-sm font-medium">
+                              {currentDays === 0 ? 'Auto' : `${currentDays}d`}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (canIncrease) {
+                                  handleDestinationDaysChange(dest.id, currentDays + 1);
+                                }
+                              }}
+                              disabled={!canIncrease}
+                            >
+                              <Plus className="w-3 h-3" />
+                            </Button>
+                          </div>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveDestination(dest.id)}
+                            className="h-6 w-6 p-0 flex-shrink-0 hover:bg-destructive/10 hover:text-destructive"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Day Summary */}
+                  <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-2 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Total trip:</span>
+                      <span className="font-medium">{duration[0]} days</span>
+                    </div>
+                    {totalSpecifiedDays > 0 && (
+                      <div className="flex justify-between">
+                        <span>Specified:</span>
+                        <span className="font-medium">{totalSpecifiedDays} days</span>
                       </div>
-                    ))}
+                    )}
+                    {unspecifiedDestinations > 0 && remainingDays > 0 && (
+                      <div className="flex justify-between">
+                        <span>Auto-distributed:</span>
+                        <span className="font-medium">{remainingDays} days across {unspecifiedDestinations} destination{unspecifiedDestinations !== 1 ? 's' : ''}</span>
+                      </div>
+                    )}
+                    {returnToStart && (
+                      <div className="flex justify-between">
+                        <span>Return travel:</span>
+                        <span className="font-medium">1 day</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

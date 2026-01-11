@@ -6,6 +6,7 @@ export interface TripDestination {
   name: string;
   address: string;
   coordinates: Coordinates;
+  daysAtDestination?: number; // Optional user-specified days at this destination
 }
 
 export interface TripStop {

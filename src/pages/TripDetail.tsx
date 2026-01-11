@@ -63,6 +63,18 @@ const TripDetail = () => {
   const { generatedTrip, tripConfig, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTrip, updateTripStop, removeTripStop, fetchCollaborators, isOwner, isLoading } = useTrip();
 
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
+  const [, forceUpdate] = useState({});
+
+  // Force re-render when tab becomes visible to fix blank page issue
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        forceUpdate({});
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [selectedStop, setSelectedStop] = useState<TripStop | null>(null);
@@ -105,14 +117,17 @@ const TripDetail = () => {
     // Wait for trips to finish loading before attempting to load
     if (isLoading) return;
 
-    if (id && (!generatedTrip || generatedTrip.id !== id)) {
+    // If trip is already loaded with correct ID, don't do anything
+    if (generatedTrip?.id === id) return;
+
+    if (id) {
       const loaded = loadSavedTrip(id);
       if (!loaded) {
         // Trip not found - redirect to My Trips
         navigate('/trips');
       }
     }
-  }, [id, generatedTrip, loadSavedTrip, navigate, isLoading]);
+  }, [id, generatedTrip?.id, loadSavedTrip, navigate, isLoading]);
 
   // Fetch collaborators when trip loads
   useEffect(() => {
@@ -125,10 +140,7 @@ const TripDetail = () => {
     if (generatedTrip) {
       try {
         await saveTrip(generatedTrip);
-        toast.success('Trip saved!', {
-          description: 'You can find it in My Trips',
-        });
-        navigate('/trips');
+        toast.success('Trip saved!');
       } catch (err) {
         console.error('Failed to save trip:', err);
         toast.error('Failed to save trip', {
@@ -201,7 +213,7 @@ const TripDetail = () => {
     }
 
     const day = generatedTrip.days.find(d => d.day === activeDay);
-    if (!day || day.stops.length === 0) {
+    if (!day) {
       setDayDirections(null);
       return;
     }
@@ -209,26 +221,51 @@ const TripDetail = () => {
     const directionsService = new google.maps.DirectionsService();
     const startLocation = generatedTrip.config.startLocation?.coordinates;
     const baseLocation = generatedTrip.config.baseLocation?.coordinates;
+    const isLastDayOfTrip = activeDay === generatedTrip.days.length;
+    const endLocation = startLocation || baseLocation;
+
+    // Helper to find most recent campsite from previous days
+    const findMostRecentCampsite = () => {
+      for (let d = activeDay - 1; d >= 1; d--) {
+        const prevDay = generatedTrip.days.find(day => day.day === d);
+        const campsite = prevDay?.stops.find(s => s.type === 'camp');
+        if (campsite) return campsite;
+      }
+      return null;
+    };
 
     // Determine where this day starts from
-    let dayOrigin: google.maps.LatLngLiteral;
+    let dayOrigin: google.maps.LatLngLiteral | undefined;
 
     if (activeDay === 1) {
       // Day 1 starts from trip start or base location
-      dayOrigin = startLocation || baseLocation || day.stops[0].coordinates;
+      dayOrigin = startLocation || baseLocation || day.stops[0]?.coordinates;
     } else {
-      // Other days start from previous night's campsite
-      const prevDay = generatedTrip.days.find(d => d.day === activeDay - 1);
-      const prevCampsite = prevDay?.stops.find(s => s.type === 'camp');
-      dayOrigin = prevCampsite?.coordinates || day.stops[0].coordinates;
+      // Other days start from most recent campsite (look back through all previous days)
+      const recentCampsite = findMostRecentCampsite();
+      dayOrigin = recentCampsite?.coordinates || day.stops[0]?.coordinates;
     }
 
-    // Day ends at this day's campsite, or last activity if no camp
+    // Determine day destination
     const dayCampsite = day.stops.find(s => s.type === 'camp');
     const dayActivities = day.stops.filter(s => s.type === 'hike' || s.type === 'viewpoint');
-    const dayDestination = dayCampsite?.coordinates || dayActivities[dayActivities.length - 1]?.coordinates;
 
-    if (!dayDestination) {
+    let dayDestination: google.maps.LatLngLiteral | undefined;
+
+    // Check if this is the final day returning home FIRST
+    if (isLastDayOfTrip && generatedTrip.config.returnToStart && endLocation) {
+      // Last day returning home - destination is start/base location
+      dayDestination = endLocation;
+    } else if (dayCampsite) {
+      // Day ends at campsite
+      dayDestination = dayCampsite.coordinates;
+    } else if (dayActivities.length > 0) {
+      // Fall back to last activity
+      dayDestination = dayActivities[dayActivities.length - 1].coordinates;
+    }
+
+    // Need both origin and destination to route
+    if (!dayOrigin || !dayDestination) {
       setDayDirections(null);
       return;
     }
@@ -511,12 +548,48 @@ const TripDetail = () => {
     if (!mapRef.current || !mapsLoaded) return;
 
     if (activeDay) {
-      const dayStops = generatedTrip.days.find(d => d.day === activeDay)?.stops || [];
-      fitMapBounds(mapRef.current, dayStops);
+      const day = generatedTrip.days.find(d => d.day === activeDay);
+      const dayStops = day?.stops || [];
+
+      // Build bounds including origin and destination markers
+      const bounds = new google.maps.LatLngBounds();
+
+      // Add day's stops
+      dayStops.forEach(stop => bounds.extend(stop.coordinates));
+
+      // Add origin marker (start location for day 1, most recent campsite for other days)
+      if (activeDay === 1) {
+        const startLoc = tripConfig.startLocation || tripConfig.baseLocation;
+        if (startLoc) {
+          bounds.extend(startLoc.coordinates);
+        }
+      } else {
+        // Look back through previous days to find most recent campsite
+        for (let d = activeDay - 1; d >= 1; d--) {
+          const prevDay = generatedTrip.days.find(day => day.day === d);
+          const campsite = prevDay?.stops.find(s => s.type === 'camp');
+          if (campsite) {
+            bounds.extend(campsite.coordinates);
+            break;
+          }
+        }
+      }
+
+      // Add destination marker for last day returning to start
+      const isLastDay = activeDay === generatedTrip.days.length;
+      const endLocation = tripConfig.startLocation || tripConfig.baseLocation;
+      if (isLastDay && tripConfig.returnToStart && endLocation) {
+        bounds.extend(endLocation.coordinates);
+      }
+
+      // Fit bounds with padding
+      if (!bounds.isEmpty()) {
+        mapRef.current.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
+      }
     } else {
       fitMapBounds(mapRef.current);
     }
-  }, [activeDay, mapsLoaded, generatedTrip.days, fitMapBounds]);
+  }, [activeDay, mapsLoaded, generatedTrip.days, fitMapBounds, tripConfig.startLocation, tripConfig.returnToStart]);
 
   const handleStartNavigation = () => {
     // Get start/base location from config
@@ -565,7 +638,7 @@ const TripDetail = () => {
         <div className="container px-4 md:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link to="/">
+              <Link to="/trips">
                 <Button variant="ghost" size="icon" className="rounded-full">
                   <X className="w-5 h-5" />
                 </Button>
@@ -575,7 +648,7 @@ const TripDetail = () => {
                   <h1 className="text-xl font-display font-bold text-foreground">
                     {tripConfig.name || 'My Trip'}
                   </h1>
-                  {collaborators.length > 0 && (
+                  {collaborators.filter(c => c.permission !== 'owner').length > 0 && (
                     <CollaboratorAvatars collaborators={collaborators} size="sm" />
                   )}
                 </div>
@@ -669,6 +742,51 @@ const TripDetail = () => {
                         ? `Start: ${tripConfig.startLocation.name}`
                         : `Base: ${tripConfig.baseLocation!.name}`
                       }
+                    />
+                  )}
+
+                  {/* Show origin marker for day preview (previous night's camp or start location) */}
+                  {activeDay && (() => {
+                    if (activeDay === 1) {
+                      // Day 1: show start location as origin
+                      const startLoc = tripConfig.startLocation || tripConfig.baseLocation;
+                      if (startLoc) {
+                        return (
+                          <Marker
+                            key="day-origin-start"
+                            position={startLoc.coordinates}
+                            icon={createMarkerIcon('start', { isActive: true, size: 36 })}
+                            title={`Start: ${startLoc.name}`}
+                          />
+                        );
+                      }
+                    } else {
+                      // Other days: show most recent campsite as origin (look back through all previous days)
+                      for (let d = activeDay - 1; d >= 1; d--) {
+                        const prevDay = generatedTrip.days.find(day => day.day === d);
+                        const campsite = prevDay?.stops.find(s => s.type === 'camp');
+                        if (campsite) {
+                          return (
+                            <Marker
+                              key="day-origin-camp"
+                              position={campsite.coordinates}
+                              icon={createMarkerIcon('camp', { isActive: true, size: 36 })}
+                              title={`From: ${campsite.name}`}
+                            />
+                          );
+                        }
+                      }
+                    }
+                    return null;
+                  })()}
+
+                  {/* Show destination marker for last day preview when returning to start */}
+                  {activeDay && activeDay === generatedTrip.days.length && tripConfig.returnToStart && (tripConfig.startLocation || tripConfig.baseLocation) && (
+                    <Marker
+                      key="day-destination-end"
+                      position={(tripConfig.startLocation || tripConfig.baseLocation)!.coordinates}
+                      icon={createMarkerIcon('start', { isActive: true, size: 36 })}
+                      title={`End: ${(tripConfig.startLocation || tripConfig.baseLocation)!.name}`}
                     />
                   )}
 
@@ -863,7 +981,7 @@ const TripDetail = () => {
                   <h1 className="text-2xl font-display font-bold text-foreground">
                     {tripConfig.name || 'My Trip'}
                   </h1>
-                  {collaborators.length > 0 && (
+                  {collaborators.filter(c => c.permission !== 'owner').length > 0 && (
                     <CollaboratorAvatars collaborators={collaborators} size="md" maxDisplay={4} />
                   )}
                 </div>
@@ -1035,6 +1153,10 @@ const TripDetail = () => {
                   tripId={generatedTrip.id}
                   expanded={expandedDays.includes(day.day)}
                   isActive={activeDay === day.day}
+                  isFirstDay={day.day === 1}
+                  isLastDay={day.day === generatedTrip.days.length}
+                  startLocation={tripConfig.startLocation}
+                  returnToStart={tripConfig.returnToStart}
                   onToggle={() => toggleDay(day.day)}
                   onStartDay={() => handleStartDay(day.day)}
                   onExitDay={handleExitDayMode}
@@ -1127,6 +1249,10 @@ interface DayCardProps {
   tripId: string;
   expanded: boolean;
   isActive: boolean;
+  isFirstDay: boolean;
+  isLastDay: boolean;
+  startLocation?: { name: string; coordinates: { lat: number; lng: number } };
+  returnToStart?: boolean;
   onToggle: () => void;
   onStartDay: () => void;
   onExitDay: () => void;
@@ -1135,7 +1261,7 @@ interface DayCardProps {
   onRemoveStop: (dayNumber: number, stop: TripStop) => void;
 }
 
-const DayCard = ({ day, tripId, expanded, isActive, onToggle, onStartDay, onExitDay, onStopClick, onSwapHike, onRemoveStop }: DayCardProps) => {
+const DayCard = ({ day, tripId, expanded, isActive, isFirstDay, isLastDay, startLocation, returnToStart, onToggle, onStartDay, onExitDay, onStopClick, onSwapHike, onRemoveStop }: DayCardProps) => {
   const timeEstimate = estimateDayTime(day);
 
   return (
@@ -1204,6 +1330,21 @@ const DayCard = ({ day, tripId, expanded, isActive, onToggle, onStartDay, onExit
       {/* Day Stops */}
       {expanded && (
         <div className="border-t border-border">
+          {/* Starting location on day 1 */}
+          {isFirstDay && startLocation && (
+            <div className="p-4 bg-primary/5 border-b border-border">
+              <div className="flex items-start gap-3">
+                <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-primary/30 bg-primary/10 text-primary">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-foreground">Start: {startLocation.name}</h4>
+                  <p className="text-sm text-muted-foreground mt-0.5">Trip starting point</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {day.stops.map((stop, index) => {
             const Icon = getIcon(stop.type);
             const typeStyles = getTypeStyles(stop.type);
@@ -1300,6 +1441,22 @@ const DayCard = ({ day, tripId, expanded, isActive, onToggle, onStartDay, onExit
               </div>
             );
           })}
+
+          {/* Ending location on last day if returning to start */}
+          {isLastDay && returnToStart && startLocation && (
+            <div className="p-4 bg-primary/5 border-b border-border">
+              <div className="flex items-start gap-3">
+                <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-primary/30 bg-primary/10 text-primary">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-foreground">End: {startLocation.name}</h4>
+                  <p className="text-sm text-muted-foreground mt-0.5">Return to starting point</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* View Day Details Link */}
           <Link
             to={`/trip/${tripId}/day/${day.day}`}
