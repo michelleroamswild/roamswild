@@ -140,7 +140,7 @@
   }
 
   .hero-topo {
-    background-color: #2C3F10;
+    background-color: hsl(var(--forest));
     position: relative;
   }
 
