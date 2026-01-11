@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import type { Tables, TablesInsert, TablesUpdate, Json } from '@/integrations/supabase/types';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { getTripSlug } from '@/utils/slugify';
 
 // Collaborator type
 export interface Collaborator {
@@ -44,6 +45,8 @@ interface TripContextType {
   saveTrip: (trip: GeneratedTrip) => Promise<void>;
   deleteSavedTrip: (tripId: string) => Promise<void>;
   loadSavedTrip: (tripId: string) => GeneratedTrip | null;
+  loadSavedTripBySlug: (slug: string) => GeneratedTrip | null;
+  tripNameExists: (name: string, excludeTripId?: string) => boolean;
   isTripSaved: (tripId: string) => boolean;
   updateTripStop: (dayNumber: number, oldStopId: string, newStop: TripStop) => void;
   removeTripStop: (dayNumber: number, stopId: string) => void;
@@ -578,6 +581,43 @@ export function TripProvider({ children }: { children: ReactNode }) {
     return null;
   }, [savedTrips, sharedTrips, generatedTrip, setGeneratedTrip]);
 
+  // Load a trip by its URL slug (matches against slugified trip name)
+  const loadSavedTripBySlug = useCallback((slug: string): GeneratedTrip | null => {
+    // If the current trip's slug matches, return it
+    if (generatedTrip && getTripSlug(generatedTrip.config.name) === slug) {
+      return generatedTrip;
+    }
+
+    // Check owned trips first
+    let trip = savedTrips.find(t => getTripSlug(t.config.name) === slug);
+    // Then check shared trips
+    if (!trip) {
+      trip = sharedTrips.find(t => getTripSlug(t.config.name) === slug);
+    }
+    if (trip) {
+      setGeneratedTrip(trip);
+      return trip;
+    }
+    return null;
+  }, [savedTrips, sharedTrips, generatedTrip, setGeneratedTrip]);
+
+  // Check if a trip name already exists (for duplicate prevention)
+  const tripNameExists = useCallback((name: string, excludeTripId?: string): boolean => {
+    const slug = getTripSlug(name);
+
+    // Check owned trips
+    const existsInOwned = savedTrips.some(t =>
+      getTripSlug(t.config.name) === slug && t.id !== excludeTripId
+    );
+    if (existsInOwned) return true;
+
+    // Check shared trips
+    const existsInShared = sharedTrips.some(t =>
+      getTripSlug(t.config.name) === slug && t.id !== excludeTripId
+    );
+    return existsInShared;
+  }, [savedTrips, sharedTrips]);
+
   const isTripSaved = (tripId: string): boolean => {
     return savedTrips.some(t => t.id === tripId);
   };
@@ -696,6 +736,8 @@ export function TripProvider({ children }: { children: ReactNode }) {
         saveTrip,
         deleteSavedTrip,
         loadSavedTrip,
+        loadSavedTripBySlug,
+        tripNameExists,
         isTripSaved,
         updateTripStop,
         removeTripStop,

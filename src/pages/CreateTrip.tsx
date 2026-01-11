@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, MapPin, Car, Loader2, Plus, GripVertical, X, ChevronDown, Clock, Gauge, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { PlaceSearch } from "@/components/PlaceSearch";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
 import { useTrip } from "@/context/TripContext";
 import { TripConfig, TripDestination } from "@/types/trip";
+import { getTripUrl } from "@/utils/slugify";
 
 interface LocationState {
   startLocation?: {
@@ -52,10 +53,11 @@ const CreateTrip = () => {
   const routerLocation = useLocation();
   const stateLocation = routerLocation.state as LocationState | null;
   const { generateTrip, generating, error: generatorError } = useTripGenerator();
-  const { setGeneratedTrip } = useTrip();
+  const { setGeneratedTrip, tripNameExists } = useTrip();
 
   // Form state
   const [tripName, setTripName] = useState("");
+  const [tripNameError, setTripNameError] = useState<string | null>(null);
   const [startLocation, setStartLocation] = useState<LocationData | null>(
     stateLocation?.startLocation ? {
       id: `start-${stateLocation.startLocation.placeId}`,
@@ -81,6 +83,19 @@ const CreateTrip = () => {
   const [returnToCampTime, setReturnToCampTime] = useState<string>('18:00');
   const [pacePreference, setPacePreference] = useState<'relaxed' | 'moderate' | 'packed'>('moderate');
   const [maxDrivingHours, setMaxDrivingHours] = useState<number[]>([4]);
+
+  // Check for duplicate trip name as user types
+  useEffect(() => {
+    if (tripName.trim()) {
+      if (tripNameExists(tripName.trim())) {
+        setTripNameError("A trip with this name already exists");
+      } else {
+        setTripNameError(null);
+      }
+    } else {
+      setTripNameError(null);
+    }
+  }, [tripName, tripNameExists]);
 
   const handleCarCapabilityChange = (capabilityId: string, checked: boolean) => {
     if (checked) {
@@ -257,6 +272,15 @@ const CreateTrip = () => {
     };
 
     console.log("Creating trip with config:", tripConfig);
+
+    // Check for duplicate trip name
+    if (tripNameExists(generatedName)) {
+      toast.error("Trip name already exists", {
+        description: "Please choose a different name for your trip",
+      });
+      return;
+    }
+
     toast.loading("Generating your trip...", { id: "generating" });
 
     try {
@@ -269,7 +293,7 @@ const CreateTrip = () => {
           id: "generating",
           description: generatedName,
         });
-        navigate(`/trip/${trip.id}`);
+        navigate(getTripUrl(trip.config.name));
       } else {
         console.error("Trip generation returned null, error:", generatorError);
         toast.error("Failed to generate trip", {
@@ -320,7 +344,11 @@ const CreateTrip = () => {
                   placeholder="e.g., Southwest Desert Adventure"
                   value={tripName}
                   onChange={(e) => setTripName(e.target.value)}
+                  className={tripNameError ? "border-red-500 focus-visible:ring-red-500" : ""}
                 />
+                {tripNameError && (
+                  <p className="text-sm text-red-500">{tripNameError}</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -866,7 +894,7 @@ const CreateTrip = () => {
             size="lg"
             className="w-full"
             onClick={handleCreateTrip}
-            disabled={generating}
+            disabled={generating || !!tripNameError}
           >
             {generating ? (
               <>

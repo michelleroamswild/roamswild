@@ -9,6 +9,7 @@ import { useTrip } from "@/context/TripContext";
 import { Route, Calendar, Clock, MapPin, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { getTripUrl } from "@/utils/slugify";
 
 const rotatingWords = [
   "Adventure",
@@ -96,7 +97,7 @@ const Index = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {savedTrips.slice(0, 3).map((trip) => (
-                  <Link key={trip.id} to={`/trip/${trip.id}`}>
+                  <Link key={trip.id} to={getTripUrl(trip.config.name)}>
                     <Card className="group hover:border-primary/30 hover:shadow-card transition-all duration-300 cursor-pointer h-full">
                       <CardContent className="p-5">
                         <h3 className="font-display font-semibold text-foreground group-hover:text-primary transition-colors truncate mb-2">

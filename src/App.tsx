@@ -48,8 +48,8 @@ const App = () => (
                   <Route path="/location/:id" element={<ProtectedRoute><LocationDetail /></ProtectedRoute>} />
                   <Route path="/saved" element={<ProtectedRoute><SavedLocations /></ProtectedRoute>} />
                   <Route path="/create-trip" element={<ProtectedRoute><CreateTrip /></ProtectedRoute>} />
-                  <Route path="/trip/:id" element={<ProtectedRoute><TripDetail /></ProtectedRoute>} />
-                  <Route path="/trip/:tripId/day/:dayNumber" element={<ProtectedRoute><DayDetail /></ProtectedRoute>} />
+                  <Route path="/trip/:slug" element={<ProtectedRoute><TripDetail /></ProtectedRoute>} />
+                  <Route path="/trip/:slug/day/:dayNumber" element={<ProtectedRoute><DayDetail /></ProtectedRoute>} />
                   <Route path="/trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
                   <Route path="/my-trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
                   <Route path="/join/:token" element={<ProtectedRoute><JoinTrip /></ProtectedRoute>} />

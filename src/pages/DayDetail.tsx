@@ -18,6 +18,12 @@ import {
   AlertTriangle,
   ExternalLink,
   Mountain,
+  Cloud,
+  Sun,
+  CloudRain,
+  CloudSnow,
+  Wind,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -32,6 +38,95 @@ import { AddStopModal } from '@/components/AddStopModal';
 import { createMarkerIcon, getTypeStyles } from '@/utils/mapMarkers';
 import { estimateDayTime } from '@/utils/tripValidation';
 import { getAllTrailsUrl, estimateTrailLength } from '@/utils/hikeUtils';
+import { getTripSlug, getTripUrl, getDayUrl } from '@/utils/slugify';
+
+// NOAA Weather types
+interface WeatherForecast {
+  temperature: number;
+  temperatureUnit: string;
+  shortForecast: string;
+}
+
+// Cache for weather data to avoid repeated API calls
+const weatherCache = new Map<string, WeatherForecast>();
+
+// Get weather icon based on forecast
+function getWeatherIcon(forecast: string) {
+  const lower = forecast.toLowerCase();
+  if (lower.includes('snow')) return CloudSnow;
+  if (lower.includes('rain') || lower.includes('shower')) return CloudRain;
+  if (lower.includes('cloud') || lower.includes('overcast')) return Cloud;
+  if (lower.includes('wind')) return Wind;
+  return Sun;
+}
+
+// Fetch weather from NOAA API
+async function fetchWeather(lat: number, lng: number): Promise<WeatherForecast | null> {
+  const cacheKey = `${lat.toFixed(2)},${lng.toFixed(2)}`;
+
+  // Check cache first
+  if (weatherCache.has(cacheKey)) {
+    return weatherCache.get(cacheKey)!;
+  }
+
+  try {
+    // Step 1: Get the forecast URL for this location
+    const pointsResponse = await fetch(
+      `https://api.weather.gov/points/${lat.toFixed(4)},${lng.toFixed(4)}`,
+      {
+        headers: {
+          'User-Agent': 'TripPlanner (contact@example.com)',
+          'Accept': 'application/geo+json',
+        },
+      }
+    );
+
+    if (!pointsResponse.ok) {
+      return null;
+    }
+
+    const pointsData = await pointsResponse.json();
+    const forecastUrl = pointsData.properties?.forecast;
+
+    if (!forecastUrl) {
+      return null;
+    }
+
+    // Step 2: Get the actual forecast
+    const forecastResponse = await fetch(forecastUrl, {
+      headers: {
+        'User-Agent': 'TripPlanner (contact@example.com)',
+        'Accept': 'application/geo+json',
+      },
+    });
+
+    if (!forecastResponse.ok) {
+      return null;
+    }
+
+    const forecastData = await forecastResponse.json();
+    const periods = forecastData.properties?.periods;
+
+    if (!periods || periods.length === 0) {
+      return null;
+    }
+
+    // Get the first period (current/today)
+    const current = periods[0];
+    const weather: WeatherForecast = {
+      temperature: current.temperature,
+      temperatureUnit: current.temperatureUnit,
+      shortForecast: current.shortForecast,
+    };
+
+    // Cache the result
+    weatherCache.set(cacheKey, weather);
+    return weather;
+  } catch (error) {
+    console.error('Weather fetch error:', error);
+    return null;
+  }
+}
 
 const getIcon = (type: string) => {
   switch (type) {
@@ -49,9 +144,9 @@ const getIcon = (type: string) => {
 };
 
 const DayDetail = () => {
-  const { tripId, dayNumber } = useParams<{ tripId: string; dayNumber: string }>();
+  const { slug, dayNumber } = useParams<{ slug: string; dayNumber: string }>();
   const navigate = useNavigate();
-  const { generatedTrip, loadSavedTrip, updateTripStop, removeTripStop, addTripStop } = useTrip();
+  const { generatedTrip, loadSavedTripBySlug, updateTripStop, removeTripStop, addTripStop } = useTrip();
 
   const [mapsLoaded, setMapsLoaded] = useState(false);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
@@ -60,18 +155,20 @@ const DayDetail = () => {
   const [campsiteModalOpen, setCampsiteModalOpen] = useState(false);
   const [selectedCampsiteForSwap, setSelectedCampsiteForSwap] = useState<TripStop | null>(null);
   const [addStopModalOpen, setAddStopModalOpen] = useState(false);
+  const [weather, setWeather] = useState<WeatherForecast | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
 
   const dayNum = parseInt(dayNumber || '1', 10);
 
   // Load trip if not already loaded
   useEffect(() => {
-    if (tripId && (!generatedTrip || generatedTrip.id !== tripId)) {
-      const loaded = loadSavedTrip(tripId);
+    if (slug && (!generatedTrip || getTripSlug(generatedTrip.config.name) !== slug)) {
+      const loaded = loadSavedTripBySlug(slug);
       if (!loaded) {
         navigate('/trips');
       }
     }
-  }, [tripId, generatedTrip, loadSavedTrip, navigate]);
+  }, [slug, generatedTrip, loadSavedTripBySlug, navigate]);
 
   // Get the current day's data
   const day = generatedTrip?.days.find(d => d.day === dayNum);
@@ -127,6 +224,24 @@ const DayDetail = () => {
       }
     );
   }, [mapsLoaded, generatedTrip, day, dayNum]);
+
+  // Fetch weather for this day's main location
+  useEffect(() => {
+    if (!day || day.stops.length === 0) return;
+
+    // Get the main location for weather - use first hike/viewpoint, or first stop
+    const mainStop = day.stops.find(s => s.type === 'hike' || s.type === 'viewpoint') || day.stops[0];
+    if (!mainStop) return;
+
+    setWeatherLoading(true);
+    fetchWeather(mainStop.coordinates.lat, mainStop.coordinates.lng)
+      .then(w => {
+        setWeather(w);
+      })
+      .finally(() => {
+        setWeatherLoading(false);
+      });
+  }, [day]);
 
   const handleOpenHikeSwap = (hike: TripStop) => {
     setSelectedHikeForSwap(hike);
@@ -279,7 +394,7 @@ const DayDetail = () => {
         <div className="container px-4 md:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link to={`/trip/${tripId}`}>
+              <Link to={getTripUrl(generatedTrip.config.name)}>
                 <Button variant="ghost" size="icon" className="rounded-full">
                   <ArrowLeft className="w-5 h-5" />
                 </Button>
@@ -346,7 +461,7 @@ const DayDetail = () => {
                 <p className="text-foreground leading-relaxed">
                   {getDaySummary()}
                 </p>
-                <div className="flex items-center gap-6 mt-4 pt-4 border-t border-border/50">
+                <div className="flex items-center gap-6 mt-4 pt-4 border-t border-border/50 flex-wrap">
                   <div className="flex items-center gap-2">
                     <Route className="w-4 h-4 text-terracotta" />
                     <span className="text-foreground font-medium">{day.drivingDistance}</span>
@@ -359,6 +474,26 @@ const DayDetail = () => {
                     <MapPin className="w-4 h-4 text-primary" />
                     <span className="text-foreground">{day.stops.length} stops</span>
                   </div>
+                  {weatherLoading && (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                      <span className="text-muted-foreground text-sm">Loading weather...</span>
+                    </div>
+                  )}
+                  {weather && !weatherLoading && (() => {
+                    const WeatherIcon = getWeatherIcon(weather.shortForecast);
+                    return (
+                      <div className="flex items-center gap-2" title={weather.shortForecast}>
+                        <WeatherIcon className="w-4 h-4 text-blue-500" />
+                        <span className="text-foreground font-medium">
+                          {weather.temperature}°{weather.temperatureUnit}
+                        </span>
+                        <span className="text-muted-foreground text-sm hidden sm:inline">
+                          {weather.shortForecast}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </CardContent>
             </Card>
@@ -528,7 +663,7 @@ const DayDetail = () => {
             {/* Day Navigation */}
             <div className="flex gap-3 pt-4">
               {dayNum > 1 && (
-                <Link to={`/trip/${tripId}/day/${dayNum - 1}`} className="flex-1">
+                <Link to={getDayUrl(generatedTrip.config.name, dayNum - 1)} className="flex-1">
                   <Button variant="outline" className="w-full">
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Day {dayNum - 1}
@@ -536,7 +671,7 @@ const DayDetail = () => {
                 </Link>
               )}
               {dayNum < generatedTrip.days.length && (
-                <Link to={`/trip/${tripId}/day/${dayNum + 1}`} className="flex-1">
+                <Link to={getDayUrl(generatedTrip.config.name, dayNum + 1)} className="flex-1">
                   <Button variant="outline" className="w-full">
                     Day {dayNum + 1}
                     <ArrowLeft className="w-4 h-4 ml-2 rotate-180" />

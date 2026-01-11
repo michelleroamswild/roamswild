@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useTrip } from "@/context/TripContext";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
 import { createMarkerIcon } from "@/utils/mapMarkers";
+import { getTripUrl } from "@/utils/slugify";
 
 type NearbyPlace = GoogleSavedPlace & { distance: number };
 
@@ -271,7 +272,7 @@ const LocationDetail = () => {
     if (tripResult) {
       setTripConfig(tripResult.config);
       setGeneratedTrip(tripResult);
-      navigate(`/trip/${tripResult.id}`);
+      navigate(getTripUrl(tripResult.config.name));
     }
   };
 

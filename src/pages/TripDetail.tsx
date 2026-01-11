@@ -41,6 +41,7 @@ import { estimateDayTime } from '@/utils/tripValidation';
 import { getAllTrailsUrl, estimateTrailLength } from '@/utils/hikeUtils';
 import { ShareTripModal } from '@/components/ShareTripModal';
 import { CollaboratorAvatars } from '@/components/CollaboratorAvatars';
+import { getTripSlug, getDayUrl } from '@/utils/slugify';
 
 const getIcon = (type: string) => {
   switch (type) {
@@ -58,9 +59,9 @@ const getIcon = (type: string) => {
 };
 
 const TripDetail = () => {
-  const { id } = useParams<{ id: string }>();
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { generatedTrip, tripConfig, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTrip, updateTripStop, removeTripStop, fetchCollaborators, isOwner, isLoading } = useTrip();
+  const { generatedTrip, tripConfig, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTripBySlug, updateTripStop, removeTripStop, fetchCollaborators, isOwner, isLoading } = useTrip();
 
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
   const [, forceUpdate] = useState({});
@@ -112,22 +113,22 @@ const TripDetail = () => {
   // Check if this trip is saved
   const isSaved = generatedTrip ? isTripSaved(generatedTrip.id) : false;
 
-  // Load saved trip if no generated trip or if the URL id doesn't match the current trip
+  // Load saved trip if no generated trip or if the URL slug doesn't match the current trip
   useEffect(() => {
     // Wait for trips to finish loading before attempting to load
     if (isLoading) return;
 
-    // If trip is already loaded with correct ID, don't do anything
-    if (generatedTrip?.id === id) return;
+    // If trip is already loaded with correct slug, don't do anything
+    if (generatedTrip && getTripSlug(generatedTrip.config.name) === slug) return;
 
-    if (id) {
-      const loaded = loadSavedTrip(id);
+    if (slug) {
+      const loaded = loadSavedTripBySlug(slug);
       if (!loaded) {
         // Trip not found - redirect to My Trips
         navigate('/trips');
       }
     }
-  }, [id, generatedTrip?.id, loadSavedTrip, navigate, isLoading]);
+  }, [slug, generatedTrip, loadSavedTripBySlug, navigate, isLoading]);
 
   // Fetch collaborators when trip loads
   useEffect(() => {
@@ -1183,7 +1184,7 @@ const TripDetail = () => {
                 <DayCard
                   key={day.day}
                   day={day}
-                  tripId={generatedTrip.id}
+                  tripName={tripConfig.name}
                   expanded={expandedDays.includes(day.day)}
                   isActive={activeDay === day.day}
                   isFirstDay={day.day === 1}
@@ -1279,7 +1280,7 @@ const TripDetail = () => {
 
 interface DayCardProps {
   day: TripDay;
-  tripId: string;
+  tripName?: string;
   expanded: boolean;
   isActive: boolean;
   isFirstDay: boolean;
@@ -1294,7 +1295,7 @@ interface DayCardProps {
   onRemoveStop: (dayNumber: number, stop: TripStop) => void;
 }
 
-const DayCard = ({ day, tripId, expanded, isActive, isFirstDay, isLastDay, startLocation, returnToStart, onToggle, onStartDay, onExitDay, onStopClick, onSwapHike, onRemoveStop }: DayCardProps) => {
+const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, startLocation, returnToStart, onToggle, onStartDay, onExitDay, onStopClick, onSwapHike, onRemoveStop }: DayCardProps) => {
   const timeEstimate = estimateDayTime(day);
 
   return (
@@ -1492,7 +1493,7 @@ const DayCard = ({ day, tripId, expanded, isActive, isFirstDay, isLastDay, start
 
           {/* View Day Details Link */}
           <Link
-            to={`/trip/${tripId}/day/${day.day}`}
+            to={getDayUrl(tripName, day.day)}
             className="block p-3 text-center text-sm font-medium text-primary hover:bg-primary/5 transition-colors"
           >
             View Day Details →

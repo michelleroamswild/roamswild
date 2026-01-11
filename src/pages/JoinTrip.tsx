@@ -7,6 +7,7 @@ import { useTrip } from '@/context/TripContext';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getTripUrl } from '@/utils/slugify';
 
 interface ShareLinkInfo {
   tripId: string;
@@ -83,7 +84,7 @@ const JoinTrip = () => {
       toast.error(result.error);
     } else if (result.tripId) {
       toast.success('You now have access to this trip!');
-      navigate(`/trip/${result.tripId}`);
+      navigate(getTripUrl(linkInfo?.tripName));
     }
   };
 

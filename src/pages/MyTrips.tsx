@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
 import { GeneratedTrip } from '@/types/trip';
 import { useAuth } from '@/context/AuthContext';
+import { getTripUrl } from '@/utils/slugify';
 
 interface TripWithMeta extends GeneratedTrip {
   isShared: boolean;
@@ -59,9 +60,9 @@ const MyTrips = () => {
     });
   }, [savedTrips, sharedTrips]);
 
-  const handleTripClick = (tripId: string) => {
-    loadSavedTrip(tripId);
-    navigate(`/trip/${tripId}`);
+  const handleTripClick = (trip: TripWithMeta) => {
+    loadSavedTrip(trip.id);
+    navigate(getTripUrl(trip.config.name));
   };
 
   const handleDeleteClick = (e: React.MouseEvent, tripId: string, tripName: string) => {
@@ -141,7 +142,7 @@ const MyTrips = () => {
                 key={trip.id}
                 className="group hover:border-primary/30 hover:shadow-card transition-all duration-300 cursor-pointer animate-fade-in overflow-hidden"
                 style={{ animationDelay: `${index * 50}ms` }}
-                onClick={() => handleTripClick(trip.id)}
+                onClick={() => handleTripClick(trip)}
               >
                 <CardContent className="p-0">
                   <div className="flex items-stretch">
