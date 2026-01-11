@@ -3,9 +3,11 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, MapPin, Car, Camera, Mountain, Compass, Loader2, Plus, GripVertical, X, Sparkles, Footprints, Ban, ChevronDown, Clock, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
+import { TimePicker } from "@/components/ui/time-picker";
 import { toast } from "sonner";
 import { PlaceSearch } from "@/components/PlaceSearch";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
@@ -74,7 +76,7 @@ const CreateTrip = () => {
 
   // Advanced options state
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-  const [startDate, setStartDate] = useState<string>('');
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [departureTime, setDepartureTime] = useState<string>('08:00');
   const [dailyStartTime, setDailyStartTime] = useState<string>('08:00');
   const [pacePreference, setPacePreference] = useState<'relaxed' | 'moderate' | 'packed'>('moderate');
@@ -207,11 +209,14 @@ const CreateTrip = () => {
     const generatedName = tripName.trim() ||
       `${startLocation.name} to ${destinations[destinations.length - 1].name}`;
 
+    // Convert Date to string format for config
+    const startDateStr = startDate ? startDate.toISOString().split('T')[0] : undefined;
+
     // Calculate end date from start date and duration
-    const endDate = startDate ? (() => {
-      const start = new Date(startDate);
-      start.setDate(start.getDate() + duration[0] - 1);
-      return start.toISOString().split('T')[0];
+    const endDateStr = startDate ? (() => {
+      const end = new Date(startDate);
+      end.setDate(end.getDate() + duration[0] - 1);
+      return end.toISOString().split('T')[0];
     })() : undefined;
 
     // Build trip config
@@ -228,8 +233,8 @@ const CreateTrip = () => {
       activities: activities as any[],
       hikingPreference: hikingPreference,
       // Advanced options
-      startDate: startDate || undefined,
-      endDate: endDate,
+      startDate: startDateStr,
+      endDate: endDateStr,
       departureTime: departureTime,
       dailyStartTime: dailyStartTime,
       pacePreference: pacePreference,
@@ -376,6 +381,43 @@ const CreateTrip = () => {
                   )}
                 </div>
               )}
+
+              {/* Start Date */}
+              <div className="space-y-2 pt-2">
+                <Label>When does your trip start? (optional)</Label>
+                <DatePicker
+                  value={startDate}
+                  onChange={setStartDate}
+                  placeholder="Select start date"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Duration */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-2xl">Trip Duration</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-sm text-muted-foreground">Days</span>
+                  <span className="text-lg font-semibold text-foreground">{duration[0]}</span>
+                </div>
+                <Slider
+                  value={duration}
+                  onValueChange={setDuration}
+                  min={1}
+                  max={14}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                  <span>1 day</span>
+                  <span>14 days</span>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -445,58 +487,6 @@ const CreateTrip = () => {
                 <label htmlFor="base-camp-mode" className="cursor-pointer text-sm">
                   Stay at the same campsite at each destination
                 </label>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Duration & Date */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">Trip Duration</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm text-muted-foreground">Days</span>
-                  <span className="text-lg font-semibold text-foreground">{duration[0]}</span>
-                </div>
-                <Slider
-                  value={duration}
-                  onValueChange={setDuration}
-                  min={1}
-                  max={14}
-                  step={1}
-                  className="w-full"
-                />
-                <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                  <span>1 day</span>
-                  <span>14 days</span>
-                </div>
-              </div>
-
-              {/* Start Date */}
-              <div className="space-y-3 pt-2 border-t border-border">
-                <Label className="text-sm font-medium">Start Date</Label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="flexible-date"
-                    checked={!startDate}
-                    onChange={(e) => setStartDate(e.target.checked ? '' : new Date().toISOString().split('T')[0])}
-                    className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
-                  />
-                  <label htmlFor="flexible-date" className="cursor-pointer text-sm">
-                    I'm flexible
-                  </label>
-                </div>
-                {startDate && (
-                  <Input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full max-w-[200px]"
-                  />
-                )}
               </div>
             </CardContent>
           </Card>
@@ -708,11 +698,10 @@ const CreateTrip = () => {
                     <Label className="font-medium">Departure Time</Label>
                   </div>
                   <p className="text-sm text-muted-foreground">What time do you want to leave your starting location?</p>
-                  <Input
-                    type="time"
+                  <TimePicker
                     value={departureTime}
-                    onChange={(e) => setDepartureTime(e.target.value)}
-                    className="w-full max-w-[150px]"
+                    onChange={setDepartureTime}
+                    placeholder="Select time"
                   />
                 </div>
 
@@ -723,11 +712,10 @@ const CreateTrip = () => {
                     <Label className="font-medium">Daily Activity Start Time</Label>
                   </div>
                   <p className="text-sm text-muted-foreground">What time do you typically start your day on the road?</p>
-                  <Input
-                    type="time"
+                  <TimePicker
                     value={dailyStartTime}
-                    onChange={(e) => setDailyStartTime(e.target.value)}
-                    className="w-full max-w-[150px]"
+                    onChange={setDailyStartTime}
+                    placeholder="Select time"
                   />
                 </div>
 
