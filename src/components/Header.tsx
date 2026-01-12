@@ -126,6 +126,12 @@ export const Header = () => {
                   Campsites
                 </Link>
               </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/landing" className="flex items-center text-muted-foreground">
+                  <House className="w-4 h-4 mr-2" weight="bold" />
+                  Landing Page (temp)
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
                 <SignOut className="w-4 h-4 mr-2" weight="bold" />
