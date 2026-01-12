@@ -803,36 +803,17 @@ const TripDetail = () => {
                 <X className="w-5 h-5" weight="bold" />
               </Button>
               <div>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-xl font-display font-bold text-foreground">
-                    {tripConfig.name || 'My Trip'}
-                  </h1>
-                  {collaborators.filter(c => c.permission !== 'owner').length > 0 && (
-                    <CollaboratorAvatars collaborators={collaborators} size="sm" />
-                  )}
-                </div>
+                <h1 className="text-xl font-display font-bold text-foreground">
+                  {tripConfig.name || 'My Trip'}
+                </h1>
                 <p className="text-sm text-muted-foreground">
                   {generatedTrip.days.length} days • {generatedTrip.totalDistance}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {isSaved ? (
-                <button
-                  onClick={handleUnsaveTrip}
-                  className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-                >
-                  <CheckCircle className="w-4 h-4" weight="fill" />
-                  Saved
-                </button>
-              ) : (
-                <button
-                  onClick={handleSaveTrip}
-                  className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
-                >
-                  <Heart className="w-4 h-4" weight="bold" />
-                  Save
-                </button>
+              {collaborators.length > 1 && (
+                <CollaboratorAvatars collaborators={collaborators} size="sm" maxDisplay={4} />
               )}
               {isSaved && (
                 <Button
@@ -843,6 +824,23 @@ const TripDetail = () => {
                 >
                   <ShareNetwork className="w-5 h-5" weight="bold" />
                 </Button>
+              )}
+              {isSaved ? (
+                <button
+                  onClick={handleUnsaveTrip}
+                  className="flex items-center justify-center gap-1.5 w-[110px] py-2 text-sm font-semibold text-white bg-earth border-2 border-earth rounded-md hover:bg-earth/90 transition-colors"
+                >
+                  <CheckCircle className="w-4 h-4" weight="fill" />
+                  Saved
+                </button>
+              ) : (
+                <button
+                  onClick={handleSaveTrip}
+                  className="flex items-center justify-center gap-1.5 w-[110px] py-2 text-sm font-semibold text-earth bg-earth-light border-2 border-earth rounded-md hover:bg-earth-light/80 transition-colors"
+                >
+                  <Heart className="w-4 h-4" weight="bold" />
+                  Save Trip
+                </button>
               )}
             </div>
           </div>
@@ -1247,13 +1245,10 @@ const TripDetail = () => {
             {/* Trip Summary */}
             <Card className="bg-gradient-card">
               <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-4">
+                <div className="mb-4">
                   <h1 className="text-2xl font-display font-bold text-foreground">
                     {tripConfig.name || 'My Trip'}
                   </h1>
-                  {collaborators.filter(c => c.permission !== 'owner').length > 0 && (
-                    <CollaboratorAvatars collaborators={collaborators} size="md" maxDisplay={4} />
-                  )}
                 </div>
                 <div className="grid grid-cols-6 gap-2 text-center">
                   <div>

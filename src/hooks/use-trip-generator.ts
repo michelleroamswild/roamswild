@@ -106,14 +106,28 @@ async function searchRIDBCampsites(
   }
 }
 
-// Find campsites near a point (from saved places, with RIDB fallback)
+// Find campsites near a point
+// When lodgingPreference is 'established', use RIDB for official campgrounds
+// When lodgingPreference is 'dispersed', use saved places with RIDB fallback
 async function findNearbyCampsites(
   lat: number,
   lng: number,
   allCampsites: GoogleSavedPlace[],
-  radiusMiles: number = 50
+  radiusMiles: number = 50,
+  lodgingPreference: 'dispersed' | 'established' = 'dispersed'
 ): Promise<(GoogleSavedPlace & { distance: number })[]> {
-  // First try saved campsites
+  // For established camping, use RIDB directly to get official campgrounds
+  if (lodgingPreference === 'established') {
+    console.log('[findNearbyCampsites] Using RIDB for established campgrounds');
+    const ridbCampsites = await searchRIDBCampsites(lat, lng, radiusMiles);
+    if (ridbCampsites.length > 0) {
+      return ridbCampsites;
+    }
+    // If no RIDB results, fall back to saved campsites
+    console.log('[findNearbyCampsites] No RIDB results, falling back to saved campsites');
+  }
+
+  // For dispersed camping (or as fallback), try saved campsites first
   const campsitesWithDistance = allCampsites.map((site) => ({
     ...site,
     distance: getDistanceMiles(lat, lng, site.lat, site.lng),
@@ -403,12 +417,14 @@ export function useTripGenerator() {
       const sameCampsite = config.sameCampsite || false;
 
       // Find all nearby campsites and hikes upfront
-      console.log('Searching for campsites within 50 miles of:', baseLocation.name, baseLocation.coordinates);
+      const lodgingPref = config.lodgingPreference || 'dispersed';
+      console.log('Searching for campsites within 50 miles of:', baseLocation.name, baseLocation.coordinates, 'lodging:', lodgingPref);
       const nearbyCamps = await findNearbyCampsites(
         baseLocation.coordinates.lat,
         baseLocation.coordinates.lng,
         allCampsites,
-        50
+        50,
+        lodgingPref
       );
       console.log('Found nearby camps:', nearbyCamps.length, nearbyCamps.slice(0, 3).map(c => c.name));
 
@@ -416,6 +432,7 @@ export function useTripGenerator() {
       let fixedCampsite: TripStop | undefined;
       if (sameCampsite && nearbyCamps.length > 0) {
         const bestCamp = nearbyCamps[0];
+        const campTypeDesc = lodgingPref === 'established' ? 'Established campground (base camp)' : 'Dispersed camping (base camp)';
         fixedCampsite = {
           id: `camp-base`,
           name: bestCamp.name,
@@ -423,7 +440,7 @@ export function useTripGenerator() {
           coordinates: { lat: bestCamp.lat, lng: bestCamp.lng },
           duration: 'Overnight',
           distance: `${bestCamp.distance.toFixed(1)} mi from ${baseLocation.name}`,
-          description: bestCamp.note || 'Dispersed camping (base camp)',
+          description: bestCamp.note || campTypeDesc,
           day: 1,
           note: bestCamp.note,
         };
@@ -529,6 +546,7 @@ export function useTripGenerator() {
 
             if (campToUse) {
               usedCampIds.add(campToUse.id);
+              const campTypeDesc = lodgingPref === 'established' ? 'Established campground' : 'Dispersed camping';
               campsite = {
                 id: `camp-${day}`,
                 name: campToUse.name,
@@ -536,7 +554,7 @@ export function useTripGenerator() {
                 coordinates: { lat: campToUse.lat, lng: campToUse.lng },
                 duration: 'Overnight',
                 distance: `${campToUse.distance.toFixed(1)} mi from ${baseLocation.name}`,
-                description: campToUse.note || 'Dispersed camping',
+                description: campToUse.note || campTypeDesc,
                 day,
                 note: campToUse.note,
               };
@@ -651,6 +669,7 @@ export function useTripGenerator() {
       console.log(`[generateTrip] Days per destination: ${daysPerDestination.join(', ')} (specified: ${specifiedDays}, auto: ${autoDestinations.length})`);
 
       // Pre-compute campsites for each destination
+      const lodgingPref = config.lodgingPreference || 'dispersed';
       const destinationCampsites: Map<string, TripStop> = new Map();
       for (const dest of config.destinations) {
         // Try finding campsites, expanding search radius if needed
@@ -658,7 +677,8 @@ export function useTripGenerator() {
           dest.coordinates.lat,
           dest.coordinates.lng,
           allCampsites,
-          50
+          50,
+          lodgingPref
         );
 
         // If no campsites within 50 miles, try 100 miles for remote destinations
@@ -667,12 +687,16 @@ export function useTripGenerator() {
             dest.coordinates.lat,
             dest.coordinates.lng,
             allCampsites,
-            100
+            100,
+            lodgingPref
           );
         }
 
         if (nearbyCamps.length > 0) {
           const bestCamp = nearbyCamps[0];
+          const campDescription = lodgingPref === 'established'
+            ? bestCamp.note || 'Established campground'
+            : bestCamp.note || 'Dispersed camping';
           destinationCampsites.set(dest.id, {
             id: `camp-base-${dest.id}`,
             name: bestCamp.name,
@@ -680,7 +704,7 @@ export function useTripGenerator() {
             coordinates: { lat: bestCamp.lat, lng: bestCamp.lng },
             duration: 'Overnight',
             distance: `${bestCamp.distance.toFixed(1)} mi from ${dest.name}`,
-            description: bestCamp.note || 'Dispersed camping',
+            description: campDescription,
             day: 0,
             note: bestCamp.note,
           });

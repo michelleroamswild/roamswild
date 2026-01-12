@@ -54,7 +54,7 @@ export const Header = () => {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-transparent">
-      <div className="container flex items-center justify-between h-16 px-4 md:px-6">
+      <div className="container flex items-center justify-between h-20 px-4 md:px-6">
         <Link to="/" className="flex items-center gap-2">
           <Jeep className="w-6 h-6 text-primary" weight="regular" />
           <span className="text-xl font-display font-bold text-foreground">RoamsWild</span>

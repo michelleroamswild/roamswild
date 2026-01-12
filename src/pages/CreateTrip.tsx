@@ -47,6 +47,7 @@ const LODGING_OPTIONS = [
 
 const ACTIVITIES = [
   { id: "photography", label: "Photography", description: "Find photo hotspots along your route" },
+  { id: "offroading", label: "Offroading", description: "Find trails and off-highway routes" },
 ];
 
 const CreateTrip = () => {
@@ -72,7 +73,8 @@ const CreateTrip = () => {
   const [carCapabilities, setCarCapabilities] = useState<string[]>([]);
   const [lodging, setLodging] = useState<string>("dispersed");
   const [activities, setActivities] = useState<string[]>([]);
-  const [baseCampMode, setBaseCampMode] = useState(false);
+  const [offroadVehicle, setOffroadVehicle] = useState<'4wd-high' | 'awd-medium'>('4wd-high');
+  const [baseCampMode, setBaseCampMode] = useState(true);
   const [includeHikes, setIncludeHikes] = useState(true);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
@@ -418,7 +420,7 @@ const CreateTrip = () => {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="container px-4 md:px-6 py-4">
+        <div className="container px-4 md:px-6 py-8">
           <div className="flex items-center gap-4">
             <Link to="/">
               <Button variant="ghost" size="icon" className="rounded-full">
@@ -662,89 +664,41 @@ const CreateTrip = () => {
                       );
                     })}
                   </div>
-
-                  {/* Day Summary */}
-                  <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-2 space-y-1">
-                    <div className="flex justify-between">
-                      <span>Total trip:</span>
-                      <span className="font-medium">{duration[0]} days</span>
-                    </div>
-                    {totalSpecifiedDays > 0 && (
-                      <div className="flex justify-between">
-                        <span>Specified:</span>
-                        <span className="font-medium">{totalSpecifiedDays} days</span>
-                      </div>
-                    )}
-                    {unspecifiedDestinations > 0 && remainingDays > 0 && (
-                      <div className="flex justify-between">
-                        <span>Auto-distributed:</span>
-                        <span className="font-medium">{remainingDays} days across {unspecifiedDestinations} destination{unspecifiedDestinations !== 1 ? 's' : ''}</span>
-                      </div>
-                    )}
-                    {returnToStart && (
-                      <div className="flex justify-between">
-                        <span>Return travel:</span>
-                        <span className="font-medium">1 day</span>
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
 
-              {/* Same Campsite Option */}
-              <div className="flex items-center space-x-2 pt-2">
-                <input
-                  type="checkbox"
-                  id="base-camp-mode"
-                  checked={baseCampMode}
-                  onChange={(e) => setBaseCampMode(e.target.checked)}
-                  className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
-                />
-                <label htmlFor="base-camp-mode" className="cursor-pointer text-sm">
-                  Stay at the same campsite at each destination
+              {/* Campsite Preference */}
+              <div className="space-y-2 pt-2">
+                <label htmlFor="camp-same" className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    id="camp-same"
+                    name="campsite-preference"
+                    checked={baseCampMode}
+                    onChange={() => setBaseCampMode(true)}
+                    className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                  />
+                  <span className="text-sm">Setup basecamp for each destination</span>
+                </label>
+                <label htmlFor="camp-new" className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    id="camp-new"
+                    name="campsite-preference"
+                    checked={!baseCampMode}
+                    onChange={() => setBaseCampMode(false)}
+                    className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                  />
+                  <span className="text-sm">Find a new campsite each night</span>
                 </label>
               </div>
             </CardContent>
           </Card>
 
-          {/* Car Capabilities */}
+          {/* Camping Options */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-2xl">Vehicle Capabilities</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3">
-                {CAR_CAPABILITIES.map((capability) => (
-                  <label
-                    key={capability.id}
-                    htmlFor={capability.id}
-                    className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-                      carCapabilities.includes(capability.id) ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      id={capability.id}
-                      checked={carCapabilities.includes(capability.id)}
-                      onChange={(e) => handleCarCapabilityChange(capability.id, e.target.checked)}
-                      className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
-                    />
-                    <div className="space-y-0.5">
-                      <span className="font-medium text-sm">
-                        {capability.label}
-                      </span>
-                      <p className="text-xs text-muted-foreground">{capability.description}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Lodging Options */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">Lodging Preference</CardTitle>
+              <CardTitle className="text-2xl">Camping</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-3">
@@ -798,40 +752,146 @@ const CreateTrip = () => {
                   className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
                 />
                 <div className="flex-1 space-y-0.5">
-                  <span className="font-medium text-sm">Include hikes</span>
+                  <span className="font-medium text-sm">Hiking</span>
                   <p className="text-xs text-muted-foreground">
                     Frequency based on trip pace
                   </p>
                 </div>
               </label>
 
-              {/* Photography */}
+              {/* Other Activities */}
               {ACTIVITIES.map((activity) => {
                 const isSelected = activities.includes(activity.id);
                 return (
-                  <label
+                  <div
                     key={activity.id}
-                    htmlFor={`activity-${activity.id}`}
-                    className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                    className={`rounded-lg border transition-colors ${
                       isSelected ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
                     }`}
                   >
-                    <input
-                      type="checkbox"
-                      id={`activity-${activity.id}`}
-                      checked={isSelected}
-                      onChange={(e) => handleActivityChange(activity.id, e.target.checked)}
-                      className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
-                    />
-                    <div className="flex-1 space-y-0.5">
-                      <span className="font-medium text-sm">{activity.label}</span>
-                      <p className="text-xs text-muted-foreground">
-                        {activity.description}
-                      </p>
-                    </div>
-                  </label>
+                    <label
+                      htmlFor={`activity-${activity.id}`}
+                      className="flex items-start space-x-3 p-3 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        id={`activity-${activity.id}`}
+                        checked={isSelected}
+                        onChange={(e) => handleActivityChange(activity.id, e.target.checked)}
+                        className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
+                      />
+                      <div className="flex-1 space-y-0.5">
+                        <span className="font-medium text-sm">{activity.label}</span>
+                        <p className="text-xs text-muted-foreground">
+                          {activity.description}
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Conditional vehicle selection for offroading */}
+                    {activity.id === 'offroading' && isSelected && (
+                      <div className="px-3 pb-3 pt-1 ml-7 space-y-2 animate-fade-in">
+                        <p className="text-xs text-muted-foreground mb-2">What's your vehicle?</p>
+                        <label htmlFor="offroad-4wd" className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            id="offroad-4wd"
+                            name="offroad-vehicle"
+                            value="4wd-high"
+                            checked={offroadVehicle === '4wd-high'}
+                            onChange={(e) => setOffroadVehicle(e.target.value as '4wd-high' | 'awd-medium')}
+                            className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                          />
+                          <span className="text-sm">4WD high clearance</span>
+                        </label>
+                        <label htmlFor="offroad-awd" className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            id="offroad-awd"
+                            name="offroad-vehicle"
+                            value="awd-medium"
+                            checked={offroadVehicle === 'awd-medium'}
+                            onChange={(e) => setOffroadVehicle(e.target.value as '4wd-high' | 'awd-medium')}
+                            className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                          />
+                          <span className="text-sm">AWD medium clearance</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
+            </CardContent>
+          </Card>
+
+          {/* Trip Pace */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-2xl">Trip Pace</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3">
+                <label
+                  htmlFor="pace-relaxed"
+                  className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                    pacePreference === 'relaxed' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    id="pace-relaxed"
+                    name="pace-preference"
+                    value="relaxed"
+                    checked={pacePreference === 'relaxed'}
+                    onChange={(e) => setPacePreference(e.target.value as 'relaxed' | 'moderate' | 'packed')}
+                    className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                  />
+                  <div className="space-y-0.5">
+                    <span className="font-medium text-sm">Relaxed</span>
+                    <p className="text-xs text-muted-foreground">Fewer activities, more downtime</p>
+                  </div>
+                </label>
+                <label
+                  htmlFor="pace-moderate"
+                  className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                    pacePreference === 'moderate' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    id="pace-moderate"
+                    name="pace-preference"
+                    value="moderate"
+                    checked={pacePreference === 'moderate'}
+                    onChange={(e) => setPacePreference(e.target.value as 'relaxed' | 'moderate' | 'packed')}
+                    className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                  />
+                  <div className="space-y-0.5">
+                    <span className="font-medium text-sm">Moderate</span>
+                    <p className="text-xs text-muted-foreground">Balanced activity and rest</p>
+                  </div>
+                </label>
+                <label
+                  htmlFor="pace-packed"
+                  className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                    pacePreference === 'packed' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    id="pace-packed"
+                    name="pace-preference"
+                    value="packed"
+                    checked={pacePreference === 'packed'}
+                    onChange={(e) => setPacePreference(e.target.value as 'relaxed' | 'moderate' | 'packed')}
+                    className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                  />
+                  <div className="space-y-0.5">
+                    <span className="font-medium text-sm">Packed</span>
+                    <p className="text-xs text-muted-foreground">Maximum activities each day</p>
+                  </div>
+                </label>
+              </div>
             </CardContent>
           </Card>
 
@@ -892,76 +952,6 @@ const CreateTrip = () => {
                     onChange={setReturnToCampTime}
                     placeholder="Select time"
                   />
-                </div>
-
-                {/* Pace Preference */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Gauge className="w-4 h-4 text-primary" />
-                    <Label className="font-medium">Trip Pace</Label>
-                  </div>
-                  <div className="grid gap-2">
-                    <label
-                      htmlFor="pace-relaxed"
-                      className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-                        pacePreference === 'relaxed' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        id="pace-relaxed"
-                        name="pace-preference"
-                        value="relaxed"
-                        checked={pacePreference === 'relaxed'}
-                        onChange={(e) => setPacePreference(e.target.value as 'relaxed' | 'moderate' | 'packed')}
-                        className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
-                      />
-                      <div className="space-y-0.5">
-                        <span className="font-medium text-sm">Relaxed</span>
-                        <p className="text-xs text-muted-foreground">Fewer activities, more downtime</p>
-                      </div>
-                    </label>
-                    <label
-                      htmlFor="pace-moderate"
-                      className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-                        pacePreference === 'moderate' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        id="pace-moderate"
-                        name="pace-preference"
-                        value="moderate"
-                        checked={pacePreference === 'moderate'}
-                        onChange={(e) => setPacePreference(e.target.value as 'relaxed' | 'moderate' | 'packed')}
-                        className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
-                      />
-                      <div className="space-y-0.5">
-                        <span className="font-medium text-sm">Moderate</span>
-                        <p className="text-xs text-muted-foreground">Balanced activity and rest</p>
-                      </div>
-                    </label>
-                    <label
-                      htmlFor="pace-packed"
-                      className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-                        pacePreference === 'packed' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        id="pace-packed"
-                        name="pace-preference"
-                        value="packed"
-                        checked={pacePreference === 'packed'}
-                        onChange={(e) => setPacePreference(e.target.value as 'relaxed' | 'moderate' | 'packed')}
-                        className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
-                      />
-                      <div className="space-y-0.5">
-                        <span className="font-medium text-sm">Packed</span>
-                        <p className="text-xs text-muted-foreground">Maximum activities each day</p>
-                      </div>
-                    </label>
-                  </div>
                 </div>
 
                 {/* Max Driving Hours */}

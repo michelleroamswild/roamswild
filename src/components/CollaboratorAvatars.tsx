@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Users } from '@phosphor-icons/react';
 import {
   Tooltip,
@@ -7,6 +6,7 @@ import {
   TooltipTrigger,
 } from './ui/tooltip';
 import { Collaborator } from '@/context/TripContext';
+import { useAuth } from '@/context/AuthContext';
 
 interface CollaboratorAvatarsProps {
   collaborators: Collaborator[];
@@ -28,17 +28,16 @@ const getInitials = (name?: string, email?: string): string => {
   return '?';
 };
 
-// Generate a consistent color based on user ID
+// Generate a consistent color based on user ID using site accent colors
 const getAvatarColor = (userId: string): string => {
   const colors = [
-    'bg-blue-500',
-    'bg-green-500',
-    'bg-purple-500',
-    'bg-orange-500',
-    'bg-pink-500',
-    'bg-teal-500',
-    'bg-indigo-500',
-    'bg-rose-500',
+    'bg-pinesoft',
+    'bg-aquateal',
+    'bg-skyblue',
+    'bg-lavenderslate',
+    'bg-softamber',
+    'bg-blushorchid',
+    'bg-terracotta',
   ];
 
   let hash = 0;
@@ -53,6 +52,8 @@ export function CollaboratorAvatars({
   maxDisplay = 3,
   size = 'md'
 }: CollaboratorAvatarsProps) {
+  const { user } = useAuth();
+
   if (collaborators.length === 0) {
     return null;
   }
@@ -61,13 +62,13 @@ export function CollaboratorAvatars({
   const remainingCount = collaborators.length - maxDisplay;
 
   const sizeClasses = {
-    sm: 'w-6 h-6 text-xs',
-    md: 'w-8 h-8 text-sm',
+    sm: 'w-6 h-6 text-[10px]',
+    md: 'w-8 h-8 text-xs',
   };
 
   const containerClasses = {
-    sm: '-space-x-2',
-    md: '-space-x-3',
+    sm: 'gap-1',
+    md: 'gap-1.5',
   };
 
   return (
@@ -77,13 +78,15 @@ export function CollaboratorAvatars({
           <Tooltip key={collab.id}>
             <TooltipTrigger asChild>
               <div
-                className={`${sizeClasses[size]} ${getAvatarColor(collab.userId)} rounded-full flex items-center justify-center text-white font-medium ring-2 ${collab.permission === 'owner' ? 'ring-amber-400' : 'ring-background'} cursor-default`}
+                className={`${sizeClasses[size]} ${getAvatarColor(collab.userId)} rounded-full flex items-center justify-center text-white font-extrabold tracking-wide cursor-default`}
               >
                 {getInitials(collab.name, collab.email)}
               </div>
             </TooltipTrigger>
             <TooltipContent>
-              <p className="font-medium">{collab.name || collab.email}</p>
+              <p className="font-medium">
+                {collab.userId === user?.id ? 'You' : (collab.name || collab.email)}
+              </p>
               <p className="text-xs text-muted-foreground capitalize">
                 {collab.permission === 'owner' ? 'Owner' : `${collab.permission} access`}
               </p>
@@ -95,7 +98,7 @@ export function CollaboratorAvatars({
           <Tooltip>
             <TooltipTrigger asChild>
               <div
-                className={`${sizeClasses[size]} bg-muted rounded-full flex items-center justify-center text-muted-foreground font-medium ring-2 ring-background cursor-default`}
+                className={`${sizeClasses[size]} bg-muted rounded-full flex items-center justify-center text-muted-foreground font-extrabold tracking-wide cursor-default`}
               >
                 +{remainingCount}
               </div>

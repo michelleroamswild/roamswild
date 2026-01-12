@@ -152,7 +152,7 @@ const Login = () => {
                 type="submit"
                 variant="primary"
                 size="lg"
-                className="w-full h-12 rounded-xl text-base font-semibold"
+                className="w-full"
                 disabled={isLoading}
               >
                 {isLoading ? (
