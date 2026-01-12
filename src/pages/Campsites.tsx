@@ -15,6 +15,9 @@ import {
   Car,
   SortAscending,
   MagnifyingGlass,
+  Tag,
+  X,
+  NoteBlank,
 } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,12 +29,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { GoogleMap } from '@/components/GoogleMap';
+import { Marker } from '@react-google-maps/api';
 import { useCampsites } from '@/context/CampsitesContext';
 import { toast } from 'sonner';
 import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
 import { Campsite, CampsiteType, CampsiteVisibility } from '@/types/campsite';
 import { AddCampsiteModal } from '@/components/AddCampsiteModal';
 import { ImportCampsitesModal } from '@/components/ImportCampsitesModal';
+import { createMarkerIcon } from '@/utils/mapMarkers';
 
 const typeLabels: Record<CampsiteType, string> = {
   dispersed: 'Dispersed',
@@ -64,6 +70,10 @@ const Campsites = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<CampsiteType | 'all'>('all');
   const [filterVisibility, setFilterVisibility] = useState<CampsiteVisibility | 'all'>('all');
+  const [filterState, setFilterState] = useState<string>('all');
+  const [filterTags, setFilterTags] = useState<string[]>([]);
+  const [filterHasNotes, setFilterHasNotes] = useState(false);
+  const [selectedCampsiteId, setSelectedCampsiteId] = useState<string | null>(null);
 
   // Load public campsites when switching to discover tab
   const handleTabChange = (tab: 'mine' | 'discover') => {
@@ -72,6 +82,26 @@ const Campsites = () => {
       fetchPublicCampsites();
     }
   };
+
+  // Get unique states for filter dropdown
+  const availableStates = useMemo(() => {
+    const list = activeTab === 'mine' ? campsites : publicCampsites;
+    const states = new Set<string>();
+    list.forEach(c => {
+      if (c.state) states.add(c.state);
+    });
+    return Array.from(states).sort();
+  }, [campsites, publicCampsites, activeTab]);
+
+  // Get unique tags for filter pills
+  const availableTags = useMemo(() => {
+    const list = activeTab === 'mine' ? campsites : publicCampsites;
+    const tags = new Set<string>();
+    list.forEach(c => {
+      c.tags?.forEach(t => tags.add(t));
+    });
+    return Array.from(tags).sort();
+  }, [campsites, publicCampsites, activeTab]);
 
   // Filter and sort campsites
   const displayedCampsites = useMemo(() => {
@@ -96,6 +126,26 @@ const Campsites = () => {
       list = list.filter(c => c.visibility === filterVisibility);
     }
 
+    // Filter by state
+    if (filterState !== 'all') {
+      list = list.filter(c => c.state === filterState);
+    }
+
+    // Filter by tags (show campsites that have ANY of the selected tags)
+    if (filterTags.length > 0) {
+      list = list.filter(c =>
+        c.tags?.some(tag => filterTags.includes(tag))
+      );
+    }
+
+    // Filter by has notes (check both notes and description fields)
+    if (filterHasNotes) {
+      list = list.filter(c =>
+        (c.notes && c.notes.trim().length > 0) ||
+        (c.description && c.description.trim().length > 0)
+      );
+    }
+
     // Sort
     return [...list].sort((a, b) => {
       switch (sortBy) {
@@ -110,7 +160,17 @@ const Campsites = () => {
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       }
     });
-  }, [campsites, publicCampsites, activeTab, searchQuery, filterType, filterVisibility, sortBy]);
+  }, [campsites, publicCampsites, activeTab, searchQuery, filterType, filterVisibility, filterState, filterTags, filterHasNotes, sortBy]);
+
+  // Calculate map center based on displayed campsites
+  const mapCenter = useMemo(() => {
+    if (displayedCampsites.length === 0) {
+      return { lat: 39.8283, lng: -98.5795 }; // Center of US
+    }
+    const avgLat = displayedCampsites.reduce((sum, c) => sum + c.lat, 0) / displayedCampsites.length;
+    const avgLng = displayedCampsites.reduce((sum, c) => sum + c.lng, 0) / displayedCampsites.length;
+    return { lat: avgLat, lng: avgLng };
+  }, [displayedCampsites]);
 
   const handleDeleteClick = (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
@@ -143,6 +203,18 @@ const Campsites = () => {
 
   const handleCampsiteClick = (campsite: Campsite) => {
     navigate(`/campsites/${campsite.id}`);
+  };
+
+  const toggleTag = (tag: string) => {
+    setFilterTags(prev =>
+      prev.includes(tag)
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    );
+  };
+
+  const clearTagFilters = () => {
+    setFilterTags([]);
   };
 
   return (
@@ -184,7 +256,33 @@ const Campsites = () => {
         </div>
       </header>
 
-      <main className="container px-4 md:px-6 py-8 max-w-4xl mx-auto">
+      <main className="w-full">
+        <div className="grid lg:grid-cols-2">
+          {/* Map Section */}
+          <div className="hidden lg:block h-[calc(100vh-73px)] sticky top-[73px]">
+            <GoogleMap
+              center={mapCenter}
+              zoom={displayedCampsites.length === 1 ? 12 : 5}
+              className="w-full h-full"
+            >
+              {displayedCampsites.map((campsite) => (
+                <Marker
+                  key={campsite.id}
+                  position={{ lat: campsite.lat, lng: campsite.lng }}
+                  icon={createMarkerIcon('camp', {
+                    size: selectedCampsiteId === campsite.id ? 48 : 36,
+                  })}
+                  onClick={() => {
+                    setSelectedCampsiteId(campsite.id);
+                    navigate(`/campsites/${campsite.id}`);
+                  }}
+                />
+              ))}
+            </GoogleMap>
+          </div>
+
+          {/* List Section */}
+          <div className="p-6 lg:h-[calc(100vh-73px)] lg:overflow-y-auto">
         {/* Tabs */}
         <div className="flex gap-1 p-1 bg-secondary/50 rounded-lg mb-6 w-fit">
           <button
@@ -282,6 +380,32 @@ const Campsites = () => {
                 </Select>
               )}
 
+              {availableStates.length > 0 && (
+                <Select value={filterState} onValueChange={setFilterState}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue placeholder="State" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All States</SelectItem>
+                    {availableStates.map((state) => (
+                      <SelectItem key={state} value={state}>{state}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              <button
+                onClick={() => setFilterHasNotes(!filterHasNotes)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  filterHasNotes
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-secondary text-foreground hover:bg-secondary/80'
+                }`}
+              >
+                <NoteBlank className="w-4 h-4" />
+                Has Notes
+              </button>
+
               <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
                 <SelectTrigger className="w-[160px] border-2 border-primary">
                   <div className="flex items-center gap-2">
@@ -297,6 +421,35 @@ const Campsites = () => {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Tag filter pills */}
+            {availableTags.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Tag className="w-4 h-4 text-muted-foreground" />
+                {availableTags.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => toggleTag(tag)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      filterTags.includes(tag)
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-secondary text-foreground hover:bg-secondary/80'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+                {filterTags.length > 0 && (
+                  <button
+                    onClick={clearTagFilters}
+                    className="px-2 py-1 rounded-full text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Results count */}
             <p className="text-sm text-muted-foreground">
@@ -350,11 +503,11 @@ const Campsites = () => {
                               )}
                             </div>
 
-                            {/* Coordinates */}
+                            {/* Location */}
                             <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
                               <MapPin className="w-4 h-4 flex-shrink-0" />
                               <span>
-                                {campsite.lat.toFixed(5)}, {campsite.lng.toFixed(5)}
+                                {campsite.state || `${campsite.lat.toFixed(4)}, ${campsite.lng.toFixed(4)}`}
                               </span>
                             </div>
 
@@ -363,6 +516,21 @@ const Campsites = () => {
                               <p className="mt-2 text-sm text-muted-foreground line-clamp-1">
                                 {campsite.description}
                               </p>
+                            )}
+
+                            {/* Tags */}
+                            {campsite.tags && campsite.tags.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                {campsite.tags.map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium"
+                                  >
+                                    <Tag className="w-3 h-3" />
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
                             )}
                           </div>
 
@@ -389,6 +557,8 @@ const Campsites = () => {
             )}
           </div>
         )}
+          </div>
+        </div>
       </main>
 
       {/* Modals */}

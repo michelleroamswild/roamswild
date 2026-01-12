@@ -6,7 +6,7 @@ import {
   CampsiteFormData,
   CampsiteRow,
   CampsiteVisibility,
-  GoogleTakeoutGeoJSON,
+  ParsedImportLocation,
   campsiteFromRow,
   campsiteToRow,
 } from '@/types/campsite';
@@ -25,7 +25,7 @@ interface CampsitesContextType {
   getCampsite: (id: string) => Promise<Campsite | null>;
 
   // Import/Export
-  importFromGoogleTakeout: (json: GoogleTakeoutGeoJSON, visibility: CampsiteVisibility) => Promise<number>;
+  importFromCSV: (locations: ParsedImportLocation[], visibility: CampsiteVisibility) => Promise<number>;
   exportToGeoJSON: () => string;
 
   // Discovery
@@ -153,6 +153,8 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
       if (data.maxVehicles !== undefined) updateData.max_vehicles = data.maxVehicles;
       if (data.maxStayDays !== undefined) updateData.max_stay_days = data.maxStayDays;
       if (data.visibility !== undefined) updateData.visibility = data.visibility;
+      if (data.state !== undefined) updateData.state = data.state;
+      if (data.tags !== undefined) updateData.tags = data.tags;
       updateData.updated_at = new Date().toISOString();
 
       const { error } = await supabase
@@ -226,44 +228,69 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Import from Google Takeout JSON
-  const importFromGoogleTakeout = async (
-    json: GoogleTakeoutGeoJSON,
+  // Import from CSV (parsed locations)
+  // Updates existing campsites if coordinates match, otherwise creates new ones
+  const importFromCSV = async (
+    locations: ParsedImportLocation[],
     visibility: CampsiteVisibility
   ): Promise<number> => {
     if (!user) return 0;
 
-    const features = json.features || [];
     let imported = 0;
 
-    for (const feature of features) {
+    for (const location of locations) {
       try {
-        const coords = feature.geometry?.coordinates;
-        const props = feature.properties || {};
+        // Check if a campsite with these coordinates already exists for this user
+        const { data: existing } = await supabase
+          .from('campsites')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('lat', location.lat)
+          .eq('lng', location.lng)
+          .single();
 
-        if (!coords || coords.length < 2) continue;
+        if (existing) {
+          // Update existing campsite
+          const { error } = await supabase
+            .from('campsites')
+            .update({
+              name: location.name,
+              description: location.note || null,
+              notes: location.comment || null,
+              state: location.state || null,
+              tags: location.tags || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existing.id);
 
-        const [lng, lat] = coords; // GeoJSON is [lng, lat]
-        const name = props.Title || 'Imported Campsite';
+          if (!error) {
+            imported++;
+          }
+        } else {
+          // Create new campsite
+          const rowData = campsiteToRow(
+            {
+              name: location.name,
+              lat: location.lat,
+              lng: location.lng,
+              type: 'dispersed',
+              description: location.note,
+              notes: location.comment,
+              visibility,
+              state: location.state,
+              tags: location.tags,
+            },
+            user.id
+          );
 
-        const rowData = campsiteToRow(
-          {
-            name,
-            lat,
-            lng,
-            type: 'dispersed',
-            visibility,
-          },
-          user.id
-        );
+          const { error } = await supabase.from('campsites').insert(rowData);
 
-        const { error } = await supabase.from('campsites').insert(rowData);
-
-        if (!error) {
-          imported++;
+          if (!error) {
+            imported++;
+          }
         }
       } catch (e) {
-        console.error('Error importing feature:', e);
+        console.error('Error importing location:', e);
       }
     }
 
@@ -273,8 +300,12 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
   };
 
   // Export to GeoJSON format (compatible with Google Maps)
+  // Only exports campsites the user created, never shared/public ones from others
   const exportToGeoJSON = (): string => {
-    const features = campsites.map(campsite => ({
+    // Filter to only include campsites owned by the current user
+    const ownedCampsites = campsites.filter(c => c.userId === user?.id);
+
+    const features = ownedCampsites.map(campsite => ({
       type: 'Feature' as const,
       geometry: {
         type: 'Point' as const,
@@ -348,7 +379,7 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
         updateCampsite,
         deleteCampsite,
         getCampsite,
-        importFromGoogleTakeout,
+        importFromCSV,
         exportToGeoJSON,
         fetchPublicCampsites,
         searchNearbyCampsites,

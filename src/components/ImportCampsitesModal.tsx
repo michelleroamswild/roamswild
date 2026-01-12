@@ -16,8 +16,137 @@ import {
 } from '@/components/ui/select';
 import { SpinnerGap, UploadSimple, File, CheckCircle, WarningCircle } from '@phosphor-icons/react';
 import { useCampsites } from '@/context/CampsitesContext';
-import { CampsiteVisibility, GoogleTakeoutGeoJSON } from '@/types/campsite';
+import { useGoogleMaps } from '@/components/GoogleMapsProvider';
+import { CampsiteVisibility, ParsedImportLocation } from '@/types/campsite';
 import { toast } from 'sonner';
+
+// Reverse geocode to get state from coordinates
+async function getStateFromCoords(lat: number, lng: number): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    if (!window.google?.maps?.Geocoder) {
+      resolve(undefined);
+      return;
+    }
+
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode(
+      { location: { lat, lng } },
+      (results, status) => {
+        if (status === 'OK' && results && results.length > 0) {
+          // Look for administrative_area_level_1 (state)
+          for (const result of results) {
+            for (const component of result.address_components) {
+              if (component.types.includes('administrative_area_level_1')) {
+                resolve(component.short_name); // e.g., "CA", "UT", "NV"
+                return;
+              }
+            }
+          }
+        }
+        resolve(undefined);
+      }
+    );
+  });
+}
+
+// Extract lat/lng from a string (URL or text)
+function extractCoords(text: string): { lat: number; lng: number } | null {
+  if (!text) return null;
+
+  // Pattern 1: /@lat,lng,zoom (e.g., /@37.7749,-122.4194,15z)
+  const atPattern = /@(-?\d+\.?\d*),(-?\d+\.?\d*)/;
+  const atMatch = text.match(atPattern);
+  if (atMatch) {
+    const lat = parseFloat(atMatch[1]);
+    const lng = parseFloat(atMatch[2]);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+
+  // Pattern 2: ?q=lat,lng or &q=lat,lng
+  const qPattern = /[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/;
+  const qMatch = text.match(qPattern);
+  if (qMatch) {
+    const lat = parseFloat(qMatch[1]);
+    const lng = parseFloat(qMatch[2]);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+
+  // Pattern 3: /place/lat,lng or /search/lat,lng
+  const placePattern = /\/(place|search)\/(-?\d+\.?\d*),(-?\d+\.?\d*)/;
+  const placeMatch = text.match(placePattern);
+  if (placeMatch) {
+    const lat = parseFloat(placeMatch[2]);
+    const lng = parseFloat(placeMatch[3]);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+
+  // Pattern 4: Standalone coordinates like "37.7749, -122.4194" or "37.7749,-122.4194"
+  const coordPattern = /(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/;
+  const coordMatch = text.match(coordPattern);
+  if (coordMatch) {
+    const lat = parseFloat(coordMatch[1]);
+    const lng = parseFloat(coordMatch[2]);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+
+  return null;
+}
+
+// Parse CSV/TSV text into rows (handles both comma and tab delimiters)
+function parseCSV(text: string): Record<string, string>[] {
+  const lines = text.split(/\r?\n/).filter(line => line.trim());
+  if (lines.length < 2) return [];
+
+  // Detect delimiter (tab or comma) from first line
+  const firstLine = lines[0];
+  const delimiter = firstLine.includes('\t') ? '\t' : ',';
+
+  // Parse row - handle quoted values
+  const parseRow = (line: string): string[] => {
+    const values: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === delimiter && !inQuotes) {
+        values.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    values.push(current.trim());
+    return values;
+  };
+
+  const headers = parseRow(lines[0]);
+  const rows: Record<string, string>[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseRow(lines[i]);
+    const row: Record<string, string> = {};
+    headers.forEach((header, index) => {
+      // Store with lowercase key for consistent access
+      row[header.toLowerCase()] = values[index] || '';
+      // Also store original for backwards compatibility
+      row[header] = values[index] || '';
+    });
+    rows.push(row);
+  }
+
+  return rows;
+}
 
 interface ImportCampsitesModalProps {
   isOpen: boolean;
@@ -25,19 +154,22 @@ interface ImportCampsitesModalProps {
 }
 
 export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalProps) {
-  const { importFromGoogleTakeout } = useCampsites();
+  const { importFromCSV } = useCampsites();
+  const { isLoaded: googleMapsLoaded } = useGoogleMaps();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isImporting, setIsImporting] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [parsedData, setParsedData] = useState<GoogleTakeoutGeoJSON | null>(null);
+  const [parsedData, setParsedData] = useState<ParsedImportLocation[] | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [skippedEntries, setSkippedEntries] = useState<{ title: string; reason: string }[]>([]);
   const [visibility, setVisibility] = useState<CampsiteVisibility>('private');
 
   const resetState = () => {
     setSelectedFile(null);
     setParsedData(null);
     setParseError(null);
+    setSkippedEntries([]);
     setVisibility('private');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -56,33 +188,80 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
     setSelectedFile(file);
     setParseError(null);
     setParsedData(null);
+    setSkippedEntries([]);
 
     try {
       const text = await file.text();
-      const json = JSON.parse(text);
+      const rows = parseCSV(text);
 
-      // Validate it looks like a GeoJSON with features
-      if (!json.features || !Array.isArray(json.features)) {
-        setParseError('Invalid format: Expected a GeoJSON file with "features" array');
+      if (rows.length === 0) {
+        setParseError('No data found in the CSV file');
         return;
       }
 
-      // Count valid features (those with coordinates)
-      const validFeatures = json.features.filter((f: { geometry?: { coordinates?: unknown[] } }) =>
-        f.geometry?.coordinates && Array.isArray(f.geometry.coordinates) && f.geometry.coordinates.length >= 2
-      );
-
-      if (validFeatures.length === 0) {
-        setParseError('No valid locations found in the file');
+      // Check for required columns
+      const firstRow = rows[0];
+      if (!('Title' in firstRow) || !('URL' in firstRow)) {
+        setParseError('Invalid CSV format. Expected columns: Title, URL');
         return;
       }
 
-      setParsedData({
-        type: 'FeatureCollection',
-        features: validFeatures,
-      });
+      // Parse each row and extract coordinates from URL
+      const locations: ParsedImportLocation[] = [];
+      const skipped: { title: string; reason: string }[] = [];
+
+      let unnamedCount = 0;
+      for (const row of rows) {
+        const title = row.Title?.trim();
+        const url = row.URL?.trim();
+        const note = row.note?.trim();
+        const comment = row.comment?.trim();
+        const tagsRaw = row.tags?.trim();
+
+        // Parse tags - split by semicolon or comma and clean up
+        const tags = tagsRaw
+          ? tagsRaw.split(/[;,]/).map(t => t.trim()).filter(t => t.length > 0)
+          : undefined;
+
+        // Try URL first, then fall back to title for coordinates
+        let coords = extractCoords(url || '');
+        if (!coords) {
+          coords = extractCoords(title || '');
+        }
+
+        if (!coords) {
+          skipped.push({ title: title || '(empty title)', reason: 'No coordinates found' });
+          continue;
+        }
+
+        // Use title or generate a default name
+        let name = title;
+        if (!name) {
+          unnamedCount++;
+          name = `Imported Campsite ${unnamedCount}`;
+        }
+
+        locations.push({
+          name,
+          lat: coords.lat,
+          lng: coords.lng,
+          note: note || undefined,
+          comment: comment || undefined,
+          url: url || undefined,
+          tags: tags && tags.length > 0 ? tags : undefined,
+        });
+      }
+
+      setSkippedEntries(skipped);
+
+      if (locations.length === 0) {
+        setParseError('No valid locations found. Could not extract coordinates from any URLs.');
+        return;
+      }
+
+      setParsedData(locations);
     } catch {
-      setParseError('Failed to parse JSON file. Please ensure it\'s a valid Google Takeout export.');
+      setParseError('Failed to parse CSV file. Please ensure it\'s a valid Google Takeout export.');
     }
   };
 
@@ -91,7 +270,18 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
 
     setIsImporting(true);
 
-    const importedCount = await importFromGoogleTakeout(parsedData, visibility);
+    // Fetch states for each location if Google Maps is loaded
+    let locationsWithState = parsedData;
+    if (googleMapsLoaded) {
+      locationsWithState = await Promise.all(
+        parsedData.map(async (location) => {
+          const state = await getStateFromCoords(location.lat, location.lng);
+          return { ...location, state };
+        })
+      );
+    }
+
+    const importedCount = await importFromCSV(locationsWithState, visibility);
 
     setIsImporting(false);
 
@@ -121,7 +311,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
               <li>Go to <a href="https://takeout.google.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google Takeout</a></li>
               <li>Select "Saved" under Google Maps</li>
               <li>Download and extract the ZIP file</li>
-              <li>Upload the GeoJSON file below</li>
+              <li>Upload the CSV file below</li>
             </ol>
           </div>
 
@@ -137,7 +327,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".json,.geojson"
+                accept=".csv"
                 onChange={handleFileSelect}
                 className="hidden"
               />
@@ -151,7 +341,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
                 <div>
                   <UploadSimple className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">
-                    Click to select a GeoJSON file
+                    Click to select a CSV file
                   </p>
                 </div>
               )}
@@ -169,7 +359,24 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
           {parsedData && (
             <div className="flex items-start gap-2 p-3 bg-primary/10 border border-primary/20 rounded-lg text-primary text-sm">
               <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>Found {parsedData.features.length} locations ready to import</span>
+              <span>Found {parsedData.length} locations ready to import</span>
+            </div>
+          )}
+
+          {skippedEntries.length > 0 && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm">
+              <div className="flex items-center gap-2 text-amber-600 font-medium mb-2">
+                <WarningCircle className="w-4 h-4" />
+                <span>{skippedEntries.length} entries will be skipped</span>
+              </div>
+              <div className="max-h-32 overflow-y-auto space-y-1">
+                {skippedEntries.map((entry, index) => (
+                  <div key={index} className="text-xs text-muted-foreground flex justify-between">
+                    <span className="truncate mr-2">{entry.title}</span>
+                    <span className="text-amber-600 flex-shrink-0">{entry.reason}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -208,7 +415,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
                   Importing...
                 </>
               ) : (
-                `Import ${parsedData?.features.length || 0} Campsites`
+                `Import ${parsedData?.length || 0} Campsites`
               )}
             </Button>
           </div>

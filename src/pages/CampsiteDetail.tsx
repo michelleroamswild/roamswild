@@ -448,6 +448,7 @@ const CampsiteDetail = () => {
                         <div className="flex items-center gap-2 mt-1 text-muted-foreground">
                           <MapPin className="w-4 h-4" />
                           <span className="text-sm">
+                            {campsite.state && `${campsite.state} · `}
                             {campsite.lat.toFixed(6)}, {campsite.lng.toFixed(6)}
                           </span>
                         </div>

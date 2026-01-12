@@ -21,6 +21,8 @@ export interface Campsite {
   maxVehicles?: number;
   maxStayDays?: number;
   visibility: CampsiteVisibility;
+  state?: string;
+  tags?: string[];
   photos?: CampsitePhoto[];
   createdAt: string;
   updatedAt: string;
@@ -57,6 +59,8 @@ export interface CampsiteRow {
   max_vehicles: number | null;
   max_stay_days: number | null;
   visibility: string;
+  state: string | null;
+  tags: string[] | null;
   created_at: string;
   updated_at: string;
   metadata: Record<string, unknown> | null;
@@ -72,25 +76,26 @@ export interface CampsitePhotoRow {
   created_at: string;
 }
 
-// Google Takeout format
-export interface GoogleTakeoutFeature {
-  type: 'Feature';
-  geometry: {
-    type: 'Point';
-    coordinates: [number, number]; // [lng, lat]
-  };
-  properties: {
-    Title?: string;
-    'Google Maps URL'?: string;
-    Location?: {
-      Address?: string;
-    };
-  };
+// Google Takeout CSV format (Saved Places export)
+// Headers: Title, note, URL, tags, comment
+export interface GoogleTakeoutCSVRow {
+  Title: string;
+  note: string;
+  URL: string;
+  tags: string;
+  comment: string;
 }
 
-export interface GoogleTakeoutGeoJSON {
-  type: 'FeatureCollection';
-  features: GoogleTakeoutFeature[];
+// Parsed import data with extracted coordinates
+export interface ParsedImportLocation {
+  name: string;
+  lat: number;
+  lng: number;
+  note?: string;
+  comment?: string;
+  url?: string;
+  state?: string;
+  tags?: string[];
 }
 
 // Form data for creating/editing campsites
@@ -111,6 +116,8 @@ export interface CampsiteFormData {
   maxVehicles?: number;
   maxStayDays?: number;
   visibility: CampsiteVisibility;
+  state?: string;
+  tags?: string[];
 }
 
 // Helper functions to convert between row and model
@@ -134,6 +141,8 @@ export function campsiteFromRow(row: CampsiteRow): Campsite {
     maxVehicles: row.max_vehicles ?? undefined,
     maxStayDays: row.max_stay_days ?? undefined,
     visibility: row.visibility as CampsiteVisibility,
+    state: row.state ?? undefined,
+    tags: row.tags ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     metadata: row.metadata ?? undefined,
@@ -159,6 +168,8 @@ export function campsiteToRow(campsite: CampsiteFormData, userId: string): Omit<
     max_vehicles: campsite.maxVehicles ?? null,
     max_stay_days: campsite.maxStayDays ?? null,
     visibility: campsite.visibility,
+    state: campsite.state ?? null,
+    tags: campsite.tags ?? null,
     metadata: null,
   };
 }
