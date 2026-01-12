@@ -1,7 +1,8 @@
-import { Jeep, List, Path, SignOut } from "@phosphor-icons/react";
+import { Jeep, List, Path, SignOut, Tent } from "@phosphor-icons/react";
 import { Button } from "./ui/button";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,8 +28,14 @@ const getInitials = (name?: string, email?: string): string => {
 
 export const Header = () => {
   const { user, signOut } = useAuth();
+  const location = useLocation();
   const userName = user?.user_metadata?.name as string | undefined;
   const initials = getInitials(userName, user?.email);
+
+  const isActive = (path: string) => {
+    if (path === '/') return location.pathname === '/';
+    return location.pathname.startsWith(path);
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -42,17 +49,38 @@ export const Header = () => {
           <span className="text-xl font-display font-bold text-foreground">RoamsWild</span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-6">
-          <Link to="/" className="text-base font-bold text-muted-foreground hover:text-foreground transition-colors">
+        <nav className="hidden md:flex items-center gap-2">
+          <Link
+            to="/"
+            className={cn(
+              "text-base font-bold transition-colors px-3 py-1.5 rounded-full",
+              isActive('/')
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            )}
+          >
             Explore
           </Link>
-          <Link to="/my-trips" className="text-base font-bold text-muted-foreground hover:text-foreground transition-colors">
+          <Link
+            to="/my-trips"
+            className={cn(
+              "text-base font-bold transition-colors px-3 py-1.5 rounded-full",
+              isActive('/my-trips')
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            )}
+          >
             My Trips
           </Link>
-          <Link to="/campsites" className="text-base font-bold text-muted-foreground hover:text-foreground transition-colors">
-            Campsites
-          </Link>
-          <Link to="/saved" className="text-base font-bold text-muted-foreground hover:text-foreground transition-colors">
+          <Link
+            to="/saved"
+            className={cn(
+              "text-base font-bold transition-colors px-3 py-1.5 rounded-full",
+              isActive('/saved')
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            )}
+          >
             Saved
           </Link>
         </nav>
@@ -80,6 +108,13 @@ export const Header = () => {
                   </p>
                 </div>
               </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to="/campsites" className="flex items-center">
+                  <Tent className="w-4 h-4 mr-2" weight="bold" />
+                  Campsites
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
                 <SignOut className="w-4 h-4 mr-2" weight="bold" />

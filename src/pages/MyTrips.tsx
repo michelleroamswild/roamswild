@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
   Plus,
   Path,
   Clock,
@@ -29,6 +28,7 @@ import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
 import { GeneratedTrip } from '@/types/trip';
 import { useAuth } from '@/context/AuthContext';
 import { getTripUrl } from '@/utils/slugify';
+import { Header } from '@/components/Header';
 
 interface TripWithMeta extends GeneratedTrip {
   isShared: boolean;
@@ -114,34 +114,17 @@ const MyTrips = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="container px-4 md:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/">
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <ArrowLeft className="w-5 h-5" weight="bold" />
-                </Button>
-              </Link>
-              <div>
-                <h1 className="text-xl font-display font-bold text-foreground">My Trips</h1>
-                <p className="text-sm text-muted-foreground">
-                  {allTrips.length} {allTrips.length === 1 ? 'trip' : 'trips'}
-                </p>
-              </div>
-            </div>
-            <Link to="/create-trip">
-              <Button variant="primary" size="sm">
-                <Path className="w-4 h-4 mr-1" weight="bold" />
-                Create Trip
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <main className="container px-4 md:px-6 py-8 max-w-4xl mx-auto">
+        {/* Page Title */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-display font-bold text-foreground">My Trips</h1>
+          <p className="text-muted-foreground mt-1">
+            {allTrips.length} {allTrips.length === 1 ? 'trip' : 'trips'} saved
+          </p>
+        </div>
+
         {isLoading ? (
           <div className="text-center py-16">
             <div className="flex items-center justify-center w-20 h-20 bg-secondary rounded-full mx-auto mb-6">
@@ -173,25 +156,22 @@ const MyTrips = () => {
         ) : (
           <div className="space-y-4">
             {/* Sort controls */}
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                {allTrips.length} {allTrips.length === 1 ? 'trip' : 'trips'}
-              </p>
+            <div className="flex items-center justify-end">
               <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
-                  <SelectTrigger className="w-[180px] h-10 text-sm border-2 border-primary rounded-md">
-                    <div className="flex items-center gap-2">
-                      <SortAscending className="w-4 h-4 text-muted-foreground" />
-                      <SelectValue />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="trip-date">Trip Date</SelectItem>
-                    <SelectItem value="name-asc">Name (A-Z)</SelectItem>
-                    <SelectItem value="name-desc">Name (Z-A)</SelectItem>
-                    <SelectItem value="created-newest">Newest First</SelectItem>
-                    <SelectItem value="created-oldest">Oldest First</SelectItem>
-                  </SelectContent>
-                </Select>
+                <SelectTrigger className="w-[180px] h-10 text-sm border-2 border-primary rounded-md">
+                  <div className="flex items-center gap-2">
+                    <SortAscending className="w-4 h-4 text-muted-foreground" />
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="trip-date">Trip Date</SelectItem>
+                  <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+                  <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+                  <SelectItem value="created-newest">Newest First</SelectItem>
+                  <SelectItem value="created-oldest">Oldest First</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {allTrips.map((trip, index) => (

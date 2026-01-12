@@ -10,6 +10,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { TimePicker } from "@/components/ui/time-picker";
 import { toast } from "sonner";
 import { PlaceSearch } from "@/components/PlaceSearch";
+import { EntryPointSelector, checkIfDrivable } from "@/components/EntryPointSelector";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
 import { useTrip } from "@/context/TripContext";
 import { TripConfig, TripDestination } from "@/types/trip";
@@ -75,6 +76,13 @@ const CreateTrip = () => {
   const [includeHikes, setIncludeHikes] = useState(true);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
+  // Entry point selector state
+  const [entryPointModal, setEntryPointModal] = useState<{
+    isOpen: boolean;
+    place: google.maps.places.PlaceResult | null;
+    targetType: 'destination' | 'start' | 'end';
+  }>({ isOpen: false, place: null, targetType: 'destination' });
+
   // Advanced options state
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
@@ -113,19 +121,45 @@ const CreateTrip = () => {
     }
   };
 
-  const handleStartLocationSelect = (place: google.maps.places.PlaceResult) => {
+  const handleStartLocationSelect = async (place: google.maps.places.PlaceResult) => {
     if (place.geometry?.location && place.place_id) {
+      const lat = place.geometry.location.lat();
+      const lng = place.geometry.location.lng();
+
+      // Check if this location is drivable
+      const isDrivable = await checkIfDrivable(lat, lng);
+      if (!isDrivable) {
+        setEntryPointModal({ isOpen: true, place, targetType: 'start' });
+        return;
+      }
+
       setStartLocation({
         id: `start-${place.place_id}`,
         name: place.name || place.formatted_address || "Selected Location",
-        lat: place.geometry.location.lat(),
-        lng: place.geometry.location.lng(),
+        lat,
+        lng,
         placeId: place.place_id,
       });
     }
   };
 
-  const handleAddDestination = (place: google.maps.places.PlaceResult) => {
+  const handleAddDestination = async (place: google.maps.places.PlaceResult) => {
+    if (place.geometry?.location && place.place_id) {
+      const lat = place.geometry.location.lat();
+      const lng = place.geometry.location.lng();
+
+      // Check if this location is drivable
+      const isDrivable = await checkIfDrivable(lat, lng);
+      if (!isDrivable) {
+        setEntryPointModal({ isOpen: true, place, targetType: 'destination' });
+        return;
+      }
+
+      addDestinationFromPlace(place);
+    }
+  };
+
+  const addDestinationFromPlace = (place: google.maps.places.PlaceResult) => {
     if (place.geometry?.location && place.place_id) {
       const newDest: LocationData = {
         id: `dest-${place.place_id}-${Date.now()}`,
@@ -135,6 +169,66 @@ const CreateTrip = () => {
         placeId: place.place_id,
       };
       setDestinations([...destinations, newDest]);
+    }
+  };
+
+  const handleEntryPointSelect = (entryPoint: {
+    placeId: string;
+    name: string;
+    coordinates: { lat: number; lng: number };
+  }) => {
+    const { targetType } = entryPointModal;
+
+    if (targetType === 'destination') {
+      const newDest: LocationData = {
+        id: `dest-${entryPoint.placeId}-${Date.now()}`,
+        name: entryPoint.name,
+        lat: entryPoint.coordinates.lat,
+        lng: entryPoint.coordinates.lng,
+        placeId: entryPoint.placeId,
+      };
+      setDestinations([...destinations, newDest]);
+    } else if (targetType === 'start') {
+      setStartLocation({
+        id: `start-${entryPoint.placeId}`,
+        name: entryPoint.name,
+        lat: entryPoint.coordinates.lat,
+        lng: entryPoint.coordinates.lng,
+        placeId: entryPoint.placeId,
+      });
+    } else if (targetType === 'end') {
+      setEndLocation({
+        id: `end-${entryPoint.placeId}`,
+        name: entryPoint.name,
+        lat: entryPoint.coordinates.lat,
+        lng: entryPoint.coordinates.lng,
+        placeId: entryPoint.placeId,
+      });
+    }
+  };
+
+  const handleUseOriginalPlace = () => {
+    const { place, targetType } = entryPointModal;
+    if (!place) return;
+
+    if (targetType === 'destination') {
+      addDestinationFromPlace(place);
+    } else if (targetType === 'start' && place.geometry?.location && place.place_id) {
+      setStartLocation({
+        id: `start-${place.place_id}`,
+        name: place.name || place.formatted_address || "Selected Location",
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng(),
+        placeId: place.place_id,
+      });
+    } else if (targetType === 'end' && place.geometry?.location && place.place_id) {
+      setEndLocation({
+        id: `end-${place.place_id}`,
+        name: place.name || place.formatted_address || "Selected Location",
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng(),
+        placeId: place.place_id,
+      });
     }
   };
 
@@ -155,13 +249,23 @@ const CreateTrip = () => {
   const remainingDays = availableDays - totalSpecifiedDays;
   const unspecifiedDestinations = destinations.filter(d => !d.days).length;
 
-  const handleEndLocationSelect = (place: google.maps.places.PlaceResult) => {
+  const handleEndLocationSelect = async (place: google.maps.places.PlaceResult) => {
     if (place.geometry?.location && place.place_id) {
+      const lat = place.geometry.location.lat();
+      const lng = place.geometry.location.lng();
+
+      // Check if this location is drivable
+      const isDrivable = await checkIfDrivable(lat, lng);
+      if (!isDrivable) {
+        setEntryPointModal({ isOpen: true, place, targetType: 'end' });
+        return;
+      }
+
       setEndLocation({
         id: `end-${place.place_id}`,
         name: place.name || place.formatted_address || "Selected Location",
-        lat: place.geometry.location.lat(),
-        lng: place.geometry.location.lng(),
+        lat,
+        lng,
         placeId: place.place_id,
       });
     }
@@ -907,6 +1011,24 @@ const CreateTrip = () => {
           </Button>
         </div>
       </main>
+
+      {/* Entry Point Selector Modal */}
+      {entryPointModal.place && (
+        <EntryPointSelector
+          isOpen={entryPointModal.isOpen}
+          onClose={() => setEntryPointModal({ isOpen: false, place: null, targetType: 'destination' })}
+          parentPlace={{
+            name: entryPointModal.place.name || '',
+            placeId: entryPointModal.place.place_id || '',
+            coordinates: {
+              lat: entryPointModal.place.geometry?.location?.lat() || 0,
+              lng: entryPointModal.place.geometry?.location?.lng() || 0,
+            },
+          }}
+          onSelectEntryPoint={handleEntryPointSelect}
+          onUseOriginal={handleUseOriginalPlace}
+        />
+      )}
     </div>
   );
 };

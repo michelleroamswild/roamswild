@@ -13,7 +13,6 @@ import {
   GasPump,
   Trash,
   ArrowsClockwise,
-  DotsSixVertical,
   Plus,
   Warning,
   ArrowSquareOut,
@@ -416,11 +415,11 @@ const DayDetail = () => {
         </div>
       </header>
 
-      <main className="container px-4 md:px-6 py-6">
-        <div className="grid lg:grid-cols-2 gap-6">
+      <main className="w-full">
+        <div className="grid lg:grid-cols-2">
           {/* Map Section */}
-          <div className="order-2 lg:order-1">
-            <Card className="overflow-hidden h-[350px] lg:h-[500px]">
+          <div className="order-2 lg:order-1 h-[400px] lg:h-[calc(100vh-73px)] lg:sticky lg:top-[73px]">
+            <div className="relative w-full h-full">
               <GoogleMap
                 center={directions ? undefined : mapCenter}
                 zoom={10}
@@ -450,11 +449,45 @@ const DayDetail = () => {
                   />
                 ))}
               </GoogleMap>
-            </Card>
+
+              {/* Route info overlay */}
+              <div className="absolute bottom-4 left-4 right-4 z-10">
+                <div className="bg-card/95 backdrop-blur-sm rounded-xl border border-border p-4 shadow-lg">
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center justify-center w-10 h-10 bg-primary/10 rounded-full">
+                        <span className="text-lg font-bold text-primary">{dayNum}</span>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">Day {dayNum}</p>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Path className="w-3 h-3" />
+                            {day.drivingDistance}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {day.drivingTime}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {day.stops.length} stops
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <Button variant="primary" size="sm" onClick={handleNavigateDay}>
+                      <NavigationArrow className="w-4 h-4 mr-2" />
+                      Navigate Day {dayNum}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Day Details */}
-          <div className="order-1 lg:order-2 space-y-4">
+          <div className="order-1 lg:order-2 space-y-4 p-6 lg:h-[calc(100vh-73px)] lg:overflow-y-auto">
             {/* Day Summary */}
             <Card className="bg-gradient-card">
               <CardContent className="p-5">
@@ -508,7 +541,7 @@ const DayDetail = () => {
                       ? 'bg-amber-500/10 border-amber-500/30'
                       : 'bg-blue-500/10 border-blue-500/30'
                   }`}>
-                    <AlertTriangle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                    <Warning className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
                       timeEstimate.isOverloaded ? 'text-amber-500' : 'text-blue-500'
                     }`} />
                     <div>

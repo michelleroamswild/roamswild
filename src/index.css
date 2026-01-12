@@ -250,14 +250,15 @@
 
 /* Google Places Autocomplete Dropdown Styling */
 .pac-container {
-  background-color: hsl(40 25% 97%);
+  background-color: hsl(40 25% 97%) !important;
   border: 1px solid hsl(35 20% 85%);
   border-radius: 1rem;
   box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.15);
   margin-top: 8px;
   padding: 8px;
   font-family: "DM Sans", sans-serif;
-  z-index: 9999 !important;
+  z-index: 10000 !important;
+  pointer-events: auto !important;
 }
 
 .pac-container::after {
@@ -268,14 +269,16 @@
   padding: 12px 16px;
   border: none;
   border-radius: 0.75rem;
-  cursor: pointer;
+  cursor: pointer !important;
+  pointer-events: auto !important;
   font-family: "DM Sans", sans-serif;
   transition: background-color 0.15s ease;
+  background-color: transparent !important;
 }
 
 .pac-item:hover,
 .pac-item-selected {
-  background-color: hsl(84 35% 28% / 0.1);
+  background-color: hsl(84 35% 28% / 0.1) !important;
 }
 
 .pac-item:first-child {
@@ -420,3 +423,4 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   font-weight: 600;
   color: hsl(150 25% 15%);
 }
+

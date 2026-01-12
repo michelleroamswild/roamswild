@@ -55,7 +55,7 @@ export function PlaceSearch({ onPlaceSelect, placeholder = "Search for a place..
         onPlaceChanged={onPlaceChanged}
         options={{
           types: ['establishment', 'geocode'],
-          fields: ['place_id', 'name', 'formatted_address', 'geometry'],
+          fields: ['place_id', 'name', 'formatted_address', 'geometry', 'types'],
         }}
       >
         <Input

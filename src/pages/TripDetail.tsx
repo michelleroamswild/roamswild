@@ -45,6 +45,7 @@ import { ShareTripModal } from '@/components/ShareTripModal';
 import { CollaboratorAvatars } from '@/components/CollaboratorAvatars';
 import { getTripSlug, getDayUrl } from '@/utils/slugify';
 import { PlaceSearch } from '@/components/PlaceSearch';
+import { useTripGenerator } from '@/hooks/use-trip-generator';
 import {
   Dialog,
   DialogContent,
@@ -69,7 +70,8 @@ const getIcon = (type: string) => {
 const TripDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { generatedTrip, tripConfig, setTripConfig, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTripBySlug, updateTripStop, removeTripStop, fetchCollaborators, isOwner, isLoading } = useTrip();
+  const { generatedTrip, tripConfig, setTripConfig, setGeneratedTrip, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTripBySlug, updateTripStop, removeTripStop, fetchCollaborators, isOwner, isLoading } = useTrip();
+  const { generateTrip, generating: regenerating } = useTripGenerator();
 
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
   const [, forceUpdate] = useState({});
@@ -103,6 +105,7 @@ const TripDetail = () => {
     index?: number;
     currentName: string;
   }>({ isOpen: false, type: 'start', currentName: '' });
+  const [pendingLocationChange, setPendingLocationChange] = useState<google.maps.places.PlaceResult | null>(null);
   const [exitConfirmModal, setExitConfirmModal] = useState(false);
   const mapRef = useRef<google.maps.Map | null>(null);
 
@@ -718,8 +721,13 @@ const TripDetail = () => {
     );
   };
 
-  const handleLocationUpdate = (place: google.maps.places.PlaceResult) => {
-    if (!tripConfig || !place.geometry?.location || !place.place_id) return;
+  const handleLocationSelect = (place: google.maps.places.PlaceResult) => {
+    setPendingLocationChange(place);
+  };
+
+  const handleLocationUpdate = async () => {
+    const place = pendingLocationChange;
+    if (!tripConfig || !place?.geometry?.location || !place.place_id) return;
 
     const newLocation: TripDestination = {
       id: `loc-${place.place_id}`,
@@ -742,11 +750,46 @@ const TripDetail = () => {
       updatedConfig.destinations = newDestinations;
     }
 
-    setTripConfig(updatedConfig);
     setEditLocationModal({ isOpen: false, type: 'start', currentName: '' });
-    toast.success('Location updated', {
-      description: 'Save the trip to keep your changes.',
-    });
+    setPendingLocationChange(null);
+
+    // Show loading toast while regenerating
+    const toastId = toast.loading('Regenerating trip with new location...');
+
+    try {
+      // Regenerate the trip with the updated config
+      const newTrip = await generateTrip(updatedConfig);
+
+      if (newTrip) {
+        // Keep the same trip ID so it can be saved over the existing trip
+        const tripWithSameId = {
+          ...newTrip,
+          id: generatedTrip?.id || newTrip.id,
+        };
+        setGeneratedTrip(tripWithSameId);
+        setTripConfig(updatedConfig);
+        toast.success('Trip regenerated!', {
+          id: toastId,
+          description: 'Your trip has been updated with the new location.',
+        });
+      } else {
+        toast.error('Failed to regenerate trip', {
+          id: toastId,
+          description: 'Please try again.',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to regenerate trip:', error);
+      toast.error('Failed to regenerate trip', {
+        id: toastId,
+        description: 'Please try again.',
+      });
+    }
+  };
+
+  const handleCloseEditModal = () => {
+    setEditLocationModal({ isOpen: false, type: 'start', currentName: '' });
+    setPendingLocationChange(null);
   };
 
   return (
@@ -883,8 +926,29 @@ const TripDetail = () => {
       )}
 
       {/* Edit Location Modal */}
-      <Dialog open={editLocationModal.isOpen} onOpenChange={(open) => !open && setEditLocationModal({ isOpen: false, type: 'start', currentName: '' })}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={editLocationModal.isOpen} onOpenChange={(open) => !open && handleCloseEditModal()}>
+        <DialogContent
+          className="sm:max-w-md"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onInteractOutside={(e) => {
+            // Prevent closing when clicking on Google Autocomplete dropdown
+            const target = e.target as HTMLElement;
+            if (target.closest('.pac-container') || target.closest('.pac-item')) {
+              e.preventDefault();
+            }
+          }}
+          onPointerDownOutside={(e) => {
+            // Prevent closing when clicking on Google Autocomplete dropdown
+            const target = e.target as HTMLElement;
+            if (target.closest('.pac-container') || target.closest('.pac-item')) {
+              e.preventDefault();
+            }
+          }}
+          onFocusOutside={(e) => {
+            // Prevent focus issues with autocomplete
+            e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>
               {editLocationModal.type === 'start' ? 'Change Start Location' : 'Change Destination'}
@@ -895,9 +959,28 @@ const TripDetail = () => {
               Current: <span className="font-medium text-foreground">{editLocationModal.currentName}</span>
             </p>
             <PlaceSearch
-              onPlaceSelect={handleLocationUpdate}
+              onPlaceSelect={handleLocationSelect}
               placeholder="Search for a new location..."
             />
+            {pendingLocationChange && (
+              <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                <p className="text-sm text-muted-foreground">New location:</p>
+                <p className="font-medium text-foreground">{pendingLocationChange.name || pendingLocationChange.formatted_address}</p>
+              </div>
+            )}
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" onClick={handleCloseEditModal} className="flex-1">
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleLocationUpdate}
+                disabled={!pendingLocationChange || regenerating}
+                className="flex-1"
+              >
+                {regenerating ? 'Updating...' : 'Change Location'}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1427,6 +1510,19 @@ const TripDetail = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Regenerating Loading Overlay */}
+      {regenerating && (
+        <div className="fixed inset-0 z-[60] bg-background/80 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-card border border-border rounded-xl p-8 shadow-lg flex flex-col items-center gap-4">
+            <ArrowsClockwise className="w-12 h-12 text-primary animate-spin" weight="bold" />
+            <div className="text-center">
+              <p className="font-semibold text-foreground text-lg">Regenerating Trip</p>
+              <p className="text-sm text-muted-foreground">Finding campsites and hikes for your new location...</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Photo Lightbox */}
       {enlargedPhoto && (
