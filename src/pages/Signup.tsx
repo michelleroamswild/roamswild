@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Compass, Envelope, Lock, User, SpinnerGap, WarningCircle, CheckCircle } from '@phosphor-icons/react';
+import { Jeep, Envelope, Lock, User, SpinnerGap, WarningCircle, CheckCircle, Mountains, Tent, Path } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/context/AuthContext';
+
+// Import a landing page photo for the side panel
+import heroPhoto from '@/images/landingpage/DJI_0682.jpg';
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -52,54 +54,97 @@ const Signup = () => {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="min-h-screen hero-topo flex items-center justify-center p-4">
         <div className="w-full max-w-md">
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-center">
-                <div className="flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mx-auto mb-4">
-                  <CheckCircle className="w-8 h-8 text-primary" />
-                </div>
-                <h1 className="text-2xl font-display font-bold text-foreground">Account Created!</h1>
-                <p className="text-muted-foreground mt-2">
-                  Welcome to RoamsWild. Redirecting you to the app...
-                </p>
+          <div className="bg-card rounded-2xl border border-border p-8 shadow-lg">
+            <div className="text-center">
+              <div className="flex items-center justify-center w-16 h-16 bg-accent/20 rounded-full mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-accent" weight="fill" />
               </div>
-            </CardContent>
-          </Card>
+              <h1 className="text-2xl font-display font-bold text-foreground">Account Created!</h1>
+              <p className="text-muted-foreground mt-2">
+                Welcome to RoamsWild. Redirecting you to the app...
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="flex items-center justify-center w-12 h-12 bg-primary rounded-xl">
-            <Compass className="w-6 h-6 text-primary-foreground" />
-          </div>
-          <span className="text-2xl font-display font-bold text-foreground">RoamsWild</span>
-        </div>
+    <div className="min-h-screen flex">
+      {/* Left side - Photo (hidden on mobile) */}
+      <div className="hidden lg:flex lg:w-1/2 relative">
+        <img
+          src={heroPhoto}
+          alt="Overlanding adventure"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/80 via-primary/60 to-transparent" />
+        <div className="relative z-10 flex flex-col justify-between p-12 text-white">
+          <Link to="/" className="flex items-center gap-2">
+            <Jeep className="w-8 h-8" weight="fill" />
+            <span className="text-2xl font-display font-bold">RoamsWild</span>
+          </Link>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center mb-6">
+          <div className="space-y-6">
+            <h2 className="text-4xl font-display font-bold leading-tight">
+              Start planning your<br />next adventure.
+            </h2>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                  <Path className="w-5 h-5" />
+                </div>
+                <span className="text-lg">Plan scenic routes</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                  <Tent className="w-5 h-5" />
+                </div>
+                <span className="text-lg">Discover hidden campsites</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                  <Mountains className="w-5 h-5" />
+                </div>
+                <span className="text-lg">Find amazing hikes</span>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-white/70 text-sm">
+            Join thousands of adventurers planning their trips with RoamsWild.
+          </p>
+        </div>
+      </div>
+
+      {/* Right side - Signup form */}
+      <div className="flex-1 flex items-center justify-center p-6 md:p-12 hero-topo">
+        <div className="w-full max-w-md">
+          {/* Mobile logo */}
+          <Link to="/" className="flex items-center justify-center gap-2 mb-8 lg:hidden">
+            <Jeep className="w-8 h-8 text-primary" weight="fill" />
+            <span className="text-2xl font-display font-bold text-foreground">RoamsWild</span>
+          </Link>
+
+          <div className="bg-card rounded-2xl border border-border p-8 shadow-lg">
+            <div className="text-center mb-8">
               <h1 className="text-2xl font-display font-bold text-foreground">Create your account</h1>
-              <p className="text-muted-foreground mt-1">Start planning your next adventure</p>
+              <p className="text-muted-foreground mt-2">Start planning your next adventure</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
+                <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive text-sm">
                   <WarningCircle className="w-4 h-4 flex-shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
+                <Label htmlFor="name" className="text-foreground font-medium">Name</Label>
                 <div className="relative">
                   <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
@@ -114,7 +159,7 @@ const Signup = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-foreground font-medium">Email</Label>
                 <div className="relative">
                   <Envelope className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
@@ -130,7 +175,7 @@ const Signup = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="text-foreground font-medium">Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
@@ -147,7 +192,7 @@ const Signup = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm Password</Label>
+                <Label htmlFor="confirm-password" className="text-foreground font-medium">Confirm Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
@@ -166,12 +211,12 @@ const Signup = () => {
                 type="submit"
                 variant="primary"
                 size="lg"
-                className="w-full"
+                className="w-full h-12 rounded-xl text-base font-semibold"
                 disabled={isLoading}
               >
                 {isLoading ? (
                   <>
-                    <SpinnerGap className="w-4 h-4 mr-2 animate-spin" />
+                    <SpinnerGap className="w-5 h-5 mr-2 animate-spin" />
                     Creating account...
                   </>
                 ) : (
@@ -180,14 +225,14 @@ const Signup = () => {
               </Button>
             </form>
 
-            <div className="mt-6 text-center text-sm text-muted-foreground">
+            <div className="mt-8 text-center text-sm text-muted-foreground">
               Already have an account?{' '}
-              <Link to="/login" className="text-primary font-medium hover:underline">
+              <Link to="/login" className="text-primary font-semibold hover:underline">
                 Sign in
               </Link>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
