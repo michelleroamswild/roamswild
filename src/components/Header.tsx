@@ -1,4 +1,5 @@
-import { Jeep, List, Path, SignOut, Tent } from "@phosphor-icons/react";
+import { useState } from "react";
+import { Jeep, List, Path, SignOut, Tent, Compass, Heart, House } from "@phosphor-icons/react";
 import { Button } from "./ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -11,6 +12,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "./ui/sheet";
 
 const getInitials = (name?: string, email?: string): string => {
   if (name) {
@@ -29,6 +37,7 @@ const getInitials = (name?: string, email?: string): string => {
 export const Header = () => {
   const { user, signOut } = useAuth();
   const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const userName = user?.user_metadata?.name as string | undefined;
   const initials = getInitials(userName, user?.email);
 
@@ -40,6 +49,8 @@ export const Header = () => {
   const handleSignOut = async () => {
     await signOut();
   };
+
+  const closeMobileMenu = () => setMobileMenuOpen(false);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-transparent">
@@ -123,9 +134,114 @@ export const Header = () => {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button variant="ghost" size="icon" className="md:hidden">
-            <List className="w-5 h-5" weight="bold" />
-          </Button>
+          {/* Mobile Menu */}
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="md:hidden">
+                <List className="w-5 h-5" weight="bold" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[280px] sm:w-[320px]">
+              <SheetHeader className="text-left">
+                <SheetTitle className="flex items-center gap-2">
+                  <Jeep className="w-5 h-5 text-primary" weight="regular" />
+                  <span className="font-display font-bold">RoamsWild</span>
+                </SheetTitle>
+              </SheetHeader>
+
+              {/* User Info */}
+              <div className="flex items-center gap-3 mt-6 pb-4 border-b border-border">
+                <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground font-medium text-sm">
+                  {initials}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground truncate">{userName || 'Account'}</p>
+                  <p className="text-sm text-muted-foreground truncate">{user?.email}</p>
+                </div>
+              </div>
+
+              {/* Navigation Links */}
+              <nav className="flex flex-col gap-1 mt-4">
+                <Link
+                  to="/"
+                  onClick={closeMobileMenu}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
+                    isActive('/')
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground hover:bg-muted"
+                  )}
+                >
+                  <House className="w-5 h-5" weight={isActive('/') ? "fill" : "regular"} />
+                  Explore
+                </Link>
+                <Link
+                  to="/my-trips"
+                  onClick={closeMobileMenu}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
+                    isActive('/my-trips')
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground hover:bg-muted"
+                  )}
+                >
+                  <Compass className="w-5 h-5" weight={isActive('/my-trips') ? "fill" : "regular"} />
+                  My Trips
+                </Link>
+                <Link
+                  to="/saved"
+                  onClick={closeMobileMenu}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
+                    isActive('/saved')
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground hover:bg-muted"
+                  )}
+                >
+                  <Heart className="w-5 h-5" weight={isActive('/saved') ? "fill" : "regular"} />
+                  Saved
+                </Link>
+                <Link
+                  to="/campsites"
+                  onClick={closeMobileMenu}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
+                    isActive('/campsites')
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground hover:bg-muted"
+                  )}
+                >
+                  <Tent className="w-5 h-5" weight={isActive('/campsites') ? "fill" : "regular"} />
+                  Campsites
+                </Link>
+              </nav>
+
+              {/* Create Trip Button */}
+              <div className="mt-6 pt-4 border-t border-border">
+                <Link to="/create-trip" onClick={closeMobileMenu}>
+                  <Button variant="primary" className="w-full">
+                    <Path className="w-4 h-4 mr-2" weight="bold" />
+                    Create Trip
+                  </Button>
+                </Link>
+              </div>
+
+              {/* Sign Out */}
+              <div className="mt-4">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    handleSignOut();
+                    closeMobileMenu();
+                  }}
+                >
+                  <SignOut className="w-4 h-4 mr-2" weight="bold" />
+                  Sign out
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
       </div>
     </header>
