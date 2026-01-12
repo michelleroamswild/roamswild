@@ -10,6 +10,7 @@ const MARKER_COLORS = {
   gas: { bg: '#e85a9a', text: '#ffffff' },       // accent-blushorchid darkened hsl(332 76% 63%)
   photo: { bg: '#e85a9a', text: '#ffffff' },     // accent-blushorchid darkened hsl(332 76% 63%)
   start: { bg: '#34b5a5', text: '#ffffff' },     // accent-aquateal darkened hsl(171 60% 51%)
+  end: { bg: '#34b5a5', text: '#ffffff' },       // accent-aquateal darkened hsl(171 60% 51%)
   default: { bg: '#6b5ce6', text: '#ffffff' },   // accent-lavenderslate darkened hsl(249 80% 60%)
 };
 
@@ -30,8 +31,8 @@ const gasPumpPath = `M241,69.66,221.66,50.34a8,8,0,0,0-11.32,11.32L229.66,81A8,8
 // MapPinArea icon - Phosphor fill weight (256x256 viewBox) - for destinations
 const mapPinAreaPath = `M124,175a8,8,0,0,0,7.94,0c2.45-1.41,60-35,60-94.95A64,64,0,0,0,64,80C64,140,121.58,173.54,124,175ZM128,56a24,24,0,1,1-24,24A24,24,0,0,1,128,56ZM240,184c0,31.18-57.71,48-112,48S16,215.18,16,184c0-14.59,13.22-27.51,37.23-36.37a8,8,0,0,1,5.54,15C42.26,168.74,32,176.92,32,184c0,13.36,36.52,32,96,32s96-18.64,96-32c0-7.08-10.26-15.26-26.77-21.36a8,8,0,0,1,5.54-15C226.78,156.49,240,169.41,240,184Z`;
 
-// Flag icon - Phosphor fill weight (256x256 viewBox)
-const flagPath = `M232,56V176a8,8,0,0,1-2.76,6c-15.28,13.23-29.89,18-43.82,18-18.91,0-36.57-8.74-53-16.85C105.87,170,82.79,158.61,56,179.77V224a8,8,0,0,1-16,0V56a8,8,0,0,1,2.77-6h0c36-31.18,68.31-15.21,96.79-1.12C167,62.46,190.79,74.2,218.76,50A8,8,0,0,1,232,56Z`;
+// MapPin icon - Phosphor fill weight (256x256 viewBox) - for start/end locations
+const mapPinPath = `M128,16a88.1,88.1,0,0,0-88,88c0,75.3,80,132.17,83.41,134.55a8,8,0,0,0,9.18,0C136,236.17,216,179.3,216,104A88.1,88.1,0,0,0,128,16Zm0,56a32,32,0,1,1-32,32A32,32,0,0,1,128,72Z`;
 
 // Camera icon - Phosphor fill weight (256x256 viewBox)
 const cameraPath = `M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm-44,76a36,36,0,1,1-36-36A36,36,0,0,1,164,132Z`;
@@ -45,7 +46,8 @@ function getIconPath(type: string): string {
     case 'gas':
       return gasPumpPath;
     case 'start':
-      return flagPath;
+    case 'end':
+      return mapPinPath;
     case 'photo':
       return cameraPath;
     default:
@@ -64,10 +66,12 @@ export function createMarkerIcon(
     size?: number;
     showLabel?: boolean;
     label?: string;
+    customColor?: string; // Override the default background color
   } = {}
 ): google.maps.Icon {
-  const { isActive = false, size = 36, showLabel = false, label } = options;
+  const { isActive = false, size = 36, showLabel = false, label, customColor } = options;
   const colors = getColors(type);
+  const bgColor = customColor || colors.bg;
   const actualSize = isActive ? size * 1.2 : size;
   // Only show a dark border when active, no border otherwise
   const strokeAttr = isActive ? 'stroke="#3f3e2c" stroke-width="2"' : '';
@@ -75,13 +79,13 @@ export function createMarkerIcon(
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${actualSize}" height="${actualSize}" viewBox="0 0 36 36">
       <!-- Background circle - no border by default -->
-      <circle cx="18" cy="18" r="17" fill="${colors.bg}" ${strokeAttr}/>
+      <circle cx="18" cy="18" r="17" fill="${bgColor}" ${strokeAttr}/>
       <!-- Icon at 20px using nested SVG to scale from 256x256 viewBox -->
       <svg x="8" y="8" width="20" height="20" viewBox="0 0 256 256">
         <path d="${getIconPath(type)}" fill="${colors.text}"/>
       </svg>
       ${showLabel && label ? `
-        <text x="18" y="32" text-anchor="middle" font-size="10" font-weight="bold" fill="${colors.bg}">${label}</text>
+        <text x="18" y="32" text-anchor="middle" font-size="10" font-weight="bold" fill="${bgColor}">${label}</text>
       ` : ''}
     </svg>
   `;
@@ -116,18 +120,37 @@ export function getMarkerColor(type: string): string {
   return getColors(type).bg;
 }
 
+// Get photo hotspot color based on photo count (lighter = fewer photos, darker = more photos)
+// Based on accent-blushorchid: hsl(332, 76%, 79%)
+export function getPhotoHotspotColor(photoCount: number): string {
+  // Blushorchid variations with more dramatic lightness differences
+  // Base: hsl(332, 76%, L%) where L varies significantly
+  if (photoCount < 20) {
+    return 'hsl(332, 76%, 88%)'; // Very light pink
+  } else if (photoCount < 50) {
+    return 'hsl(332, 76%, 72%)'; // Light pink
+  } else if (photoCount < 100) {
+    return 'hsl(332, 76%, 55%)'; // Medium pink
+  } else {
+    return 'hsl(332, 76%, 38%)'; // Dark pink - much darker for popular spots
+  }
+}
+
 // Type styles for consistency with card styling (matches marker colors)
 export function getTypeStyles(type: string): string {
   switch (type) {
     case 'hike':
-      return 'bg-pinesoft/20 text-pinesoft border-pinesoft/30';
+      return 'bg-pinesoft/20 text-[#3c8a79] border-pinesoft/30';
     case 'camp':
-      return 'bg-softamber/20 text-primary border-softamber/30';
+      return 'bg-softamber/20 text-[#ea9b0c] border-softamber/30';
     case 'viewpoint':
-      return 'bg-skyblue/20 text-primary border-skyblue/30';
+      return 'bg-skyblue/20 text-[#4a96ed] border-skyblue/30';
     case 'gas':
-      return 'bg-blushorchid/20 text-primary border-blushorchid/30';
+      return 'bg-blushorchid/20 text-[#e85a9a] border-blushorchid/30';
+    case 'start':
+    case 'end':
+      return 'bg-aquateal/20 text-[#34b5a5] border-aquateal/30';
     default:
-      return 'bg-lavenderslate/20 text-primary border-lavenderslate/30';
+      return 'bg-lavenderslate/20 text-[#6b5ce6] border-lavenderslate/30';
   }
 }

@@ -78,7 +78,7 @@ async function searchPhotoHotspots(
     photosUrl.searchParams.set('radius_units', 'km');
     photosUrl.searchParams.set('has_geo', '1');
     photosUrl.searchParams.set('extras', 'geo,place_url,url_m,url_s');
-    photosUrl.searchParams.set('per_page', '250');
+    photosUrl.searchParams.set('per_page', '500');
     photosUrl.searchParams.set('sort', 'interestingness-desc');
     photosUrl.searchParams.set('format', 'json');
     photosUrl.searchParams.set('nojsoncallback', '1');
@@ -95,7 +95,7 @@ async function searchPhotoHotspots(
 
     // Convert clusters to hotspots
     for (const cluster of clusters) {
-      if (cluster.count >= 3) { // Only show clusters with 3+ photos
+      if (cluster.count >= 2) { // Only show clusters with 2+ photos
         hotspots.push({
           id: `hotspot-${cluster.lat.toFixed(4)}-${cluster.lng.toFixed(4)}`,
           name: cluster.placeName || `Photo Hotspot`,
@@ -107,10 +107,10 @@ async function searchPhotoHotspots(
       }
     }
 
-    // Sort by photo count descending and take top 10
+    // Sort by photo count descending and take top 15 per search point
     return hotspots
       .sort((a, b) => b.photoCount - a.photoCount)
-      .slice(0, 10);
+      .slice(0, 15);
 
   } catch (error) {
     console.error('Error fetching Flickr hotspots:', error);
@@ -247,6 +247,71 @@ export function usePhotoHotspots(lat: number, lng: number, radiusKm: number = 50
 
     fetchHotspots();
   }, [lat, lng, radiusKm]);
+
+  return { hotspots, loading, error };
+}
+
+// Search at multiple points along a route for better coverage
+export function useRoutePhotoHotspots(
+  searchPoints: Array<{ lat: number; lng: number }>,
+  radiusKm: number = 32
+) {
+  const [hotspots, setHotspots] = useState<PhotoHotspot[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!searchPoints || searchPoints.length === 0) return;
+
+    const fetchAllHotspots = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        console.log('Fetching photo hotspots for route with', searchPoints.length, 'search points');
+
+        // Search at each point along the route
+        const allResults: PhotoHotspot[] = [];
+        const seenIds = new Set<string>();
+
+        for (const point of searchPoints) {
+          if (point.lat === 0 && point.lng === 0) continue;
+
+          const results = await searchPhotoHotspots(point.lat, point.lng, radiusKm);
+
+          // Add unique hotspots (avoid duplicates from overlapping searches)
+          for (const hotspot of results) {
+            // Create a location-based ID to detect duplicates
+            const locationKey = `${hotspot.lat.toFixed(3)}-${hotspot.lng.toFixed(3)}`;
+            if (!seenIds.has(locationKey)) {
+              seenIds.add(locationKey);
+              allResults.push(hotspot);
+            }
+          }
+
+          // Small delay between API calls to avoid rate limiting
+          if (searchPoints.indexOf(point) < searchPoints.length - 1) {
+            await new Promise(r => setTimeout(r, 300));
+          }
+        }
+
+        // Sort by photo count and return top results
+        const sortedResults = allResults
+          .sort((a, b) => b.photoCount - a.photoCount)
+          .slice(0, 30); // Return more hotspots for route view
+
+        console.log('Route photo hotspots found:', sortedResults.length);
+        setHotspots(sortedResults);
+      } catch (err) {
+        setError('Failed to fetch photo hotspots');
+        console.error('Route photo hotspots error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAllHotspots();
+  }, [JSON.stringify(searchPoints), radiusKm]);
 
   return { hotspots, loading, error };
 }

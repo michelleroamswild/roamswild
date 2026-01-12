@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Mountains, NavigationArrow, Star, ShareNetwork, ArrowSquareOut, Compass, Plus, Trash, Sneaker, Path, Calendar, Tent, SpinnerGap, Camera, CaretDown, CaretUp, X, Tree, TreeEvergreen, Sun, Cloud, CloudRain, Snowflake, Wind } from "@phosphor-icons/react";
+import { ArrowLeft, MapPin, Mountains, NavigationArrow, Star, ShareNetwork, ArrowSquareOut, Compass, Plus, Trash, Boot, Path, Calendar, Tent, SpinnerGap, Camera, CaretDown, CaretUp, X, Tree, TreeEvergreen, Sun, Cloud, CloudRain, Snowflake, Wind } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -695,7 +695,7 @@ const LocationDetail = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 bg-secondary/50 rounded-xl">
                     <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                      <Mountains className="w-4 h-4" />
+                      <Mountains className="w-4 h-4 text-[#6b5ce6]" />
                       <span className="text-sm">Elevation</span>
                     </div>
                     {elevation !== null ? (
@@ -803,7 +803,7 @@ const LocationDetail = () => {
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <label className="text-sm font-medium text-foreground flex items-center gap-2">
-                        <Sneaker className="w-4 h-4 text-muted-foreground" />
+                        <Boot className="w-4 h-4 text-[#3c8a79]" />
                         Hikes per day
                       </label>
                       <span className="text-2xl font-bold text-foreground">
@@ -827,7 +827,7 @@ const LocationDetail = () => {
                   {/* Same campsite toggle */}
                   <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
                     <div className="flex items-center gap-3">
-                      <Tent className="w-4 h-4 text-amber-500" />
+                      <Tent className="w-4 h-4 text-[#ea9b0c]" />
                       <div>
                         <p className="text-sm font-medium text-foreground">Base Camp Mode</p>
                         <p className="text-xs text-muted-foreground">Stay at the same campsite each night</p>
@@ -900,8 +900,8 @@ const LocationDetail = () => {
                           }
                         }}
                       >
-                        <div className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 ${place.source === 'ridb' ? 'bg-[#213D5C]/10' : 'bg-primary/10'}`}>
-                          <Tent className={`w-5 h-5 ${place.source === 'ridb' ? 'text-[#213D5C]' : 'text-primary'}`} />
+                        <div className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 ${place.source === 'ridb' ? 'bg-[#213D5C]/10' : 'bg-softamber/20'}`}>
+                          <Tent className={`w-5 h-5 ${place.source === 'ridb' ? 'text-[#213D5C]' : 'text-[#ea9b0c]'}`} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-foreground truncate">
@@ -952,8 +952,8 @@ const LocationDetail = () => {
                           );
                         }}
                       >
-                        <div className="flex items-center justify-center w-10 h-10 bg-primary/10 rounded-lg flex-shrink-0">
-                          <Sneaker className="w-5 h-5 text-primary" />
+                        <div className="flex items-center justify-center w-10 h-10 bg-pinesoft/10 rounded-lg flex-shrink-0">
+                          <Boot className="w-5 h-5 text-[#3c8a79]" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-foreground truncate">
@@ -984,7 +984,7 @@ const LocationDetail = () => {
                   </div>
                 ) : (
                   <div className="text-center py-4 text-muted-foreground">
-                    <Sneaker className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <Boot className="w-8 h-8 mx-auto mb-2 opacity-30" />
                     <p>No hikes found within 30 miles</p>
                   </div>
                 )}
@@ -1000,7 +1000,7 @@ const LocationDetail = () => {
                     className="w-full flex items-center justify-between"
                   >
                     <div className="flex items-center gap-2">
-                      <Camera className="w-5 h-5 text-orange-500" />
+                      <Camera className="w-5 h-5 text-[#e85a9a]" />
                       <h3 className="font-semibold text-foreground">Photo Hotspots</h3>
                       <span className="text-xs text-muted-foreground">({photoHotspots.length})</span>
                     </div>
@@ -1047,8 +1047,8 @@ const LocationDetail = () => {
                                 />
                               </button>
                             ) : (
-                              <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                                <Camera className="w-5 h-5 text-orange-500" />
+                              <div className="w-10 h-10 rounded-lg bg-blushorchid/20 flex items-center justify-center flex-shrink-0">
+                                <Camera className="w-5 h-5 text-[#e85a9a]" />
                               </div>
                             )}
                             <button
@@ -1086,7 +1086,7 @@ const LocationDetail = () => {
                     className="w-full flex items-center justify-between"
                   >
                     <div className="flex items-center gap-2">
-                      <TreeEvergreen className="w-5 h-5 text-pinesoft" />
+                      <TreeEvergreen className="w-5 h-5 text-[#3c8a79]" />
                       <h3 className="font-semibold text-foreground">Dispersed Camping Areas</h3>
                       {publicLands.length > 0 && (
                         <span className="text-xs text-muted-foreground">({publicLands.length})</span>
@@ -1131,7 +1131,7 @@ const LocationDetail = () => {
                               }}
                             >
                               <div className="w-10 h-10 rounded-lg bg-pinesoft/10 flex items-center justify-center flex-shrink-0">
-                                <TreeEvergreen className="w-5 h-5 text-pinesoft" />
+                                <TreeEvergreen className="w-5 h-5 text-[#3c8a79]" />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-foreground text-sm truncate">

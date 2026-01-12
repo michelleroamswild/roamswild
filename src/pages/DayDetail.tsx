@@ -5,9 +5,10 @@ import {
   Path,
   Clock,
   MapPin,
+  MapPinArea,
   NavigationArrow,
   Star,
-  Sneaker,
+  Boot,
   Tent,
   Eye,
   GasPump,
@@ -130,15 +131,18 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherForecast |
 const getIcon = (type: string) => {
   switch (type) {
     case 'hike':
-      return Sneaker;
+      return Boot;
     case 'gas':
       return GasPump;
     case 'camp':
       return Tent;
     case 'viewpoint':
       return Eye;
-    default:
+    case 'start':
+    case 'end':
       return MapPin;
+    default:
+      return MapPinArea;
   }
 };
 

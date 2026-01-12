@@ -296,7 +296,7 @@ export const Suggestions = () => {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <Tent className="w-5 h-5 text-amber-500" />
+                  <Tent className="w-5 h-5 text-[#ea9b0c]" />
                   <h3 className="text-lg font-semibold text-foreground">Top Campsites</h3>
                 </div>
               </div>
@@ -405,7 +405,7 @@ export const Suggestions = () => {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <Camera className="w-5 h-5 text-orange-500" />
+                  <Camera className="w-5 h-5 text-[#e85a9a]" />
                   <h3 className="text-lg font-semibold text-foreground">Popular Photo Spots</h3>
                 </div>
                 <span className="text-xs text-muted-foreground">via Flickr</span>
@@ -440,8 +440,8 @@ interface CampsiteCardProps {
 const CampsiteCard = ({ campsite, index, isSelected, onClick }: CampsiteCardProps) => {
   return (
     <Card
-      className={`group hover:border-amber-500/30 hover:shadow-card transition-all duration-300 animate-fade-in cursor-pointer ${
-        isSelected ? 'border-amber-500 bg-amber-500/5' : ''
+      className={`group hover:border-softamber/30 hover:shadow-card transition-all duration-300 animate-fade-in cursor-pointer ${
+        isSelected ? 'border-softamber bg-softamber/5' : ''
       }`}
       style={{ animationDelay: `${index * 100}ms` }}
       onClick={onClick}
@@ -449,13 +449,13 @@ const CampsiteCard = ({ campsite, index, isSelected, onClick }: CampsiteCardProp
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <div className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 ${
-            isSelected ? 'bg-amber-500/20' : 'bg-amber-500/10'
+            isSelected ? 'bg-softamber/30' : 'bg-softamber/20'
           }`}>
-            <Tent className="w-5 h-5 text-amber-500" />
+            <Tent className="w-5 h-5 text-[#ea9b0c]" />
           </div>
           <div className="flex-1 min-w-0">
             <h4 className={`font-semibold truncate transition-colors ${
-              isSelected ? 'text-amber-600' : 'text-foreground group-hover:text-amber-600'
+              isSelected ? 'text-[#ea9b0c]' : 'text-foreground group-hover:text-[#ea9b0c]'
             }`}>
               {campsite.name}
             </h4>
@@ -577,20 +577,20 @@ const PhotoHotspotCard = ({ hotspot, index }: PhotoHotspotCardProps) => {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
           <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
-            <Camera className="w-3.5 h-3.5 text-orange-400" />
+            <Camera className="w-3.5 h-3.5 text-[#e85a9a]" />
             <span className="text-xs font-medium text-white">Photo Hotspot</span>
           </div>
         </div>
       ) : (
-        <div className="h-24 w-full bg-gradient-to-br from-orange-500/20 to-orange-500/5 flex items-center justify-center">
-          <Camera className="w-10 h-10 text-orange-500/40" />
+        <div className="h-24 w-full bg-gradient-to-br from-blushorchid/20 to-blushorchid/5 flex items-center justify-center">
+          <Camera className="w-10 h-10 text-blushorchid/40" />
         </div>
       )}
 
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <h4 className="font-semibold text-foreground truncate group-hover:text-orange-500 transition-colors">
+            <h4 className="font-semibold text-foreground truncate group-hover:text-[#e85a9a] transition-colors">
               {hotspot.name}
             </h4>
             <div className="flex items-center gap-1 mt-1">

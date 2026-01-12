@@ -49,15 +49,15 @@ const features = [
     icon: Tent,
     title: "Campsite Database",
     description: "Access thousands of dispersed camping spots, BLM land, and hidden gems saved by the community.",
-    color: "text-amber-500",
-    bgColor: "bg-amber-500/10",
+    color: "text-[#ea9b0c]",
+    bgColor: "bg-softamber/20",
   },
   {
     icon: Mountains,
     title: "Trail Discovery",
     description: "Find hiking trails near your campsites with difficulty ratings, distance, and elevation data.",
-    color: "text-emerald-500",
-    bgColor: "bg-emerald-500/10",
+    color: "text-[#3c8a79]",
+    bgColor: "bg-pinesoft/20",
   },
   {
     icon: Users,
@@ -165,13 +165,13 @@ const AppScreenshot = () => (
       <div className="absolute left-[12%] bottom-[12%] w-6 h-6 bg-accent rounded-full border-2 border-white shadow-lg flex items-center justify-center">
         <span className="text-[8px] font-bold text-white">A</span>
       </div>
-      <div className="absolute left-[28%] top-[52%] w-5 h-5 bg-amber-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+      <div className="absolute left-[28%] top-[52%] w-5 h-5 bg-softamber rounded-full border-2 border-white shadow-lg flex items-center justify-center">
         <Tent className="w-2.5 h-2.5 text-white" weight="fill" />
       </div>
-      <div className="absolute left-[48%] top-[32%] w-5 h-5 bg-emerald-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+      <div className="absolute left-[48%] top-[32%] w-5 h-5 bg-pinesoft rounded-full border-2 border-white shadow-lg flex items-center justify-center">
         <Mountains className="w-2.5 h-2.5 text-white" weight="fill" />
       </div>
-      <div className="absolute right-[28%] top-[18%] w-5 h-5 bg-amber-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+      <div className="absolute right-[28%] top-[18%] w-5 h-5 bg-softamber rounded-full border-2 border-white shadow-lg flex items-center justify-center">
         <Tent className="w-2.5 h-2.5 text-white" weight="fill" />
       </div>
       <div className="absolute right-[12%] top-[9%] w-6 h-6 bg-rose-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
@@ -211,16 +211,16 @@ const AppScreenshot = () => (
           </div>
         </div>
         <div className="flex gap-2">
-          <div className="flex-1 bg-accent/10 rounded-lg p-1.5 text-center">
-            <Tent className="w-3 h-3 text-accent mx-auto" />
+          <div className="flex-1 bg-softamber/20 rounded-lg p-1.5 text-center">
+            <Tent className="w-3 h-3 text-[#ea9b0c] mx-auto" />
             <span className="text-[8px] font-medium text-foreground block">3 Camps</span>
           </div>
-          <div className="flex-1 bg-emerald-500/10 rounded-lg p-1.5 text-center">
-            <Mountains className="w-3 h-3 text-emerald-500 mx-auto" />
+          <div className="flex-1 bg-pinesoft/20 rounded-lg p-1.5 text-center">
+            <Mountains className="w-3 h-3 text-[#3c8a79] mx-auto" />
             <span className="text-[8px] font-medium text-foreground block">2 Hikes</span>
           </div>
-          <div className="flex-1 bg-amber-500/10 rounded-lg p-1.5 text-center">
-            <Path className="w-3 h-3 text-amber-500 mx-auto" />
+          <div className="flex-1 bg-skyblue/20 rounded-lg p-1.5 text-center">
+            <Path className="w-3 h-3 text-[#4a96ed] mx-auto" />
             <span className="text-[8px] font-medium text-foreground block">68 mi</span>
           </div>
         </div>
@@ -395,75 +395,93 @@ const Landing = () => {
               {/* Floating photos - BEHIND the device (z-0), poking out halfway */}
               {/* Image 1 - Top Left - flies at 300px */}
               <div
-                className="absolute w-80 h-60 md:w-96 md:h-72 overflow-hidden shadow-2xl hidden lg:block z-0 rounded-2xl"
-                style={{
-                  left: '-96px',
-                  top: '-20px',
-                  transform: `translateX(${scrollY > 300 ? '70vw' : `${scrollY * 0.3}px`}) rotate(-12deg)`,
-                  transition: `transform ${scrollY > 500 ? '2s' : '4s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
-                }}
+                className="absolute hidden lg:block z-0 animate-float-slow"
+                style={{ left: '-96px', top: '-20px', animationDelay: '0s' }}
               >
-                <img src={photo8} alt="" className="w-full h-full object-cover" />
+                <div
+                  className="w-80 h-60 md:w-96 md:h-72 overflow-hidden shadow-2xl rounded-2xl"
+                  style={{
+                    transform: `translateX(${scrollY > 300 ? '70vw' : `${scrollY * 0.3}px`}) rotate(-12deg)`,
+                    transition: `transform ${scrollY > 300 ? '2s' : '0.8s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
+                  }}
+                >
+                  <img src={photo8} alt="" className="w-full h-full object-cover" />
+                </div>
               </div>
               {/* Image 2 - Top Right - flies at 400px */}
               <div
-                className="absolute w-96 h-72 md:w-[28rem] md:h-80 overflow-hidden shadow-2xl hidden lg:block z-0 rounded-2xl"
-                style={{
-                  right: '-120px',
-                  top: '-20px',
-                  transform: `translateX(${scrollY > 400 ? '70vw' : `${scrollY * 0.4}px`}) rotate(15deg)`,
-                  transition: `transform ${scrollY > 500 ? '3s' : '6s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
-                }}
+                className="absolute hidden lg:block z-0 animate-float-medium"
+                style={{ right: '-120px', top: '-20px', animationDelay: '0.3s' }}
               >
-                <img src={photo7} alt="" className="w-full h-full object-cover" />
+                <div
+                  className="w-96 h-72 md:w-[28rem] md:h-80 overflow-hidden shadow-2xl rounded-2xl"
+                  style={{
+                    transform: `translateX(${scrollY > 400 ? '70vw' : `${scrollY * 0.4}px`}) rotate(15deg)`,
+                    transition: `transform ${scrollY > 400 ? '3s' : '1s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
+                  }}
+                >
+                  <img src={photo7} alt="" className="w-full h-full object-cover" />
+                </div>
               </div>
               {/* Image 3 - Bottom Left - flies at 320px */}
               <div
-                className="absolute w-80 h-60 md:w-96 md:h-72 overflow-hidden shadow-2xl hidden lg:block z-0 rounded-2xl"
-                style={{
-                  left: '-140px',
-                  bottom: '240px',
-                  transform: `translateX(${scrollY > 320 ? '70vw' : `${scrollY * 0.25}px`}) rotate(12deg)`,
-                  transition: `transform ${scrollY > 500 ? '2.5s' : '5s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
-                }}
+                className="absolute hidden lg:block z-0 animate-float-medium"
+                style={{ left: '-140px', bottom: '240px', animationDelay: '0.5s' }}
               >
-                <img src={photo10} alt="" className="w-full h-full object-cover" />
+                <div
+                  className="w-80 h-60 md:w-96 md:h-72 overflow-hidden shadow-2xl rounded-2xl"
+                  style={{
+                    transform: `translateX(${scrollY > 320 ? '70vw' : `${scrollY * 0.25}px`}) rotate(12deg)`,
+                    transition: `transform ${scrollY > 320 ? '2.5s' : '0.9s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
+                  }}
+                >
+                  <img src={photo10} alt="" className="w-full h-full object-cover" />
+                </div>
               </div>
               {/* Image 4 - Bottom Right - flies at 450px */}
               <div
-                className="absolute w-96 h-72 md:w-[28rem] md:h-80 overflow-hidden shadow-2xl hidden xl:block z-0 rounded-2xl"
-                style={{
-                  right: '-180px',
-                  bottom: '180px',
-                  transform: `translateX(${scrollY > 450 ? '70vw' : `${scrollY * 0.35}px`}) rotate(-8deg)`,
-                  transition: `transform ${scrollY > 500 ? '3.5s' : '7s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
-                }}
+                className="absolute hidden xl:block z-0 animate-float-slow"
+                style={{ right: '-180px', bottom: '180px', animationDelay: '0.8s' }}
               >
-                <img src={photo14} alt="" className="w-full h-full object-cover" />
+                <div
+                  className="w-96 h-72 md:w-[28rem] md:h-80 overflow-hidden shadow-2xl rounded-2xl"
+                  style={{
+                    transform: `translateX(${scrollY > 450 ? '70vw' : `${scrollY * 0.35}px`}) rotate(-8deg)`,
+                    transition: `transform ${scrollY > 450 ? '3.5s' : '1.1s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
+                  }}
+                >
+                  <img src={photo14} alt="" className="w-full h-full object-cover" />
+                </div>
               </div>
               {/* Image 5 - Bottom Left lower - flies at 380px */}
               <div
-                className="absolute w-64 h-48 md:w-80 md:h-60 overflow-hidden shadow-2xl hidden lg:block z-0 rounded-2xl"
-                style={{
-                  left: '-60px',
-                  bottom: '40px',
-                  transform: `translateX(${scrollY > 380 ? '70vw' : `${scrollY * 0.2}px`}) rotate(-8deg)`,
-                  transition: `transform ${scrollY > 500 ? '2.75s' : '5.5s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
-                }}
+                className="absolute hidden lg:block z-0 animate-float-slow"
+                style={{ left: '-60px', bottom: '40px', animationDelay: '1s' }}
               >
-                <img src={photo9} alt="" className="w-full h-full object-cover" />
+                <div
+                  className="w-64 h-48 md:w-80 md:h-60 overflow-hidden shadow-2xl rounded-2xl"
+                  style={{
+                    transform: `translateX(${scrollY > 380 ? '70vw' : `${scrollY * 0.2}px`}) rotate(-8deg)`,
+                    transition: `transform ${scrollY > 380 ? '2.75s' : '0.85s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
+                  }}
+                >
+                  <img src={photo9} alt="" className="w-full h-full object-cover" />
+                </div>
               </div>
               {/* Image 6 - Bottom Center - flies at 500px */}
               <div
-                className="absolute w-64 h-48 md:w-80 md:h-60 overflow-hidden shadow-2xl hidden lg:block z-0 rounded-2xl"
-                style={{
-                  left: '65%',
-                  bottom: '20px',
-                  transform: `translateX(calc(-50% + ${scrollY > 500 ? '70vw' : `${scrollY * 0.28}px`})) rotate(6deg)`,
-                  transition: `transform ${scrollY > 500 ? '4s' : '8s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
-                }}
+                className="absolute hidden lg:block z-0 animate-float-medium"
+                style={{ left: '65%', bottom: '20px', animationDelay: '1.2s' }}
               >
-                <img src={photo11} alt="" className="w-full h-full object-cover" />
+                <div
+                  className="w-64 h-48 md:w-80 md:h-60 overflow-hidden shadow-2xl rounded-2xl"
+                  style={{
+                    transform: `translateX(calc(-50% + ${scrollY > 500 ? '70vw' : `${scrollY * 0.28}px`})) rotate(6deg)`,
+                    transition: `transform ${scrollY > 500 ? '4s' : '1.2s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
+                  }}
+                >
+                  <img src={photo11} alt="" className="w-full h-full object-cover" />
+                </div>
               </div>
 
               {/* Phone - IN FRONT (z-10) */}

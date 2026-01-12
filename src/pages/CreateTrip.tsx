@@ -76,6 +76,7 @@ const CreateTrip = () => {
   const [offroadVehicle, setOffroadVehicle] = useState<'4wd-high' | 'awd-medium'>('4wd-high');
   const [baseCampMode, setBaseCampMode] = useState(true);
   const [includeHikes, setIncludeHikes] = useState(true);
+  const [travelOnlyFinalDay, setTravelOnlyFinalDay] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   // Entry point selector state
@@ -375,6 +376,7 @@ const CreateTrip = () => {
       returnToCampTime: returnToCampTime,
       pacePreference: pacePreference,
       maxDrivingHoursPerDay: maxDrivingHours[0],
+      travelOnlyFinalDay: travelOnlyFinalDay,
     };
 
     console.log("Creating trip with config:", tripConfig);
@@ -473,9 +475,9 @@ const CreateTrip = () => {
                   defaultValue={startLocation?.name}
                 />
                 {startLocation && (
-                  <div className="flex items-center justify-between p-3 bg-[hsl(var(--accent-aquateal)/0.1)] rounded-lg border border-[hsl(var(--accent-aquateal)/0.2)]">
+                  <div className="flex items-center justify-between p-3 bg-aquateal/20 rounded-lg border border-aquateal/30">
                     <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-[hsl(var(--accent-aquateal))]" />
+                      <MapPin className="w-4 h-4 text-[#34b5a5]" />
                       <span className="text-sm font-medium">{startLocation.name}</span>
                     </div>
                     <Button
@@ -504,6 +506,20 @@ const CreateTrip = () => {
                 </label>
               </div>
 
+              {/* Travel Only Final Day Checkbox */}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="travel-only-final"
+                  checked={travelOnlyFinalDay}
+                  onChange={(e) => setTravelOnlyFinalDay(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                />
+                <label htmlFor="travel-only-final" className="cursor-pointer text-sm">
+                  No activities on final day (travel only)
+                </label>
+              </div>
+
               {/* End Location (only if not returning to start) */}
               {!returnToStart && (
                 <div className="space-y-2 pt-2 animate-fade-in">
@@ -513,9 +529,9 @@ const CreateTrip = () => {
                     placeholder="Search for end point..."
                   />
                   {endLocation && (
-                    <div className="flex items-center justify-between p-3 bg-[hsl(var(--accent-softamber)/0.1)] rounded-lg border border-[hsl(var(--accent-softamber)/0.2)]">
+                    <div className="flex items-center justify-between p-3 bg-aquateal/20 rounded-lg border border-aquateal/30">
                       <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-[hsl(var(--accent-softamber))]" />
+                        <MapPin className="w-4 h-4 text-[#34b5a5]" />
                         <span className="text-sm font-medium">{endLocation.name}</span>
                       </div>
                       <Button

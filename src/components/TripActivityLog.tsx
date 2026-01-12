@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, User, MapPin, Sneaker, Tent, Plus, Trash, ArrowsClockwise, Users } from '@phosphor-icons/react';
+import { Clock, User, MapPin, Boot, Tent, Plus, Trash, ArrowsClockwise, Users } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';

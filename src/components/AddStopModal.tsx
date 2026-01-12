@@ -320,7 +320,7 @@ export function AddStopModal({
                       className={`flex items-center justify-center w-10 h-10 rounded-lg ${
                         selectedId === hike.id
                           ? 'bg-primary text-primary-foreground'
-                          : 'bg-emerald-500/10 text-emerald-600'
+                          : 'bg-pinesoft/20 text-[#3c8a79]'
                       }`}
                     >
                       {selectedId === hike.id ? (

@@ -504,7 +504,11 @@ export function useTripGenerator() {
         const dayHikes: TripStop[] = [];
         const shouldHikeToday = hikingDays.has(day);
 
-        if (shouldHikeToday) {
+        // Skip activities on final day if travelOnlyFinalDay is enabled
+        const isFinalDay = day === numDays;
+        const skipActivitiesForTravel = config.travelOnlyFinalDay && isFinalDay;
+
+        if (shouldHikeToday && !skipActivitiesForTravel) {
           // Get unique hikes for this day
           const availableHikes = allNearbyHikes.filter(h => !usedHikeIds.has(h.placeId || h.id));
           console.log(`[generateLocationBasedTrip] Day ${day}: ${availableHikes.length} available hikes`);
@@ -825,7 +829,12 @@ export function useTripGenerator() {
           let hike: TripStop | undefined;
           const shouldHikeToday = hikingDays.has(dayNumber);
 
-          if (shouldHikeToday && availableHikes.length > 0) {
+          // Check if this is the final activity day (last day at last destination)
+          // Skip activities if travelOnlyFinalDay is enabled
+          const isFinalActivityDay = destIdx === numDestinations - 1 && isLastDayAtDest;
+          const skipActivitiesForTravel = config.travelOnlyFinalDay && isFinalActivityDay;
+
+          if (shouldHikeToday && availableHikes.length > 0 && !skipActivitiesForTravel) {
             for (const h of availableHikes) {
               const hikeKey = h.placeId || h.id;
               if (!usedHikeIds.has(hikeKey)) {
@@ -864,8 +873,10 @@ export function useTripGenerator() {
           }
 
           // Add campsite for every night spent at a destination
-          // (The return day is handled separately and doesn't need a campsite)
-          if (campsite) {
+          // EXCEPT: don't add campsite on the final day if trip doesn't return to start
+          const isLastDayOfTrip = destIdx === numDestinations - 1 && isLastDayAtDest && !config.returnToStart;
+
+          if (campsite && !isLastDayOfTrip) {
             const campsiteForDay: TripStop = {
               ...campsite,
               id: `camp-${dayNumber}`,
@@ -875,6 +886,16 @@ export function useTripGenerator() {
                 : campsite.note || 'Dispersed camping',
             };
             dayStops.push(campsiteForDay);
+          }
+
+          // Mark the last stop of the trip as 'end' type when not returning to start
+          if (isLastDayOfTrip && dayStops.length > 0) {
+            // Find the destination/viewpoint stop and mark it as end
+            const destStop = dayStops.find(s => s.type === 'viewpoint');
+            if (destStop) {
+              destStop.type = 'end';
+              destStop.duration = 'Trip complete';
+            }
           }
 
           totalDistanceMiles += dayDistanceMiles;
@@ -909,7 +930,7 @@ export function useTripGenerator() {
         const returnStop: TripStop = {
           id: `return-${dayNumber}`,
           name: `Return to ${config.startLocation.name}`,
-          type: 'viewpoint',
+          type: 'end',
           coordinates: config.startLocation.coordinates,
           duration: 'Trip complete',
           distance: `${returnDistance.toFixed(0)} mi`,

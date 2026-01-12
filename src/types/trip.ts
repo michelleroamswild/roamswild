@@ -65,6 +65,7 @@ export interface TripConfig {
   returnToCampTime?: string; // Time to be back at camp each day (HH:MM)
   pacePreference?: PacePreference;
   maxDrivingHoursPerDay?: number; // Maximum hours of driving per day
+  travelOnlyFinalDay?: boolean; // No activities on final day (travel only)
 }
 
 export interface GeneratedTrip {

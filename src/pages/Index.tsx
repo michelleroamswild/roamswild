@@ -6,7 +6,7 @@ import { FilterChips } from "@/components/FilterChips";
 import { SavedLocations } from "@/components/SavedLocations";
 import { Suggestions } from "@/components/Suggestions";
 import { useTrip } from "@/context/TripContext";
-import { Path, Calendar, Clock, MapPinArea, CaretRight, Sneaker, ArrowRight, Users, Mountains } from "@phosphor-icons/react";
+import { Path, Calendar, Clock, MapPinArea, CaretRight, Boot, ArrowRight, Users, Mountains } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getTripUrl } from "@/utils/slugify";
@@ -81,40 +81,66 @@ const Index = () => {
 
         <div className="container px-4 md:px-6 py-40 relative">
           {/* Left Photo Collage - Hidden on mobile */}
-          <div
-            className="hidden lg:block absolute left-0 top-8 w-[400px] xl:w-[500px] pointer-events-none transition-transform duration-100 ease-out"
-            style={{ transform: `translateX(${-scrollY * 0.5}px)` }}
-          >
+          <div className="hidden lg:block absolute left-0 top-8 w-[400px] xl:w-[500px] pointer-events-none">
             <div
-              className="absolute top-0 -left-48 xl:-left-64 w-96 xl:w-[450px] h-64 xl:h-80 overflow-hidden shadow-2xl rotate-[-6deg] animate-float-slow z-10"
+              className="absolute top-0 -left-48 xl:-left-64 z-10 animate-float-slow"
               style={{ animationDelay: '0s' }}
             >
-              <img src={heroPhotos[0]} alt="" className="w-full h-full object-cover" />
+              <div
+                className="w-96 xl:w-[450px] h-64 xl:h-80 overflow-hidden shadow-2xl rounded-2xl"
+                style={{
+                  transform: `translateX(${scrollY > 200 ? '-70vw' : `${-scrollY * 0.3}px`}) rotate(-6deg)`,
+                  transition: `transform ${scrollY > 200 ? '2s' : '0.8s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
+                }}
+              >
+                <img src={heroPhotos[0]} alt="" className="w-full h-full object-cover" />
+              </div>
             </div>
             <div
-              className="absolute top-64 xl:top-72 -left-40 xl:-left-56 w-[420px] xl:w-[500px] h-72 xl:h-80 overflow-hidden shadow-2xl rotate-[4deg] animate-float-medium z-20"
+              className="absolute top-64 xl:top-72 -left-40 xl:-left-56 z-20 animate-float-medium"
               style={{ animationDelay: '0.5s' }}
             >
-              <img src={heroPhotos[1]} alt="" className="w-full h-full object-cover" />
+              <div
+                className="w-[420px] xl:w-[500px] h-72 xl:h-80 overflow-hidden shadow-2xl rounded-2xl"
+                style={{
+                  transform: `translateX(${scrollY > 280 ? '-70vw' : `${-scrollY * 0.4}px`}) rotate(4deg)`,
+                  transition: `transform ${scrollY > 280 ? '2.5s' : '1s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
+                }}
+              >
+                <img src={heroPhotos[1]} alt="" className="w-full h-full object-cover" />
+              </div>
             </div>
           </div>
 
           {/* Right Photo Collage - Hidden on mobile */}
-          <div
-            className="hidden lg:block absolute right-0 top-8 w-[400px] xl:w-[500px] pointer-events-none transition-transform duration-100 ease-out"
-            style={{ transform: `translateX(${scrollY * 0.5}px)` }}
-          >
+          <div className="hidden lg:block absolute right-0 top-8 w-[400px] xl:w-[500px] pointer-events-none">
             <div
-              className="absolute top-0 -right-48 xl:-right-64 w-96 xl:w-[450px] h-64 xl:h-72 overflow-hidden shadow-2xl rotate-[5deg] animate-float-medium z-10"
+              className="absolute top-0 -right-48 xl:-right-64 z-10 animate-float-medium"
               style={{ animationDelay: '0.3s' }}
             >
-              <img src={heroPhotos[2]} alt="" className="w-full h-full object-cover" />
+              <div
+                className="w-96 xl:w-[450px] h-64 xl:h-72 overflow-hidden shadow-2xl rounded-2xl"
+                style={{
+                  transform: `translateX(${scrollY > 240 ? '70vw' : `${scrollY * 0.35}px`}) rotate(5deg)`,
+                  transition: `transform ${scrollY > 240 ? '2.2s' : '0.9s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
+                }}
+              >
+                <img src={heroPhotos[2]} alt="" className="w-full h-full object-cover" />
+              </div>
             </div>
             <div
-              className="absolute top-60 xl:top-72 -right-36 xl:-right-48 w-[420px] xl:w-[500px] h-72 xl:h-80 overflow-hidden shadow-2xl rotate-[-3deg] animate-float-slow z-20"
+              className="absolute top-60 xl:top-72 -right-36 xl:-right-48 z-20 animate-float-slow"
               style={{ animationDelay: '0.8s' }}
             >
-              <img src={heroPhotos[3]} alt="" className="w-full h-full object-cover" />
+              <div
+                className="w-[420px] xl:w-[500px] h-72 xl:h-80 overflow-hidden shadow-2xl rounded-2xl"
+                style={{
+                  transform: `translateX(${scrollY > 320 ? '70vw' : `${scrollY * 0.45}px`}) rotate(-3deg)`,
+                  transition: `transform ${scrollY > 320 ? '3s' : '1.1s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
+                }}
+              >
+                <img src={heroPhotos[3]} alt="" className="w-full h-full object-cover" />
+              </div>
             </div>
           </div>
 
@@ -142,7 +168,7 @@ const Index = () => {
 
       {/* Saved Trips Section */}
       {savedTrips.length > 0 && (
-        <section className="bg-accentdark py-16 md:py-20 min-h-[500px] flex items-center grainy">
+        <section className="bg-accentdark py-40 md:py-52 grainy">
           <div className="container px-4 md:px-6">
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -244,7 +270,7 @@ const Index = () => {
                       {/* Route visualization */}
                       {startName && (
                         <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-4">
-                          <MapPinArea className="w-4 h-4 flex-shrink-0 text-primary" />
+                          <MapPinArea className="w-4 h-4 flex-shrink-0 text-[#34b5a5]" />
                           <span className="truncate">{startName}</span>
                           {destinationCount > 0 && (
                             <>
@@ -294,7 +320,7 @@ const Index = () => {
                         {hikeCount > 0 && (
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-lg bg-lavenderslate/20 flex items-center justify-center">
-                              <Mountains className="w-4 h-4 text-lavenderslate" />
+                              <Mountains className="w-4 h-4 text-[#6b5ce6]" />
                             </div>
                             <div>
                               <p className="text-xs text-muted-foreground">Hikes</p>
@@ -306,7 +332,7 @@ const Index = () => {
                         {totalHikingMiles > 0 && (
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-lg bg-pinesoft/20 flex items-center justify-center">
-                              <Sneaker className="w-4 h-4 text-pinesoft" />
+                              <Boot className="w-4 h-4 text-[#3c8a79]" />
                             </div>
                             <div>
                               <p className="text-xs text-muted-foreground">Hiking</p>

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   X,
@@ -26,6 +26,8 @@ import {
   Warning,
   Gauge,
   PencilSimple,
+  CircleNotch,
+  Plus,
 } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -35,10 +37,10 @@ import { Marker, InfoWindow, DirectionsRenderer } from '@react-google-maps/api';
 import { TripStop, TripDay } from '@/types/trip';
 import { toast } from 'sonner';
 import { AlternativeHikesModal } from '@/components/AlternativeHikesModal';
-import { usePhotoHotspots, PhotoHotspot } from '@/hooks/use-photo-hotspots';
+import { useRoutePhotoHotspots, PhotoHotspot } from '@/hooks/use-photo-hotspots';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { createMarkerIcon, getTypeStyles } from '@/utils/mapMarkers';
+import { createMarkerIcon, getTypeStyles, getPhotoHotspotColor } from '@/utils/mapMarkers';
 import { estimateDayTime } from '@/utils/tripValidation';
 import { getAllTrailsUrl, estimateTrailLength } from '@/utils/hikeUtils';
 import { ShareTripModal } from '@/components/ShareTripModal';
@@ -46,6 +48,7 @@ import { CollaboratorAvatars } from '@/components/CollaboratorAvatars';
 import { getTripSlug, getDayUrl } from '@/utils/slugify';
 import { PlaceSearch } from '@/components/PlaceSearch';
 import { useTripGenerator } from '@/hooks/use-trip-generator';
+import { EntryPointSelector, checkIfDrivable } from '@/components/EntryPointSelector';
 import {
   Dialog,
   DialogContent,
@@ -62,9 +65,75 @@ const getIcon = (type: string) => {
       return GasPump;
     case 'camp':
       return Tent;
+    case 'start':
+    case 'end':
+      return MapPin;
     default:
       return MapPinArea;
   }
+};
+
+const loaderStates = [
+  { icon: MapPin, color: '#34b5a5', bg: 'bg-aquateal/20', label: 'Finding locations...' },
+  { icon: MapPinArea, color: '#6b5ce6', bg: 'bg-lavenderslate/20', label: 'Planning destinations...' },
+  { icon: Boot, color: '#3c8a79', bg: 'bg-pinesoft/20', label: 'Discovering hikes...' },
+  { icon: Tent, color: '#ea9b0c', bg: 'bg-softamber/20', label: 'Finding campsites...' },
+];
+
+const RegeneratingLoader = () => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % loaderStates.length);
+    }, 800);
+    return () => clearInterval(interval);
+  }, []);
+
+  const current = loaderStates[currentIndex];
+  const Icon = current.icon;
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-background/80 backdrop-blur-sm flex items-center justify-center">
+      <div className="bg-card border border-border rounded-xl p-8 shadow-lg flex flex-col items-center gap-5">
+        <div className="relative">
+          <svg className="w-20 h-20 animate-spin" viewBox="0 0 50 50">
+            <circle
+              cx="25"
+              cy="25"
+              r="20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeDasharray="80, 200"
+              className="opacity-20"
+            />
+            <circle
+              cx="25"
+              cy="25"
+              r="20"
+              fill="none"
+              stroke={current.color}
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeDasharray="40, 200"
+              className="transition-all duration-500"
+            />
+          </svg>
+          <div className={`absolute inset-0 flex items-center justify-center`}>
+            <div className={`w-12 h-12 rounded-full ${current.bg} flex items-center justify-center transition-all duration-500`}>
+              <Icon className="w-6 h-6 transition-all duration-500" style={{ color: current.color }} />
+            </div>
+          </div>
+        </div>
+        <div className="text-center">
+          <p className="font-semibold text-foreground text-lg">Regenerating Trip</p>
+          <p className="text-sm text-muted-foreground transition-all duration-300">{current.label}</p>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const TripDetail = () => {
@@ -107,25 +176,88 @@ const TripDetail = () => {
   }>({ isOpen: false, type: 'start', currentName: '' });
   const [pendingLocationChange, setPendingLocationChange] = useState<google.maps.places.PlaceResult | null>(null);
   const [exitConfirmModal, setExitConfirmModal] = useState(false);
+  const [entryPointModal, setEntryPointModal] = useState<{
+    isOpen: boolean;
+    place: google.maps.places.PlaceResult | null;
+    context: 'edit' | 'add';
+  }>({ isOpen: false, place: null, context: 'edit' });
+  const [addDestinationModal, setAddDestinationModal] = useState(false);
+  const [pendingNewDestination, setPendingNewDestination] = useState<google.maps.places.PlaceResult | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
 
-  // Calculate center point of trip for photo hotspots search
-  const tripCenter = generatedTrip ? (() => {
-    const allStops = generatedTrip.days.flatMap(day => day.stops);
-    if (allStops.length === 0) return { lat: 0, lng: 0 };
-    const sumLat = allStops.reduce((sum, stop) => sum + stop.coordinates.lat, 0);
-    const sumLng = allStops.reduce((sum, stop) => sum + stop.coordinates.lng, 0);
-    return {
-      lat: sumLat / allStops.length,
-      lng: sumLng / allStops.length,
-    };
-  })() : { lat: 0, lng: 0 };
+  // Get key search points along the route for photo hotspots
+  const routeSearchPoints = useMemo(() => {
+    if (!generatedTrip) return [];
 
-  // Fetch photo hotspots near the trip route
-  const { hotspots: photoHotspots, loading: loadingPhotoHotspots } = usePhotoHotspots(
-    tripCenter.lat,
-    tripCenter.lng,
-    80 // 80km radius to cover trip area
+    const points: Array<{ lat: number; lng: number }> = [];
+    const seenLocations = new Set<string>();
+
+    const addPoint = (coords: { lat: number; lng: number }) => {
+      const key = `${coords.lat.toFixed(2)},${coords.lng.toFixed(2)}`;
+      if (!seenLocations.has(key)) {
+        seenLocations.add(key);
+        points.push(coords);
+      }
+    };
+
+    // Add start location
+    if (generatedTrip.config.startLocation) {
+      addPoint(generatedTrip.config.startLocation.coordinates);
+    }
+
+    // Add each destination
+    for (const dest of generatedTrip.config.destinations || []) {
+      addPoint(dest.coordinates);
+    }
+
+    // Add all stops from each day (campsites, hikes, viewpoints)
+    for (const day of generatedTrip.days) {
+      for (const stop of day.stops) {
+        // Include campsites, hikes, and viewpoints as search points
+        if (stop.type === 'camp' || stop.type === 'hike' || stop.type === 'viewpoint') {
+          addPoint(stop.coordinates);
+        }
+      }
+    }
+
+    // Add intermediate points between distant locations for better coverage
+    const orderedPoints = [...points];
+    const interpolatedPoints: Array<{ lat: number; lng: number }> = [];
+
+    for (let i = 0; i < orderedPoints.length - 1; i++) {
+      const p1 = orderedPoints[i];
+      const p2 = orderedPoints[i + 1];
+
+      // Calculate distance between points (rough estimate in km)
+      const latDiff = Math.abs(p2.lat - p1.lat);
+      const lngDiff = Math.abs(p2.lng - p1.lng);
+      const roughDistKm = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) * 111; // ~111km per degree
+
+      // Add midpoint(s) if distance is greater than 50km
+      if (roughDistKm > 50) {
+        const numMidpoints = Math.min(Math.floor(roughDistKm / 50), 3); // Max 3 midpoints
+        for (let j = 1; j <= numMidpoints; j++) {
+          const ratio = j / (numMidpoints + 1);
+          interpolatedPoints.push({
+            lat: p1.lat + (p2.lat - p1.lat) * ratio,
+            lng: p1.lng + (p2.lng - p1.lng) * ratio,
+          });
+        }
+      }
+    }
+
+    // Add interpolated points
+    for (const pt of interpolatedPoints) {
+      addPoint(pt);
+    }
+
+    return points;
+  }, [generatedTrip]);
+
+  // Fetch photo hotspots at multiple points along the route
+  const { hotspots: photoHotspots, loading: loadingPhotoHotspots } = useRoutePhotoHotspots(
+    routeSearchPoints,
+    32 // 32km radius at each search point
   );
 
   // Check if this trip is saved
@@ -409,11 +541,20 @@ const TripDetail = () => {
     const configDestinations = generatedTrip.config.destinations || [];
 
     const origin = { lat: startLocation.lat, lng: startLocation.lng };
-    const destination = isRoundTrip ? origin : (campsites.length > 0 ? campsites[campsites.length - 1] : origin);
+
+    // Find the end destination
+    let destination: google.maps.LatLngLiteral;
+    if (isRoundTrip) {
+      destination = origin;
+    } else {
+      // For non-round trips, find the 'end' type stop
+      const endStop = allStops.find(s => s.type === 'end');
+      destination = endStop?.coordinates || (campsites.length > 0 ? campsites[campsites.length - 1] : origin);
+    }
 
     // For round trips, all campsites are waypoints
-    // For one-way, all but the last campsite are waypoints (last is destination)
-    const waypointCampsites = isRoundTrip ? campsites : campsites.slice(0, -1);
+    // For one-way trips, all campsites are waypoints (end is the 'end' stop, not a campsite)
+    const waypointCampsites = campsites;
 
     const campsiteWaypoints = waypointCampsites.map(coord => ({
       location: { lat: coord.lat, lng: coord.lng },
@@ -432,10 +573,11 @@ const TripDetail = () => {
       (result, status) => {
         if (status === google.maps.DirectionsStatus.OK && result) {
           setDirections(result);
-        } else if (campsites.length > 0) {
-          // Try routing in segments: origin→camp1, camp1→camp2, etc.
-          const allPoints = [origin, ...campsites];
-          if (isRoundTrip) allPoints.push(origin);
+        } else if (campsites.length > 0 || !isRoundTrip) {
+          // Try routing in segments: origin→camp1, camp1→camp2, etc. → end
+          const allPoints: google.maps.LatLngLiteral[] = [origin, ...campsites];
+          // Add final destination (origin for round trip, end stop for one-way)
+          allPoints.push(destination);
 
           const segmentPromises: Promise<google.maps.DirectionsResult | null>[] = [];
 
@@ -465,10 +607,8 @@ const TripDetail = () => {
         } else {
           // Fallback: route through destinations instead
           const destCoords = configDestinations.map(d => d.coordinates);
-          const destDestination = isRoundTrip
-            ? origin
-            : (destCoords.length > 0 ? destCoords.pop()! : origin);
 
+          // Use all destinations as waypoints, final destination is already computed
           const destinationWaypoints = destCoords.map(coords => ({
             location: { lat: coords.lat, lng: coords.lng },
             stopover: true,
@@ -477,7 +617,7 @@ const TripDetail = () => {
           directionsService.route(
             {
               origin,
-              destination: destDestination,
+              destination,
               waypoints: destinationWaypoints,
               travelMode: google.maps.TravelMode.DRIVING,
               optimizeWaypoints: false,
@@ -502,14 +642,12 @@ const TripDetail = () => {
                   const reachable = results.filter((r): r is google.maps.LatLngLiteral => r !== null);
                   if (reachable.length === 0) return;
 
-                  const routeDest = isRoundTrip ? origin : reachable[reachable.length - 1];
-                  const routeWaypoints = isRoundTrip ? reachable : reachable.slice(0, -1);
-
+                  // Use all reachable points as waypoints, route to final destination
                   directionsService.route(
                     {
                       origin,
-                      destination: routeDest,
-                      waypoints: routeWaypoints.map(c => ({ location: c, stopover: true })),
+                      destination,
+                      waypoints: reachable.map(c => ({ location: c, stopover: true })),
                       travelMode: google.maps.TravelMode.DRIVING,
                     },
                     (finalResult, finalStatus) => {
@@ -721,8 +859,56 @@ const TripDetail = () => {
     );
   };
 
-  const handleLocationSelect = (place: google.maps.places.PlaceResult) => {
+  const handleLocationSelect = async (place: google.maps.places.PlaceResult) => {
+    if (place.geometry?.location && place.place_id) {
+      const lat = place.geometry.location.lat();
+      const lng = place.geometry.location.lng();
+
+      // Check if this location is drivable
+      const isDrivable = await checkIfDrivable(lat, lng);
+      if (!isDrivable) {
+        setEntryPointModal({ isOpen: true, place, context: 'edit' });
+        return;
+      }
+    }
     setPendingLocationChange(place);
+  };
+
+  const handleEntryPointSelect = (entryPoint: {
+    placeId: string;
+    name: string;
+    coordinates: { lat: number; lng: number };
+  }) => {
+    // Create a mock PlaceResult from the entry point
+    const mockPlace = {
+      place_id: entryPoint.placeId,
+      name: entryPoint.name,
+      formatted_address: entryPoint.name,
+      geometry: {
+        location: {
+          lat: () => entryPoint.coordinates.lat,
+          lng: () => entryPoint.coordinates.lng,
+        } as google.maps.LatLng,
+      },
+    } as google.maps.places.PlaceResult;
+
+    if (entryPointModal.context === 'add') {
+      setPendingNewDestination(mockPlace);
+    } else {
+      setPendingLocationChange(mockPlace);
+    }
+    setEntryPointModal({ isOpen: false, place: null, context: 'edit' });
+  };
+
+  const handleUseOriginalLocation = () => {
+    if (entryPointModal.place) {
+      if (entryPointModal.context === 'add') {
+        setPendingNewDestination(entryPointModal.place);
+      } else {
+        setPendingLocationChange(entryPointModal.place);
+      }
+    }
+    setEntryPointModal({ isOpen: false, place: null, context: 'edit' });
   };
 
   const handleLocationUpdate = async () => {
@@ -743,7 +929,31 @@ const TripDetail = () => {
     let updatedConfig = { ...tripConfig };
 
     if (editLocationModal.type === 'start') {
+      // If it was a round trip, keep the original start as the end destination
+      if (tripConfig.returnToStart && tripConfig.startLocation) {
+        const originalStart: TripDestination = {
+          id: `end-${tripConfig.startLocation.placeId}`,
+          placeId: tripConfig.startLocation.placeId,
+          name: tripConfig.startLocation.name,
+          address: tripConfig.startLocation.address,
+          coordinates: tripConfig.startLocation.coordinates,
+        };
+        updatedConfig.destinations = [...tripConfig.destinations, originalStart];
+        updatedConfig.returnToStart = false;
+      }
       updatedConfig.startLocation = newLocation;
+    } else if (editLocationModal.type === 'end') {
+      // Changing end location
+      if (editLocationModal.index !== undefined) {
+        // Editing the last destination (which is the end when returnToStart is false)
+        const newDestinations = [...tripConfig.destinations];
+        newDestinations[editLocationModal.index] = newLocation;
+        updatedConfig.destinations = newDestinations;
+      } else {
+        // Was a round trip - no longer returning to start, add new end as destination
+        updatedConfig.returnToStart = false;
+        updatedConfig.destinations = [...tripConfig.destinations, newLocation];
+      }
     } else if (editLocationModal.type === 'destination' && editLocationModal.index !== undefined) {
       const newDestinations = [...tripConfig.destinations];
       newDestinations[editLocationModal.index] = newLocation;
@@ -790,6 +1000,75 @@ const TripDetail = () => {
   const handleCloseEditModal = () => {
     setEditLocationModal({ isOpen: false, type: 'start', currentName: '' });
     setPendingLocationChange(null);
+  };
+
+  const handleNewDestinationSelect = async (place: google.maps.places.PlaceResult) => {
+    if (place.geometry?.location && place.place_id) {
+      const lat = place.geometry.location.lat();
+      const lng = place.geometry.location.lng();
+
+      // Check if this location is drivable
+      const isDrivable = await checkIfDrivable(lat, lng);
+      if (!isDrivable) {
+        setEntryPointModal({ isOpen: true, place, context: 'add' });
+        return;
+      }
+    }
+    setPendingNewDestination(place);
+  };
+
+  const handleAddDestination = async () => {
+    const place = pendingNewDestination;
+    if (!tripConfig || !place?.geometry?.location || !place.place_id) return;
+
+    const newDestination: TripDestination = {
+      id: `loc-${place.place_id}-${Date.now()}`,
+      placeId: place.place_id,
+      name: place.name || place.formatted_address || '',
+      address: place.formatted_address || '',
+      coordinates: {
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng(),
+      },
+    };
+
+    const updatedConfig = {
+      ...tripConfig,
+      destinations: [...tripConfig.destinations, newDestination],
+    };
+
+    setAddDestinationModal(false);
+    setPendingNewDestination(null);
+
+    const toastId = toast.loading('Regenerating trip with new destination...');
+
+    try {
+      const newTrip = await generateTrip(updatedConfig);
+
+      if (newTrip) {
+        const tripWithSameId = {
+          ...newTrip,
+          id: generatedTrip?.id || newTrip.id,
+        };
+        setGeneratedTrip(tripWithSameId);
+        setTripConfig(updatedConfig);
+        toast.success('Destination added!', {
+          id: toastId,
+          description: 'Your trip has been updated.',
+        });
+      } else {
+        toast.error('Failed to add destination', {
+          id: toastId,
+          description: 'Please try again.',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to add destination:', error);
+      toast.error('Failed to add destination', {
+        id: toastId,
+        description: 'Please try again.',
+      });
+    }
   };
 
   return (
@@ -863,7 +1142,7 @@ const TripDetail = () => {
                     })}
                     className="flex items-center gap-1.5 flex-shrink-0 group hover:bg-white/50 rounded-full px-2 py-1 -mx-2 -my-1 transition-colors"
                   >
-                    <div className="w-2 h-2 rounded-full bg-[hsl(var(--accent-aquateal))]" />
+                    <div className="w-2 h-2 rounded-full bg-[#34b5a5]" />
                     <span className="text-sm font-medium text-foreground whitespace-nowrap">
                       {tripConfig.startLocation.name.split(',')[0]}
                     </span>
@@ -886,37 +1165,67 @@ const TripDetail = () => {
               )}
 
               {/* Destinations */}
-              {tripConfig.destinations.map((dest, index) => (
-                <div key={dest.id} className="flex items-center gap-2 flex-shrink-0">
+              {tripConfig.destinations.map((dest, index) => {
+                const isLastDestination = index === tripConfig.destinations.length - 1;
+                const isEndLocation = isLastDestination && !tripConfig.returnToStart;
+
+                return (
+                  <div key={dest.id} className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => setEditLocationModal({
+                        isOpen: true,
+                        type: isEndLocation ? 'end' : 'destination',
+                        index,
+                        currentName: dest.name,
+                      })}
+                      className="flex items-center gap-1.5 group hover:bg-white/50 rounded-full px-2 py-1 -mx-2 -my-1 transition-colors"
+                    >
+                      <div className={`w-2 h-2 rounded-full ${isEndLocation ? 'bg-[#34b5a5]' : 'bg-primary'}`} />
+                      <span className="text-sm font-medium text-foreground whitespace-nowrap">
+                        {dest.name.split(',')[0]}
+                      </span>
+                      <PencilSimple className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                    {!isEndLocation && (
+                      <CaretRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Add Destination Button - only show if returning to start or no destinations */}
+              {(tripConfig.returnToStart || tripConfig.destinations.length === 0) && (
+                <>
                   <button
-                    onClick={() => setEditLocationModal({
-                      isOpen: true,
-                      type: 'destination',
-                      index,
-                      currentName: dest.name,
-                    })}
-                    className="flex items-center gap-1.5 group hover:bg-white/50 rounded-full px-2 py-1 -mx-2 -my-1 transition-colors"
+                    onClick={() => setAddDestinationModal(true)}
+                    className="flex items-center gap-1.5 flex-shrink-0 group hover:bg-white/50 rounded-full px-2 py-1 -mx-2 -my-1 transition-colors"
                   >
-                    <div className="w-2 h-2 rounded-full bg-primary" />
-                    <span className="text-sm font-medium text-foreground whitespace-nowrap">
-                      {dest.name.split(',')[0]}
-                    </span>
-                    <PencilSimple className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">Add location</span>
+                    <Plus className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors" />
                   </button>
-                  {(index < tripConfig.destinations.length - 1 || tripConfig.returnToStart) && (
+
+                  {tripConfig.returnToStart && (
                     <CaretRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                   )}
-                </div>
-              ))}
+                </>
+              )}
 
-              {/* Return to Start */}
+              {/* Return to Start / End Location */}
               {tripConfig.returnToStart && tripConfig.startLocation && (
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <div className="w-2 h-2 rounded-full bg-[hsl(var(--accent-softamber))]" />
+                <button
+                  onClick={() => setEditLocationModal({
+                    isOpen: true,
+                    type: 'end',
+                    currentName: tripConfig.startLocation?.name || '',
+                  })}
+                  className="flex items-center gap-1.5 flex-shrink-0 group hover:bg-white/50 rounded-full px-2 py-1 -mx-2 -my-1 transition-colors"
+                >
+                  <div className="w-2 h-2 rounded-full bg-[#34b5a5]" />
                   <span className="text-sm font-medium text-foreground whitespace-nowrap">
                     {tripConfig.startLocation.name.split(',')[0]}
                   </span>
-                </div>
+                  <PencilSimple className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
               )}
             </div>
           </div>
@@ -948,8 +1257,17 @@ const TripDetail = () => {
           }}
         >
           <DialogHeader>
-            <DialogTitle>
-              {editLocationModal.type === 'start' ? 'Change Start Location' : 'Change Destination'}
+            <DialogTitle className="flex items-center gap-2">
+              {editLocationModal.type === 'start' || editLocationModal.type === 'end' ? (
+                <MapPin className="w-5 h-5 text-[#34b5a5]" />
+              ) : (
+                <MapPinArea className="w-5 h-5 text-[#6b5ce6]" />
+              )}
+              {editLocationModal.type === 'start'
+                ? 'Change Start Location'
+                : editLocationModal.type === 'end'
+                ? 'Change End Location'
+                : 'Change Destination'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -977,6 +1295,85 @@ const TripDetail = () => {
                 className="flex-1"
               >
                 {regenerating ? 'Updating...' : 'Change Location'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Entry Point Selector Modal */}
+      {entryPointModal.place && (
+        <EntryPointSelector
+          isOpen={entryPointModal.isOpen}
+          onClose={() => setEntryPointModal({ isOpen: false, place: null, context: 'edit' })}
+          parentPlace={{
+            name: entryPointModal.place.name || entryPointModal.place.formatted_address || '',
+            placeId: entryPointModal.place.place_id || '',
+            coordinates: {
+              lat: entryPointModal.place.geometry?.location?.lat() || 0,
+              lng: entryPointModal.place.geometry?.location?.lng() || 0,
+            },
+          }}
+          onSelectEntryPoint={handleEntryPointSelect}
+          onUseOriginal={handleUseOriginalLocation}
+        />
+      )}
+
+      {/* Add Destination Modal */}
+      <Dialog open={addDestinationModal} onOpenChange={(open) => {
+        if (!open) {
+          setAddDestinationModal(false);
+          setPendingNewDestination(null);
+        }
+      }}>
+        <DialogContent
+          className="sm:max-w-md"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onInteractOutside={(e) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('.pac-container') || target.closest('.pac-item')) {
+              e.preventDefault();
+            }
+          }}
+          onPointerDownOutside={(e) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('.pac-container') || target.closest('.pac-item')) {
+              e.preventDefault();
+            }
+          }}
+          onFocusOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPinArea className="w-5 h-5 text-[#6b5ce6]" />
+              Add Destination
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <PlaceSearch
+              onPlaceSelect={handleNewDestinationSelect}
+              placeholder="Search for a destination..."
+            />
+            {pendingNewDestination && (
+              <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                <p className="text-sm text-muted-foreground">New destination:</p>
+                <p className="font-medium text-foreground">{pendingNewDestination.name || pendingNewDestination.formatted_address}</p>
+              </div>
+            )}
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" onClick={() => {
+                setAddDestinationModal(false);
+                setPendingNewDestination(null);
+              }} className="flex-1">
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleAddDestination}
+                disabled={!pendingNewDestination || regenerating}
+                className="flex-1"
+              >
+                {regenerating ? 'Adding...' : 'Add Destination'}
               </Button>
             </div>
           </div>
@@ -1075,13 +1472,49 @@ const TripDetail = () => {
                     <Marker
                       key="day-destination-end"
                       position={(tripConfig.startLocation || tripConfig.baseLocation)!.coordinates}
-                      icon={createMarkerIcon('start', { isActive: true, size: 36 })}
+                      icon={createMarkerIcon('end', { isActive: true, size: 36 })}
                       title={`End: ${(tripConfig.startLocation || tripConfig.baseLocation)!.name}`}
                     />
                   )}
 
+                  {/* Show end marker when trip doesn't return to start (end is at last destination) */}
+                  {!activeDay && !tripConfig.returnToStart && (() => {
+                    const endStop = allStops.find(s => s.type === 'end');
+                    if (endStop) {
+                      return (
+                        <Marker
+                          key="trip-end-marker"
+                          position={endStop.coordinates}
+                          icon={createMarkerIcon('end', { size: 36 })}
+                          title={`End: ${endStop.name}`}
+                        />
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  {/* Show end marker for last day preview when NOT returning to start */}
+                  {activeDay && activeDay === generatedTrip.days.length && !tripConfig.returnToStart && (() => {
+                    const dayStops = generatedTrip.days.find(d => d.day === activeDay)?.stops || [];
+                    const endStop = dayStops.find(s => s.type === 'end');
+                    if (endStop) {
+                      return (
+                        <Marker
+                          key="day-end-marker"
+                          position={endStop.coordinates}
+                          icon={createMarkerIcon('end', { isActive: true, size: 36 })}
+                          title={`End: ${endStop.name}`}
+                        />
+                      );
+                    }
+                    return null;
+                  })()}
+
                   {/* Show only active day's stops when day is selected, otherwise all stops */}
-                  {(activeDay ? generatedTrip.days.find(d => d.day === activeDay)?.stops || [] : allStops).map((stop) => (
+                  {/* Filter out 'end' type stops since we have dedicated start/end markers */}
+                  {(activeDay ? generatedTrip.days.find(d => d.day === activeDay)?.stops || [] : allStops)
+                    .filter(stop => stop.type !== 'end')
+                    .map((stop) => (
                     <Marker
                       key={stop.id}
                       position={stop.coordinates}
@@ -1098,7 +1531,8 @@ const TripDetail = () => {
                       position={{ lat: hotspot.lat, lng: hotspot.lng }}
                       icon={createMarkerIcon('photo', {
                         isActive: selectedPhotoHotspot?.id === hotspot.id,
-                        size: 36
+                        size: 36,
+                        customColor: getPhotoHotspotColor(hotspot.photoCount)
                       })}
                       title={`${hotspot.name} (${hotspot.photoCount} photos)`}
                       onClick={() => {
@@ -1134,6 +1568,15 @@ const TripDetail = () => {
                           <p className="text-gray-500 text-xs mt-0.5">
                             {selectedPhotoHotspot.photoCount.toLocaleString()} photos
                           </p>
+                          <a
+                            href={`https://www.flickr.com/search/?lat=${selectedPhotoHotspot.lat}&lon=${selectedPhotoHotspot.lng}&radius=1&has_geo=1&view_all=1`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 mt-2 text-xs text-pink-600 hover:text-pink-700 hover:underline"
+                          >
+                            <ArrowSquareOut className="w-3 h-3" />
+                            View on Flickr
+                          </a>
                         </div>
                       </div>
                     </InfoWindow>
@@ -1330,7 +1773,7 @@ const TripDetail = () => {
                     className="w-full flex items-center justify-between"
                   >
                     <div className="flex items-center gap-2">
-                      <Camera className="w-5 h-5 text-[hsl(var(--accent-blushorchid))]" />
+                      <Camera className="w-5 h-5 text-[#e85a9a]" />
                       <h3 className="font-semibold text-foreground">Photo Hotspots</h3>
                       <span className="text-xs text-muted-foreground">({photoHotspots.length})</span>
                     </div>
@@ -1377,8 +1820,8 @@ const TripDetail = () => {
                                 />
                               </button>
                             ) : (
-                              <div className="w-10 h-10 rounded-lg bg-[hsl(var(--accent-blushorchid)/0.1)] flex items-center justify-center flex-shrink-0">
-                                <Camera className="w-5 h-5 text-[hsl(var(--accent-blushorchid))]" />
+                              <div className="w-10 h-10 rounded-lg bg-blushorchid/20 flex items-center justify-center flex-shrink-0">
+                                <Camera className="w-5 h-5 text-[#e85a9a]" />
                               </div>
                             )}
                             <button
@@ -1393,9 +1836,20 @@ const TripDetail = () => {
                               <p className="font-medium text-foreground text-sm truncate">
                                 {hotspot.name}
                               </p>
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Camera className="w-3 h-3" />
-                                <span>{hotspot.photoCount.toLocaleString()} photos</span>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <Camera className="w-3 h-3" />
+                                  {hotspot.photoCount.toLocaleString()} photos
+                                </span>
+                                <a
+                                  href={`https://www.flickr.com/search/?lat=${hotspot.lat}&lon=${hotspot.lng}&radius=1&has_geo=1&view_all=1`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-pink-500 hover:text-pink-600 hover:underline"
+                                >
+                                  Flickr
+                                </a>
                               </div>
                             </button>
                           </div>
@@ -1507,17 +1961,7 @@ const TripDetail = () => {
       </Dialog>
 
       {/* Regenerating Loading Overlay */}
-      {regenerating && (
-        <div className="fixed inset-0 z-[60] bg-background/80 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-card border border-border rounded-xl p-8 shadow-lg flex flex-col items-center gap-4">
-            <ArrowsClockwise className="w-12 h-12 text-primary animate-spin" weight="bold" />
-            <div className="text-center">
-              <p className="font-semibold text-foreground text-lg">Regenerating Trip</p>
-              <p className="text-sm text-muted-foreground">Finding campsites and hikes for your new location...</p>
-            </div>
-          </div>
-        </div>
-      )}
+      {regenerating && <RegeneratingLoader />}
 
       {/* Photo Lightbox */}
       {enlargedPhoto && (
@@ -1606,8 +2050,8 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
               title={timeEstimate.warningMessage}
             />
           )}
-          {day.hike && <Boot className="w-4 h-4 text-pinesoft" />}
-          {day.campsite && <Tent className="w-4 h-4 text-amber-500" />}
+          {day.hike && <Boot className="w-4 h-4 text-[#3c8a79]" />}
+          {day.campsite && <Tent className="w-4 h-4 text-[#ea9b0c]" />}
           <Button
             variant={isActive ? "default" : "outline"}
             size="sm"
@@ -1639,10 +2083,10 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
         <div className="border-t border-border">
           {/* Starting location on day 1 */}
           {isFirstDay && startLocation && (
-            <div className="p-4 bg-primary/5 border-b border-border">
+            <div className="p-4 bg-aquateal/5 border-b border-border">
               <div className="flex items-start gap-3">
-                <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-primary/30 bg-primary/10 text-primary">
-                  <MapPin className="w-4 h-4" />
+                <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-aquateal/30 bg-aquateal/20">
+                  <MapPin className="w-4 h-4 text-[#34b5a5]" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="font-medium text-foreground">Start: {startLocation.name}</h4>
@@ -1751,10 +2195,10 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
 
           {/* Ending location on last day if returning to start */}
           {isLastDay && returnToStart && startLocation && (
-            <div className="p-4 bg-primary/5 border-b border-border">
+            <div className="p-4 bg-aquateal/5 border-b border-border">
               <div className="flex items-start gap-3">
-                <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-primary/30 bg-primary/10 text-primary">
-                  <MapPin className="w-4 h-4" />
+                <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-aquateal/30 bg-aquateal/20">
+                  <MapPin className="w-4 h-4 text-[#34b5a5]" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="font-medium text-foreground">End: {startLocation.name}</h4>

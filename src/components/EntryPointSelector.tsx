@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { MapPin, NavigationArrow, SpinnerGap, Warning, CaretRight } from '@phosphor-icons/react';
+import { MapPinArea, NavigationArrow, SpinnerGap, Warning, CaretRight } from '@phosphor-icons/react';
 
 interface EntryPoint {
   placeId: string;
@@ -250,8 +250,8 @@ export function EntryPointSelector({
                     onClick={() => handleSelect(entryPoint)}
                   >
                     <div className="flex items-start gap-3">
-                      <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 text-primary flex-shrink-0">
-                        <MapPin className="w-4 h-4" />
+                      <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-lavenderslate/20 flex-shrink-0">
+                        <MapPinArea className="w-4 h-4 text-[#6b5ce6]" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-foreground group-hover:text-primary transition-colors">
@@ -275,7 +275,7 @@ export function EntryPointSelector({
               onClick={handleUseOriginal}
               className="w-full"
             >
-              <MapPin className="w-4 h-4 mr-2" />
+              <MapPinArea className="w-4 h-4 mr-2" />
               Use general location anyway
             </Button>
           </div>
