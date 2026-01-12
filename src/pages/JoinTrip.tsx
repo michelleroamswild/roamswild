@@ -22,7 +22,7 @@ interface ShareLinkInfo {
 const JoinTrip = () => {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const { joinTripByLink } = useTrip();
+  const { joinTripByLink, loadSavedTrip } = useTrip();
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -84,6 +84,8 @@ const JoinTrip = () => {
       toast.error(result.error);
     } else if (result.tripId) {
       toast.success('You now have access to this trip!');
+      // Load the trip into context before navigating
+      loadSavedTrip(result.tripId);
       navigate(getTripUrl(linkInfo?.tripName));
     }
   };
