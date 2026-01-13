@@ -66,7 +66,11 @@ export interface DispersedRoadsResult {
 }
 
 const USFS_MVUM_API = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_MVUM_01/MapServer/1/query';
-const OVERPASS_API = 'https://overpass-api.de/api/interpreter';
+// Multiple Overpass endpoints for redundancy
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
 
 /**
  * Calculate distance between two points in miles
@@ -92,79 +96,164 @@ function isNearWater(lat: number, lng: number, waterFeatures: WaterFeature[], th
 /**
  * Find dead-end points from road geometries
  */
+interface EndpointInfo {
+  lat: number;
+  lng: number;
+  count: number;
+  roads: string[];
+  isPublicLand: boolean; // At least one road is on public land
+  isHighClearance: boolean;
+}
+
+/**
+ * Check if a point is within any public land boundary
+ */
+function isWithinPublicLand(lat: number, lng: number, publicLands: PublicLandArea[]): boolean {
+  return publicLands.some(land =>
+    lat >= land.bounds.minLat &&
+    lat <= land.bounds.maxLat &&
+    lng >= land.bounds.minLng &&
+    lng <= land.bounds.maxLng
+  );
+}
+
+/**
+ * Check if an OSM track is likely on public land (not a suburban cul-de-sac)
+ * We err on the side of inclusion - the visual polygon overlay helps users verify
+ */
+function isLikelyPublicLand(track: OSMTrack): boolean {
+  // Definitely exclude if marked private
+  if (track.access === 'private' || track.access === 'no') return false;
+
+  // Definitely include if marked for off-road/backcountry use
+  if (track.fourWdOnly) return true;
+  if (track.tracktype) return true; // Any grade indicates real track
+  if (track.highway === 'track') return true;
+  if (track.access === 'yes' || track.access === 'permissive') return true;
+
+  // Surface types that suggest backcountry
+  const backcountrySurfaces = ['unpaved', 'gravel', 'dirt', 'ground', 'sand', 'mud', 'grass'];
+  if (track.surface && backcountrySurfaces.some(s => track.surface?.includes(s))) return true;
+
+  // For unclassified roads, include them by default
+  // In remote areas these are often public forest/BLM roads
+  // The visual polygon overlay helps users verify they're on public land
+  if (track.highway === 'unclassified') return true;
+
+  // Default to true - our query already filters for tracks/unpaved roads
+  // so anything that made it through the query is likely backcountry
+  return true;
+}
+
 function findDeadEnds(
   mvumRoads: MVUMRoad[],
   osmTracks: OSMTrack[],
-  waterFeatures: WaterFeature[]
+  waterFeatures: WaterFeature[],
+  publicLands: PublicLandArea[]
 ): PotentialSpot[] {
   const spots: PotentialSpot[] = [];
-  const allEndpoints: { lat: number; lng: number; count: number }[] = [];
 
   // Collect all endpoints from all roads
-  const endpointMap = new Map<string, { lat: number; lng: number; count: number; roads: string[] }>();
+  const endpointMap = new Map<string, EndpointInfo>();
 
-  // Process MVUM roads
+  // Process MVUM roads - these are always on public land (National Forest)
   mvumRoads.forEach(road => {
     if (!road.geometry?.coordinates?.length) return;
     const coords = road.geometry.coordinates;
 
     // Start point
     const startKey = `${coords[0][1].toFixed(4)},${coords[0][0].toFixed(4)}`;
-    const startEntry = endpointMap.get(startKey) || { lat: coords[0][1], lng: coords[0][0], count: 0, roads: [] };
+    const startEntry = endpointMap.get(startKey) || {
+      lat: coords[0][1], lng: coords[0][0], count: 0, roads: [],
+      isPublicLand: false, isHighClearance: false
+    };
     startEntry.count++;
     startEntry.roads.push(road.name);
+    startEntry.isPublicLand = true; // MVUM = public land
+    startEntry.isHighClearance = startEntry.isHighClearance || road.highClearanceVehicle;
     endpointMap.set(startKey, startEntry);
 
     // End point
     const endCoord = coords[coords.length - 1];
     const endKey = `${endCoord[1].toFixed(4)},${endCoord[0].toFixed(4)}`;
-    const endEntry = endpointMap.get(endKey) || { lat: endCoord[1], lng: endCoord[0], count: 0, roads: [] };
+    const endEntry = endpointMap.get(endKey) || {
+      lat: endCoord[1], lng: endCoord[0], count: 0, roads: [],
+      isPublicLand: false, isHighClearance: false
+    };
     endEntry.count++;
     endEntry.roads.push(road.name);
+    endEntry.isPublicLand = true; // MVUM = public land
+    endEntry.isHighClearance = endEntry.isHighClearance || road.highClearanceVehicle;
     endpointMap.set(endKey, endEntry);
   });
 
-  // Process OSM tracks
+  // Process OSM tracks - check if they're likely on public land
   osmTracks.forEach(track => {
     if (!track.geometry?.coordinates?.length) return;
+
+    const likelyPublic = isLikelyPublicLand(track);
     const coords = track.geometry.coordinates;
 
     // Start point
     const startKey = `${coords[0][1].toFixed(4)},${coords[0][0].toFixed(4)}`;
-    const startEntry = endpointMap.get(startKey) || { lat: coords[0][1], lng: coords[0][0], count: 0, roads: [] };
+    const startEntry = endpointMap.get(startKey) || {
+      lat: coords[0][1], lng: coords[0][0], count: 0, roads: [],
+      isPublicLand: false, isHighClearance: false
+    };
     startEntry.count++;
     startEntry.roads.push(track.name || 'Unnamed Track');
+    startEntry.isPublicLand = startEntry.isPublicLand || likelyPublic;
+    startEntry.isHighClearance = startEntry.isHighClearance || track.fourWdOnly;
     endpointMap.set(startKey, startEntry);
 
     // End point
     const endCoord = coords[coords.length - 1];
     const endKey = `${endCoord[1].toFixed(4)},${endCoord[0].toFixed(4)}`;
-    const endEntry = endpointMap.get(endKey) || { lat: endCoord[1], lng: endCoord[0], count: 0, roads: [] };
+    const endEntry = endpointMap.get(endKey) || {
+      lat: endCoord[1], lng: endCoord[0], count: 0, roads: [],
+      isPublicLand: false, isHighClearance: false
+    };
     endEntry.count++;
     endEntry.roads.push(track.name || 'Unnamed Track');
+    endEntry.isPublicLand = endEntry.isPublicLand || likelyPublic;
+    endEntry.isHighClearance = endEntry.isHighClearance || track.fourWdOnly;
     endpointMap.set(endKey, endEntry);
   });
 
   // Debug: log endpoint distribution
   const countDistribution: Record<number, number> = {};
+  let publicLandCount = 0;
   endpointMap.forEach((entry) => {
     countDistribution[entry.count] = (countDistribution[entry.count] || 0) + 1;
+    if (entry.isPublicLand) publicLandCount++;
   });
-  console.log('Endpoint count distribution:', countDistribution);
+  console.log('Endpoint count distribution:', countDistribution, 'Public land endpoints:', publicLandCount);
 
   // Find dead-ends (endpoints that only appear once = true dead end)
   // and intersections (endpoints that appear 3+ times)
+  // ONLY include spots that are on public land
   endpointMap.forEach((entry, key) => {
+    // Check if within OSM public land boundaries (additional check)
+    const withinPublicLandBoundary = isWithinPublicLand(entry.lat, entry.lng, publicLands);
+
+    // Skip if not on public land (either from road characteristics OR boundary check)
+    if (!entry.isPublicLand && !withinPublicLandBoundary) return;
+
     const nearWater = isNearWater(entry.lat, entry.lng, waterFeatures);
 
     if (entry.count === 1) {
       // Dead end - road terminus
       let score = 25; // Base score for dead end
-      const reasons: string[] = ['Road terminus (dead-end)'];
+      const reasons: string[] = ['Road terminus (dead-end)', 'On public land'];
 
       if (nearWater) {
         score += 15;
         reasons.push('Near water');
+      }
+
+      if (entry.isHighClearance) {
+        score += 10;
+        reasons.push('High clearance road');
       }
 
       spots.push({
@@ -178,11 +267,12 @@ function findDeadEnds(
         source: 'derived',
         roadName: entry.roads[0],
         nearWater,
+        highClearance: entry.isHighClearance,
       });
     } else if (entry.count >= 3) {
       // Intersection - multiple roads meet
       let score = 15;
-      const reasons: string[] = [`${entry.count} roads intersect here`];
+      const reasons: string[] = [`${entry.count} roads intersect here`, 'On public land'];
 
       if (nearWater) {
         score += 15;
@@ -257,14 +347,28 @@ async function fetchMVUMRoads(
   }));
 }
 
+// Public land boundary info
+export interface PublicLandArea {
+  id: number;
+  name?: string;
+  type: string; // national_forest, national_park, blm, wilderness, etc.
+  bounds: {
+    minLat: number;
+    maxLat: number;
+    minLng: number;
+    maxLng: number;
+  };
+}
+
 /**
- * Combined OSM query for tracks, camp sites, and water features
+ * Combined OSM query for tracks, camp sites, water features, and public lands
  * This reduces API calls from 3 to 1 to avoid rate limiting
  */
 interface OSMCombinedResult {
   tracks: OSMTrack[];
   campSites: PotentialSpot[];
   waterFeatures: WaterFeature[];
+  publicLands: PublicLandArea[];
 }
 
 async function fetchAllOSMData(
@@ -273,12 +377,12 @@ async function fetchAllOSMData(
   maxLat: number,
   maxLng: number
 ): Promise<OSMCombinedResult> {
-  // Combined Overpass query for all OSM data we need
-  // Use separate output statements: geom for ways (full line coords), center for area ways
+  // Optimized Overpass query - removed expensive public lands (using BLM API instead)
+  // and simplified water features to avoid timeouts
   const query = `
     [out:json][timeout:45];
     (
-      // Tracks and unpaved roads - need full geometry
+      // Tracks and unpaved roads - need full geometry for dead-end detection
       way["highway"="track"](${minLat},${minLng},${maxLat},${maxLng});
       way["highway"="unclassified"]["surface"~"unpaved|gravel|dirt|ground|sand|mud"](${minLat},${minLng},${maxLat},${maxLng});
       way["4wd_only"="yes"](${minLat},${minLng},${maxLat},${maxLng});
@@ -286,38 +390,70 @@ async function fetchAllOSMData(
       // Camp sites - nodes and ways
       node["tourism"="camp_site"](${minLat},${minLng},${maxLat},${maxLng});
       node["tourism"="camp_pitch"](${minLat},${minLng},${maxLat},${maxLng});
-      node["tourism"="caravan_site"](${minLat},${minLng},${maxLat},${maxLng});
       way["tourism"="camp_site"](${minLat},${minLng},${maxLat},${maxLng});
       node["camp_site"](${minLat},${minLng},${maxLat},${maxLng});
       node["camp_type"](${minLat},${minLng},${maxLat},${maxLng});
       node["leisure"="firepit"](${minLat},${minLng},${maxLat},${maxLng});
 
-      // Water features
-      way["waterway"="stream"](${minLat},${minLng},${maxLat},${maxLng});
-      way["waterway"="river"](${minLat},${minLng},${maxLat},${maxLng});
-      way["natural"="water"](${minLat},${minLng},${maxLat},${maxLng});
+      // Water features - only nodes/points to reduce query size
       node["natural"="spring"](${minLat},${minLng},${maxLat},${maxLng});
+      node["natural"="water"](${minLat},${minLng},${maxLat},${maxLng});
+      node["amenity"="drinking_water"](${minLat},${minLng},${maxLat},${maxLng});
     );
     out geom;
   `;
 
-  const response = await fetch(OVERPASS_API, {
-    method: 'POST',
-    body: `data=${encodeURIComponent(query)}`,
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-  });
+  // Try multiple Overpass endpoints with retry logic
+  let response: Response | null = null;
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
-    throw new Error(`Overpass API error: ${response.status}`);
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        console.log(`Trying Overpass endpoint: ${endpoint} (attempt ${attempt})`);
+        response = await fetch(endpoint, {
+          method: 'POST',
+          body: `data=${encodeURIComponent(query)}`,
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        });
+
+        if (response.ok) {
+          console.log(`Overpass query successful from ${endpoint}`);
+          break; // Success, exit retry loop
+        }
+
+        // If rate limited (429) or timeout (504), wait and retry
+        if ((response.status === 429 || response.status === 504) && attempt < 2) {
+          console.log(`Overpass API returned ${response.status}, retrying in 2s...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+
+        lastError = new Error(`Overpass API error: ${response.status}`);
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (attempt < 2) {
+          console.log(`Overpass API failed, retrying in 2s...`, err);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+    }
+
+    if (response?.ok) break; // Success, exit endpoint loop
+    console.log(`Endpoint ${endpoint} failed, trying next...`);
+  }
+
+  if (!response?.ok) {
+    throw lastError || new Error('All Overpass endpoints failed');
   }
 
   const data = await response.json();
 
   if (!data.elements) {
     console.log('No elements in OSM response');
-    return { tracks: [], campSites: [], waterFeatures: [] };
+    return { tracks: [], campSites: [], waterFeatures: [], publicLands: [] };
   }
 
   console.log('OSM response elements:', data.elements.length, 'total');
@@ -403,22 +539,25 @@ async function fetchAllOSMData(
     })
     .filter((s: any) => s.lat && s.lng);
 
-  // Parse water features
+  // Parse water features (springs, water points, drinking water)
   const waterFeatures: WaterFeature[] = data.elements
     .filter((el: any) => {
       const tags = el.tags || {};
-      return tags.waterway || tags.natural === 'water' || tags.natural === 'spring';
+      return tags.natural === 'water' || tags.natural === 'spring' || tags.amenity === 'drinking_water';
     })
     .map((el: any) => ({
       id: el.id,
       name: el.tags?.name,
-      type: el.tags?.waterway || el.tags?.natural || 'water',
+      type: el.tags?.natural || el.tags?.amenity || 'water',
       lat: el.lat || el.center?.lat,
       lng: el.lon || el.center?.lon,
     }))
     .filter((w: WaterFeature) => w.lat && w.lng);
 
-  return { tracks, campSites, waterFeatures };
+  // Public lands are now fetched from BLM SMA API separately, return empty array
+  const publicLands: PublicLandArea[] = [];
+
+  return { tracks, campSites, waterFeatures, publicLands };
 }
 
 /**
@@ -466,22 +605,23 @@ export function useDispersedRoads(
             return [];
           }),
           fetchAllOSMData(minLat, minLng, maxLat, maxLng).then((data) => {
-            console.log('OSM data fetched:', data.tracks.length, 'tracks,', data.campSites.length, 'camps');
+            console.log('OSM data fetched:', data.tracks.length, 'tracks,', data.campSites.length, 'camps,', data.publicLands.length, 'public lands');
             return data;
           }).catch((err) => {
             console.error('OSM fetch error:', err);
-            return { tracks: [], campSites: [], waterFeatures: [] };
+            return { tracks: [], campSites: [], waterFeatures: [], publicLands: [] };
           }),
         ]);
 
-        const { tracks: osm, campSites: camps, waterFeatures: water } = osmData;
+        const { tracks: osm, campSites: camps, waterFeatures: water, publicLands } = osmData;
 
         setMvumRoads(mvum);
         setOsmTracks(osm);
         setWaterFeatures(water);
 
         // Find dead-ends and intersections from road geometry
-        const derivedSpots = findDeadEnds(mvum, osm, water);
+        // Pass publicLands for additional boundary checking
+        const derivedSpots = findDeadEnds(mvum, osm, water, publicLands);
 
         // Filter out derived spots that are within 0.5 miles of a known OSM camp site
         const filteredDerivedSpots = derivedSpots.filter(spot => {

@@ -1,18 +1,57 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, MapPin, MagnifyingGlass, Path, Jeep, SpinnerGap, TreeEvergreen, Warning, Crosshair, Tent, Star, Drop, MapPinLine } from '@phosphor-icons/react';
+import { ArrowLeft, MapPin, MagnifyingGlass, Path, Jeep, SpinnerGap, TreeEvergreen, Warning, Crosshair, Tent, Star, Drop, MapPinLine, Eye, EyeSlash } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { GoogleMap } from '@/components/GoogleMap';
-import { Polyline, Marker } from '@react-google-maps/api';
+import { Polyline, Marker, Polygon } from '@react-google-maps/api';
 import { Autocomplete } from '@react-google-maps/api';
 import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot } from '@/hooks/use-dispersed-roads';
+import { usePublicLands } from '@/hooks/use-public-lands';
 import { Header } from '@/components/Header';
 
 interface SearchLocation {
   lat: number;
   lng: number;
   name: string;
+}
+
+/**
+ * Ray-casting algorithm to check if a point is inside a polygon
+ */
+function isPointInPolygon(
+  point: { lat: number; lng: number },
+  polygon: { lat: number; lng: number }[]
+): boolean {
+  if (!polygon || polygon.length < 3) return false;
+
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lng;
+    const yi = polygon[i].lat;
+    const xj = polygon[j].lng;
+    const yj = polygon[j].lat;
+
+    const intersect =
+      yi > point.lat !== yj > point.lat &&
+      point.lng < ((xj - xi) * (point.lat - yi)) / (yj - yi) + xi;
+
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Check if a point is within any of the public land polygons
+ */
+function isWithinAnyPublicLand(
+  lat: number,
+  lng: number,
+  publicLands: { polygon?: { lat: number; lng: number }[] }[]
+): boolean {
+  return publicLands.some(
+    (land) => land.polygon && isPointInPolygon({ lat, lng }, land.polygon)
+  );
 }
 
 const DispersedExplorer = () => {
@@ -22,6 +61,7 @@ const DispersedExplorer = () => {
   const [mapZoom, setMapZoom] = useState(7);
   const [selectedRoad, setSelectedRoad] = useState<MVUMRoad | OSMTrack | null>(null);
   const [selectedSpot, setSelectedSpot] = useState<PotentialSpot | null>(null);
+  const [showPublicLands, setShowPublicLands] = useState(true);
   const mapRef = useRef<google.maps.Map | null>(null);
 
   const { mvumRoads, osmTracks, potentialSpots, loading, error } = useDispersedRoads(
@@ -29,6 +69,40 @@ const DispersedExplorer = () => {
     searchLocation?.lng ?? null,
     20 // 20 mile radius
   );
+
+  // Fetch public lands (BLM, USFS, NPS, FWS) for overlay
+  const { publicLands, loading: publicLandsLoading } = usePublicLands(
+    searchLocation?.lat ?? 0,
+    searchLocation?.lng ?? 0,
+    25 // 25 mile radius for public lands
+  );
+
+  // Filter potential spots: only show derived spots (dead-ends, intersections)
+  // if they're within BLM/USFS/NPS polygon boundaries. OSM camp sites always shown.
+  const filteredPotentialSpots = useMemo(() => {
+    // Always show OSM camp sites regardless of polygon data
+    const campSites = potentialSpots.filter((spot) => spot.type === 'camp-site');
+
+    if (!publicLands.length) {
+      // No polygon data yet, only show verified camp sites
+      console.log('No public lands loaded yet, showing only OSM camp sites');
+      return campSites;
+    }
+
+    // Debug logging
+    const polygonsWithData = publicLands.filter(l => l.polygon && l.polygon.length > 0);
+    console.log(`Public lands: ${publicLands.length} total, ${polygonsWithData.length} with polygon data`);
+
+    // Filter derived spots to only those within public land polygons
+    const derivedSpots = potentialSpots.filter((spot) => spot.type !== 'camp-site');
+    const filteredDerived = derivedSpots.filter((spot) =>
+      isWithinAnyPublicLand(spot.lat, spot.lng, publicLands)
+    );
+
+    console.log(`Filtered: ${filteredDerived.length}/${derivedSpots.length} derived spots within public land polygons`);
+
+    return [...campSites, ...filteredDerived];
+  }, [potentialSpots, publicLands]);
 
   const onAutocompleteLoad = useCallback((autocompleteInstance: google.maps.places.Autocomplete) => {
     setAutocomplete(autocompleteInstance);
@@ -227,9 +301,33 @@ const DispersedExplorer = () => {
                         <p className="text-xs text-blue-600 dark:text-blue-400">OSM Tracks</p>
                       </div>
                       <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                        <p className="text-xl font-bold text-orange-700 dark:text-orange-300">{potentialSpots.length}</p>
+                        <p className="text-xl font-bold text-orange-700 dark:text-orange-300">{filteredPotentialSpots.length}</p>
                         <p className="text-xs text-orange-600 dark:text-orange-400">Camp Spots</p>
                       </div>
+                    </div>
+
+                    {/* Public Lands Toggle */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-emerald-500/30 border-2 border-emerald-600 rounded" />
+                        <span className="text-sm font-medium">Public Lands</span>
+                        {publicLandsLoading && <SpinnerGap className="w-3 h-3 animate-spin text-muted-foreground" />}
+                        {publicLands.length > 0 && (
+                          <span className="text-xs text-muted-foreground">({publicLands.length})</span>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={() => setShowPublicLands(!showPublicLands)}
+                      >
+                        {showPublicLands ? (
+                          <Eye className="w-4 h-4" />
+                        ) : (
+                          <EyeSlash className="w-4 h-4" />
+                        )}
+                      </Button>
                     </div>
 
                     {/* Legend */}
@@ -255,6 +353,10 @@ const DispersedExplorer = () => {
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-1 bg-blue-500 rounded" />
                           <span>OSM Track</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-emerald-500/30 border border-emerald-600 rounded" />
+                          <span>BLM/USFS Land</span>
                         </div>
                       </div>
                     </div>
@@ -313,17 +415,17 @@ const DispersedExplorer = () => {
             </Card>
 
             {/* Potential Spots Card */}
-            {potentialSpots.length > 0 && (
+            {filteredPotentialSpots.length > 0 && (
               <Card>
                 <CardContent className="p-4">
                   <h3 className="font-medium text-foreground mb-3 flex items-center gap-2">
                     <Tent className="w-4 h-4 text-green-600" />
                     Potential Camp Spots
-                    <span className="ml-auto text-xs text-muted-foreground">{potentialSpots.length} found</span>
+                    <span className="ml-auto text-xs text-muted-foreground">{filteredPotentialSpots.length} found</span>
                   </h3>
 
                   <div className="space-y-2 max-h-[250px] overflow-y-auto">
-                    {potentialSpots.slice(0, 20).map((spot) => (
+                    {filteredPotentialSpots.slice(0, 20).map((spot) => (
                       <button
                         key={spot.id}
                         onClick={() => {
@@ -508,6 +610,24 @@ const DispersedExplorer = () => {
                 />
               )}
 
+              {/* Public Lands Overlay (BLM, USFS) */}
+              {showPublicLands && publicLands.map((land) => (
+                land.polygon ? (
+                  <Polygon
+                    key={land.id}
+                    paths={land.polygon}
+                    options={{
+                      fillColor: '#10b981',
+                      fillOpacity: 0.25,
+                      strokeColor: '#059669',
+                      strokeOpacity: 0.7,
+                      strokeWeight: 2,
+                      clickable: false,
+                    }}
+                  />
+                ) : null
+              ))}
+
               {/* MVUM Roads */}
               {mvumRoads.map((road) => (
                 <Polyline
@@ -539,7 +659,7 @@ const DispersedExplorer = () => {
               ))}
 
               {/* Potential Camp Spots */}
-              {potentialSpots.map((spot) => (
+              {filteredPotentialSpots.map((spot) => (
                 <Marker
                   key={spot.id}
                   position={{ lat: spot.lat, lng: spot.lng }}

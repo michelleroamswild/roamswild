@@ -83,9 +83,10 @@ export function usePublicLands(
           ymax: center.y + meterRadius,
         };
 
-        // Query BLM SMA service for BLM and USFS lands
+        // Query BLM SMA service for BLM, USFS, NPS, and FWS lands
+        // NPS includes National Recreation Areas, FWS includes Wildlife Refuges
         const params = new URLSearchParams({
-          where: "ADMIN_AGENCY_CODE IN ('BLM', 'USFS')",
+          where: "ADMIN_AGENCY_CODE IN ('BLM', 'USFS', 'NPS', 'FWS')",
           geometry: JSON.stringify({
             xmin: bbox.xmin,
             ymin: bbox.ymin,
