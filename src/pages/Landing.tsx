@@ -5,20 +5,18 @@ import {
   Path,
   Tent,
   Mountains,
-  MapPin,
   Users,
   Calendar,
-  Compass,
-  CheckCircle,
   ArrowRight,
-  Star,
   Lightning,
   Shield,
-  DeviceMobile,
+  Sun,
+  Boot,
+  CaretLeft,
+  Clock,
+  MapPin,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
 
 // Landing page photos
 import photo1 from "@/images/landingpage/DJI_0693.jpg";
@@ -74,9 +72,9 @@ const features = [
     bgColor: "bg-purple-500/10",
   },
   {
-    icon: MapPin,
-    title: "Offline Maps",
-    description: "Download your trip for offline access. Navigate even without cell service.",
+    icon: Sun,
+    title: "Photography Conditions",
+    description: "Get golden hour times, weather forecasts, and optimal shooting conditions for every stop.",
     color: "text-rose-500",
     bgColor: "bg-rose-500/10",
   },
@@ -130,98 +128,140 @@ const PhoneMockup = ({ children, className = "" }: { children: React.ReactNode; 
   </div>
 );
 
-// App screenshot mockup - Trip Map View
+// App screenshot mockup - Trip Detail View
 const AppScreenshot = () => (
-  <div className="h-full w-full bg-cream relative">
-    {/* Map background - styled to look like a trip route */}
-    <div className="absolute inset-0 bg-gradient-to-br from-[#e8e4d9] to-[#d4d0c4]">
-      {/* Topo-style pattern overlay */}
-      <div className="absolute inset-0 opacity-30" style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 5c13.807 0 25 11.193 25 25S43.807 55 30 55 5 43.807 5 30 16.193 5 30 5zm0 10c-8.284 0-15 6.716-15 15s6.716 15 15 15 15-6.716 15-15-6.716-15-15-15z' fill='%23a8a090' fill-opacity='0.2' fill-rule='evenodd'/%3E%3C/svg%3E")`,
-      }} />
-
-      {/* Route line SVG */}
-      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-        {/* Route path */}
-        <path
-          d="M 15 85 Q 25 70 30 55 Q 35 40 50 35 Q 65 30 70 20 Q 75 15 85 12"
-          fill="none"
-          stroke="#456B2A"
-          strokeWidth="1"
-          strokeDasharray="2,1"
-          className="animate-pulse"
-        />
-        {/* Animated route highlight */}
-        <path
-          d="M 15 85 Q 25 70 30 55 Q 35 40 50 35 Q 65 30 70 20 Q 75 15 85 12"
-          fill="none"
-          stroke="#8BC34A"
-          strokeWidth="0.8"
-          strokeLinecap="round"
-        />
-      </svg>
-
-      {/* Map markers */}
-      <div className="absolute left-[12%] bottom-[12%] w-6 h-6 bg-accent rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-        <span className="text-[8px] font-bold text-white">A</span>
-      </div>
-      <div className="absolute left-[28%] top-[52%] w-5 h-5 bg-softamber rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-        <Tent className="w-2.5 h-2.5 text-white" weight="fill" />
-      </div>
-      <div className="absolute left-[48%] top-[32%] w-5 h-5 bg-pinesoft rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-        <Mountains className="w-2.5 h-2.5 text-white" weight="fill" />
-      </div>
-      <div className="absolute right-[28%] top-[18%] w-5 h-5 bg-softamber rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-        <Tent className="w-2.5 h-2.5 text-white" weight="fill" />
-      </div>
-      <div className="absolute right-[12%] top-[9%] w-6 h-6 bg-rose-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-        <span className="text-[8px] font-bold text-white">B</span>
-      </div>
-    </div>
-
-    {/* Top header bar */}
-    <div className="absolute top-8 left-0 right-0 px-4">
-      <div className="bg-white/95 backdrop-blur-sm rounded-xl p-3 shadow-lg border border-border">
-        <div className="flex items-center justify-between">
+  <div className="h-full w-full bg-background flex flex-col">
+    {/* Header */}
+    <div className="bg-background border-b border-border px-3 pt-10 pb-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
+            <CaretLeft className="w-3 h-3 text-foreground" />
+          </div>
           <div>
-            <h4 className="text-xs font-bold text-foreground">Utah Canyon Country</h4>
-            <p className="text-[10px] text-muted-foreground">5 days · 342 miles</p>
+            <h4 className="text-[11px] font-bold text-foreground">Utah Canyon Country</h4>
+            <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
+              <span>5 days</span>
+              <span>·</span>
+              <span>342 mi</span>
+            </div>
           </div>
-          <div className="flex -space-x-1.5">
-            {["JD", "SM", "AK"].map((initials, i) => (
-              <div key={i} className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[7px] font-medium border border-white">
-                {initials}
-              </div>
-            ))}
-          </div>
+        </div>
+        <div className="flex -space-x-1.5">
+          {["JD", "SM"].map((initials, i) => (
+            <div key={i} className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[7px] font-medium border-2 border-background">
+              {initials}
+            </div>
+          ))}
         </div>
       </div>
     </div>
 
-    {/* Bottom trip info card */}
-    <div className="absolute bottom-4 left-3 right-3">
-      <div className="bg-white/95 backdrop-blur-sm rounded-xl p-3 shadow-lg border border-border">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-6 h-6 bg-accent/10 rounded-lg flex items-center justify-center">
-            <Calendar className="w-3 h-3 text-accent" />
+    {/* Scrollable content */}
+    <div className="flex-1 overflow-hidden px-3 py-3 space-y-2.5">
+      {/* Day 1 Card */}
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="px-3 py-2 bg-muted/50 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-accent text-white flex items-center justify-center text-[8px] font-bold">1</div>
+            <span className="text-[10px] font-semibold text-foreground">Day 1</span>
           </div>
-          <div>
-            <p className="text-[10px] font-semibold text-foreground">Day 2 of 5</p>
-            <p className="text-[8px] text-muted-foreground">Canyonlands → Dead Horse Point</p>
+          <div className="flex items-center gap-1 text-[8px] text-muted-foreground">
+            <Clock className="w-2.5 h-2.5" />
+            <span>3h 20m</span>
           </div>
         </div>
-        <div className="flex gap-2">
-          <div className="flex-1 bg-softamber/20 rounded-lg p-1.5 text-center">
-            <Tent className="w-3 h-3 text-softamber mx-auto" />
-            <span className="text-[8px] font-medium text-foreground block">3 Camps</span>
+        <div className="px-3 py-2 space-y-2">
+          {/* Stop 1 */}
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-pinesoft/20 flex items-center justify-center">
+              <Boot className="w-2.5 h-2.5 text-pinesoft" weight="fill" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[9px] font-medium text-foreground truncate">Corona Arch Trail</p>
+              <p className="text-[8px] text-muted-foreground">3.0 mi · Moderate</p>
+            </div>
           </div>
-          <div className="flex-1 bg-pinesoft/20 rounded-lg p-1.5 text-center">
-            <Mountains className="w-3 h-3 text-pinesoft mx-auto" />
-            <span className="text-[8px] font-medium text-foreground block">2 Hikes</span>
+          {/* Stop 2 */}
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-softamber/20 flex items-center justify-center">
+              <Tent className="w-2.5 h-2.5 text-softamber" weight="fill" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[9px] font-medium text-foreground truncate">BLM Dispersed - Willow Springs</p>
+              <p className="text-[8px] text-muted-foreground">Free · No reservations</p>
+            </div>
           </div>
-          <div className="flex-1 bg-skyblue/20 rounded-lg p-1.5 text-center">
-            <Path className="w-3 h-3 text-skyblue mx-auto" />
-            <span className="text-[8px] font-medium text-foreground block">68 mi</span>
+        </div>
+      </div>
+
+      {/* Day 2 Card - Expanded with more detail */}
+      <div className="bg-card rounded-xl border-2 border-accent overflow-hidden">
+        <div className="px-3 py-2 bg-accent/10 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-accent text-white flex items-center justify-center text-[8px] font-bold">2</div>
+            <span className="text-[10px] font-semibold text-foreground">Day 2</span>
+          </div>
+          <div className="flex items-center gap-1 text-[8px] text-accent font-medium">
+            <Sun className="w-2.5 h-2.5" />
+            <span>Great light</span>
+          </div>
+        </div>
+        <div className="px-3 py-2 space-y-2">
+          {/* Stop 1 */}
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-pinesoft/20 flex items-center justify-center">
+              <Boot className="w-2.5 h-2.5 text-pinesoft" weight="fill" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[9px] font-medium text-foreground truncate">Delicate Arch</p>
+              <p className="text-[8px] text-muted-foreground">3.2 mi · Moderate</p>
+            </div>
+          </div>
+          {/* Stop 2 */}
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-rose-500/20 flex items-center justify-center">
+              <MapPin className="w-2.5 h-2.5 text-rose-500" weight="fill" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[9px] font-medium text-foreground truncate">Dead Horse Point</p>
+              <p className="text-[8px] text-muted-foreground">Viewpoint · Sunset spot</p>
+            </div>
+          </div>
+          {/* Stop 3 */}
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-softamber/20 flex items-center justify-center">
+              <Tent className="w-2.5 h-2.5 text-softamber" weight="fill" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[9px] font-medium text-foreground truncate">Horsethief Campground</p>
+              <p className="text-[8px] text-muted-foreground">$15/night · First come</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Day 3 Card */}
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="px-3 py-2 bg-muted/50 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-accent text-white flex items-center justify-center text-[8px] font-bold">3</div>
+            <span className="text-[10px] font-semibold text-foreground">Day 3</span>
+          </div>
+          <div className="flex items-center gap-1 text-[8px] text-muted-foreground">
+            <Clock className="w-2.5 h-2.5" />
+            <span>4h 45m</span>
+          </div>
+        </div>
+        <div className="px-3 py-2 space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-pinesoft/20 flex items-center justify-center">
+              <Boot className="w-2.5 h-2.5 text-pinesoft" weight="fill" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[9px] font-medium text-foreground truncate">Mesa Arch Trail</p>
+              <p className="text-[8px] text-muted-foreground">0.7 mi · Easy</p>
+            </div>
           </div>
         </div>
       </div>
@@ -241,9 +281,6 @@ const rotatingWords = [
 ];
 
 const Landing = () => {
-  const [email, setEmail] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [scrollY, setScrollY] = useState(0);
@@ -269,23 +306,6 @@ const Landing = () => {
 
     return () => clearInterval(interval);
   }, []);
-
-  const handleWaitlistSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
-
-    setIsSubmitting(true);
-
-    // Simulate API call - replace with actual waitlist signup
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    setIsSubmitting(false);
-    setIsSubmitted(true);
-    setEmail("");
-    toast.success("You're on the list!", {
-      description: "We'll notify you when RoamsWild is ready for you.",
-    });
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -340,50 +360,19 @@ const Landing = () => {
                 Your next adventure starts here.
               </p>
 
-              {/* Waitlist Form */}
-              {!isSubmitted ? (
-                <form onSubmit={handleWaitlistSubmit} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto lg:mx-0">
-                  <Input
-                    type="email"
-                    placeholder="Enter your email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="flex-1 h-12 text-base"
-                    required
-                  />
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="lg"
-                    disabled={isSubmitting}
-                    className="whitespace-nowrap"
-                  >
-                    {isSubmitting ? "Joining..." : "Request Access"}
-                    <ArrowRight className="w-4 h-4 ml-2" />
+              {/* CTA Buttons */}
+              <div className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto lg:mx-0">
+                <Link to="/signup" className="flex-1">
+                  <Button variant="primary" size="lg" className="w-full h-14 text-lg">
+                    Create Account
+                    <ArrowRight className="w-5 h-5 ml-2" />
                   </Button>
-                </form>
-              ) : (
-                <div className="flex items-center gap-2 text-accent font-medium max-w-md mx-auto lg:mx-0 bg-accent/10 p-4 rounded-xl">
-                  <CheckCircle className="w-5 h-5" weight="fill" />
-                  <span>You're on the waitlist! We'll be in touch soon.</span>
-                </div>
-              )}
-
-              {/* Social proof */}
-              <div className="flex items-center justify-center lg:justify-start gap-4 mt-8">
-                <div className="flex -space-x-2">
-                  {["JD", "SM", "AK", "TR"].map((initials, i) => (
-                    <div
-                      key={i}
-                      className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-medium border-2 border-background"
-                    >
-                      {initials}
-                    </div>
-                  ))}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground">2,400+</span> adventurers on the waitlist
-                </div>
+                </Link>
+                <Link to="/login" className="flex-1">
+                  <Button variant="secondary" size="lg" className="w-full h-14 text-lg">
+                    Sign In
+                  </Button>
+                </Link>
               </div>
             </div>
 
@@ -561,7 +550,7 @@ const Landing = () => {
               <div className="space-y-4">
                 {[
                   { icon: Shield, text: "Verified campsite locations from real overlanders" },
-                  { icon: DeviceMobile, text: "Works offline in remote areas" },
+                  { icon: Sun, text: "Golden hour and photography condition forecasts" },
                   { icon: Users, text: "Real-time collaboration with your crew" },
                   { icon: Lightning, text: "AI-powered route optimization" },
                 ].map((item, index) => (
@@ -586,39 +575,23 @@ const Landing = () => {
               Ready to Plan Your Next Adventure?
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Join the waitlist and be the first to know when RoamsWild launches.
-              Early access members get exclusive features and lifetime benefits.
+              Start planning your next adventure today. Create an account to discover
+              hidden campsites, plan scenic routes, and explore with friends.
             </p>
 
-            {!isSubmitted ? (
-              <form onSubmit={handleWaitlistSubmit} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
-                <Input
-                  type="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="flex-1 h-12 text-base"
-                  required
-                />
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="lg"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? "Joining..." : "Join Waitlist"}
+            <div className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto">
+              <Link to="/signup" className="flex-1">
+                <Button variant="primary" size="lg" className="w-full h-14 text-lg">
+                  Create Account
+                  <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
-              </form>
-            ) : (
-              <div className="flex items-center justify-center gap-2 text-accent font-medium bg-accent/10 p-4 rounded-xl max-w-md mx-auto">
-                <CheckCircle className="w-5 h-5" weight="fill" />
-                <span>You're on the waitlist!</span>
-              </div>
-            )}
-
-            <p className="text-sm text-muted-foreground mt-4">
-              No spam, ever. Unsubscribe anytime.
-            </p>
+              </Link>
+              <Link to="/login" className="flex-1">
+                <Button variant="secondary" size="lg" className="w-full h-14 text-lg">
+                  Sign In
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </section>

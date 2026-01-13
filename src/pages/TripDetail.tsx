@@ -2230,7 +2230,7 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
         </button>
         <div className="flex items-center gap-2">
           {timeEstimate.warningMessage && (
-            <AlertTriangle
+            <Warning
               className={`w-4 h-4 ${timeEstimate.isOverloaded ? 'text-amber-500' : 'text-blue-500'}`}
               title={timeEstimate.warningMessage}
             />
