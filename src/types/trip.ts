@@ -68,6 +68,15 @@ export interface TripConfig {
   travelOnlyFinalDay?: boolean; // No activities on final day (travel only)
 }
 
+export interface CachedPhotoHotspot {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  photoCount: number;
+  samplePhotoUrl?: string;
+}
+
 export interface GeneratedTrip {
   id: string;
   config: TripConfig;
@@ -77,4 +86,7 @@ export interface GeneratedTrip {
   createdAt: string;
   ownerId?: string; // User ID of the trip owner (for sharing)
   collaboratorCount?: number; // Number of people this trip is shared with
+  // Cached photo hotspots
+  cachedPhotoHotspots?: CachedPhotoHotspot[];
+  photoHotspotsHash?: string; // Hash of search points to detect when to refetch
 }

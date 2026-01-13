@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, MapPin, Car, SpinnerGap, Plus, DotsSixVertical, X, CaretDown, Clock, Gauge, Minus } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
@@ -477,7 +478,7 @@ const CreateTrip = () => {
                 {startLocation && (
                   <div className="flex items-center justify-between p-3 bg-aquateal/20 rounded-lg border border-aquateal/30">
                     <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-[#34b5a5]" />
+                      <MapPin className="w-4 h-4 text-aquateal" />
                       <span className="text-sm font-medium">{startLocation.name}</span>
                     </div>
                     <Button
@@ -494,12 +495,10 @@ const CreateTrip = () => {
 
               {/* Return to Start Checkbox */}
               <div className="flex items-center space-x-2 pt-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   id="return-to-start"
                   checked={returnToStart}
-                  onChange={(e) => setReturnToStart(e.target.checked)}
-                  className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                  onCheckedChange={(checked) => setReturnToStart(checked === true)}
                 />
                 <label htmlFor="return-to-start" className="cursor-pointer text-sm">
                   Return to start location
@@ -508,12 +507,10 @@ const CreateTrip = () => {
 
               {/* Travel Only Final Day Checkbox */}
               <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   id="travel-only-final"
                   checked={travelOnlyFinalDay}
-                  onChange={(e) => setTravelOnlyFinalDay(e.target.checked)}
-                  className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                  onCheckedChange={(checked) => setTravelOnlyFinalDay(checked === true)}
                 />
                 <label htmlFor="travel-only-final" className="cursor-pointer text-sm">
                   No activities on final day (travel only)
@@ -531,7 +528,7 @@ const CreateTrip = () => {
                   {endLocation && (
                     <div className="flex items-center justify-between p-3 bg-aquateal/20 rounded-lg border border-aquateal/30">
                       <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-[#34b5a5]" />
+                        <MapPin className="w-4 h-4 text-aquateal" />
                         <span className="text-sm font-medium">{endLocation.name}</span>
                       </div>
                       <Button
@@ -760,12 +757,11 @@ const CreateTrip = () => {
                   includeHikes ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
                 }`}
               >
-                <input
-                  type="checkbox"
+                <Checkbox
                   id="include-hikes"
                   checked={includeHikes}
-                  onChange={(e) => setIncludeHikes(e.target.checked)}
-                  className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
+                  onCheckedChange={(checked) => setIncludeHikes(checked === true)}
+                  className="mt-0.5"
                 />
                 <div className="flex-1 space-y-0.5">
                   <span className="font-medium text-sm">Hiking</span>
@@ -789,12 +785,11 @@ const CreateTrip = () => {
                       htmlFor={`activity-${activity.id}`}
                       className="flex items-start space-x-3 p-3 cursor-pointer"
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         id={`activity-${activity.id}`}
                         checked={isSelected}
-                        onChange={(e) => handleActivityChange(activity.id, e.target.checked)}
-                        className="h-4 w-4 mt-0.5 cursor-pointer accent-[hsl(var(--forest))]"
+                        onCheckedChange={(checked) => handleActivityChange(activity.id, checked === true)}
+                        className="mt-0.5"
                       />
                       <div className="flex-1 space-y-0.5">
                         <span className="font-medium text-sm">{activity.label}</span>

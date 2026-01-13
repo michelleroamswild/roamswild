@@ -695,7 +695,7 @@ const LocationDetail = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 bg-secondary/50 rounded-xl">
                     <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                      <Mountains className="w-4 h-4 text-[#6b5ce6]" />
+                      <Mountains className="w-4 h-4 text-lavenderslate" />
                       <span className="text-sm">Elevation</span>
                     </div>
                     {elevation !== null ? (
@@ -803,7 +803,7 @@ const LocationDetail = () => {
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <label className="text-sm font-medium text-foreground flex items-center gap-2">
-                        <Boot className="w-4 h-4 text-[#3c8a79]" />
+                        <Boot className="w-4 h-4 text-pinesoft" />
                         Hikes per day
                       </label>
                       <span className="text-2xl font-bold text-foreground">
@@ -827,7 +827,7 @@ const LocationDetail = () => {
                   {/* Same campsite toggle */}
                   <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
                     <div className="flex items-center gap-3">
-                      <Tent className="w-4 h-4 text-[#ea9b0c]" />
+                      <Tent className="w-4 h-4 text-softamber" />
                       <div>
                         <p className="text-sm font-medium text-foreground">Base Camp Mode</p>
                         <p className="text-xs text-muted-foreground">Stay at the same campsite each night</p>
@@ -901,7 +901,7 @@ const LocationDetail = () => {
                         }}
                       >
                         <div className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 ${place.source === 'ridb' ? 'bg-[#213D5C]/10' : 'bg-softamber/20'}`}>
-                          <Tent className={`w-5 h-5 ${place.source === 'ridb' ? 'text-[#213D5C]' : 'text-[#ea9b0c]'}`} />
+                          <Tent className={`w-5 h-5 ${place.source === 'ridb' ? 'text-[#213D5C]' : 'text-softamber'}`} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-foreground truncate">
@@ -953,7 +953,7 @@ const LocationDetail = () => {
                         }}
                       >
                         <div className="flex items-center justify-center w-10 h-10 bg-pinesoft/10 rounded-lg flex-shrink-0">
-                          <Boot className="w-5 h-5 text-[#3c8a79]" />
+                          <Boot className="w-5 h-5 text-pinesoft" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-foreground truncate">
@@ -1000,7 +1000,7 @@ const LocationDetail = () => {
                     className="w-full flex items-center justify-between"
                   >
                     <div className="flex items-center gap-2">
-                      <Camera className="w-5 h-5 text-[#e85a9a]" />
+                      <Camera className="w-5 h-5 text-blushorchid" />
                       <h3 className="font-semibold text-foreground">Photo Hotspots</h3>
                       <span className="text-xs text-muted-foreground">({photoHotspots.length})</span>
                     </div>
@@ -1048,7 +1048,7 @@ const LocationDetail = () => {
                               </button>
                             ) : (
                               <div className="w-10 h-10 rounded-lg bg-blushorchid/20 flex items-center justify-center flex-shrink-0">
-                                <Camera className="w-5 h-5 text-[#e85a9a]" />
+                                <Camera className="w-5 h-5 text-blushorchid" />
                               </div>
                             )}
                             <button
@@ -1086,7 +1086,7 @@ const LocationDetail = () => {
                     className="w-full flex items-center justify-between"
                   >
                     <div className="flex items-center gap-2">
-                      <TreeEvergreen className="w-5 h-5 text-[#3c8a79]" />
+                      <TreeEvergreen className="w-5 h-5 text-pinesoft" />
                       <h3 className="font-semibold text-foreground">Dispersed Camping Areas</h3>
                       {publicLands.length > 0 && (
                         <span className="text-xs text-muted-foreground">({publicLands.length})</span>
@@ -1131,7 +1131,7 @@ const LocationDetail = () => {
                               }}
                             >
                               <div className="w-10 h-10 rounded-lg bg-pinesoft/10 flex items-center justify-center flex-shrink-0">
-                                <TreeEvergreen className="w-5 h-5 text-[#3c8a79]" />
+                                <TreeEvergreen className="w-5 h-5 text-pinesoft" />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-foreground text-sm truncate">

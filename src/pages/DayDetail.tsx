@@ -10,7 +10,6 @@ import {
   Star,
   Boot,
   Tent,
-  Eye,
   GasPump,
   Trash,
   ArrowsClockwise,
@@ -24,6 +23,7 @@ import {
   Snowflake,
   Wind,
   SpinnerGap,
+  Camera,
 } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -137,7 +137,9 @@ const getIcon = (type: string) => {
     case 'camp':
       return Tent;
     case 'viewpoint':
-      return Eye;
+      return MapPinArea;
+    case 'photo':
+      return Camera;
     case 'start':
     case 'end':
       return MapPin;
@@ -160,6 +162,7 @@ const DayDetail = () => {
   const [addStopModalOpen, setAddStopModalOpen] = useState(false);
   const [weather, setWeather] = useState<WeatherForecast | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
+  const [endLocationName, setEndLocationName] = useState<string | null>(null);
 
   const dayNum = parseInt(dayNumber || '1', 10);
 
@@ -199,7 +202,7 @@ const DayDetail = () => {
 
     // Day ends at this day's campsite, or last activity if no camp
     const dayCampsite = day.stops.find(s => s.type === 'camp');
-    const dayActivities = day.stops.filter(s => s.type === 'hike' || s.type === 'viewpoint');
+    const dayActivities = day.stops.filter(s => s.type === 'hike' || s.type === 'viewpoint' || s.type === 'photo');
     const dayDestination = dayCampsite?.coordinates || dayActivities[dayActivities.length - 1]?.coordinates || day.stops[day.stops.length - 1]?.coordinates;
 
     if (!dayDestination) {
@@ -245,6 +248,67 @@ const DayDetail = () => {
         setWeatherLoading(false);
       });
   }, [day]);
+
+  // Reverse geocode the end location (campsite) to get city/state
+  useEffect(() => {
+    if (!mapsLoaded || !generatedTrip || !day) return;
+
+    const isLastDay = dayNum === generatedTrip.days.length;
+
+    // Last day returning home - use start location name
+    if (isLastDay && generatedTrip.config.returnToStart) {
+      setEndLocationName(generatedTrip.config.startLocation?.name || 'Home');
+      return;
+    }
+
+    // Find the end stop for this day
+    const endStop = day.stops.find(s => s.type === 'end');
+    const campsite = day.stops.find(s => s.type === 'camp');
+    const finalStop = endStop || campsite;
+
+    if (!finalStop) {
+      setEndLocationName(null);
+      return;
+    }
+
+    // Reverse geocode to get city/state
+    const geocoder = new google.maps.Geocoder();
+    geocoder.geocode(
+      { location: finalStop.coordinates },
+      (results, status) => {
+        if (status === 'OK' && results && results.length > 0) {
+          // Look for locality (city) and administrative_area_level_1 (state)
+          let city = '';
+          let state = '';
+
+          for (const result of results) {
+            for (const component of result.address_components) {
+              if (component.types.includes('locality')) {
+                city = component.long_name;
+              }
+              if (component.types.includes('administrative_area_level_1')) {
+                state = component.short_name;
+              }
+            }
+            if (city && state) break;
+          }
+
+          if (city && state) {
+            setEndLocationName(`${city}, ${state}`);
+          } else if (city) {
+            setEndLocationName(city);
+          } else if (state) {
+            setEndLocationName(state);
+          } else {
+            // Fall back to formatted address or stop name
+            setEndLocationName(finalStop.name);
+          }
+        } else {
+          setEndLocationName(finalStop.name);
+        }
+      }
+    );
+  }, [mapsLoaded, generatedTrip, day, dayNum]);
 
   const handleOpenHikeSwap = (hike: TripStop) => {
     setSelectedHikeForSwap(hike);
@@ -350,6 +414,31 @@ const DayDetail = () => {
   const mainDestination = day.stops.find(s => s.type === 'viewpoint') || day.stops[0];
   const destinationName = mainDestination?.name || `Day ${dayNum}`;
 
+  // Get the destination/area name for a given day
+  const getDestinationForDay = (dayNumber: number): string => {
+    // For base location trips, use the base location name
+    if (generatedTrip.config.baseLocation) {
+      return generatedTrip.config.baseLocation.name;
+    }
+
+    // For multi-destination trips, figure out which destination this day is at
+    const destinations = generatedTrip.config.destinations;
+    if (destinations.length === 0) return destinationName;
+
+    // Count days per destination to find which one this day belongs to
+    let dayCount = 0;
+    for (const dest of destinations) {
+      const daysAtDest = dest.daysAtDestination || 1;
+      dayCount += daysAtDest;
+      if (dayNumber <= dayCount) {
+        return dest.name;
+      }
+    }
+
+    // Fall back to last destination
+    return destinations[destinations.length - 1]?.name || destinationName;
+  };
+
   // Determine where this day starts from for the summary
   const getOriginName = (): string => {
     if (dayNum === 1) {
@@ -357,10 +446,13 @@ const DayDetail = () => {
              generatedTrip.config.baseLocation?.name ||
              'your starting point';
     }
-    const prevDay = generatedTrip.days.find(d => d.day === dayNum - 1);
-    const prevCampsite = prevDay?.stops.find(s => s.type === 'camp');
-    return prevCampsite?.name || 'camp';
+    // Use previous day's destination area
+    return getDestinationForDay(dayNum - 1);
   };
+
+  // Use geocoded end location name, or fall back to destination
+  const endName = endLocationName || getDestinationForDay(dayNum);
+  const originName = getOriginName();
 
   // Generate a contextual summary for the day
   const getDaySummary = (): string => {
@@ -406,8 +498,10 @@ const DayDetail = () => {
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">
                   Day {dayNum} of {generatedTrip.days.length}
                 </p>
-                <h1 className="text-xl font-display font-bold text-foreground">
-                  {destinationName}
+                <h1 className="text-xl font-display font-bold text-foreground flex items-center gap-2">
+                  <span className="truncate max-w-[120px] sm:max-w-[180px]">{originName}</span>
+                  <span className="flex-shrink-0 text-muted-foreground">→</span>
+                  <span className="truncate max-w-[120px] sm:max-w-[180px]">{endName}</span>
                 </h1>
               </div>
             </div>
@@ -441,6 +535,15 @@ const DayDetail = () => {
                         strokeOpacity: 1,
                       },
                     }}
+                  />
+                )}
+
+                {/* Start location marker for Day 1 */}
+                {dayNum === 1 && (generatedTrip.config.startLocation || generatedTrip.config.baseLocation) && (
+                  <Marker
+                    position={(generatedTrip.config.startLocation || generatedTrip.config.baseLocation)!.coordinates}
+                    icon={createMarkerIcon('start', { isActive: true, size: 36 })}
+                    title={(generatedTrip.config.startLocation || generatedTrip.config.baseLocation)!.name}
                   />
                 )}
 

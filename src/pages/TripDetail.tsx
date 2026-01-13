@@ -65,6 +65,8 @@ const getIcon = (type: string) => {
       return GasPump;
     case 'camp':
       return Tent;
+    case 'photo':
+      return Camera;
     case 'start':
     case 'end':
       return MapPin;
@@ -139,7 +141,7 @@ const RegeneratingLoader = () => {
 const TripDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { generatedTrip, tripConfig, setTripConfig, setGeneratedTrip, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTripBySlug, updateTripStop, removeTripStop, fetchCollaborators, isOwner, isLoading } = useTrip();
+  const { generatedTrip, tripConfig, setTripConfig, setGeneratedTrip, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTripBySlug, updateTripStop, removeTripStop, addTripStop, fetchCollaborators, isOwner, isLoading } = useTrip();
   const { generateTrip, generating: regenerating } = useTripGenerator();
 
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
@@ -185,80 +187,59 @@ const TripDetail = () => {
   const [pendingNewDestination, setPendingNewDestination] = useState<google.maps.places.PlaceResult | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
 
-  // Get key search points along the route for photo hotspots
-  const routeSearchPoints = useMemo(() => {
-    if (!generatedTrip) return [];
+  // Get destination coordinates for photo hotspots search
+  const { destinationSearchPoints, searchPointsHash } = useMemo(() => {
+    if (!generatedTrip) return { destinationSearchPoints: [], searchPointsHash: '' };
 
     const points: Array<{ lat: number; lng: number }> = [];
-    const seenLocations = new Set<string>();
+    const hashParts: string[] = [];
 
-    const addPoint = (coords: { lat: number; lng: number }) => {
-      const key = `${coords.lat.toFixed(2)},${coords.lng.toFixed(2)}`;
-      if (!seenLocations.has(key)) {
-        seenLocations.add(key);
-        points.push(coords);
-      }
-    };
-
-    // Add start location
-    if (generatedTrip.config.startLocation) {
-      addPoint(generatedTrip.config.startLocation.coordinates);
-    }
-
-    // Add each destination
+    // Add each destination as a search point
     for (const dest of generatedTrip.config.destinations || []) {
-      addPoint(dest.coordinates);
+      points.push(dest.coordinates);
+      hashParts.push(`${dest.coordinates.lat.toFixed(3)},${dest.coordinates.lng.toFixed(3)}`);
     }
 
-    // Add all stops from each day (campsites, hikes, viewpoints)
-    for (const day of generatedTrip.days) {
-      for (const stop of day.stops) {
-        // Include campsites, hikes, and viewpoints as search points
-        if (stop.type === 'camp' || stop.type === 'hike' || stop.type === 'viewpoint') {
-          addPoint(stop.coordinates);
-        }
-      }
-    }
-
-    // Add intermediate points between distant locations for better coverage
-    const orderedPoints = [...points];
-    const interpolatedPoints: Array<{ lat: number; lng: number }> = [];
-
-    for (let i = 0; i < orderedPoints.length - 1; i++) {
-      const p1 = orderedPoints[i];
-      const p2 = orderedPoints[i + 1];
-
-      // Calculate distance between points (rough estimate in km)
-      const latDiff = Math.abs(p2.lat - p1.lat);
-      const lngDiff = Math.abs(p2.lng - p1.lng);
-      const roughDistKm = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) * 111; // ~111km per degree
-
-      // Add midpoint(s) if distance is greater than 50km
-      if (roughDistKm > 50) {
-        const numMidpoints = Math.min(Math.floor(roughDistKm / 50), 3); // Max 3 midpoints
-        for (let j = 1; j <= numMidpoints; j++) {
-          const ratio = j / (numMidpoints + 1);
-          interpolatedPoints.push({
-            lat: p1.lat + (p2.lat - p1.lat) * ratio,
-            lng: p1.lng + (p2.lng - p1.lng) * ratio,
-          });
-        }
-      }
-    }
-
-    // Add interpolated points
-    for (const pt of interpolatedPoints) {
-      addPoint(pt);
-    }
-
-    return points;
+    const hash = hashParts.join('|');
+    return { destinationSearchPoints: points, searchPointsHash: hash };
   }, [generatedTrip]);
 
-  // Fetch photo hotspots at multiple points along the route
-  const { hotspots: photoHotspots, loading: loadingPhotoHotspots } = useRoutePhotoHotspots(
-    routeSearchPoints,
-    32 // 32km radius at each search point
+  // Check if we have valid cached photo hotspots
+  const hasCachedHotspots = generatedTrip?.cachedPhotoHotspots &&
+    generatedTrip.cachedPhotoHotspots.length > 0 &&
+    generatedTrip.photoHotspotsHash === searchPointsHash;
+
+  // Only fetch if no valid cache
+  const shouldFetchHotspots = !hasCachedHotspots && destinationSearchPoints.length > 0;
+
+  // Fetch photo hotspots at each destination (only if not cached)
+  const { hotspots: fetchedHotspots, loading: loadingPhotoHotspots } = useRoutePhotoHotspots(
+    shouldFetchHotspots ? destinationSearchPoints : [],
+    32 // 32km radius at each destination
   );
+
+  // Use cached hotspots or fetched hotspots
+  const photoHotspots = hasCachedHotspots ? generatedTrip!.cachedPhotoHotspots! : fetchedHotspots;
+
+  // Cache the fetched hotspots when they arrive
+  useEffect(() => {
+    if (fetchedHotspots.length > 0 && generatedTrip && !hasCachedHotspots) {
+      // Save to trip
+      const updatedTrip = {
+        ...generatedTrip,
+        cachedPhotoHotspots: fetchedHotspots.map(h => ({
+          id: h.id,
+          name: h.name,
+          lat: h.lat,
+          lng: h.lng,
+          photoCount: h.photoCount,
+          samplePhotoUrl: h.samplePhotoUrl,
+        })),
+        photoHotspotsHash: searchPointsHash,
+      };
+      setGeneratedTrip(updatedTrip);
+    }
+  }, [fetchedHotspots, generatedTrip, hasCachedHotspots, searchPointsHash, setGeneratedTrip]);
 
   // Check if this trip is saved
   const isSaved = generatedTrip ? isTripSaved(generatedTrip.id) : false;
@@ -286,6 +267,75 @@ const TripDetail = () => {
       fetchCollaborators(generatedTrip.id).then(setCollaborators);
     }
   }, [generatedTrip?.id, fetchCollaborators]);
+
+  // Find the best day to add a photo spot based on proximity to that day's stops
+  const findBestDayForPhotoSpot = useCallback((photoLat: number, photoLng: number): number => {
+    if (!generatedTrip || generatedTrip.days.length === 0) return 1;
+
+    // Calculate distance helper (Haversine)
+    const getDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+      const R = 6371; // km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng/2) * Math.sin(dLng/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    };
+
+    let bestDay = 1;
+    let minAvgDistance = Infinity;
+
+    for (const day of generatedTrip.days) {
+      if (day.stops.length === 0) continue;
+
+      // Calculate average distance from all stops on this day to the photo spot
+      let totalDistance = 0;
+      for (const stop of day.stops) {
+        totalDistance += getDistance(photoLat, photoLng, stop.coordinates.lat, stop.coordinates.lng);
+      }
+      const avgDistance = totalDistance / day.stops.length;
+
+      // Also check distance to campsite if exists (photo spots near camp are convenient)
+      const campsiteDistance = day.campsite
+        ? getDistance(photoLat, photoLng, day.campsite.coordinates.lat, day.campsite.coordinates.lng)
+        : avgDistance;
+
+      // Weight: prefer days where photo spot is close to both activities and camp
+      const weightedDistance = (avgDistance + campsiteDistance) / 2;
+
+      if (weightedDistance < minAvgDistance) {
+        minAvgDistance = weightedDistance;
+        bestDay = day.day;
+      }
+    }
+
+    return bestDay;
+  }, [generatedTrip]);
+
+  // Add a photo spot to the trip
+  const handleAddPhotoSpotToTrip = useCallback((hotspot: PhotoHotspot) => {
+    if (!generatedTrip) return;
+
+    const bestDay = findBestDayForPhotoSpot(hotspot.lat, hotspot.lng);
+
+    const photoStop: TripStop = {
+      id: `photo-${Date.now()}`,
+      name: hotspot.name || 'Photo Spot',
+      type: 'photo',
+      coordinates: { lat: hotspot.lat, lng: hotspot.lng },
+      duration: '30 min - 1 hr',
+      distance: '',
+      description: `Photo hotspot with ${hotspot.photoCount.toLocaleString()} geotagged photos`,
+      day: bestDay,
+    };
+
+    addTripStop(bestDay, photoStop);
+    setSelectedPhotoHotspot(null);
+    toast.success(`Added "${hotspot.name}" to Day ${bestDay}`, {
+      description: 'Photo spot added to your itinerary',
+    });
+  }, [generatedTrip, findBestDayForPhotoSpot, addTripStop]);
 
   const handleSaveTrip = async () => {
     if (generatedTrip) {
@@ -423,7 +473,7 @@ const TripDetail = () => {
 
     // Determine day destination
     const dayCampsite = day.stops.find(s => s.type === 'camp');
-    const dayActivities = day.stops.filter(s => s.type === 'hike' || s.type === 'viewpoint');
+    const dayActivities = day.stops.filter(s => s.type === 'hike' || s.type === 'viewpoint' || s.type === 'photo');
 
     let dayDestination: google.maps.LatLngLiteral | undefined;
 
@@ -1259,9 +1309,9 @@ const TripDetail = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {editLocationModal.type === 'start' || editLocationModal.type === 'end' ? (
-                <MapPin className="w-5 h-5 text-[#34b5a5]" />
+                <MapPin className="w-5 h-5 text-aquateal" />
               ) : (
-                <MapPinArea className="w-5 h-5 text-[#6b5ce6]" />
+                <MapPinArea className="w-5 h-5 text-lavenderslate" />
               )}
               {editLocationModal.type === 'start'
                 ? 'Change Start Location'
@@ -1345,7 +1395,7 @@ const TripDetail = () => {
         >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <MapPinArea className="w-5 h-5 text-[#6b5ce6]" />
+              <MapPinArea className="w-5 h-5 text-lavenderslate" />
               Add Destination
             </DialogTitle>
           </DialogHeader>
@@ -1525,7 +1575,7 @@ const TripDetail = () => {
                   ))}
 
                   {/* Photo hotspot markers */}
-                  {showPhotoHotspots && tripConfig.activities?.includes('photography') && photoHotspots.map((hotspot) => (
+                  {showPhotoHotspots && photoHotspots.map((hotspot) => (
                     <Marker
                       key={hotspot.id}
                       position={{ lat: hotspot.lat, lng: hotspot.lng }}
@@ -1562,21 +1612,29 @@ const TripDetail = () => {
                           </button>
                         )}
                         <div className="p-2">
-                          <h4 className="font-semibold text-gray-900 text-sm">
-                            {selectedPhotoHotspot.name}
-                          </h4>
+                          <div className="flex items-center justify-between gap-2">
+                            <h4 className="font-semibold text-gray-900 text-sm">
+                              {selectedPhotoHotspot.name}
+                            </h4>
+                            <a
+                              href={`https://www.flickr.com/map?fLat=${selectedPhotoHotspot.lat}&fLon=${selectedPhotoHotspot.lng}&zl=14`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-pink-600 hover:text-pink-700 hover:underline flex-shrink-0"
+                            >
+                              <ArrowSquareOut className="w-3 h-3" />
+                              Flickr
+                            </a>
+                          </div>
                           <p className="text-gray-500 text-xs mt-0.5">
                             {selectedPhotoHotspot.photoCount.toLocaleString()} photos
                           </p>
-                          <a
-                            href={`https://www.flickr.com/search/?lat=${selectedPhotoHotspot.lat}&lon=${selectedPhotoHotspot.lng}&radius=1&has_geo=1&view_all=1`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 mt-2 text-xs text-pink-600 hover:text-pink-700 hover:underline"
+                          <button
+                            onClick={() => handleAddPhotoSpotToTrip(selectedPhotoHotspot)}
+                            className="w-full mt-3 px-3 py-1.5 bg-primary text-primary-foreground text-xs font-medium rounded-md hover:bg-primary/90 transition-colors"
                           >
-                            <ArrowSquareOut className="w-3 h-3" />
-                            View on Flickr
-                          </a>
+                            Add to trip
+                          </button>
                         </div>
                       </div>
                     </InfoWindow>
@@ -1764,42 +1822,56 @@ const TripDetail = () => {
               </CardContent>
             </Card>
 
-            {/* Photo Hotspots - only show if photography activity is selected */}
-            {photoHotspots.length > 0 && tripConfig.activities?.includes('photography') && (
+            {/* Photo Hotspots */}
+            {(photoHotspots.length > 0 || loadingPhotoHotspots) && (
               <Card>
                 <CardContent className="p-4">
                   <button
                     onClick={() => setPhotoHotspotsExpanded(!photoHotspotsExpanded)}
                     className="w-full flex items-center justify-between"
+                    disabled={loadingPhotoHotspots}
                   >
                     <div className="flex items-center gap-2">
-                      <Camera className="w-5 h-5 text-[#e85a9a]" />
+                      <Camera className="w-5 h-5 text-blushorchid" />
                       <h3 className="font-semibold text-foreground">Photo Hotspots</h3>
-                      <span className="text-xs text-muted-foreground">({photoHotspots.length})</span>
+                      {loadingPhotoHotspots ? (
+                        <CircleNotch className="w-4 h-4 text-muted-foreground animate-spin" />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">({photoHotspots.length})</span>
+                      )}
                     </div>
-                    {photoHotspotsExpanded ? (
-                      <CaretUp className="w-5 h-5 text-muted-foreground" />
-                    ) : (
-                      <CaretDown className="w-5 h-5 text-muted-foreground" />
+                    {!loadingPhotoHotspots && (
+                      photoHotspotsExpanded ? (
+                        <CaretUp className="w-5 h-5 text-muted-foreground" />
+                      ) : (
+                        <CaretDown className="w-5 h-5 text-muted-foreground" />
+                      )
                     )}
                   </button>
 
                   {photoHotspotsExpanded && (
                     <div className="mt-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">via Flickr</span>
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor="show-hotspots" className="text-sm text-muted-foreground">
-                            Show on map
-                          </Label>
-                          <Switch
-                            id="show-hotspots"
-                            checked={showPhotoHotspots}
-                            onCheckedChange={setShowPhotoHotspots}
-                          />
+                      {loadingPhotoHotspots ? (
+                        <div className="flex items-center justify-center py-6">
+                          <CircleNotch className="w-6 h-6 text-blushorchid animate-spin" />
+                          <span className="ml-2 text-sm text-muted-foreground">Finding photo spots...</span>
                         </div>
-                      </div>
-                      <div className="space-y-2">
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">via Flickr</span>
+                            <div className="flex items-center gap-2">
+                              <Label htmlFor="show-hotspots" className="text-sm text-muted-foreground">
+                                Show on map
+                              </Label>
+                              <Switch
+                                id="show-hotspots"
+                                checked={showPhotoHotspots}
+                                onCheckedChange={setShowPhotoHotspots}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
                         {photoHotspots.slice(0, 5).map((hotspot) => (
                           <div
                             key={hotspot.id}
@@ -1821,7 +1893,7 @@ const TripDetail = () => {
                               </button>
                             ) : (
                               <div className="w-10 h-10 rounded-lg bg-blushorchid/20 flex items-center justify-center flex-shrink-0">
-                                <Camera className="w-5 h-5 text-[#e85a9a]" />
+                                <Camera className="w-5 h-5 text-blushorchid" />
                               </div>
                             )}
                             <button
@@ -1842,7 +1914,7 @@ const TripDetail = () => {
                                   {hotspot.photoCount.toLocaleString()} photos
                                 </span>
                                 <a
-                                  href={`https://www.flickr.com/search/?lat=${hotspot.lat}&lon=${hotspot.lng}&radius=1&has_geo=1&view_all=1`}
+                                  href={`https://www.flickr.com/map?fLat=${hotspot.lat}&fLon=${hotspot.lng}&zl=14`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   onClick={(e) => e.stopPropagation()}
@@ -1854,7 +1926,9 @@ const TripDetail = () => {
                             </button>
                           </div>
                         ))}
-                      </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -2016,20 +2090,20 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
   const timeEstimate = estimateDayTime(day);
 
   return (
-    <Card className={`overflow-hidden ${isActive ? 'ring-2 ring-emerald-500 border-emerald-500' : ''}`}>
+    <Card className={`overflow-hidden ${isActive ? 'ring-2 ring-primary border-primary' : ''}`}>
       {/* Day Header */}
       <div className="flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors">
         <button
           onClick={onToggle}
           className="flex items-center gap-3 flex-1"
         >
-          <div className={`flex items-center justify-center w-10 h-10 rounded-full ${isActive ? 'bg-emerald-500/20' : 'bg-primary/10'}`}>
-            <span className={`text-lg font-bold ${isActive ? 'text-emerald-600' : 'text-primary'}`}>{day.day}</span>
+          <div className={`flex items-center justify-center w-10 h-10 rounded-full ${isActive ? 'bg-primary text-primary-foreground' : 'bg-primary/10'}`}>
+            <span className={`text-lg font-bold ${isActive ? '' : 'text-primary'}`}>{day.day}</span>
           </div>
           <div className="text-left">
             <p className="font-medium text-foreground">
               Day {day.day}
-              {isActive && <span className="ml-2 text-xs text-emerald-600 font-normal">(Active)</span>}
+              {isActive && <span className="ml-2 text-xs text-primary font-normal">(Previewing)</span>}
             </p>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
@@ -2050,12 +2124,11 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
               title={timeEstimate.warningMessage}
             />
           )}
-          {day.hike && <Boot className="w-4 h-4 text-[#3c8a79]" />}
-          {day.campsite && <Tent className="w-4 h-4 text-[#ea9b0c]" />}
+          {day.hike && <Boot className="w-4 h-4 text-pinesoft" />}
+          {day.campsite && <Tent className="w-4 h-4 text-softamber" />}
           <Button
-            variant={isActive ? "default" : "outline"}
+            variant="secondary"
             size="sm"
-            className={isActive ? "bg-emerald-600 hover:bg-emerald-700" : ""}
             onClick={(e) => {
               e.stopPropagation();
               if (isActive) {
@@ -2086,7 +2159,7 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
             <div className="p-4 bg-aquateal/5 border-b border-border">
               <div className="flex items-start gap-3">
                 <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-aquateal/30 bg-aquateal/20">
-                  <MapPin className="w-4 h-4 text-[#34b5a5]" />
+                  <MapPin className="w-4 h-4 text-aquateal" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="font-medium text-foreground">Start: {startLocation.name}</h4>
@@ -2198,7 +2271,7 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
             <div className="p-4 bg-aquateal/5 border-b border-border">
               <div className="flex items-start gap-3">
                 <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-aquateal/30 bg-aquateal/20">
-                  <MapPin className="w-4 h-4 text-[#34b5a5]" />
+                  <MapPin className="w-4 h-4 text-aquateal" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="font-medium text-foreground">End: {startLocation.name}</h4>

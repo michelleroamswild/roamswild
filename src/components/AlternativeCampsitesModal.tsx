@@ -377,7 +377,7 @@ export function AlternativeCampsitesModal({
                       className={`flex items-center justify-center w-10 h-10 rounded-lg ${
                         selectedId === campsite.id
                           ? 'bg-primary text-primary-foreground'
-                          : 'bg-softamber/20 text-[#ea9b0c]'
+                          : 'bg-softamber/20 text-softamber'
                       }`}
                     >
                       {selectedId === campsite.id ? (

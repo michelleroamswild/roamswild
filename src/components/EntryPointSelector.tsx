@@ -251,7 +251,7 @@ export function EntryPointSelector({
                   >
                     <div className="flex items-start gap-3">
                       <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-lavenderslate/20 flex-shrink-0">
-                        <MapPinArea className="w-4 h-4 text-[#6b5ce6]" />
+                        <MapPinArea className="w-4 h-4 text-lavenderslate" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-foreground group-hover:text-primary transition-colors">

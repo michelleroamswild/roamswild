@@ -49,14 +49,14 @@ const features = [
     icon: Tent,
     title: "Campsite Database",
     description: "Access thousands of dispersed camping spots, BLM land, and hidden gems saved by the community.",
-    color: "text-[#ea9b0c]",
+    color: "text-softamber",
     bgColor: "bg-softamber/20",
   },
   {
     icon: Mountains,
     title: "Trail Discovery",
     description: "Find hiking trails near your campsites with difficulty ratings, distance, and elevation data.",
-    color: "text-[#3c8a79]",
+    color: "text-pinesoft",
     bgColor: "bg-pinesoft/20",
   },
   {
@@ -212,15 +212,15 @@ const AppScreenshot = () => (
         </div>
         <div className="flex gap-2">
           <div className="flex-1 bg-softamber/20 rounded-lg p-1.5 text-center">
-            <Tent className="w-3 h-3 text-[#ea9b0c] mx-auto" />
+            <Tent className="w-3 h-3 text-softamber mx-auto" />
             <span className="text-[8px] font-medium text-foreground block">3 Camps</span>
           </div>
           <div className="flex-1 bg-pinesoft/20 rounded-lg p-1.5 text-center">
-            <Mountains className="w-3 h-3 text-[#3c8a79] mx-auto" />
+            <Mountains className="w-3 h-3 text-pinesoft mx-auto" />
             <span className="text-[8px] font-medium text-foreground block">2 Hikes</span>
           </div>
           <div className="flex-1 bg-skyblue/20 rounded-lg p-1.5 text-center">
-            <Path className="w-3 h-3 text-[#4a96ed] mx-auto" />
+            <Path className="w-3 h-3 text-skyblue mx-auto" />
             <span className="text-[8px] font-medium text-foreground block">68 mi</span>
           </div>
         </div>

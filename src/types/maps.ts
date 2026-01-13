@@ -3,7 +3,7 @@ export interface Coordinates {
   lng: number;
 }
 
-export type StopType = 'hike' | 'gas' | 'camp' | 'viewpoint' | 'water' | 'food' | 'service' | 'cell' | 'start' | 'end';
+export type StopType = 'hike' | 'gas' | 'camp' | 'viewpoint' | 'water' | 'food' | 'service' | 'cell' | 'start' | 'end' | 'photo';
 
 export interface RouteStop {
   id: number;

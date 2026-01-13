@@ -10,19 +10,21 @@
     --foreground: 69 17% 21%;
 
     --card: 36 23% 97%;
+    --card-light: 36 23% 97%;
     --card-foreground: 150 25% 15%;
 
     --popover: 40 25% 97%;
     --popover-foreground: 150 25% 15%;
 
     --primary: 69 17% 21%;
+    --primary-dark: 69 17% 21%;
     --primary-hover: 82 61% 15%;
     --primary-foreground: 40 25% 97%;
 
     --secondary: 51 37% 89%;
     --secondary-foreground: 150 25% 15%;
 
-    --muted: 35 20% 90%;
+    --muted: 35 20% 85%;
     --muted-foreground: 84 35% 28%;
 
     --accent: 74 68% 56%;
@@ -36,6 +38,7 @@
     --destructive-foreground: 210 40% 98%;
 
     --border: 35 20% 85%;
+    --border-light: 35 20% 85%;
     --input: 90 14% 97%;
     --ring: 152 45% 25%;
 
@@ -43,14 +46,14 @@
 
     /* Custom overlanding tokens */
     --forest: 74 68% 35%;
-    --forest-light: 84 34% 44%;
+    --forest-light: var(--accent);
     --sand: 35 35% 85%;
     --sand-dark: 35 25% 75%;
     --terracotta: 20 65% 55%;
     --terracotta-dark: 20 65% 45%;
     --earth: 351 7% 63%;
     --earth-light: 355 8% 71%;
-    --cream: 36 23% 91%;
+    --cream: 35 20% 85%;
     --topo-line: 150 15% 80%;
 
     /* Custom accent colors */
@@ -59,7 +62,7 @@
     --accent-skyblue: 212 86% 77%;
     --accent-lavenderslate: 249 80% 75%;
     --accent-softamber: 40 83% 63%;
-    --accent-blushorchid: 332 76% 79;
+    --accent-blushorchid: 332 76% 79%;
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -73,44 +76,60 @@
   }
 
   .dark {
-    --background: 150 20% 10%;
-    --foreground: 40 25% 95%;
+    /* Background uses light theme primary hue, darkened */
+    --background: 69 17% 10%;
+    --foreground: 36 23% 97%;
 
-    --card: 150 20% 12%;
-    --card-foreground: 40 25% 95%;
+    --card: 69 17% 18%;
+    --card-light: 69 17% 24%;
+    --card-foreground: 36 23% 97%;
 
-    --popover: 150 20% 10%;
-    --popover-foreground: 40 25% 95%;
+    --popover: 30 12% 13%;
+    --popover-foreground: 40 20% 93%;
 
-    --primary: 152 45% 45%;
-    --primary-hover: 82 61% 15%;
-    --primary-foreground: 150 20% 10%;
+    /* Primary uses the muted/cream tone from light mode */
+    --primary: 35 20% 85%;
+    --primary-dark: 69 17% 21%;
+    --primary-hover: 35 20% 75%;
+    --primary-foreground: 30 15% 10%;
 
-    --secondary: 150 15% 20%;
-    --secondary-foreground: 40 25% 95%;
+    --secondary: 35 25% 75%;
+    --secondary-foreground: 30 15% 10%;
 
-    --muted: 150 15% 18%;
-    --muted-foreground: 40 15% 60%;
+    --muted: 30 10% 16%;
+    --muted-foreground: 40 12% 55%;
 
-    --accent: 20 65% 55%;
-    --accent-foreground: 40 25% 97%;
+    /* Accent stays the lime green */
+    --accent: 74 68% 56%;
+    --accent-foreground: 30 15% 10%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 65% 45%;
+    --destructive-foreground: 0 0% 98%;
 
-    --border: 150 15% 20%;
-    --input: 150 15% 20%;
-    --ring: 84 35% 28%;
+    --border: 69 17% 21%;
+    --border-light: 69 17% 36%;
+    --input: 35 10% 18%;
+    --ring: 74 50% 40%;
 
-    --forest: 84 35% 28%;
-    --forest-light: 84 34% 44%;
-    --sand: 35 20% 25%;
-    --sand-dark: 35 15% 20%;
+    /* Earth tones - same as light mode */
+    --forest: 74 68% 35%;
+    --forest-light: var(--accent);
+    --sand: 35 35% 85%;
+    --sand-dark: 35 25% 75%;
     --terracotta: 20 65% 55%;
     --terracotta-dark: 20 65% 45%;
-    --earth: 25 20% 60%;
-    --cream: 40 15% 15%;
-    --topo-line: 150 10% 25%;
+    --earth: 351 7% 63%;
+    --earth-light: 355 8% 71%;
+    --cream: 35 20% 85%;
+    --topo-line: 150 15% 80%;
+
+    /* Accent colors with higher L for dark mode */
+    --accent-pinesoft: 167 39% 65%;
+    --accent-aquateal: 171 60% 75%;
+    --accent-skyblue: 212 86% 85%;
+    --accent-lavenderslate: 249 80% 85%;
+    --accent-softamber: 40 83% 75%;
+    --accent-blushorchid: 332 76% 88%;
     --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
   }
 }
@@ -165,6 +184,10 @@
     position: relative;
   }
 
+  .dark .hero-topo {
+    background-color: hsl(var(--background));
+  }
+
   .hero-topo::before {
     content: '';
     position: absolute;
@@ -181,6 +204,11 @@
     z-index: 0;
   }
 
+  .dark .hero-topo::before {
+    background-color: hsl(var(--accent));
+    opacity: 0.08;
+  }
+
   .hero-topo > * {
     position: relative;
     z-index: 1;
@@ -195,6 +223,13 @@
 
   .text-gradient-forest {
     background: linear-gradient(135deg, hsl(var(--forest)) 0%, hsl(var(--forest-light)) 50%, hsl(74 68% 45%) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .dark .text-gradient-forest {
+    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(74 68% 65%) 50%, hsl(40 83% 70%) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

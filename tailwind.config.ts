@@ -48,13 +48,17 @@ export default {
   			]
   		},
   		colors: {
-  			border: 'hsl(var(--border))',
+  			border: {
+  				DEFAULT: 'hsl(var(--border))',
+  				light: 'hsl(var(--border-light))'
+  			},
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			primary: {
   				DEFAULT: 'hsl(var(--primary))',
+  				dark: 'hsl(var(--primary-dark))',
   				hover: 'hsl(var(--primary-hover))',
   				foreground: 'hsl(var(--primary-foreground))'
   			},
@@ -85,6 +89,7 @@ export default {
   			},
   			card: {
   				DEFAULT: 'hsl(var(--card))',
+  				light: 'hsl(var(--card-light))',
   				foreground: 'hsl(var(--card-foreground))'
   			},
   			forest: {

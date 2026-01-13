@@ -76,7 +76,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Hero Section with dark green topo background */}
-      <div className="hero-topo overflow-x-clip">
+      <div className="hero-topo dark:bg-background overflow-x-clip">
         <Header />
 
         <div className="container px-4 md:px-6 py-40 relative">
@@ -146,7 +146,7 @@ const Index = () => {
 
           {/* Center Content */}
           <section className="text-center animate-fade-in relative z-10 max-w-3xl mx-auto">
-            <h1 className="font-display font-bold text-primary mb-4 overflow-visible">
+            <h1 className="font-display font-bold text-primary dark:text-foreground mb-4 overflow-visible">
               <span className="text-2xl md:text-3xl lg:text-4xl block mb-2">Plan Your Next</span>
               <span
                 className={`text-gradient-forest block text-5xl md:text-6xl lg:text-7xl transition-all duration-200 whitespace-nowrap ${
@@ -157,7 +157,7 @@ const Index = () => {
                 {rotatingWords[currentWordIndex]}
               </span>
             </h1>
-            <p className="text-lg md:text-xl text-primary/70 max-w-2xl mx-auto mb-8">
+            <p className="text-lg md:text-xl text-primary/70 dark:text-muted-foreground max-w-2xl mx-auto mb-8">
               Discover trails, find dispersed campsites, and build the perfect overlanding route from your saved locations.
             </p>
 
@@ -168,12 +168,12 @@ const Index = () => {
 
       {/* Saved Trips Section */}
       {savedTrips.length > 0 && (
-        <section className="bg-accentdark py-40 md:py-52 grainy">
+        <section className="bg-accentdark dark:bg-card py-40 md:py-52 grainy">
           <div className="container px-4 md:px-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="font-display font-bold text-white">My Trips</h2>
-                <p className="text-white/70 mt-1">
+                <h2 className="font-display font-bold text-white dark:text-foreground">My Trips</h2>
+                <p className="text-white/70 dark:text-muted-foreground mt-1">
                   {savedTrips.length} saved {savedTrips.length === 1 ? 'trip' : 'trips'}
                 </p>
               </div>
@@ -185,7 +185,7 @@ const Index = () => {
                   </Button>
                 </Link>
                 <Link to="/my-trips">
-                  <Button variant="tertiary" size="sm" className="text-white border-white/30 hover:border-white hover:bg-white/10">
+                  <Button variant="tertiary" size="sm" className="text-white dark:text-foreground border-white/30 dark:border-border hover:border-white dark:hover:border-primary hover:bg-white/10 dark:hover:bg-primary/10">
                     View All
                     <CaretRight className="w-4 h-4 ml-1" weight="bold" />
                   </Button>
@@ -270,7 +270,7 @@ const Index = () => {
                       {/* Route visualization */}
                       {startName && (
                         <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-4">
-                          <MapPinArea className="w-4 h-4 flex-shrink-0 text-[#34b5a5]" />
+                          <MapPinArea className="w-4 h-4 flex-shrink-0 text-aquateal" />
                           <span className="truncate">{startName}</span>
                           {destinationCount > 0 && (
                             <>
@@ -320,7 +320,7 @@ const Index = () => {
                         {hikeCount > 0 && (
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-lg bg-lavenderslate/20 flex items-center justify-center">
-                              <Mountains className="w-4 h-4 text-[#6b5ce6]" />
+                              <Mountains className="w-4 h-4 text-lavenderslate" />
                             </div>
                             <div>
                               <p className="text-xs text-muted-foreground">Hikes</p>
@@ -332,7 +332,7 @@ const Index = () => {
                         {totalHikingMiles > 0 && (
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-lg bg-pinesoft/20 flex items-center justify-center">
-                              <Boot className="w-4 h-4 text-[#3c8a79]" />
+                              <Boot className="w-4 h-4 text-pinesoft" />
                             </div>
                             <div>
                               <p className="text-xs text-muted-foreground">Hiking</p>

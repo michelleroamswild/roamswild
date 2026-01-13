@@ -201,7 +201,7 @@ export function AlternativeHikesModal({
                       className={`flex items-center justify-center w-10 h-10 rounded-lg ${
                         selectedId === hike.id
                           ? 'bg-primary text-primary-foreground'
-                          : 'bg-pinesoft/20 text-[#3c8a79]'
+                          : 'bg-pinesoft/20 text-pinesoft'
                       }`}
                     >
                       {selectedId === hike.id ? (

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Jeep, List, Path, SignOut, Tent, Compass, Heart, House } from "@phosphor-icons/react";
+import { Jeep, List, Path, SignOut, Tent, Compass, Heart, House, Moon, Sun } from "@phosphor-icons/react";
 import { Button } from "./ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -36,6 +37,7 @@ const getInitials = (name?: string, email?: string): string => {
 
 export const Header = () => {
   const { user, signOut } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const userName = user?.user_metadata?.name as string | undefined;
@@ -131,6 +133,20 @@ export const Header = () => {
                   <House className="w-4 h-4 mr-2" weight="bold" />
                   Landing Page (temp)
                 </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={toggleTheme} className="flex items-center cursor-pointer">
+                {isDark ? (
+                  <>
+                    <Sun className="w-4 h-4 mr-2" weight="bold" />
+                    Light Mode
+                  </>
+                ) : (
+                  <>
+                    <Moon className="w-4 h-4 mr-2" weight="bold" />
+                    Dark Mode
+                  </>
+                )}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
@@ -230,6 +246,27 @@ export const Header = () => {
                     Create Trip
                   </Button>
                 </Link>
+              </div>
+
+              {/* Dark Mode Toggle */}
+              <div className="mt-4">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                  onClick={toggleTheme}
+                >
+                  {isDark ? (
+                    <>
+                      <Sun className="w-4 h-4 mr-2" weight="bold" />
+                      Light Mode
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-4 h-4 mr-2" weight="bold" />
+                      Dark Mode
+                    </>
+                  )}
+                </Button>
               </div>
 
               {/* Sign Out */}

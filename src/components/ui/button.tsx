@@ -10,9 +10,9 @@ const buttonVariants = cva(
     variants: {
       variant: {
         // Main button hierarchy
-        primary: "bg-primary text-primary-foreground hover:bg-forest-light shadow-lg hover:shadow-xl hover:-translate-y-0.5",
-        secondary: "bg-white text-primary border-2 border-primary hover:bg-primary hover:text-white shadow-sm",
-        tertiary: "text-primary border-2 border-primary/30 hover:border-primary hover:bg-primary/5",
+        primary: "bg-primary text-primary-foreground hover:bg-forest shadow-md hover:shadow-lg hover:-translate-y-px",
+        secondary: "bg-white text-primary-dark border-2 border-primary hover:bg-primary hover:text-primary-foreground dark:bg-transparent dark:text-primary dark:border-primary dark:hover:bg-primary dark:hover:text-primary-foreground shadow-md hover:shadow-lg hover:-translate-y-px",
+        tertiary: "text-primary border-2 border-primary/30 hover:border-primary hover:bg-primary/5 shadow-md hover:shadow-lg hover:-translate-y-px",
         // Utility variants
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         ghost: "hover:bg-accent hover:text-accent-foreground",
