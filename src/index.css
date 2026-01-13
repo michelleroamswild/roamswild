@@ -7,6 +7,7 @@
 @layer base {
   :root {
     --background: 90 0% 100%;
+    --background-secondary: 35 20% 62%;
     --foreground: 69 17% 21%;
 
     --card: 36 23% 97%;
@@ -78,6 +79,7 @@
   .dark {
     /* Background uses light theme primary hue, darkened */
     --background: 69 17% 10%;
+    --background-secondary: 35 20% 22%;
     --foreground: 36 23% 97%;
 
     --card: 69 17% 18%;

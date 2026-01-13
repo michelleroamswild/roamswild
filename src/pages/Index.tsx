@@ -168,7 +168,7 @@ const Index = () => {
 
       {/* Saved Trips Section */}
       {savedTrips.length > 0 && (
-        <section className="bg-accentdark dark:bg-card py-40 md:py-52 grainy">
+        <section className="bg-background-secondary dark:bg-card py-40 md:py-52 grainy">
           <div className="container px-4 md:px-6">
             <div className="flex items-center justify-between mb-6">
               <div>

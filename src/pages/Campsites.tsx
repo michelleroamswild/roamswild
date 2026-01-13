@@ -407,7 +407,7 @@ const Campsites = () => {
               </button>
 
               <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-                <SelectTrigger className="w-[160px] border-2 border-primary">
+                <SelectTrigger className="w-[160px]">
                   <div className="flex items-center gap-2">
                     <SortAscending className="w-4 h-4 text-muted-foreground" />
                     <SelectValue />

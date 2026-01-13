@@ -109,6 +109,12 @@ const StyleGuide = () => {
                   <p className="text-xs text-muted-foreground font-mono">#f9f8f6</p>
                   <p className="text-xs text-muted-foreground font-mono">hsl(36 23% 97%)</p>
                 </div>
+                <div className="space-y-1">
+                  <div className="h-16 rounded-lg bg-background-secondary"></div>
+                  <p className="text-sm font-medium">Background Secondary</p>
+                  <p className="text-xs text-muted-foreground font-mono">#b09d7d</p>
+                  <p className="text-xs text-muted-foreground font-mono">hsl(35 20% 62%)</p>
+                </div>
               </div>
             </div>
 
@@ -290,6 +296,12 @@ const StyleGuide = () => {
                   <p className="text-sm font-medium text-foreground">Card</p>
                   <p className="text-xs text-muted-foreground font-mono">#353425</p>
                   <p className="text-xs text-muted-foreground font-mono">hsl(69 17% 18%)</p>
+                </div>
+                <div className="space-y-1">
+                  <div className="h-16 rounded-lg bg-background-secondary"></div>
+                  <p className="text-sm font-medium text-foreground">Background Secondary</p>
+                  <p className="text-xs text-muted-foreground font-mono">#4a3f30</p>
+                  <p className="text-xs text-muted-foreground font-mono">hsl(35 20% 22%)</p>
                 </div>
               </div>
             </div>
