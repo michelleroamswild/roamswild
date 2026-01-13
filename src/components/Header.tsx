@@ -140,12 +140,6 @@ export const Header = () => {
                   </DropdownMenuItem>
                 </>
               )}
-              <DropdownMenuItem asChild>
-                <Link to="/landing" className="flex items-center text-muted-foreground">
-                  <House className="w-4 h-4 mr-2" weight="bold" />
-                  Landing Page (temp)
-                </Link>
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={toggleTheme} className="flex items-center cursor-pointer">
                 {isDark ? (
