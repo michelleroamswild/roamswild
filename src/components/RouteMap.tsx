@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Marker, InfoWindow, DirectionsRenderer } from '@react-google-maps/api';
 import { GoogleMap } from './GoogleMap';
 import { RouteStop, StopType } from '@/types/maps';
+import { useTheme } from '@/hooks/use-theme';
 
 // Marker colors by stop type
 const markerColors: Record<StopType, string> = {
@@ -25,6 +26,7 @@ interface RouteMapProps {
 export function RouteMap({ stops, className, showDirections = true, onStopClick }: RouteMapProps) {
   const [selectedStop, setSelectedStop] = useState<RouteStop | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
+  const { isDark } = useTheme();
 
   // Calculate center from stops
   const center = stops.length > 0
@@ -89,7 +91,7 @@ export function RouteMap({ stops, className, showDirections = true, onStopClick 
           options={{
             suppressMarkers: true, // We'll use custom markers
             polylineOptions: {
-              strokeColor: '#c4704f', // terracotta
+              strokeColor: isDark ? '#d9d0c3' : '#c4704f', // primary in dark, terracotta in light
               strokeWeight: 4,
               strokeOpacity: 0.8,
             },

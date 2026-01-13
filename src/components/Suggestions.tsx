@@ -4,7 +4,7 @@ import { MapPin, Tent, Mountains, Star, SpinnerGap, NavigationArrow, CaretRight,
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { useNearbyPlaces, GoogleSavedPlace } from "@/hooks/use-nearby-places";
-import { usePhotoHotspots, PhotoHotspot } from "@/hooks/use-photo-hotspots";
+import { usePhotoSpots, PhotoSpot } from "@/hooks/use-photo-spots";
 import { PlaceSearch } from "./PlaceSearch";
 import { GoogleMap } from "./GoogleMap";
 import { Marker, InfoWindow } from "@react-google-maps/api";
@@ -164,8 +164,8 @@ export const Suggestions = () => {
     50
   );
 
-  // Fetch photo hotspots from Flickr
-  const { hotspots: photoHotspots, loading: loadingPhotoHotspots } = usePhotoHotspots(
+  // Fetch photo spots from Flickr and Google Places
+  const { spots: photoHotspots, loading: loadingPhotoHotspots } = usePhotoSpots(
     userLocation?.lat || 0,
     userLocation?.lng || 0,
     50
@@ -557,7 +557,7 @@ const HotSpotCard = ({ spot, index }: HotSpotCardProps) => {
 };
 
 interface PhotoHotspotCardProps {
-  hotspot: PhotoHotspot;
+  hotspot: PhotoSpot;
   index: number;
 }
 
@@ -578,7 +578,18 @@ const PhotoHotspotCard = ({ hotspot, index }: PhotoHotspotCardProps) => {
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
           <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
             <Camera className="w-3.5 h-3.5 text-blushorchid" />
-            <span className="text-xs font-medium text-white">Photo Hotspot</span>
+            <span className="text-xs font-medium text-white">Photo Spot</span>
+          </div>
+          {/* Source badge */}
+          <div className={`absolute top-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+            hotspot.source === 'merged'
+              ? 'bg-purple-500 text-white'
+              : hotspot.source === 'google'
+              ? 'bg-blue-500 text-white'
+              : 'bg-pink-500 text-white'
+          }`}>
+            {hotspot.source === 'merged' ? 'Verified' :
+             hotspot.source === 'google' ? 'Google' : 'Flickr'}
           </div>
         </div>
       ) : (
@@ -593,11 +604,19 @@ const PhotoHotspotCard = ({ hotspot, index }: PhotoHotspotCardProps) => {
             <h4 className="font-semibold text-foreground truncate group-hover:text-blushorchid transition-colors">
               {hotspot.name}
             </h4>
-            <div className="flex items-center gap-1 mt-1">
-              <Camera className="w-3 h-3 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">
-                {hotspot.photoCount.toLocaleString()} photos
-              </span>
+            <div className="flex items-center gap-2 mt-1">
+              {hotspot.rating && (
+                <span className="flex items-center gap-0.5 text-sm text-amber-600">
+                  <Star weight="fill" className="w-3 h-3" />
+                  {hotspot.rating.toFixed(1)}
+                </span>
+              )}
+              {hotspot.photoCount && (
+                <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                  <Camera className="w-3 h-3" />
+                  {hotspot.photoCount.toLocaleString()}
+                </span>
+              )}
             </div>
           </div>
           <CaretRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1" />

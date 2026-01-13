@@ -37,7 +37,7 @@ import { Marker, InfoWindow, DirectionsRenderer } from '@react-google-maps/api';
 import { TripStop, TripDay } from '@/types/trip';
 import { toast } from 'sonner';
 import { AlternativeHikesModal } from '@/components/AlternativeHikesModal';
-import { useRoutePhotoHotspots, PhotoHotspot } from '@/hooks/use-photo-hotspots';
+import { useRoutePhotoSpots, PhotoSpot } from '@/hooks/use-photo-spots';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { createMarkerIcon, getTypeStyles, getPhotoHotspotColor } from '@/utils/mapMarkers';
@@ -48,6 +48,9 @@ import { CollaboratorAvatars } from '@/components/CollaboratorAvatars';
 import { getTripSlug, getDayUrl } from '@/utils/slugify';
 import { PlaceSearch } from '@/components/PlaceSearch';
 import { useTripGenerator } from '@/hooks/use-trip-generator';
+import { useTheme } from '@/hooks/use-theme';
+import { usePhotoWeather } from '@/hooks/use-photo-weather';
+import { PhotoWeatherCard } from '@/components/PhotoWeatherCard';
 import { EntryPointSelector, checkIfDrivable } from '@/components/EntryPointSelector';
 import {
   Dialog,
@@ -143,6 +146,7 @@ const TripDetail = () => {
   const navigate = useNavigate();
   const { generatedTrip, tripConfig, setTripConfig, setGeneratedTrip, saveTrip, deleteSavedTrip, isTripSaved, loadSavedTripBySlug, updateTripStop, removeTripStop, addTripStop, fetchCollaborators, isOwner, isLoading } = useTrip();
   const { generateTrip, generating: regenerating } = useTripGenerator();
+  const { isDark } = useTheme();
 
   const [expandedDays, setExpandedDays] = useState<number[]>([1]);
   const [, forceUpdate] = useState({});
@@ -168,7 +172,7 @@ const TripDetail = () => {
   const [selectedHikeForSwap, setSelectedHikeForSwap] = useState<TripStop | null>(null);
   const [showPhotoHotspots, setShowPhotoHotspots] = useState(false);
   const [photoHotspotsExpanded, setPhotoHotspotsExpanded] = useState(false);
-  const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoHotspot | null>(null);
+  const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoSpot | null>(null);
   const [enlargedPhoto, setEnlargedPhoto] = useState<{ url: string; name: string } | null>(null);
   const [editLocationModal, setEditLocationModal] = useState<{
     isOpen: boolean;
@@ -212,8 +216,8 @@ const TripDetail = () => {
   // Only fetch if no valid cache
   const shouldFetchHotspots = !hasCachedHotspots && destinationSearchPoints.length > 0;
 
-  // Fetch photo hotspots at each destination (only if not cached)
-  const { hotspots: fetchedHotspots, loading: loadingPhotoHotspots } = useRoutePhotoHotspots(
+  // Fetch photo spots at each destination (only if not cached)
+  const { spots: fetchedHotspots, loading: loadingPhotoHotspots } = useRoutePhotoSpots(
     shouldFetchHotspots ? destinationSearchPoints : [],
     32 // 32km radius at each destination
   );
@@ -234,12 +238,37 @@ const TripDetail = () => {
           lng: h.lng,
           photoCount: h.photoCount,
           samplePhotoUrl: h.samplePhotoUrl,
+          rating: h.rating,
+          reviewCount: h.reviewCount,
+          source: h.source,
         })),
         photoHotspotsHash: searchPointsHash,
       };
       setGeneratedTrip(updatedTrip);
     }
   }, [fetchedHotspots, generatedTrip, hasCachedHotspots, searchPointsHash, setGeneratedTrip]);
+
+  // Get elevation from stop if available (parse from string like "8,500 ft")
+  const selectedStopElevation = useMemo(() => {
+    if (!selectedStop?.elevation) return 0;
+    const match = selectedStop.elevation.match(/[\d,]+/);
+    if (match) {
+      const feet = parseInt(match[0].replace(/,/g, ''), 10);
+      return feet * 0.3048; // Convert to meters
+    }
+    return 0;
+  }, [selectedStop]);
+
+  // Fetch photo weather for selected stop
+  const {
+    forecast: selectedStopWeather,
+    loading: loadingStopWeather,
+    error: stopWeatherError,
+  } = usePhotoWeather(
+    selectedStop?.coordinates.lat ?? 0,
+    selectedStop?.coordinates.lng ?? 0,
+    selectedStopElevation
+  );
 
   // Check if this trip is saved
   const isSaved = generatedTrip ? isTripSaved(generatedTrip.id) : false;
@@ -314,10 +343,18 @@ const TripDetail = () => {
   }, [generatedTrip]);
 
   // Add a photo spot to the trip
-  const handleAddPhotoSpotToTrip = useCallback((hotspot: PhotoHotspot) => {
+  const handleAddPhotoSpotToTrip = useCallback((hotspot: PhotoSpot) => {
     if (!generatedTrip) return;
 
     const bestDay = findBestDayForPhotoSpot(hotspot.lat, hotspot.lng);
+
+    // Build description based on available data
+    let description = 'Scenic photo spot';
+    if (hotspot.photoCount) {
+      description = `Photo hotspot with ${hotspot.photoCount.toLocaleString()} geotagged photos`;
+    } else if (hotspot.rating) {
+      description = `Scenic viewpoint (${hotspot.rating.toFixed(1)} stars)`;
+    }
 
     const photoStop: TripStop = {
       id: `photo-${Date.now()}`,
@@ -326,7 +363,7 @@ const TripDetail = () => {
       coordinates: { lat: hotspot.lat, lng: hotspot.lng },
       duration: '30 min - 1 hr',
       distance: '',
-      description: `Photo hotspot with ${hotspot.photoCount.toLocaleString()} geotagged photos`,
+      description,
       day: bestDay,
     };
 
@@ -1449,7 +1486,7 @@ const TripDetail = () => {
                       options={{
                         suppressMarkers: true,
                         polylineOptions: {
-                          strokeColor: '#2d5a3d',
+                          strokeColor: isDark ? '#d9d0c3' : '#2d5a3d',
                           strokeWeight: 5,
                           strokeOpacity: 1,
                         },
@@ -1462,7 +1499,7 @@ const TripDetail = () => {
                       options={{
                         suppressMarkers: true,
                         polylineOptions: {
-                          strokeColor: '#2d5a3d',
+                          strokeColor: isDark ? '#d9d0c3' : '#2d5a3d',
                           strokeWeight: 5,
                           strokeOpacity: 1,
                         },
@@ -1582,9 +1619,9 @@ const TripDetail = () => {
                       icon={createMarkerIcon('photo', {
                         isActive: selectedPhotoHotspot?.id === hotspot.id,
                         size: 36,
-                        customColor: getPhotoHotspotColor(hotspot.photoCount)
+                        customColor: getPhotoHotspotColor(hotspot.photoCount || 0)
                       })}
-                      title={`${hotspot.name} (${hotspot.photoCount} photos)`}
+                      title={`${hotspot.name}${hotspot.photoCount ? ` (${hotspot.photoCount} photos)` : ''}${hotspot.rating ? ` ★${hotspot.rating.toFixed(1)}` : ''}`}
                       onClick={() => {
                         setSelectedStop(null);
                         setSelectedPhotoHotspot(hotspot);
@@ -1616,19 +1653,51 @@ const TripDetail = () => {
                             <h4 className="font-semibold text-gray-900 text-sm">
                               {selectedPhotoHotspot.name}
                             </h4>
-                            <a
-                              href={`https://www.flickr.com/map?fLat=${selectedPhotoHotspot.lat}&fLon=${selectedPhotoHotspot.lng}&zl=14`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-xs text-pink-600 hover:text-pink-700 hover:underline flex-shrink-0"
-                            >
-                              <ArrowSquareOut className="w-3 h-3" />
-                              Flickr
-                            </a>
+                            {selectedPhotoHotspot.source === 'google' ? (
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${selectedPhotoHotspot.lat},${selectedPhotoHotspot.lng}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline flex-shrink-0"
+                              >
+                                <ArrowSquareOut className="w-3 h-3" />
+                                Maps
+                              </a>
+                            ) : (
+                              <a
+                                href={`https://www.flickr.com/map?fLat=${selectedPhotoHotspot.lat}&fLon=${selectedPhotoHotspot.lng}&zl=14`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs text-pink-600 hover:text-pink-700 hover:underline flex-shrink-0"
+                              >
+                                <ArrowSquareOut className="w-3 h-3" />
+                                Flickr
+                              </a>
+                            )}
                           </div>
-                          <p className="text-gray-500 text-xs mt-0.5">
-                            {selectedPhotoHotspot.photoCount.toLocaleString()} photos
-                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {selectedPhotoHotspot.rating && (
+                              <span className="flex items-center gap-0.5 text-xs text-amber-600">
+                                <Star weight="fill" className="w-3 h-3" />
+                                {selectedPhotoHotspot.rating.toFixed(1)}
+                              </span>
+                            )}
+                            {selectedPhotoHotspot.photoCount && (
+                              <span className="text-gray-500 text-xs">
+                                {selectedPhotoHotspot.photoCount.toLocaleString()} photos
+                              </span>
+                            )}
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                              selectedPhotoHotspot.source === 'merged'
+                                ? 'bg-purple-100 text-purple-700'
+                                : selectedPhotoHotspot.source === 'google'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-pink-100 text-pink-700'
+                            }`}>
+                              {selectedPhotoHotspot.source === 'merged' ? 'Verified' :
+                               selectedPhotoHotspot.source === 'google' ? 'Google' : 'Flickr'}
+                            </span>
+                          </div>
                           <button
                             onClick={() => handleAddPhotoSpotToTrip(selectedPhotoHotspot)}
                             className="w-full mt-3 px-3 py-1.5 bg-primary text-primary-foreground text-xs font-medium rounded-md hover:bg-primary/90 transition-colors"
@@ -1744,83 +1813,116 @@ const TripDetail = () => {
           {/* Itinerary Panel */}
           <div className="order-1 lg:order-2 space-y-4 p-6 lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
             {/* Trip Summary */}
-            <Card className="bg-gradient-card">
-              <CardContent className="p-4">
-                <div className="mb-4">
-                  <h1 className="text-2xl font-display font-bold text-foreground">
-                    {tripConfig.name || 'My Trip'}
-                  </h1>
-                </div>
-                <div className="grid grid-cols-6 gap-2 text-center">
-                  <div>
-                    <p className="text-xl font-bold text-foreground">
-                      {generatedTrip.totalDistance.replace(' mi', '')}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Miles</p>
-                  </div>
-                  <div>
-                    <p className="text-xl font-bold text-foreground">
-                      {generatedTrip.totalDrivingTime.split('h')[0]}h
-                    </p>
-                    <p className="text-xs text-muted-foreground">Driving</p>
-                  </div>
-                  <div>
-                    <p className="text-xl font-bold text-foreground">
-                      {(() => {
-                        // Calculate total hiking time from all days
-                        let totalHikingMinutes = 0;
-                        generatedTrip.days.forEach(day => {
-                          const estimate = estimateDayTime(day);
-                          totalHikingMinutes += estimate.hikingHours * 60;
-                        });
-                        const hours = Math.floor(totalHikingMinutes / 60);
-                        return hours > 0 ? `${hours}h` : '0h';
-                      })()}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Hiking</p>
-                  </div>
-                  <div>
-                    <p className="text-xl font-bold text-foreground">
-                      {(() => {
-                        // Calculate total hiking miles (~1.8 mph average)
-                        let totalHikingMinutes = 0;
-                        generatedTrip.days.forEach(day => {
-                          const estimate = estimateDayTime(day);
-                          totalHikingMinutes += estimate.hikingHours * 60;
-                        });
-                        const hikingMiles = Math.round((totalHikingMinutes / 60) * 1.8);
-                        return hikingMiles > 0 ? `~${hikingMiles}` : '0';
-                      })()}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Trail Mi</p>
-                  </div>
-                  <div>
-                    <p className="text-xl font-bold text-foreground">{generatedTrip.days.length}</p>
-                    <p className="text-xs text-muted-foreground">Days</p>
-                  </div>
-                  <div>
-                    <p className="text-xl font-bold text-foreground capitalize">
-                      {tripConfig.pacePreference || 'Moderate'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Pace</p>
-                  </div>
-                </div>
+            <div className="space-y-3">
+              {/* Trip Name */}
+              <div className="mb-1">
+                <h1 className="text-3xl font-display font-bold text-foreground">
+                  {tripConfig.name || 'My Trip'}
+                </h1>
                 {tripConfig.startDate && (
-                  <div className="mt-4 pt-3 border-t border-border flex items-center justify-center gap-2 text-sm">
+                  <div className="flex items-center gap-2 mt-1 text-sm">
                     <Calendar className="w-4 h-4 text-primary" />
-                    <span className="text-muted-foreground">Starts</span>
-                    <span className="font-medium text-foreground">
+                    <span className="text-muted-foreground">
                       {new Date(tripConfig.startDate).toLocaleDateString('en-US', {
-                        weekday: 'short',
                         month: 'short',
                         day: 'numeric',
-                        year: 'numeric'
                       })}
+                      {' – '}
+                      {(() => {
+                        const startDate = new Date(tripConfig.startDate!);
+                        const endDate = new Date(startDate);
+                        endDate.setDate(startDate.getDate() + generatedTrip.days.length - 1);
+                        return endDate.toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        });
+                      })()}
                     </span>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+
+              {/* Trip Overview Card */}
+              <Card className="bg-card">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Path className="w-4 h-4 text-terracotta" />
+                    <h3 className="font-semibold text-foreground text-sm">Trip Overview</h3>
+                  </div>
+                  <div className="grid grid-cols-4 gap-3 text-center">
+                    <div className="bg-secondary/50 rounded-lg p-2">
+                      <p className="text-xl font-bold text-foreground">
+                        {generatedTrip.totalDistance.replace(' mi', '')}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Miles</p>
+                    </div>
+                    <div className="bg-secondary/50 rounded-lg p-2">
+                      <p className="text-xl font-bold text-foreground">
+                        {generatedTrip.totalDrivingTime.split('h')[0]}h
+                      </p>
+                      <p className="text-xs text-muted-foreground">Driving</p>
+                    </div>
+                    <div className="bg-secondary/50 rounded-lg p-2">
+                      <p className="text-xl font-bold text-foreground">{generatedTrip.days.length}</p>
+                      <p className="text-xs text-muted-foreground">Days</p>
+                    </div>
+                    <div className="bg-secondary/50 rounded-lg p-2">
+                      <p className="text-xl font-bold text-foreground capitalize">
+                        {tripConfig.pacePreference || 'Mod'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Pace</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Activities Card */}
+              <Card className="bg-card">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Boot className="w-4 h-4 text-pinesoft" />
+                    <h3 className="font-semibold text-foreground text-sm">Activities</h3>
+                  </div>
+                  {(() => {
+                    // Calculate hiking stats
+                    let totalHikingMinutes = 0;
+                    let hikeCount = 0;
+                    generatedTrip.days.forEach(day => {
+                      const estimate = estimateDayTime(day);
+                      totalHikingMinutes += estimate.hikingHours * 60;
+                      hikeCount += day.stops.filter(s => s.type === 'hike').length;
+                    });
+                    const hikingHours = Math.floor(totalHikingMinutes / 60);
+                    const hikingMiles = Math.round((totalHikingMinutes / 60) * 1.8);
+
+                    return (
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-pinesoft/20">
+                          <Boot className="w-5 h-5 text-pinesoft" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-foreground">Hiking</p>
+                          <p className="text-sm text-muted-foreground">
+                            {hikeCount} {hikeCount === 1 ? 'hike' : 'hikes'} • {hikingHours > 0 ? `~${hikingHours}h` : '0h'} • {hikingMiles > 0 ? `~${hikingMiles} mi` : '0 mi'}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Photography Conditions - shows when a stop is selected */}
+            {selectedStop && (
+              <PhotoWeatherCard
+                forecast={selectedStopWeather}
+                loading={loadingStopWeather}
+                error={stopWeatherError}
+                locationName={selectedStop.name}
+              />
+            )}
 
             {/* Photo Hotspots */}
             {(photoHotspots.length > 0 || loadingPhotoHotspots) && (
@@ -1859,7 +1961,7 @@ const TripDetail = () => {
                       ) : (
                         <>
                           <div className="flex items-center justify-between">
-                            <span className="text-xs text-muted-foreground">via Flickr</span>
+                            <span className="text-xs text-muted-foreground">via Flickr & Google</span>
                             <div className="flex items-center gap-2">
                               <Label htmlFor="show-hotspots" className="text-sm text-muted-foreground">
                                 Show on map
@@ -1909,19 +2011,28 @@ const TripDetail = () => {
                                 {hotspot.name}
                               </p>
                               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <span className="flex items-center gap-1">
-                                  <Camera className="w-3 h-3" />
-                                  {hotspot.photoCount.toLocaleString()} photos
+                                {hotspot.rating && (
+                                  <span className="flex items-center gap-0.5 text-amber-600">
+                                    <Star weight="fill" className="w-3 h-3" />
+                                    {hotspot.rating.toFixed(1)}
+                                  </span>
+                                )}
+                                {hotspot.photoCount && (
+                                  <span className="flex items-center gap-1">
+                                    <Camera className="w-3 h-3" />
+                                    {hotspot.photoCount.toLocaleString()}
+                                  </span>
+                                )}
+                                <span className={`px-1 py-0.5 rounded text-[10px] ${
+                                  hotspot.source === 'merged'
+                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+                                    : hotspot.source === 'google'
+                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                                    : 'bg-pink-100 text-pink-700 dark:bg-pink-900 dark:text-pink-300'
+                                }`}>
+                                  {hotspot.source === 'merged' ? 'Verified' :
+                                   hotspot.source === 'google' ? 'Google' : 'Flickr'}
                                 </span>
-                                <a
-                                  href={`https://www.flickr.com/map?fLat=${hotspot.lat}&fLon=${hotspot.lng}&zl=14`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="text-pink-500 hover:text-pink-600 hover:underline"
-                                >
-                                  Flickr
-                                </a>
                               </div>
                             </button>
                           </div>

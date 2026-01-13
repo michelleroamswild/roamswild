@@ -14,6 +14,8 @@ import { useNearbyHikes, HikeResult } from "@/hooks/use-nearby-hikes";
 import { usePhotoHotspots, PhotoHotspot } from "@/hooks/use-photo-hotspots";
 import { usePublicLands, PublicLand } from "@/hooks/use-public-lands";
 import { useNoaaWeather, getWeatherIcon } from "@/hooks/use-noaa-weather";
+import { usePhotoWeather } from "@/hooks/use-photo-weather";
+import { PhotoWeatherCard } from "@/components/PhotoWeatherCard";
 import { toast } from "sonner";
 import { useTrip } from "@/context/TripContext";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
@@ -131,6 +133,13 @@ const LocationDetail = () => {
   const { weather, loading: weatherLoading } = useNoaaWeather(
     location?.lat ?? null,
     location?.lng ?? null
+  );
+
+  // Get photography weather conditions
+  const { forecast: photoWeather, loading: photoWeatherLoading, error: photoWeatherError } = usePhotoWeather(
+    location?.lat ?? 0,
+    location?.lng ?? 0,
+    elevation ?? 0
   );
 
   // Photo hotspots UI state
@@ -761,6 +770,13 @@ const LocationDetail = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Photography Weather Conditions */}
+            <PhotoWeatherCard
+              forecast={photoWeather}
+              loading={photoWeatherLoading}
+              error={photoWeatherError}
+            />
 
             {/* Plan a Trip */}
             <Card className="bg-gradient-to-br from-primary/5 to-terracotta/5 border-primary/20">

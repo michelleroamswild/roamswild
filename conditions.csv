@@ -1,0 +1,36 @@
+“Scattered high clouds likely to enhance sunset color”,,
+Condition,Photo Outcome,Label
+High clouds 20–60%,Strong color diffusion,Dramatic Color Potential
+Mid clouds 30–50%,Texture + rays,Layered Sky
+Low clouds < 20%,Clear horizon,Open Horizon
+Low clouds > 40%,Sunset blocked,Horizon Obstructed
+Total clouds < 10%,Flat light,Clean but Minimal Color
+,,
+“Light atmospheric haze may soften contrast and boost color”,,
+Visibility > 20 km,Crisp detail,Clear Air
+Visibility 10–20 km,Soft contrast,Atmospheric Depth
+Visibility < 10 km,Flat/muted,Hazy Light
+Moderate aerosols,Color boost,Warm Diffusion
+Heavy smoke,Color loss,Muted Palette
+,,
+“Rain clearing 35 minutes before sunset — strong color potential”,,
+Condition,Photo Outcome,Label
+Rain < 1 hr before sunset,Clouds + clearing,Post-Storm Glow Potential
+Rain during sunset,Poor shooting,Unstable Conditions
+Snow nearby,Reflective clouds,High Alpenglow Chance
+,,
+“Calm winds — good conditions for reflections”,,
+Wind,Photo Outcome,Label
+< 5 mph,Mirror water,Reflections Possible
+5–12 mph,Movement,Dynamic Foreground
+> 15 mph,Shake risk,Tripod Unstable
+Gusty,Drone risk,Aerial Caution
+,,
+“High humidity may produce glowing highlights near sunset”,,
+Low humidity,Sharp contrast,Crisp Light
+High humidity,Glow,Soft Highlights
+Dew near temp,Fog risk,Possible Mist
+,,
+“Sky conditions improve ~12 minutes after sunset”,,
+Clouds increasing post-sunset,Peak color later,Stay After Sunset
+Clouds thinning,Short window,Shoot Early

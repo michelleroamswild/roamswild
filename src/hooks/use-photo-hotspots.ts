@@ -34,6 +34,31 @@ const FLICKR_API_KEY = import.meta.env.VITE_FLICKR_API_KEY || '';
 
 const FLICKR_API_BASE = 'https://api.flickr.com/services/rest/';
 
+// Tags to filter for landscape/nature photography
+const LANDSCAPE_TAGS = [
+  'landscape', 'nature', 'mountains', 'sunset', 'sunrise',
+  'scenery', 'scenic', 'wilderness', 'hiking', 'outdoor',
+  'vista', 'panorama', 'overlook', 'viewpoint', 'photography',
+  'nationalpark', 'trail', 'canyon', 'desert', 'forest',
+  'lake', 'river', 'waterfall', 'beach', 'coast'
+].join(',');
+
+// Names that indicate non-scenic locations (to filter out)
+const EXCLUDED_NAME_PATTERNS = [
+  'restaurant', 'hotel', 'motel', 'shop', 'store', 'mall',
+  'airport', 'gas station', 'walmart', 'target', 'starbucks',
+  'mcdonalds', 'burger', 'pizza', 'cafe', 'coffee',
+  'parking', 'hospital', 'school', 'office', 'bank',
+  'trailhead'
+];
+
+// Check if a place name should be excluded
+function shouldExcludeName(name: string): boolean {
+  if (!name) return false;
+  const lowerName = name.toLowerCase();
+  return EXCLUDED_NAME_PATTERNS.some(pattern => lowerName.includes(pattern));
+}
+
 // Search for places with lots of photos near a location
 async function searchPhotoHotspots(
   lat: number,
@@ -77,7 +102,11 @@ async function searchPhotoHotspots(
     photosUrl.searchParams.set('radius', Math.min(radiusKm, 32).toString()); // Max 32km
     photosUrl.searchParams.set('radius_units', 'km');
     photosUrl.searchParams.set('has_geo', '1');
-    photosUrl.searchParams.set('extras', 'geo,place_url,url_m,url_s');
+    // Filter by landscape/nature tags
+    photosUrl.searchParams.set('tags', LANDSCAPE_TAGS);
+    photosUrl.searchParams.set('tag_mode', 'any'); // Match photos with ANY of these tags
+    // Request geo_context to filter indoor photos
+    photosUrl.searchParams.set('extras', 'geo,place_url,url_m,url_s,geo_context');
     photosUrl.searchParams.set('per_page', '500');
     photosUrl.searchParams.set('sort', 'interestingness-desc');
     photosUrl.searchParams.set('format', 'json');
@@ -95,10 +124,16 @@ async function searchPhotoHotspots(
 
     // Convert clusters to hotspots
     for (const cluster of clusters) {
-      if (cluster.count >= 2) { // Only show clusters with 2+ photos
+      // Require 3+ photos for higher confidence scenic spots
+      if (cluster.count >= 3) {
+        const name = cluster.placeName || 'Photo Hotspot';
+
+        // Skip locations that are likely shops, restaurants, etc.
+        if (shouldExcludeName(name)) continue;
+
         hotspots.push({
           id: `hotspot-${cluster.lat.toFixed(4)}-${cluster.lng.toFixed(4)}`,
-          name: cluster.placeName || `Photo Hotspot`,
+          name,
           lat: cluster.lat,
           lng: cluster.lng,
           photoCount: cluster.count,
@@ -134,6 +169,7 @@ interface FlickrPhoto {
   title?: string;
   url_m?: string; // Medium size photo URL (500px)
   url_s?: string; // Small size photo URL (240px)
+  geo_context?: string; // 0=not defined, 1=indoors, 2=outdoors
 }
 
 // Cluster photos that are within ~1km of each other
@@ -143,6 +179,9 @@ function clusterPhotosByLocation(photos: FlickrPhoto[]): PhotoCluster[] {
 
   for (const photo of photos) {
     if (!photo.latitude || !photo.longitude) continue;
+
+    // Skip indoor photos (geo_context: 0=not defined, 1=indoors, 2=outdoors)
+    if (photo.geo_context === '1') continue;
 
     const lat = parseFloat(photo.latitude);
     const lng = parseFloat(photo.longitude);
