@@ -110,9 +110,10 @@ interface GoogleMapProps {
   className?: string;
   onClick?: (e: google.maps.MapMouseEvent) => void;
   onLoad?: (map: google.maps.Map) => void;
+  options?: google.maps.MapOptions;
 }
 
-export function GoogleMap({ center, zoom = 10, children, className, onClick, onLoad }: GoogleMapProps) {
+export function GoogleMap({ center, zoom = 10, children, className, onClick, onLoad, options }: GoogleMapProps) {
   const { isLoaded, loadError } = useGoogleMaps();
   const { isDark } = useTheme();
 
@@ -132,18 +133,22 @@ export function GoogleMap({ center, zoom = 10, children, className, onClick, onL
     );
   }
 
+  // Don't apply custom styles for satellite/hybrid map types
+  const isSatellite = options?.mapTypeId === 'satellite' || options?.mapTypeId === 'hybrid';
+
   return (
     <GoogleMapComponent
       mapContainerClassName={className || "w-full h-full"}
       center={center}
       zoom={zoom}
       options={{
-        styles: isDark ? darkMapStyles : lightMapStyles,
+        styles: isSatellite ? undefined : (isDark ? darkMapStyles : lightMapStyles),
         disableDefaultUI: false,
         zoomControl: true,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: true,
+        ...options,
       }}
       onClick={onClick}
       onLoad={onLoad}

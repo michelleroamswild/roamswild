@@ -1,19 +1,15 @@
 import { MagnifyingGlass, MapPin } from "@phosphor-icons/react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useLoadScript, Autocomplete } from "@react-google-maps/api";
-
-const libraries: ("places")[] = ["places"];
+import { Autocomplete } from "@react-google-maps/api";
+import { useGoogleMaps } from "./GoogleMapsProvider";
 
 export const SearchBar = () => {
   const [isFocused, setIsFocused] = useState(false);
   const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
   const navigate = useNavigate();
 
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries,
-  });
+  const { isLoaded } = useGoogleMaps();
 
   const onLoad = (autocompleteInstance: google.maps.places.Autocomplete) => {
     setAutocomplete(autocompleteInstance);

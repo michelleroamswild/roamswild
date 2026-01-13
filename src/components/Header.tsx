@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Jeep, List, Path, SignOut, Tent, Compass, Heart, House, Moon, Sun } from "@phosphor-icons/react";
+import { Jeep, List, Path, SignOut, Tent, Compass, Heart, House, Moon, Sun, MapTrifold } from "@phosphor-icons/react";
 import { Button } from "./ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -129,6 +129,12 @@ export const Header = () => {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
+                <Link to="/dispersed" className="flex items-center">
+                  <MapTrifold className="w-4 h-4 mr-2" weight="bold" />
+                  Dispersed Explorer
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
                 <Link to="/landing" className="flex items-center text-muted-foreground">
                   <House className="w-4 h-4 mr-2" weight="bold" />
                   Landing Page (temp)
@@ -235,6 +241,19 @@ export const Header = () => {
                 >
                   <Tent className="w-5 h-5" weight={isActive('/campsites') ? "fill" : "regular"} />
                   Campsites
+                </Link>
+                <Link
+                  to="/dispersed"
+                  onClick={closeMobileMenu}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
+                    isActive('/dispersed')
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground hover:bg-muted"
+                  )}
+                >
+                  <MapTrifold className="w-5 h-5" weight={isActive('/dispersed') ? "fill" : "regular"} />
+                  Dispersed Explorer
                 </Link>
               </nav>
 

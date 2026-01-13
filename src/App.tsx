@@ -27,6 +27,7 @@ import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import Campsites from "./pages/Campsites";
 import CampsiteDetail from "./pages/CampsiteDetail";
+import DispersedExplorer from "./pages/DispersedExplorer";
 import StyleGuide from "./pages/StyleGuide";
 
 // Smart home route - shows Landing for guests, Index for authenticated users
@@ -83,6 +84,7 @@ const App = () => (
                   <Route path="/join/:token" element={<ProtectedRoute><JoinTrip /></ProtectedRoute>} />
                   <Route path="/campsites" element={<ProtectedRoute><Campsites /></ProtectedRoute>} />
                   <Route path="/campsites/:id" element={<ProtectedRoute><CampsiteDetail /></ProtectedRoute>} />
+                  <Route path="/dispersed" element={<ProtectedRoute><DispersedExplorer /></ProtectedRoute>} />
                   <Route path="/style-guide" element={<StyleGuide />} />
 
                   {/* Catch-all */}
