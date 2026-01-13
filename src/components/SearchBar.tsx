@@ -48,12 +48,12 @@ export const SearchBar = () => {
       >
         <div
           className={`
-            flex items-center gap-3 bg-input border rounded-md px-4 py-3
+            flex items-center gap-3 bg-input dark:bg-primary border rounded-md px-4 py-3
             transition-all duration-300
-            ${isFocused ? 'border-ring ring-2 ring-ring/20' : 'border-border'}
+            ${isFocused ? 'border-ring ring-2 ring-ring/20' : 'border-border dark:border-transparent'}
           `}
         >
-          <MapPin className="w-5 h-5 text-primary flex-shrink-0" />
+          <MapPin className="w-5 h-5 text-primary dark:text-primary-foreground flex-shrink-0" />
           {isLoaded ? (
             <Autocomplete
               onLoad={onLoad}
@@ -69,7 +69,7 @@ export const SearchBar = () => {
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 placeholder="Search destinations, trails, or campsites..."
-                className="w-full bg-transparent text-foreground placeholder:text-muted-foreground text-lg outline-none"
+                className="w-full bg-transparent text-foreground dark:text-primary-foreground placeholder:text-muted-foreground dark:placeholder:text-primary-foreground/60 text-lg outline-none"
               />
             </Autocomplete>
           ) : (
@@ -77,10 +77,10 @@ export const SearchBar = () => {
               type="text"
               disabled
               placeholder="Loading search..."
-              className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground text-lg outline-none"
+              className="flex-1 bg-transparent text-foreground dark:text-primary-foreground placeholder:text-muted-foreground dark:placeholder:text-primary-foreground/60 text-lg outline-none"
             />
           )}
-          <button className="flex items-center justify-center w-12 h-12 bg-primary text-primary-foreground rounded-md hover:bg-forest-light transition-colors duration-200 shadow-sm">
+          <button className="flex items-center justify-center w-12 h-12 bg-primary dark:bg-primary-foreground text-primary-foreground dark:text-primary rounded-md hover:bg-forest-light dark:hover:bg-primary-foreground/90 transition-colors duration-200 shadow-sm">
             <MagnifyingGlass className="w-5 h-5" weight="bold" />
           </button>
         </div>

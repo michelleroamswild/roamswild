@@ -1,9 +1,10 @@
 import { GoogleMap as GoogleMapComponent } from '@react-google-maps/api';
 import { ReactNode } from 'react';
 import { useGoogleMaps } from './GoogleMapsProvider';
+import { useTheme } from '@/hooks/use-theme';
 
-// Earth-tone styled map to match the app theme
-const mapStyles = [
+// Earth-tone styled map to match the app theme (light mode)
+const lightMapStyles = [
   {
     featureType: "water",
     elementType: "geometry",
@@ -41,6 +42,67 @@ const mapStyles = [
   }
 ];
 
+// Dark mode map styles
+const darkMapStyles = [
+  {
+    elementType: "geometry",
+    stylers: [{ color: "#1a1a18" }]
+  },
+  {
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#1a1a18" }]
+  },
+  {
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#8a8a7a" }]
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#2d3a35" }]
+  },
+  {
+    featureType: "landscape",
+    elementType: "geometry",
+    stylers: [{ color: "#252521" }]
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#3a3a35" }]
+  },
+  {
+    featureType: "road",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#2a2a25" }]
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#2a3530" }]
+  },
+  {
+    featureType: "transit",
+    elementType: "geometry",
+    stylers: [{ color: "#2a2a25" }]
+  },
+  {
+    featureType: "poi",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#6b7c6e" }]
+  },
+  {
+    featureType: "administrative",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#7a8a7e" }]
+  },
+  {
+    featureType: "administrative.locality",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#9a9a8a" }]
+  }
+];
+
 interface GoogleMapProps {
   center: google.maps.LatLngLiteral;
   zoom?: number;
@@ -52,6 +114,7 @@ interface GoogleMapProps {
 
 export function GoogleMap({ center, zoom = 10, children, className, onClick, onLoad }: GoogleMapProps) {
   const { isLoaded, loadError } = useGoogleMaps();
+  const { isDark } = useTheme();
 
   if (loadError) {
     return (
@@ -75,7 +138,7 @@ export function GoogleMap({ center, zoom = 10, children, className, onClick, onL
       center={center}
       zoom={zoom}
       options={{
-        styles: mapStyles,
+        styles: isDark ? darkMapStyles : lightMapStyles,
         disableDefaultUI: false,
         zoomControl: true,
         mapTypeControl: false,

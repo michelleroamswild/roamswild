@@ -222,7 +222,7 @@
   }
 
   .text-gradient-forest {
-    background: linear-gradient(135deg, hsl(var(--forest)) 0%, hsl(var(--forest-light)) 50%, hsl(74 68% 45%) 100%);
+    background: linear-gradient(135deg, hsl(var(--forest)) 0%, hsl(var(--accentdark)) 50%, hsl(var(--forest)) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
