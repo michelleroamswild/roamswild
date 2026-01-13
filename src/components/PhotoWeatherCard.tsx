@@ -278,7 +278,7 @@ export function PhotoWeatherCard({
                   {conditions.sunriseForecast?.temperature !== undefined && (
                     <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
                       <ThermometerSimple className="w-3 h-3" />
-                      {Math.round(conditions.sunriseForecast.temperature)}°
+                      {Math.round(conditions.sunriseForecast.temperature * 9/5 + 32)}°F
                     </span>
                   )}
                 </div>
@@ -328,7 +328,7 @@ export function PhotoWeatherCard({
                   {conditions.sunsetForecast?.temperature !== undefined && (
                     <span className="text-xs text-orange-600 dark:text-orange-400 flex items-center gap-0.5">
                       <ThermometerSimple className="w-3 h-3" />
-                      {Math.round(conditions.sunsetForecast.temperature)}°
+                      {Math.round(conditions.sunsetForecast.temperature * 9/5 + 32)}°F
                     </span>
                   )}
                 </div>

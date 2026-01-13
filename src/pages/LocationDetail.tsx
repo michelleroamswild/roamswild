@@ -16,6 +16,7 @@ import { usePublicLands, PublicLand } from "@/hooks/use-public-lands";
 import { useNoaaWeather, getWeatherIcon } from "@/hooks/use-noaa-weather";
 import { usePhotoWeather } from "@/hooks/use-photo-weather";
 import { PhotoWeatherCard } from "@/components/PhotoWeatherCard";
+import { FiveDayPhotoForecast } from "@/components/FiveDayPhotoForecast";
 import { toast } from "sonner";
 import { useTrip } from "@/context/TripContext";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
@@ -770,6 +771,13 @@ const LocationDetail = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* 5-Day Photo Forecast */}
+            <FiveDayPhotoForecast
+              forecast={photoWeather}
+              loading={photoWeatherLoading}
+              compact
+            />
 
             {/* Photography Weather Conditions */}
             <PhotoWeatherCard

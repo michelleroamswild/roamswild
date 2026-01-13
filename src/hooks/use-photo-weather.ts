@@ -10,6 +10,7 @@ import {
   analyzePhotoConditions,
   extractMetrics,
   getForecastConfidence,
+  createTimeSpecificForecast,
 } from '@/utils/weatherScoring';
 import { getSunTimes } from '@/utils/sunCalc';
 
@@ -162,6 +163,110 @@ function createDailySummary(
 }
 
 /**
+ * Create daily summary from daily API data (for days without hourly data)
+ */
+function createDailySummaryFromDailyData(
+  date: Date,
+  values: TomorrowioValues,
+  lat: number,
+  lng: number,
+  elevationMeters: number
+): DailyPhotoSummary {
+  const sunTimes = getSunTimes(lat, lng, date);
+
+  const goldenHour = {
+    morning: sunTimes.goldenHourMorning,
+    evening: sunTimes.goldenHourEvening,
+  };
+
+  // Create conditions using the daily values
+  const conditions = analyzePhotoConditions(
+    values,
+    elevationMeters,
+    goldenHour,
+    48, // Low confidence for multi-day forecasts
+    undefined,
+    undefined,
+    { sunrise: sunTimes.sunrise, sunset: sunTimes.sunset }
+  );
+
+  // Create simple sunrise/sunset forecasts from daily data
+  const sunriseTemp = values.temperature ?? 15;
+  const sunsetTemp = values.temperature ?? 15;
+
+  // Estimate sunrise/sunset quality from daily cloud cover
+  const cloudCover = values.cloudCover ?? 0;
+  const precipProb = values.precipitationProbability ?? 0;
+
+  let sunQuality: 'excellent' | 'good' | 'fair' | 'challenging' = 'fair';
+  if (precipProb > 60) {
+    sunQuality = 'challenging';
+  } else if (cloudCover >= 20 && cloudCover <= 60 && precipProb < 30) {
+    sunQuality = cloudCover >= 30 && cloudCover <= 50 ? 'excellent' : 'good';
+  } else if (cloudCover < 20 && precipProb < 20) {
+    sunQuality = 'good';
+  } else if (cloudCover > 80) {
+    sunQuality = 'challenging';
+  }
+
+  // Add simple sunrise/sunset forecasts
+  conditions.sunriseForecast = {
+    time: sunTimes.sunrise,
+    temperature: sunriseTemp - 5, // Typically cooler at sunrise
+    conditions: [],
+    overall: sunQuality,
+    goldenHourStart: sunTimes.goldenHourMorning.start,
+    goldenHourEnd: sunTimes.goldenHourMorning.end,
+    blueHourStart: sunTimes.blueHourMorning.start,
+    blueHourEnd: sunTimes.blueHourMorning.end,
+  };
+
+  conditions.sunsetForecast = {
+    time: sunTimes.sunset,
+    temperature: sunsetTemp,
+    conditions: [],
+    overall: sunQuality,
+    goldenHourStart: sunTimes.goldenHourEvening.start,
+    goldenHourEnd: sunTimes.goldenHourEvening.end,
+    blueHourStart: sunTimes.blueHourEvening.start,
+    blueHourEnd: sunTimes.blueHourEvening.end,
+  };
+
+  // Determine best time
+  let bestTime: 'sunrise' | 'sunset' | 'either' = 'either';
+  if (conditions.timing.recommendation === 'sunrise') {
+    bestTime = 'sunrise';
+  } else if (conditions.timing.recommendation === 'sunset' ||
+             conditions.timing.recommendation === 'stay-after') {
+    bestTime = 'sunset';
+  }
+
+  // Generate summary
+  let summary = '';
+  switch (conditions.overall) {
+    case 'excellent':
+      summary = `Excellent conditions expected`;
+      break;
+    case 'good':
+      summary = `Good photo conditions`;
+      break;
+    case 'fair':
+      summary = `Fair conditions — worth checking`;
+      break;
+    case 'challenging':
+      summary = `Challenging conditions expected`;
+      break;
+  }
+
+  return {
+    date,
+    conditions,
+    bestTime,
+    summary,
+  };
+}
+
+/**
  * Main hook for fetching and processing photo weather data
  */
 export function usePhotoWeather(
@@ -263,7 +368,17 @@ export function usePhotoWeather(
             });
 
             if (dayHourly.length > 0) {
+              // Use hourly data for detailed forecast
               daily.push(createDailySummary(dayDate, dayHourly));
+            } else {
+              // Use daily data for days without hourly coverage
+              daily.push(createDailySummaryFromDailyData(
+                dayDate,
+                dailyData[i].values,
+                lat,
+                lng,
+                elevationMeters
+              ));
             }
           }
         }
