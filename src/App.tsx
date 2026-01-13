@@ -30,6 +30,8 @@ import CampsiteDetail from "./pages/CampsiteDetail";
 import DispersedExplorer from "./pages/DispersedExplorer";
 import StyleGuide from "./pages/StyleGuide";
 
+const showDevFeatures = import.meta.env.VITE_ENABLE_DEV_FEATURES === 'true';
+
 // Smart home route - shows Landing for guests, Index for authenticated users
 const HomeRoute = () => {
   const { user, isLoading } = useAuth();
@@ -82,9 +84,13 @@ const App = () => (
                   <Route path="/trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
                   <Route path="/my-trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
                   <Route path="/join/:token" element={<ProtectedRoute><JoinTrip /></ProtectedRoute>} />
-                  <Route path="/campsites" element={<ProtectedRoute><Campsites /></ProtectedRoute>} />
-                  <Route path="/campsites/:id" element={<ProtectedRoute><CampsiteDetail /></ProtectedRoute>} />
-                  <Route path="/dispersed" element={<ProtectedRoute><DispersedExplorer /></ProtectedRoute>} />
+                  {showDevFeatures && (
+                    <>
+                      <Route path="/campsites" element={<ProtectedRoute><Campsites /></ProtectedRoute>} />
+                      <Route path="/campsites/:id" element={<ProtectedRoute><CampsiteDetail /></ProtectedRoute>} />
+                      <Route path="/dispersed" element={<ProtectedRoute><DispersedExplorer /></ProtectedRoute>} />
+                    </>
+                  )}
                   <Route path="/style-guide" element={<StyleGuide />} />
 
                   {/* Catch-all */}

@@ -21,6 +21,8 @@ import {
   SheetTrigger,
 } from "./ui/sheet";
 
+const showDevFeatures = import.meta.env.VITE_ENABLE_DEV_FEATURES === 'true';
+
 const getInitials = (name?: string, email?: string): string => {
   if (name) {
     const parts = name.trim().split(' ');
@@ -122,18 +124,22 @@ export const Header = () => {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link to="/campsites" className="flex items-center">
-                  <Tent className="w-4 h-4 mr-2" weight="bold" />
-                  Campsites
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/dispersed" className="flex items-center">
-                  <MapTrifold className="w-4 h-4 mr-2" weight="bold" />
-                  Dispersed Explorer
-                </Link>
-              </DropdownMenuItem>
+              {showDevFeatures && (
+                <>
+                  <DropdownMenuItem asChild>
+                    <Link to="/campsites" className="flex items-center">
+                      <Tent className="w-4 h-4 mr-2" weight="bold" />
+                      Campsites
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/dispersed" className="flex items-center">
+                      <MapTrifold className="w-4 h-4 mr-2" weight="bold" />
+                      Dispersed Explorer
+                    </Link>
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuItem asChild>
                 <Link to="/landing" className="flex items-center text-muted-foreground">
                   <House className="w-4 h-4 mr-2" weight="bold" />
@@ -229,32 +235,36 @@ export const Header = () => {
                   <Heart className="w-5 h-5" weight={isActive('/saved') ? "fill" : "regular"} />
                   Saved
                 </Link>
-                <Link
-                  to="/campsites"
-                  onClick={closeMobileMenu}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
-                    isActive('/campsites')
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground hover:bg-muted"
-                  )}
-                >
-                  <Tent className="w-5 h-5" weight={isActive('/campsites') ? "fill" : "regular"} />
-                  Campsites
-                </Link>
-                <Link
-                  to="/dispersed"
-                  onClick={closeMobileMenu}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
-                    isActive('/dispersed')
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground hover:bg-muted"
-                  )}
-                >
-                  <MapTrifold className="w-5 h-5" weight={isActive('/dispersed') ? "fill" : "regular"} />
-                  Dispersed Explorer
-                </Link>
+                {showDevFeatures && (
+                  <>
+                    <Link
+                      to="/campsites"
+                      onClick={closeMobileMenu}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
+                        isActive('/campsites')
+                          ? "bg-accent text-accent-foreground"
+                          : "text-foreground hover:bg-muted"
+                      )}
+                    >
+                      <Tent className="w-5 h-5" weight={isActive('/campsites') ? "fill" : "regular"} />
+                      Campsites
+                    </Link>
+                    <Link
+                      to="/dispersed"
+                      onClick={closeMobileMenu}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
+                        isActive('/dispersed')
+                          ? "bg-accent text-accent-foreground"
+                          : "text-foreground hover:bg-muted"
+                      )}
+                    >
+                      <MapTrifold className="w-5 h-5" weight={isActive('/dispersed') ? "fill" : "regular"} />
+                      Dispersed Explorer
+                    </Link>
+                  </>
+                )}
               </nav>
 
               {/* Create Trip Button */}
