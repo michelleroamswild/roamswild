@@ -13,9 +13,7 @@ import {
   createTimeSpecificForecast,
 } from '@/utils/weatherScoring';
 import { getSunTimes } from '@/utils/sunCalc';
-
-const TOMORROW_API_KEY = import.meta.env.VITE_TOMORROW_IO_API_KEY || '';
-const TOMORROW_API_BASE = 'https://api.tomorrow.io/v4/weather/forecast';
+import { supabase } from '@/integrations/supabase/client';
 
 // Cache to avoid hitting rate limits
 const weatherCache = new Map<string, { data: PhotoWeatherForecast; timestamp: number }>();
@@ -283,11 +281,6 @@ export function usePhotoWeather(
     if (!lat || !lng) return;
     if (lat === 0 && lng === 0) return;
 
-    if (!TOMORROW_API_KEY) {
-      setError('Tomorrow.io API key not configured');
-      return;
-    }
-
     // Check cache
     const cacheKey = getCacheKey(lat, lng);
     const cached = weatherCache.get(cacheKey);
@@ -301,13 +294,23 @@ export function usePhotoWeather(
       setError(null);
 
       try {
-        const url = new URL(TOMORROW_API_BASE);
-        url.searchParams.set('location', `${lat},${lng}`);
-        url.searchParams.set('timesteps', '1h,1d');
-        url.searchParams.set('apikey', TOMORROW_API_KEY);
-        url.searchParams.set('units', 'metric');
+        // Use Supabase Edge Function proxy (API key stored securely on server)
+        const { data: { session } } = await supabase.auth.getSession();
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
-        const response = await fetch(url.toString());
+        const params = new URLSearchParams({
+          endpoint: '/weather/forecast',
+          location: `${lat},${lng}`,
+          timesteps: '1h,1d',
+          units: 'metric',
+        });
+
+        const response = await fetch(`${supabaseUrl}/functions/v1/weather-proxy?${params}`, {
+          headers: {
+            'Authorization': `Bearer ${session?.access_token || ''}`,
+            'Content-Type': 'application/json',
+          },
+        });
 
         if (!response.ok) {
           throw new Error(`API error: ${response.status}`);
@@ -420,13 +423,17 @@ export function useMultiLocationPhotoWeather(
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!locations.length || !TOMORROW_API_KEY) return;
+    if (!locations.length) return;
 
     const fetchAll = async () => {
       setLoading(true);
       setError(null);
 
       const results = new Map<string, PhotoWeatherForecast>();
+
+      // Get session once for all requests
+      const { data: { session } } = await supabase.auth.getSession();
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
       for (const loc of locations) {
         const cacheKey = getCacheKey(loc.lat, loc.lng);
@@ -439,13 +446,19 @@ export function useMultiLocationPhotoWeather(
         }
 
         try {
-          const url = new URL(TOMORROW_API_BASE);
-          url.searchParams.set('location', `${loc.lat},${loc.lng}`);
-          url.searchParams.set('timesteps', '1h');
-          url.searchParams.set('apikey', TOMORROW_API_KEY);
-          url.searchParams.set('units', 'metric');
+          const params = new URLSearchParams({
+            endpoint: '/weather/forecast',
+            location: `${loc.lat},${loc.lng}`,
+            timesteps: '1h',
+            units: 'metric',
+          });
 
-          const response = await fetch(url.toString());
+          const response = await fetch(`${supabaseUrl}/functions/v1/weather-proxy?${params}`, {
+            headers: {
+              'Authorization': `Bearer ${session?.access_token || ''}`,
+              'Content-Type': 'application/json',
+            },
+          });
           const data: TomorrowioResponse = await response.json();
 
           if (data.timelines?.hourly?.length) {

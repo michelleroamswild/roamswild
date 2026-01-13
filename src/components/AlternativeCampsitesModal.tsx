@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, MapPin, SpinnerGap, Tent, Check, ArrowSquareOut, Cloud, Sun, CloudRain, Snowflake, Wind } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { TripStop } from '@/types/trip';
+import { supabase } from '@/integrations/supabase/client';
 
 // NOAA Weather types
 interface WeatherForecast {
@@ -128,9 +129,6 @@ function toRad(deg: number): number {
   return deg * (Math.PI / 180);
 }
 
-// RIDB API key
-const RIDB_API_KEY = import.meta.env.VITE_RIDB_API_KEY || '';
-
 interface RIDBFacility {
   FacilityID: string;
   FacilityName: string;
@@ -140,27 +138,34 @@ interface RIDBFacility {
   FacilityTypeDescription: string;
 }
 
-// Search RIDB for campsites
+// Search RIDB for campsites via Supabase Edge Function
 async function searchRIDBCampsites(
   lat: number,
   lng: number,
   radiusMiles: number = 50
 ): Promise<CampsiteOption[]> {
-  if (!RIDB_API_KEY) {
-    return [];
-  }
-
   try {
-    const url = `/api/ridb/facilities?latitude=${lat}&longitude=${lng}&radius=${radiusMiles}&limit=50`;
+    // Use Supabase Edge Function proxy (API key stored securely on server)
+    const { data: { session } } = await supabase.auth.getSession();
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
-    const response = await fetch(url, {
+    const params = new URLSearchParams({
+      endpoint: '/facilities',
+      latitude: lat.toString(),
+      longitude: lng.toString(),
+      radius: radiusMiles.toString(),
+      limit: '50',
+    });
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/ridb-proxy?${params}`, {
       headers: {
-        'apikey': RIDB_API_KEY,
-        'Accept': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+        'Content-Type': 'application/json',
       },
     });
 
     if (!response.ok) {
+      console.error('RIDB API error:', response.status);
       return [];
     }
 
@@ -192,7 +197,8 @@ async function searchRIDBCampsites(
         };
       })
       .sort((a, b) => a.distance - b.distance);
-  } catch {
+  } catch (error) {
+    console.error('RIDB search error:', error);
     return [];
   }
 }

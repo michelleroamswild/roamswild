@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { TripConfig, GeneratedTrip, TripDay, TripStop, TripDestination } from '@/types/trip';
 import { GoogleSavedPlace } from './use-nearby-places';
+import { supabase } from '@/integrations/supabase/client';
 
 // Haversine formula to calculate distance between two points in miles
 function getDistanceMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -26,9 +27,6 @@ function getMidpoint(lat1: number, lng1: number, lat2: number, lng2: number) {
   };
 }
 
-// RIDB API key
-const RIDB_API_KEY = import.meta.env.VITE_RIDB_API_KEY || '';
-
 interface RIDBFacility {
   FacilityID: string;
   FacilityName: string;
@@ -38,27 +36,31 @@ interface RIDBFacility {
   FacilityTypeDescription: string;
 }
 
-// Search RIDB for campsites near a location
+// Search RIDB for campsites near a location via Supabase Edge Function
 async function searchRIDBCampsites(
   lat: number,
   lng: number,
   radiusMiles: number = 50
 ): Promise<(GoogleSavedPlace & { distance: number })[]> {
-  if (!RIDB_API_KEY) {
-    console.log('RIDB API key not configured');
-    return [];
-  }
-
   try {
-    // Use proxy to avoid CORS issues
-    const url = `/api/ridb/facilities?latitude=${lat}&longitude=${lng}&radius=${radiusMiles}&limit=100`;
+    // Use Supabase Edge Function proxy (API key stored securely on server)
+    const { data: { session } } = await supabase.auth.getSession();
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
-    console.log('Fetching RIDB campsites:', url);
+    const params = new URLSearchParams({
+      endpoint: '/facilities',
+      latitude: lat.toString(),
+      longitude: lng.toString(),
+      radius: radiusMiles.toString(),
+      limit: '100',
+    });
 
-    const response = await fetch(url, {
+    console.log('Fetching RIDB campsites via edge function');
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/ridb-proxy?${params}`, {
       headers: {
-        'apikey': RIDB_API_KEY,
-        'Accept': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+        'Content-Type': 'application/json',
       },
     });
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface GoogleSavedPlace {
   id: string;
@@ -10,9 +11,6 @@ export interface GoogleSavedPlace {
   savedAt?: string;
   source?: 'saved' | 'ridb';
 }
-
-// RIDB API key
-const RIDB_API_KEY = import.meta.env.VITE_RIDB_API_KEY || '';
 
 interface RIDBFacility {
   FacilityID: string;
@@ -39,27 +37,31 @@ function toRad(deg: number): number {
   return deg * (Math.PI / 180);
 }
 
-// Search RIDB for campsites near a location
+// Search RIDB for campsites near a location via Supabase Edge Function
 async function searchRIDBCampsites(
   lat: number,
   lng: number,
   radiusMiles: number
 ): Promise<(GoogleSavedPlace & { distance: number })[]> {
-  if (!RIDB_API_KEY) {
-    console.log('RIDB API key not configured');
-    return [];
-  }
-
   try {
-    // Use proxy to avoid CORS issues
-    const url = `/api/ridb/facilities?latitude=${lat}&longitude=${lng}&radius=${radiusMiles}&limit=100`;
+    // Use Supabase Edge Function proxy (API key stored securely on server)
+    const { data: { session } } = await supabase.auth.getSession();
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
-    console.log('Fetching RIDB campsites for place page:', url);
+    const params = new URLSearchParams({
+      endpoint: '/facilities',
+      latitude: lat.toString(),
+      longitude: lng.toString(),
+      radius: radiusMiles.toString(),
+      limit: '100',
+    });
 
-    const response = await fetch(url, {
+    console.log('Fetching RIDB campsites via edge function');
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/ridb-proxy?${params}`, {
       headers: {
-        'apikey': RIDB_API_KEY,
-        'Accept': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+        'Content-Type': 'application/json',
       },
     });
 
