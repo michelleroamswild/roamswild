@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { GoogleMap } from '@/components/GoogleMap';
 import { Polyline, Marker, Polygon } from '@react-google-maps/api';
 import { Autocomplete } from '@react-google-maps/api';
-import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot } from '@/hooks/use-dispersed-roads';
+import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
 import { usePublicLands } from '@/hooks/use-public-lands';
 import { Header } from '@/components/Header';
 
@@ -64,11 +64,14 @@ const DispersedExplorer = () => {
   const [showPublicLands, setShowPublicLands] = useState(true);
   const mapRef = useRef<google.maps.Map | null>(null);
 
-  const { mvumRoads, osmTracks, potentialSpots, loading, error } = useDispersedRoads(
+  const { mvumRoads, osmTracks, potentialSpots, establishedCampgrounds, loading, error } = useDispersedRoads(
     searchLocation?.lat ?? null,
     searchLocation?.lng ?? null,
     20 // 20 mile radius
   );
+
+  // Selected established campground
+  const [selectedCampground, setSelectedCampground] = useState<EstablishedCampground | null>(null);
 
   // Fetch public lands (BLM, USFS, NPS, FWS) for overlay
   const { publicLands, loading: publicLandsLoading } = usePublicLands(
@@ -77,32 +80,43 @@ const DispersedExplorer = () => {
     25 // 25 mile radius for public lands
   );
 
-  // Filter potential spots: only show derived spots (dead-ends, intersections)
-  // if they're within BLM/USFS/NPS polygon boundaries. OSM camp sites always shown.
+  // Filter potential spots with smart rules:
+  // - OSM camp sites: Always show (they're verified camping locations)
+  // - MVUM-derived spots: Always show (MVUM roads are definitely on National Forest)
+  // - OSM-derived spots: Validate against public land polygons when available
   const filteredPotentialSpots = useMemo(() => {
-    // Always show OSM camp sites regardless of polygon data
+    // Always show OSM camp sites - they're explicitly tagged as camping locations
     const campSites = potentialSpots.filter((spot) => spot.type === 'camp-site');
 
-    if (!publicLands.length) {
-      // No polygon data yet, only show verified camp sites
-      console.log('No public lands loaded yet, showing only OSM camp sites');
-      return campSites;
-    }
-
-    // Debug logging
-    const polygonsWithData = publicLands.filter(l => l.polygon && l.polygon.length > 0);
-    console.log(`Public lands: ${publicLands.length} total, ${polygonsWithData.length} with polygon data`);
-
-    // Filter derived spots to only those within public land polygons
+    // Get derived spots (dead-ends, intersections)
     const derivedSpots = potentialSpots.filter((spot) => spot.type !== 'camp-site');
-    const filteredDerived = derivedSpots.filter((spot) =>
-      isWithinAnyPublicLand(spot.lat, spot.lng, publicLands)
-    );
 
-    console.log(`Filtered: ${filteredDerived.length}/${derivedSpots.length} derived spots within public land polygons`);
+    // Check if we have MVUM roads - if so, we're in National Forest territory
+    const hasMVUMRoads = mvumRoads.length > 0;
+
+    // Filter derived spots:
+    // - Always include if on MVUM road (definitely National Forest)
+    // - If we have public land polygons, validate OSM spots against them
+    // - If no polygons but we have MVUM roads in the area, show OSM spots too (area is NF)
+    // - If no polygons AND no MVUM roads, hide OSM spots (could be anywhere)
+    const filteredDerived = derivedSpots.filter((spot) => {
+      // MVUM roads are definitely on public land - always include
+      if (spot.isOnMVUMRoad) return true;
+
+      // If we have polygon data, validate against it
+      if (publicLands.length > 0) {
+        return isWithinAnyPublicLand(spot.lat, spot.lng, publicLands);
+      }
+
+      // No polygon data - use MVUM presence as proxy for "in National Forest"
+      // If we have MVUM roads in this area, OSM-derived spots are likely valid
+      return hasMVUMRoads;
+    });
+
+    console.log(`Filtered spots: ${campSites.length} camps, ${filteredDerived.length}/${derivedSpots.length} derived (${derivedSpots.filter(s => s.isOnMVUMRoad).length} MVUM, ${publicLands.length} polygons, hasMVUM: ${hasMVUMRoads})`);
 
     return [...campSites, ...filteredDerived];
-  }, [potentialSpots, publicLands]);
+  }, [potentialSpots, publicLands, mvumRoads]);
 
   const onAutocompleteLoad = useCallback((autocompleteInstance: google.maps.places.Autocomplete) => {
     setAutocomplete(autocompleteInstance);
@@ -123,6 +137,7 @@ const DispersedExplorer = () => {
         setMapZoom(12);
         setSelectedRoad(null);
         setSelectedSpot(null);
+        setSelectedCampground(null);
       }
     }
   }, [autocomplete]);
@@ -142,6 +157,7 @@ const DispersedExplorer = () => {
       });
       setSelectedRoad(null);
       setSelectedSpot(null);
+      setSelectedCampground(null);
     }
   }, []);
 
@@ -167,8 +183,8 @@ const DispersedExplorer = () => {
     else if (spot.score >= 25) color = 'yellow';
     else if (spot.score >= 15) color = 'orange';
 
-    // Use Google Maps default marker icons
-    return `http://maps.google.com/mapfiles/ms/icons/${color}-dot.png`;
+    // Use Google Maps default marker icons (HTTPS to avoid mixed content blocking)
+    return `https://maps.google.com/mapfiles/ms/icons/${color}-dot.png`;
   };
 
   const getSpotIcon = (type: PotentialSpot['type']) => {
@@ -273,7 +289,12 @@ const DispersedExplorer = () => {
                         variant="ghost"
                         size="sm"
                         className="h-6 px-2 text-xs"
-                        onClick={() => setSearchLocation(null)}
+                        onClick={() => {
+                          setSearchLocation(null);
+                          setSelectedCampground(null);
+                          setSelectedSpot(null);
+                          setSelectedRoad(null);
+                        }}
                       >
                         Clear
                       </Button>
@@ -312,7 +333,7 @@ const DispersedExplorer = () => {
                 ) : (
                   <div className="space-y-4">
                     {/* Summary */}
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
                         <p className="text-xl font-bold text-green-700 dark:text-green-300">{mvumRoads.length}</p>
                         <p className="text-xs text-green-600 dark:text-green-400">MVUM Roads</p>
@@ -323,7 +344,11 @@ const DispersedExplorer = () => {
                       </div>
                       <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
                         <p className="text-xl font-bold text-orange-700 dark:text-orange-300">{filteredPotentialSpots.length}</p>
-                        <p className="text-xs text-orange-600 dark:text-orange-400">Camp Spots</p>
+                        <p className="text-xs text-orange-600 dark:text-orange-400">Dispersed Spots</p>
+                      </div>
+                      <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                        <p className="text-xl font-bold text-purple-700 dark:text-purple-300">{establishedCampgrounds.length}</p>
+                        <p className="text-xs text-purple-600 dark:text-purple-400">USFS/BLM Sites</p>
                       </div>
                     </div>
 
@@ -379,6 +404,10 @@ const DispersedExplorer = () => {
                           <div className="w-3 h-3 bg-emerald-500/30 border border-emerald-600 rounded" />
                           <span>BLM/USFS Land</span>
                         </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-purple-500 rounded-full" />
+                          <span>Campground</span>
+                        </div>
                       </div>
                     </div>
 
@@ -394,7 +423,7 @@ const DispersedExplorer = () => {
                           .map((road) => (
                             <button
                               key={`mvum-${road.id}`}
-                              onClick={() => setSelectedRoad(road)}
+                              onClick={() => { setSelectedRoad(road); setSelectedCampground(null); setSelectedSpot(null); }}
                               className={`w-full text-left p-2 rounded-lg border transition-colors ${
                                 selectedRoad === road
                                   ? 'bg-primary/10 border-primary'
@@ -413,7 +442,7 @@ const DispersedExplorer = () => {
                           .map((track) => (
                             <button
                               key={`osm-${track.id}`}
-                              onClick={() => setSelectedRoad(track)}
+                              onClick={() => { setSelectedRoad(track); setSelectedCampground(null); setSelectedSpot(null); }}
                               className={`w-full text-left p-2 rounded-lg border transition-colors ${
                                 selectedRoad === track
                                   ? 'bg-primary/10 border-primary'
@@ -452,6 +481,7 @@ const DispersedExplorer = () => {
                         onClick={() => {
                           setSelectedSpot(spot);
                           setSelectedRoad(null);
+                          setSelectedCampground(null);
                           setMapCenter({ lat: spot.lat, lng: spot.lng });
                           setMapZoom(15);
                         }}
@@ -500,6 +530,88 @@ const DispersedExplorer = () => {
                         <span>Near Water</span>
                       </div>
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Established Campgrounds Card */}
+            {establishedCampgrounds.length > 0 && (
+              <Card>
+                <CardContent className="p-4">
+                  <h3 className="font-medium text-foreground mb-3 flex items-center gap-2">
+                    <TreeEvergreen className="w-4 h-4 text-purple-600" />
+                    USFS/BLM Campgrounds
+                    <span className="ml-auto text-xs text-muted-foreground">{establishedCampgrounds.length} found</span>
+                  </h3>
+
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                    {establishedCampgrounds.slice(0, 15).map((cg) => (
+                      <button
+                        key={cg.id}
+                        onClick={() => {
+                          setSelectedCampground(cg);
+                          setSelectedSpot(null);
+                          setSelectedRoad(null);
+                          setMapCenter({ lat: cg.lat, lng: cg.lng });
+                          setMapZoom(14);
+                        }}
+                        className={`w-full text-left p-2 rounded-lg border transition-colors ${
+                          selectedCampground === cg
+                            ? 'bg-purple-100 dark:bg-purple-900/30 border-purple-400'
+                            : 'bg-muted/50 border-transparent hover:bg-muted'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <TreeEvergreen className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                          <span className="text-sm font-medium text-foreground truncate flex-1">{cg.name}</span>
+                          {cg.reservable && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded">Reserve</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground ml-6 truncate">{cg.facilityType}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
+                    Official campgrounds from Recreation.gov - these are <strong>not</strong> dispersed camping
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Selected Campground Details */}
+            {selectedCampground && (
+              <Card>
+                <CardContent className="p-4">
+                  <h3 className="font-medium text-foreground mb-3 flex items-center gap-2">
+                    <TreeEvergreen className="w-4 h-4 text-purple-600" />
+                    Campground Details
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <p><span className="text-muted-foreground">Name:</span> {selectedCampground.name}</p>
+                    <p><span className="text-muted-foreground">Type:</span> {selectedCampground.facilityType}</p>
+                    <p><span className="text-muted-foreground">Coordinates:</span> {selectedCampground.lat.toFixed(5)}, {selectedCampground.lng.toFixed(5)}</p>
+                    {selectedCampground.reservable && (
+                      <p className="flex items-center gap-1">
+                        <span className="text-muted-foreground">Reservable:</span>
+                        <span className="text-green-600">Yes</span>
+                      </p>
+                    )}
+                    {selectedCampground.description && (
+                      <p className="text-xs text-muted-foreground mt-2">{selectedCampground.description}</p>
+                    )}
+                    {selectedCampground.url && (
+                      <a
+                        href={selectedCampground.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-purple-600 hover:underline mt-2"
+                      >
+                        View on Recreation.gov →
+                      </a>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -705,8 +817,33 @@ const DispersedExplorer = () => {
                   onClick={() => {
                     setSelectedSpot(spot);
                     setSelectedRoad(null);
+                    setSelectedCampground(null);
                   }}
                   zIndex={selectedSpot === spot ? 1000 : spot.score}
+                />
+              ))}
+
+              {/* Established Campgrounds */}
+              {establishedCampgrounds
+                .filter((cg) => isFinite(cg.lat) && isFinite(cg.lng))
+                .map((cg) => (
+                <Marker
+                  key={cg.id}
+                  position={{ lat: cg.lat, lng: cg.lng }}
+                  title={cg.name}
+                  icon={{
+                    url: 'https://maps.google.com/mapfiles/ms/icons/purple-dot.png',
+                    scaledSize: new google.maps.Size(
+                      selectedCampground === cg ? 44 : 36,
+                      selectedCampground === cg ? 44 : 36
+                    ),
+                  }}
+                  onClick={() => {
+                    setSelectedCampground(cg);
+                    setSelectedSpot(null);
+                    setSelectedRoad(null);
+                  }}
+                  zIndex={selectedCampground === cg ? 1001 : 500}
                 />
               ))}
             </GoogleMap>

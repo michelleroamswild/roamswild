@@ -52,8 +52,9 @@ const agencyNames: Record<string, string> = {
   'NPS': 'National Park Service',
 };
 
-// USFS Administrative Forest Boundaries service
-const USFS_BOUNDARIES_URL = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_ForestSystemBoundaries_01/MapServer/0/query';
+// USA Federal Lands service (based on PAD-US ownership data, not administrative boundaries)
+// This excludes private inholdings within forest boundaries
+const USA_FEDERAL_LANDS_URL = 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0/query';
 
 export function usePublicLands(
   centerLat: number,
@@ -72,6 +73,9 @@ export function usePublicLands(
     async function fetchPublicLands() {
       setLoading(true);
       setError(null);
+
+      // Clear previous data immediately when starting a new search
+      setPublicLands([]);
 
       try {
         // Convert center point to Web Mercator
@@ -106,9 +110,11 @@ export function usePublicLands(
           f: 'json',
         });
 
-        // USFS query uses lat/lng (4326)
-        const usfsParams = new URLSearchParams({
-          where: '1=1',
+        // USA Federal Lands query (PAD-US based) - uses lat/lng (4326)
+        // Include all major federal land agencies for complete coverage
+        // Field is "Agency" with full names like "Forest Service", "Bureau of Land Management"
+        const federalLandsParams = new URLSearchParams({
+          where: "Agency IN ('Forest Service', 'Bureau of Land Management', 'National Park Service', 'Fish and Wildlife Service', 'Department of Defense', 'Bureau of Reclamation')",
           geometry: JSON.stringify({
             xmin: centerLng - (radiusMiles / 50), // Rough conversion
             ymin: centerLat - (radiusMiles / 69),
@@ -120,16 +126,17 @@ export function usePublicLands(
           inSR: '4326',
           outSR: '4326',
           spatialRel: 'esriSpatialRelIntersects',
-          outFields: 'OBJECTID,FORESTNAME,FORESTNUMBER',
+          outFields: 'OBJECTID,unit_name,Agency',
           returnGeometry: 'true',
-          resultRecordCount: '50',
+          resultRecordCount: '100',
           f: 'json',
         });
 
-        console.log('Fetching public lands from BLM SMA and USFS services');
+        console.log('Fetching public lands from BLM SMA and USA Federal Lands (PAD-US) services');
+        console.log(`Search area: ${centerLat.toFixed(4)}, ${centerLng.toFixed(4)} - radius ${radiusMiles}mi`);
 
         // Fetch both in parallel - handle failures gracefully
-        const [blmResult, usfsResult] = await Promise.all([
+        const [blmResult, federalLandsResult] = await Promise.all([
           fetch(`/api/blm-sma/BLM_Natl_SMA_Cached_with_PriUnk/MapServer/1/query?${blmParams.toString()}`)
             .then(async (res) => {
               if (!res.ok) {
@@ -142,16 +149,16 @@ export function usePublicLands(
               console.warn('BLM SMA fetch failed:', err);
               return null;
             }),
-          fetch(`${USFS_BOUNDARIES_URL}?${usfsParams.toString()}`)
+          fetch(`${USA_FEDERAL_LANDS_URL}?${federalLandsParams.toString()}`)
             .then(async (res) => {
               if (!res.ok) {
-                console.warn(`USFS API returned ${res.status}`);
+                console.warn(`USA Federal Lands API returned ${res.status}`);
                 return null;
               }
               return res.json();
             })
             .catch(err => {
-              console.warn('USFS boundaries fetch failed:', err);
+              console.warn('USA Federal Lands fetch failed:', err);
               return null;
             }),
         ]);
@@ -167,20 +174,29 @@ export function usePublicLands(
           })));
         }
 
-        // Process USFS response
-        if (usfsResult && !usfsResult.error && usfsResult.features) {
-          console.log(`USFS returned ${usfsResult.features.length} features`);
-          // Transform USFS features to match BLM format
-          const usfsFeatures = usfsResult.features.map((f: any) => ({
+        // Process USA Federal Lands (PAD-US) response
+        if (federalLandsResult && !federalLandsResult.error && federalLandsResult.features) {
+          console.log(`USA Federal Lands returned ${federalLandsResult.features.length} features`);
+          // Map full agency names to codes
+          const agencyToCode: Record<string, string> = {
+            'Forest Service': 'USFS',
+            'Bureau of Land Management': 'BLM',
+            'National Park Service': 'NPS',
+            'Fish and Wildlife Service': 'FWS',
+            'Department of Defense': 'DOD',
+            'Bureau of Reclamation': 'BOR',
+          };
+          // Transform Federal Lands features to match BLM format
+          const federalFeatures = federalLandsResult.features.map((f: any) => ({
             attributes: {
               OBJECTID: f.attributes.OBJECTID,
-              ADMIN_UNIT_NAME: f.attributes.FORESTNAME || 'National Forest',
-              ADMIN_AGENCY_CODE: 'USFS',
+              ADMIN_UNIT_NAME: f.attributes.unit_name || 'Federal Land',
+              ADMIN_AGENCY_CODE: agencyToCode[f.attributes.Agency] || f.attributes.Agency || 'FED',
             },
             geometry: f.geometry,
-            source: 'usfs',
+            source: 'federal',
           }));
-          features = features.concat(usfsFeatures);
+          features = features.concat(federalFeatures);
         }
 
         console.log(`Fetched ${features.length} total public land features`);
@@ -206,7 +222,7 @@ export function usePublicLands(
 
           const agencyCode = f.attributes.ADMIN_AGENCY_CODE || 'UNK';
           const baseName = f.attributes.ADMIN_UNIT_NAME || agencyNames[agencyCode] || 'Public Land';
-          const isUSFS = f.source === 'usfs';
+          const isFederalLands = f.source === 'federal';
 
           // Process each ring - find rings that have ANY point within search area
           f.geometry.rings.forEach((ring: number[][], ringIndex: number) => {
@@ -217,7 +233,7 @@ export function usePublicLands(
             let centroidLat: number;
             let centroidLng: number;
 
-            if (isUSFS) {
+            if (isFederalLands) {
               // USFS data is already in lat/lng (4326)
               // Ring format is [lng, lat]
               hasPointInArea = ring.some((coord: number[]) => {
@@ -267,7 +283,7 @@ export function usePublicLands(
             const distance = getDistanceMiles(centerLat, centerLng, centroidLat, centroidLng);
 
             lands.push({
-              id: `${isUSFS ? 'usfs' : 'sma'}-${f.attributes.OBJECTID}-${ringIndex}`,
+              id: `${isFederalLands ? 'federal' : 'sma'}-${f.attributes.OBJECTID}-${ringIndex}`,
               name: baseName,
               managingAgency: agencyCode,
               managingAgencyFull: agencyNames[agencyCode] || agencyCode,
@@ -285,7 +301,7 @@ export function usePublicLands(
         // Limit to 100 polygons to avoid performance issues
         const limitedLands = lands.slice(0, 100);
 
-        console.log(`Found ${limitedLands.length} public land areas for dispersed camping`);
+        console.log(`Found ${limitedLands.length} public land areas (PAD-US ownership data)`);
         setPublicLands(limitedLands);
       } catch (err) {
         console.error('Error fetching public lands:', err);
