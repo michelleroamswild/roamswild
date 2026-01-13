@@ -139,21 +139,6 @@ ALTER TABLE public.campsite_photos ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own profile" ON public.profiles
   FOR SELECT TO authenticated USING (auth.uid() = id);
 
-CREATE POLICY "Users can view collaborator profiles" ON public.profiles
-  FOR SELECT TO authenticated
-  USING (
-    id IN (
-      SELECT tc.user_id FROM public.trip_collaborators tc
-      JOIN public.saved_trips st ON tc.trip_id = st.id
-      WHERE st.user_id = auth.uid() OR st.owner_id = auth.uid()
-    )
-    OR id IN (
-      SELECT COALESCE(st.owner_id, st.user_id) FROM public.saved_trips st
-      JOIN public.trip_collaborators tc ON tc.trip_id = st.id
-      WHERE tc.user_id = auth.uid()
-    )
-  );
-
 CREATE POLICY "Users can update own profile" ON public.profiles
   FOR UPDATE TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
@@ -161,105 +146,64 @@ CREATE POLICY "Users can insert own profile" ON public.profiles
   FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
 
 -- SAVED_TRIPS POLICIES
-CREATE POLICY "Users can view own and shared trips" ON public.saved_trips
+-- Note: Using simple policies to avoid infinite recursion between tables
+-- Collaboration access is handled via SECURITY DEFINER functions instead
+CREATE POLICY "saved_trips_select" ON public.saved_trips
   FOR SELECT TO authenticated
-  USING (
-    auth.uid() = user_id
-    OR auth.uid() = owner_id
-    OR EXISTS (
-      SELECT 1 FROM public.trip_collaborators
-      WHERE trip_collaborators.trip_id = saved_trips.id
-      AND trip_collaborators.user_id = auth.uid()
-    )
-  );
+  USING (auth.uid() = user_id OR auth.uid() = owner_id);
 
-CREATE POLICY "Users can insert own trips" ON public.saved_trips
-  FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "saved_trips_insert" ON public.saved_trips
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can update trips they can edit" ON public.saved_trips
+CREATE POLICY "saved_trips_update" ON public.saved_trips
   FOR UPDATE TO authenticated
-  USING (
-    auth.uid() = user_id
-    OR auth.uid() = owner_id
-    OR EXISTS (
-      SELECT 1 FROM public.trip_collaborators
-      WHERE trip_collaborators.trip_id = saved_trips.id
-      AND trip_collaborators.user_id = auth.uid()
-      AND trip_collaborators.permission IN ('edit', 'admin')
-    )
-  );
+  USING (auth.uid() = user_id OR auth.uid() = owner_id);
 
-CREATE POLICY "Users can delete own trips" ON public.saved_trips
-  FOR DELETE TO authenticated USING (auth.uid() = user_id OR auth.uid() = owner_id);
+CREATE POLICY "saved_trips_delete" ON public.saved_trips
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id OR auth.uid() = owner_id);
 
 -- TRIP_COLLABORATORS POLICIES
-CREATE POLICY "Users can view collaborators for their trips" ON public.trip_collaborators
+-- Note: Simple policies to avoid recursion with saved_trips
+CREATE POLICY "trip_collaborators_select" ON public.trip_collaborators
   FOR SELECT TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.saved_trips
-      WHERE saved_trips.id = trip_collaborators.trip_id
-      AND (saved_trips.user_id = auth.uid() OR saved_trips.owner_id = auth.uid())
-    )
-    OR user_id = auth.uid()
-  );
+  USING (user_id = auth.uid());
 
-CREATE POLICY "Trip owners can manage collaborators" ON public.trip_collaborators
-  FOR ALL TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.saved_trips
-      WHERE saved_trips.id = trip_collaborators.trip_id
-      AND (saved_trips.user_id = auth.uid() OR saved_trips.owner_id = auth.uid())
-    )
-  );
+CREATE POLICY "trip_collaborators_insert" ON public.trip_collaborators
+  FOR INSERT TO authenticated
+  WITH CHECK (true);
+
+CREATE POLICY "trip_collaborators_update" ON public.trip_collaborators
+  FOR UPDATE TO authenticated
+  USING (user_id = auth.uid());
+
+CREATE POLICY "trip_collaborators_delete" ON public.trip_collaborators
+  FOR DELETE TO authenticated
+  USING (user_id = auth.uid());
 
 -- TRIP_SHARE_LINKS POLICIES
-CREATE POLICY "Trip owners can manage share links" ON public.trip_share_links
+-- Simplified: only trip owners can manage share links
+CREATE POLICY "trip_share_links_all" ON public.trip_share_links
   FOR ALL TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.saved_trips
-      WHERE saved_trips.id = trip_share_links.trip_id
-      AND (saved_trips.user_id = auth.uid() OR saved_trips.owner_id = auth.uid())
-    )
+    trip_id IN (SELECT id FROM public.saved_trips WHERE user_id = auth.uid() OR owner_id = auth.uid())
   );
 
 -- TRIP_ACTIVITY POLICIES
-CREATE POLICY "Users can view trip activity" ON public.trip_activity
+-- Simplified: users can view/insert activity for trips they own
+CREATE POLICY "trip_activity_select" ON public.trip_activity
   FOR SELECT TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.saved_trips
-      WHERE saved_trips.id = trip_activity.trip_id
-      AND (
-        saved_trips.user_id = auth.uid()
-        OR saved_trips.owner_id = auth.uid()
-        OR EXISTS (
-          SELECT 1 FROM public.trip_collaborators
-          WHERE trip_collaborators.trip_id = saved_trips.id
-          AND trip_collaborators.user_id = auth.uid()
-        )
-      )
-    )
+    trip_id IN (SELECT id FROM public.saved_trips WHERE user_id = auth.uid() OR owner_id = auth.uid())
+    OR user_id = auth.uid()
   );
 
-CREATE POLICY "Users can insert trip activity" ON public.trip_activity
+CREATE POLICY "trip_activity_insert" ON public.trip_activity
   FOR INSERT TO authenticated
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.saved_trips
-      WHERE saved_trips.id = trip_activity.trip_id
-      AND (
-        saved_trips.user_id = auth.uid()
-        OR saved_trips.owner_id = auth.uid()
-        OR EXISTS (
-          SELECT 1 FROM public.trip_collaborators
-          WHERE trip_collaborators.trip_id = saved_trips.id
-          AND trip_collaborators.user_id = auth.uid()
-        )
-      )
-    )
+    trip_id IN (SELECT id FROM public.saved_trips WHERE user_id = auth.uid() OR owner_id = auth.uid())
+    OR user_id = auth.uid()
   );
 
 -- SAVED_LOCATIONS POLICIES
