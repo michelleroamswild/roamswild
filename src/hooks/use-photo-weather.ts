@@ -34,13 +34,42 @@ function processWeatherData(
   elevationMeters: number,
   timestamp: Date,
   hoursAhead: number = 0,
-  hourlyValues?: TomorrowioValues[]
+  hourlyValues?: TomorrowioValues[],
+  hourlyTimestamps?: Date[]
 ): PhotoWeatherData {
+  const now = new Date();
   const sunTimes = getSunTimes(lat, lng, timestamp);
 
+  // Get next upcoming sunrise/sunset (use tomorrow if today's has passed)
+  let nextSunrise = sunTimes.sunrise;
+  let nextSunriseMorningGolden = sunTimes.goldenHourMorning;
+  let nextSunriseBlueHour = sunTimes.blueHourMorning;
+
+  if (sunTimes.sunrise < now) {
+    const tomorrow = new Date(timestamp);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowSunTimes = getSunTimes(lat, lng, tomorrow);
+    nextSunrise = tomorrowSunTimes.sunrise;
+    nextSunriseMorningGolden = tomorrowSunTimes.goldenHourMorning;
+    nextSunriseBlueHour = tomorrowSunTimes.blueHourMorning;
+  }
+
+  let nextSunset = sunTimes.sunset;
+  let nextSunsetEveningGolden = sunTimes.goldenHourEvening;
+  let nextSunsetBlueHour = sunTimes.blueHourEvening;
+
+  if (sunTimes.sunset < now) {
+    const tomorrow = new Date(timestamp);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowSunTimes = getSunTimes(lat, lng, tomorrow);
+    nextSunset = tomorrowSunTimes.sunset;
+    nextSunsetEveningGolden = tomorrowSunTimes.goldenHourEvening;
+    nextSunsetBlueHour = tomorrowSunTimes.blueHourEvening;
+  }
+
   const goldenHour = {
-    morning: sunTimes.goldenHourMorning,
-    evening: sunTimes.goldenHourEvening,
+    morning: nextSunriseMorningGolden,
+    evening: nextSunsetEveningGolden,
   };
 
   const conditions = analyzePhotoConditions(
@@ -48,7 +77,9 @@ function processWeatherData(
     elevationMeters,
     goldenHour,
     hoursAhead,
-    hourlyValues
+    hourlyValues,
+    hourlyTimestamps,
+    { sunrise: nextSunrise, sunset: nextSunset }
   );
 
   const metrics = extractMetrics(values);
@@ -58,10 +89,10 @@ function processWeatherData(
     lng,
     elevation: elevationMeters,
     timestamp,
-    sunrise: sunTimes.sunrise,
-    sunset: sunTimes.sunset,
-    goldenHourMorning: sunTimes.goldenHourMorning,
-    goldenHourEvening: sunTimes.goldenHourEvening,
+    sunrise: nextSunrise,
+    sunset: nextSunset,
+    goldenHourMorning: nextSunriseMorningGolden,
+    goldenHourEvening: nextSunsetEveningGolden,
     metrics,
     conditions,
   };
@@ -186,8 +217,9 @@ export function usePhotoWeather(
         const hourlyData = data.timelines.hourly;
         const dailyData = data.timelines.daily;
 
-        // Get all hourly values for trend analysis
-        const hourlyValues = hourlyData.slice(0, 12).map(d => d.values);
+        // Get all hourly values and timestamps for trend analysis
+        const hourlyValues = hourlyData.slice(0, 24).map(d => d.values);
+        const hourlyTimestamps = hourlyData.slice(0, 24).map(d => new Date(d.time));
 
         // Process current conditions
         const now = new Date();
@@ -199,7 +231,8 @@ export function usePhotoWeather(
           elevationMeters,
           now,
           0,
-          hourlyValues
+          hourlyValues,
+          hourlyTimestamps
         );
 
         // Process hourly data
@@ -214,7 +247,8 @@ export function usePhotoWeather(
               elevationMeters,
               timestamp,
               index,
-              hourlyValues
+              hourlyValues,
+              hourlyTimestamps
             );
           });
 
@@ -300,7 +334,8 @@ export function useMultiLocationPhotoWeather(
           const data: TomorrowioResponse = await response.json();
 
           if (data.timelines?.hourly?.length) {
-            const hourlyValues = data.timelines.hourly.slice(0, 12).map(d => d.values);
+            const hourlyValues = data.timelines.hourly.slice(0, 24).map(d => d.values);
+            const hourlyTimestamps = data.timelines.hourly.slice(0, 24).map(d => new Date(d.time));
             const currentValues = data.timelines.hourly[0].values;
             const current = processWeatherData(
               currentValues,
@@ -309,7 +344,8 @@ export function useMultiLocationPhotoWeather(
               loc.elevation ?? 0,
               new Date(),
               0,
-              hourlyValues
+              hourlyValues,
+              hourlyTimestamps
             );
 
             const forecast: PhotoWeatherForecast = {

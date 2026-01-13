@@ -4,6 +4,8 @@ import {
   TimingAdvice,
   TomorrowioValues,
   WeatherMetrics,
+  ShotSuggestion,
+  TimeSpecificForecast,
 } from '@/types/weather';
 
 /**
@@ -66,8 +68,8 @@ export function analyzeSkyConditions(data: TomorrowioValues): ConditionInsight[]
     });
   }
 
-  // Cloud height specifics
-  if (cloudBase !== null) {
+  // Cloud height specifics - only show when there are actually clouds
+  if (cloudBase !== null && cloudCover >= 10) {
     if (cloudBase >= 6) {
       insights.push({
         label: 'High Cirrus Present',
@@ -81,6 +83,13 @@ export function analyzeSkyConditions(data: TomorrowioValues): ConditionInsight[]
         description: 'Clouds at 2-6km altitude create excellent color reflection',
         impact: 'positive',
         icon: 'palette',
+      });
+    } else if (cloudBase < 2 && cloudCover >= 20) {
+      insights.push({
+        label: 'Low Cloud Layer',
+        description: 'Clouds below 2km may create moody atmosphere but could block horizon light',
+        impact: 'neutral',
+        icon: 'clouds',
       });
     }
   }
@@ -458,6 +467,396 @@ export function getForecastConfidence(hoursAhead: number): number {
 }
 
 /**
+ * Get seasonal photography insights based on location and time of year
+ */
+export function getSeasonalInsights(
+  lat: number,
+  elevationMeters: number,
+  date: Date = new Date()
+): ConditionInsight[] {
+  const insights: ConditionInsight[] = [];
+  const month = date.getMonth(); // 0-11
+  const isNorthernHemisphere = lat > 0;
+
+  // Determine season (for northern hemisphere, flip for southern)
+  let season: 'winter' | 'spring' | 'summer' | 'fall';
+  if (isNorthernHemisphere) {
+    if (month >= 2 && month <= 4) season = 'spring';
+    else if (month >= 5 && month <= 7) season = 'summer';
+    else if (month >= 8 && month <= 10) season = 'fall';
+    else season = 'winter';
+  } else {
+    if (month >= 2 && month <= 4) season = 'fall';
+    else if (month >= 5 && month <= 7) season = 'winter';
+    else if (month >= 8 && month <= 10) season = 'spring';
+    else season = 'summer';
+  }
+
+  const absLat = Math.abs(lat);
+
+  // Season-specific insights (always show one)
+  if (season === 'winter') {
+    if (elevationMeters >= 300) {
+      insights.push({
+        label: 'Peak Inversion Season',
+        description: 'Winter mornings often produce valley fog — arrive early for sea of clouds',
+        impact: 'positive',
+        icon: 'calendar',
+      });
+    } else {
+      insights.push({
+        label: 'Winter Light',
+        description: 'Low sun angle creates long shadows and warm side-light all day',
+        impact: 'positive',
+        icon: 'sun-horizon',
+      });
+    }
+  } else if (season === 'fall') {
+    insights.push({
+      label: 'Prime Sunset Season',
+      description: 'Autumn typically brings clearer air and more dramatic cloud formations',
+      impact: 'positive',
+      icon: 'sparkle',
+    });
+  } else if (season === 'spring') {
+    insights.push({
+      label: 'Variable Conditions',
+      description: 'Spring weather is dynamic — dramatic clouds often follow clearing storms',
+      impact: 'neutral',
+      icon: 'calendar',
+    });
+  } else if (season === 'summer') {
+    if (absLat < 40) {
+      insights.push({
+        label: 'Monsoon Season',
+        description: 'Summer afternoons may bring dramatic storm clouds for photography',
+        impact: 'neutral',
+        icon: 'cloud-rain',
+      });
+    } else {
+      insights.push({
+        label: 'Extended Golden Hour',
+        description: 'Summer golden hours last longer — more time to find compositions',
+        impact: 'positive',
+        icon: 'sun-horizon',
+      });
+    }
+  }
+
+  // Additional elevation insight
+  if (elevationMeters >= 1000) {
+    insights.push({
+      label: 'High Elevation Advantage',
+      description: 'Above typical cloud layers — potential for dramatic above-cloud views',
+      impact: 'positive',
+      icon: 'mountains',
+    });
+  }
+
+  return insights;
+}
+
+/**
+ * Convert wind direction degrees to cardinal direction
+ */
+export function getWindDirectionName(degrees: number): string {
+  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const index = Math.round(degrees / 45) % 8;
+  return directions[index];
+}
+
+/**
+ * Analyze wind direction for sunset/sunrise photography
+ * Clouds moving from west catch sunset light; from east catch sunrise light
+ */
+export function analyzeWindDirection(
+  windDirection: number | undefined,
+  cloudCover: number
+): ConditionInsight | undefined {
+  if (windDirection === undefined) return undefined;
+
+  const dir = getWindDirectionName(windDirection);
+  const hasClouds = cloudCover >= 15;
+
+  // West/Southwest winds push clouds that catch sunset light
+  if (windDirection >= 225 && windDirection <= 315) {
+    return {
+      label: hasClouds ? 'Clouds Favor Sunset' : 'Wind from West',
+      description: hasClouds
+        ? `Wind from ${dir} — clouds moving east will catch and reflect sunset light`
+        : `Wind from ${dir} — if clouds develop, they\'ll move to catch sunset light`,
+      impact: hasClouds ? 'positive' : 'neutral',
+      icon: 'compass-west',
+    };
+  }
+
+  // East/Northeast winds push clouds that catch sunrise light
+  if (windDirection >= 45 && windDirection <= 135) {
+    return {
+      label: hasClouds ? 'Clouds Favor Sunrise' : 'Wind from East',
+      description: hasClouds
+        ? `Wind from ${dir} — clouds moving west will catch and reflect sunrise light`
+        : `Wind from ${dir} — if clouds develop, they\'ll move to catch sunrise light`,
+      impact: hasClouds ? 'positive' : 'neutral',
+      icon: 'compass-east',
+    };
+  }
+
+  // North/South winds - clouds move parallel to sun path
+  if ((windDirection >= 315 || windDirection < 45) || (windDirection >= 135 && windDirection < 225)) {
+    return {
+      label: 'Wind from ' + dir,
+      description: `Clouds ${hasClouds ? 'are' : 'would be'} moving ${windDirection < 45 || windDirection >= 315 ? 'south' : 'north'} along the horizon`,
+      impact: 'neutral',
+      icon: 'compass',
+    };
+  }
+
+  return undefined;
+}
+
+/**
+ * Generate shot type suggestions based on conditions
+ */
+export function generateShotSuggestions(
+  data: TomorrowioValues,
+  skyInsights: ConditionInsight[],
+  atmosphereInsights: ConditionInsight[],
+  windInsights: ConditionInsight[]
+): ShotSuggestion[] {
+  const suggestions: ShotSuggestion[] = [];
+  const cloudCover = data.cloudCover ?? 0;
+  const visibility = data.visibility ?? 10;
+  const windSpeed = data.windSpeed ?? 0;
+  const windMph = windSpeed * 2.237;
+  const humidity = data.humidity ?? 50;
+  const temp = data.temperature ?? 15;
+  const dewPoint = data.dewPoint ?? 10;
+  const dewDiff = temp - dewPoint;
+
+  // Wide landscapes - when sky is interesting
+  const hasDramaticSky = skyInsights.some(i =>
+    i.label.includes('Dramatic') ||
+    i.label.includes('Layered') ||
+    i.label.includes('Post-Storm')
+  );
+  if (hasDramaticSky || (cloudCover >= 20 && cloudCover <= 70)) {
+    suggestions.push({
+      type: 'Wide Landscapes',
+      reason: 'Dramatic clouds will add interest to wide compositions',
+      icon: 'mountains',
+    });
+  }
+
+  // Reflections - calm water
+  if (windMph < 5) {
+    suggestions.push({
+      type: 'Reflections',
+      reason: 'Calm winds — lakes and ponds will be mirror-like',
+      icon: 'water',
+    });
+  }
+
+  // Waterfalls/forests - overcast or soft light
+  if (cloudCover > 80 || visibility < 8) {
+    suggestions.push({
+      type: 'Waterfalls & Forests',
+      reason: 'Soft, diffused light is ideal for intimate forest scenes',
+      icon: 'tree',
+    });
+  }
+
+  // Fog/mist shots
+  if (dewDiff <= 3 && humidity >= 85) {
+    suggestions.push({
+      type: 'Moody Atmosphere',
+      reason: 'Mist conditions create ethereal, layered compositions',
+      icon: 'fog',
+    });
+  }
+
+  // Silhouettes - clear horizon
+  if (cloudCover < 30 && visibility > 15) {
+    suggestions.push({
+      type: 'Silhouettes',
+      reason: 'Clear horizon will create strong silhouette opportunities',
+      icon: 'silhouette',
+    });
+  }
+
+  // Long exposures - windy conditions
+  if (windMph >= 8 && windMph <= 20 && cloudCover >= 30) {
+    suggestions.push({
+      type: 'Long Exposure Clouds',
+      reason: 'Moving clouds can create dramatic streaks with ND filters',
+      icon: 'timer',
+    });
+  }
+
+  // Detail/macro - harsh or flat light
+  if (cloudCover > 90 || (cloudCover < 10 && visibility > 15)) {
+    suggestions.push({
+      type: 'Details & Textures',
+      reason: cloudCover > 90
+        ? 'Flat light is perfect for texture and detail work'
+        : 'Clear conditions favor close-up natural details',
+      icon: 'magnify',
+    });
+  }
+
+  // Astro potential - clear and dark
+  if (cloudCover < 15 && visibility > 20) {
+    suggestions.push({
+      type: 'Night Sky Potential',
+      reason: 'Clear skies may allow for star photography after dark',
+      icon: 'stars',
+    });
+  }
+
+  return suggestions.slice(0, 4); // Limit to top 4 suggestions
+}
+
+/**
+ * Create time-specific forecast for sunrise or sunset
+ */
+export function createTimeSpecificForecast(
+  targetTime: Date,
+  hourlyData: TomorrowioValues[],
+  hourlyTimestamps: Date[],
+  type: 'sunrise' | 'sunset',
+  goldenHour: { start: Date; end: Date },
+  blueHour: { start: Date; end: Date }
+): TimeSpecificForecast | undefined {
+  if (!hourlyData.length || !hourlyTimestamps.length) return undefined;
+
+  // Find the hourly data point closest to the target time
+  const targetMs = targetTime.getTime();
+  let closestIndex = 0;
+  let closestDiff = Math.abs(hourlyTimestamps[0].getTime() - targetMs);
+
+  for (let i = 1; i < hourlyTimestamps.length; i++) {
+    const diff = Math.abs(hourlyTimestamps[i].getTime() - targetMs);
+    if (diff < closestDiff) {
+      closestDiff = diff;
+      closestIndex = i;
+    }
+  }
+
+  // If more than 12 hours away, data isn't relevant (allows for showing next sunrise/sunset)
+  if (closestDiff > 12 * 60 * 60 * 1000) return undefined;
+
+  const data = hourlyData[closestIndex];
+  const conditions: ConditionInsight[] = [];
+
+  // Get temperature at this time
+  const temperature = data.temperature ?? 15;
+
+  // Analyze conditions at that specific time
+  const cloudCover = data.cloudCover ?? 0;
+  const cloudBase = data.cloudBase;
+  const visibility = data.visibility ?? 10;
+  const precipProb = data.precipitationProbability ?? 0;
+  const windDirection = data.windDirection;
+
+  // Cloud analysis for this time
+  if (cloudCover >= 20 && cloudCover <= 60 && cloudBase !== null && cloudBase >= 3) {
+    conditions.push({
+      label: type === 'sunset' ? 'Good Sunset Clouds' : 'Good Sunrise Clouds',
+      description: `${Math.round(cloudCover)}% cloud cover at ideal height for color`,
+      impact: 'positive',
+      icon: 'clouds-sun',
+    });
+  } else if (cloudCover > 85) {
+    conditions.push({
+      label: 'Heavy Cloud Cover',
+      description: `${Math.round(cloudCover)}% clouds may block direct light`,
+      impact: 'caution',
+      icon: 'cloud-heavy',
+    });
+  } else if (cloudCover >= 60 && cloudCover <= 85) {
+    conditions.push({
+      label: 'Partly Cloudy',
+      description: `${Math.round(cloudCover)}% coverage — watch for dramatic breaks`,
+      impact: 'neutral',
+      icon: 'clouds',
+    });
+  } else if (cloudCover >= 15 && cloudCover < 20) {
+    conditions.push({
+      label: 'Light Clouds',
+      description: `${Math.round(cloudCover)}% coverage — subtle color accents possible`,
+      impact: 'neutral',
+      icon: 'clouds-sun',
+    });
+  } else {
+    conditions.push({
+      label: 'Clear Sky Expected',
+      description: 'Minimal clouds — clean gradient light, good for silhouettes',
+      impact: 'neutral',
+      icon: 'sun',
+    });
+  }
+
+  // Precipitation at target time
+  if (precipProb > 50) {
+    conditions.push({
+      label: 'Rain Likely',
+      description: `${Math.round(precipProb)}% chance of precipitation`,
+      impact: 'negative',
+      icon: 'rain',
+    });
+  }
+
+  // Visibility at target time
+  if (visibility < 5) {
+    conditions.push({
+      label: 'Low Visibility',
+      description: `${visibility.toFixed(1)}km visibility — hazy conditions`,
+      impact: 'caution',
+      icon: 'haze',
+    });
+  } else if (visibility > 20) {
+    conditions.push({
+      label: 'Excellent Visibility',
+      description: `${visibility.toFixed(0)}km visibility — crisp, clear conditions`,
+      impact: 'positive',
+      icon: 'eye',
+    });
+  }
+
+  // Wind direction insight
+  let windDirectionInsight: string | undefined;
+  if (windDirection !== undefined && cloudCover >= 20) {
+    const dir = getWindDirectionName(windDirection);
+    if (type === 'sunset' && windDirection >= 225 && windDirection <= 315) {
+      windDirectionInsight = `Wind from ${dir} pushing clouds to catch sunset light`;
+    } else if (type === 'sunrise' && windDirection >= 45 && windDirection <= 135) {
+      windDirectionInsight = `Wind from ${dir} pushing clouds to catch sunrise light`;
+    }
+  }
+
+  // Determine overall for this time
+  const positives = conditions.filter(c => c.impact === 'positive').length;
+  const negatives = conditions.filter(c => c.impact === 'negative').length;
+  let overall: 'excellent' | 'good' | 'fair' | 'challenging';
+
+  if (negatives >= 1) overall = 'challenging';
+  else if (positives >= 1 && negatives === 0) overall = cloudCover >= 20 && cloudCover <= 60 ? 'excellent' : 'good';
+  else overall = 'fair';
+
+  return {
+    time: targetTime,
+    temperature,
+    conditions,
+    overall,
+    windDirection: windDirectionInsight,
+    goldenHourStart: goldenHour.start,
+    goldenHourEnd: goldenHour.end,
+    blueHourStart: blueHour.start,
+    blueHourEnd: blueHour.end,
+  };
+}
+
+/**
  * Main function to analyze all conditions
  */
 export function analyzePhotoConditions(
@@ -465,7 +864,9 @@ export function analyzePhotoConditions(
   elevationMeters: number,
   goldenHour: { morning: { start: Date; end: Date }; evening: { start: Date; end: Date } },
   hoursAhead: number = 0,
-  hourlyData?: TomorrowioValues[]
+  hourlyData?: TomorrowioValues[],
+  hourlyTimestamps?: Date[],
+  sunTimes?: { sunrise: Date; sunset: Date }
 ): PhotoConditions {
   const sky = analyzeSkyConditions(data);
   const atmosphere = analyzeAtmosphere(data);
@@ -475,6 +876,38 @@ export function analyzePhotoConditions(
   const inversion = analyzeInversion(data, elevationMeters);
   const timing = analyzeTimingAdvice(data, hourlyData);
 
+  // Add wind direction insight to sky conditions if relevant
+  const windDirectionInsight = analyzeWindDirection(data.windDirection, data.cloudCover ?? 0);
+  if (windDirectionInsight) {
+    sky.push(windDirectionInsight);
+  }
+
+  // Generate shot suggestions
+  const shotSuggestions = generateShotSuggestions(data, sky, atmosphere, wind);
+
+  // Create time-specific forecasts if we have the data
+  let sunriseForecast: TimeSpecificForecast | undefined;
+  let sunsetForecast: TimeSpecificForecast | undefined;
+
+  if (hourlyData && hourlyTimestamps && sunTimes) {
+    sunriseForecast = createTimeSpecificForecast(
+      sunTimes.sunrise,
+      hourlyData,
+      hourlyTimestamps,
+      'sunrise',
+      goldenHour.morning,
+      { start: new Date(sunTimes.sunrise.getTime() - 30 * 60 * 1000), end: sunTimes.sunrise } // Blue hour before sunrise
+    );
+    sunsetForecast = createTimeSpecificForecast(
+      sunTimes.sunset,
+      hourlyData,
+      hourlyTimestamps,
+      'sunset',
+      goldenHour.evening,
+      { start: sunTimes.sunset, end: new Date(sunTimes.sunset.getTime() + 30 * 60 * 1000) } // Blue hour after sunset
+    );
+  }
+
   return {
     headline: generateHeadline(sky, atmosphere, precipitation, wind),
     sky,
@@ -483,6 +916,9 @@ export function analyzePhotoConditions(
     wind,
     humidity,
     inversion,
+    sunriseForecast,
+    sunsetForecast,
+    shotSuggestions,
     timing,
     goldenHour,
     overall: assessOverall(sky, atmosphere, precipitation),
@@ -502,6 +938,7 @@ export function extractMetrics(data: TomorrowioValues): WeatherMetrics {
     temperature: data.temperature ?? 15,
     windSpeed: data.windSpeed ?? 0,
     windGust: data.windGust ?? 0,
+    windDirection: data.windDirection ?? 0,
     precipProbability: data.precipitationProbability ?? 0,
     pressure: data.pressureSurfaceLevel ?? 1013,
   };

@@ -14,6 +14,27 @@ export interface TimingAdvice {
   reason: string;          // e.g., "Clouds increasing post-sunset — peak color may come later"
 }
 
+// Shot type suggestion based on conditions
+export interface ShotSuggestion {
+  type: string;            // e.g., "Wide Landscapes", "Reflections", "Intimate Forest"
+  reason: string;          // e.g., "Dramatic clouds will add interest to wide compositions"
+  icon?: string;
+}
+
+// Time-specific forecast (for sunrise or sunset)
+export interface TimeSpecificForecast {
+  time: Date;
+  temperature: number;     // Temperature at this time (°C)
+  conditions: ConditionInsight[];
+  overall: 'excellent' | 'good' | 'fair' | 'challenging';
+  windDirection?: string;  // e.g., "Clouds from west will catch light"
+  // Time windows
+  goldenHourStart: Date;
+  goldenHourEnd: Date;
+  blueHourStart: Date;
+  blueHourEnd: Date;
+}
+
 // Complete photography conditions analysis
 export interface PhotoConditions {
   // Main headline summary
@@ -29,6 +50,13 @@ export interface PhotoConditions {
   // Special conditions
   inversion?: ConditionInsight;  // Cloud inversion potential
   alpenglow?: ConditionInsight;  // Mountain glow potential
+
+  // Time-specific forecasts
+  sunriseForecast?: TimeSpecificForecast;
+  sunsetForecast?: TimeSpecificForecast;
+
+  // Shot suggestions
+  shotSuggestions: ShotSuggestion[];
 
   // Timing recommendations
   timing: TimingAdvice;
@@ -51,6 +79,7 @@ export interface WeatherMetrics {
   temperature: number;     // °C
   windSpeed: number;       // m/s
   windGust: number;        // m/s
+  windDirection: number;   // Degrees (0-360)
   precipProbability: number; // 0-100%
   pressure: number;        // hPa
 }
@@ -108,6 +137,7 @@ export interface TomorrowioValues {
   precipitationProbability?: number;
   windSpeed?: number;
   windGust?: number;
+  windDirection?: number; // Degrees (0-360, 0=N, 90=E, 180=S, 270=W)
   pressureSurfaceLevel?: number;
 }
 
