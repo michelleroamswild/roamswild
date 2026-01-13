@@ -47,9 +47,13 @@ function webMercatorToLatLng(x: number, y: number): { lat: number; lng: number }
 const agencyNames: Record<string, string> = {
   'BLM': 'Bureau of Land Management',
   'USFS': 'US Forest Service',
+  'FS': 'US Forest Service',
   'FWS': 'Fish & Wildlife Service',
   'NPS': 'National Park Service',
 };
+
+// USFS Administrative Forest Boundaries service
+const USFS_BOUNDARIES_URL = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_ForestSystemBoundaries_01/MapServer/0/query';
 
 export function usePublicLands(
   centerLat: number,
@@ -83,10 +87,9 @@ export function usePublicLands(
           ymax: center.y + meterRadius,
         };
 
-        // Query BLM SMA service for BLM, USFS, NPS, and FWS lands
-        // NPS includes National Recreation Areas, FWS includes Wildlife Refuges
-        const params = new URLSearchParams({
-          where: "ADMIN_AGENCY_CODE IN ('BLM', 'USFS', 'NPS', 'FWS')",
+        // Query both BLM SMA and USFS boundaries services in parallel
+        const blmParams = new URLSearchParams({
+          where: "ADMIN_AGENCY_CODE IN ('BLM', 'NPS', 'FWS')",
           geometry: JSON.stringify({
             xmin: bbox.xmin,
             ymin: bbox.ymin,
@@ -99,34 +102,102 @@ export function usePublicLands(
           spatialRel: 'esriSpatialRelIntersects',
           outFields: 'OBJECTID,ADMIN_UNIT_NAME,ADMIN_AGENCY_CODE',
           returnGeometry: 'true',
+          resultRecordCount: '100',
+          f: 'json',
+        });
+
+        // USFS query uses lat/lng (4326)
+        const usfsParams = new URLSearchParams({
+          where: '1=1',
+          geometry: JSON.stringify({
+            xmin: centerLng - (radiusMiles / 50), // Rough conversion
+            ymin: centerLat - (radiusMiles / 69),
+            xmax: centerLng + (radiusMiles / 50),
+            ymax: centerLat + (radiusMiles / 69),
+            spatialReference: { wkid: 4326 },
+          }),
+          geometryType: 'esriGeometryEnvelope',
+          inSR: '4326',
+          outSR: '4326',
+          spatialRel: 'esriSpatialRelIntersects',
+          outFields: 'OBJECTID,FORESTNAME,FORESTNUMBER',
+          returnGeometry: 'true',
           resultRecordCount: '50',
           f: 'json',
         });
 
-        const url = `/api/blm-sma/BLM_Natl_SMA_Cached_with_PriUnk/MapServer/1/query?${params.toString()}`;
+        console.log('Fetching public lands from BLM SMA and USFS services');
 
-        console.log('Fetching public lands from BLM SMA service');
+        // Fetch both in parallel - handle failures gracefully
+        const [blmResult, usfsResult] = await Promise.all([
+          fetch(`/api/blm-sma/BLM_Natl_SMA_Cached_with_PriUnk/MapServer/1/query?${blmParams.toString()}`)
+            .then(async (res) => {
+              if (!res.ok) {
+                console.warn(`BLM SMA API returned ${res.status}`);
+                return null;
+              }
+              return res.json();
+            })
+            .catch(err => {
+              console.warn('BLM SMA fetch failed:', err);
+              return null;
+            }),
+          fetch(`${USFS_BOUNDARIES_URL}?${usfsParams.toString()}`)
+            .then(async (res) => {
+              if (!res.ok) {
+                console.warn(`USFS API returned ${res.status}`);
+                return null;
+              }
+              return res.json();
+            })
+            .catch(err => {
+              console.warn('USFS boundaries fetch failed:', err);
+              return null;
+            }),
+        ]);
 
-        const response = await fetch(url);
+        let features: any[] = [];
 
-        if (!response.ok) {
-          throw new Error(`BLM SMA API error: ${response.status}`);
+        // Process BLM response
+        if (blmResult && !blmResult.error && blmResult.features) {
+          console.log(`BLM returned ${blmResult.features.length} features`);
+          features = features.concat(blmResult.features.map((f: any) => ({
+            ...f,
+            source: 'blm',
+          })));
         }
 
-        const data = await response.json();
-
-        if (data.error) {
-          console.error('BLM SMA API error:', data.error);
-          throw new Error(data.error.message || 'Failed to fetch public lands');
+        // Process USFS response
+        if (usfsResult && !usfsResult.error && usfsResult.features) {
+          console.log(`USFS returned ${usfsResult.features.length} features`);
+          // Transform USFS features to match BLM format
+          const usfsFeatures = usfsResult.features.map((f: any) => ({
+            attributes: {
+              OBJECTID: f.attributes.OBJECTID,
+              ADMIN_UNIT_NAME: f.attributes.FORESTNAME || 'National Forest',
+              ADMIN_AGENCY_CODE: 'USFS',
+            },
+            geometry: f.geometry,
+            source: 'usfs',
+          }));
+          features = features.concat(usfsFeatures);
         }
 
-        const features = data.features || [];
+        console.log(`Fetched ${features.length} total public land features`);
+
+        // If no features from either source, that's okay - just show empty
+        if (features.length === 0) {
+          console.log('No public land features found in this area');
+          setPublicLands([]);
+          setLoading(false);
+          return;
+        }
 
         // Transform features to our format
         // Each feature may have multiple rings (multi-polygon), so we flatten them
         const lands: PublicLand[] = [];
 
-        // Convert search center to Web Mercator for comparison
+        // Convert search center to Web Mercator for comparison (BLM data)
         const searchCenter = latLngToWebMercator(centerLat, centerLng);
         const searchRadiusMeters = radiusMiles * 1609;
 
@@ -135,43 +206,73 @@ export function usePublicLands(
 
           const agencyCode = f.attributes.ADMIN_AGENCY_CODE || 'UNK';
           const baseName = f.attributes.ADMIN_UNIT_NAME || agencyNames[agencyCode] || 'Public Land';
+          const isUSFS = f.source === 'usfs';
 
           // Process each ring - find rings that have ANY point within search area
           f.geometry.rings.forEach((ring: number[][], ringIndex: number) => {
             if (ring.length < 3) return; // Need at least 3 points for a polygon
 
-            // Check if any point in the ring is within the search bounding box
-            const hasPointInArea = ring.some((coord: number[]) => {
-              const dx = Math.abs(coord[0] - searchCenter.x);
-              const dy = Math.abs(coord[1] - searchCenter.y);
-              return dx < searchRadiusMeters && dy < searchRadiusMeters;
-            });
+            let hasPointInArea: boolean;
+            let polygon: { lat: number; lng: number }[];
+            let centroidLat: number;
+            let centroidLng: number;
 
-            if (!hasPointInArea) return;
+            if (isUSFS) {
+              // USFS data is already in lat/lng (4326)
+              // Ring format is [lng, lat]
+              hasPointInArea = ring.some((coord: number[]) => {
+                const coordLng = coord[0];
+                const coordLat = coord[1];
+                return Math.abs(coordLat - centerLat) < (radiusMiles / 69) &&
+                       Math.abs(coordLng - centerLng) < (radiusMiles / 50);
+              });
 
-            // Calculate centroid for the marker position
-            const sumX = ring.reduce((sum: number, coord: number[]) => sum + coord[0], 0);
-            const sumY = ring.reduce((sum: number, coord: number[]) => sum + coord[1], 0);
-            const centroidX = sumX / ring.length;
-            const centroidY = sumY / ring.length;
+              if (!hasPointInArea) return;
 
-            // Convert centroid back to lat/lng
-            const { lat, lng } = webMercatorToLatLng(centroidX, centroidY);
-            const distance = getDistanceMiles(centerLat, centerLng, lat, lng);
+              // Calculate centroid
+              const sumLng = ring.reduce((sum: number, coord: number[]) => sum + coord[0], 0);
+              const sumLat = ring.reduce((sum: number, coord: number[]) => sum + coord[1], 0);
+              centroidLng = sumLng / ring.length;
+              centroidLat = sumLat / ring.length;
 
-            // Convert polygon ring to lat/lng coordinates
-            const polygon = ring.map((coord: number[]) => {
-              const converted = webMercatorToLatLng(coord[0], coord[1]);
-              return { lat: converted.lat, lng: converted.lng };
-            });
+              // Convert ring to polygon format
+              polygon = ring.map((coord: number[]) => ({
+                lat: coord[1],
+                lng: coord[0],
+              }));
+            } else {
+              // BLM data is in Web Mercator (102100)
+              hasPointInArea = ring.some((coord: number[]) => {
+                const dx = Math.abs(coord[0] - searchCenter.x);
+                const dy = Math.abs(coord[1] - searchCenter.y);
+                return dx < searchRadiusMeters && dy < searchRadiusMeters;
+              });
+
+              if (!hasPointInArea) return;
+
+              // Calculate centroid in Web Mercator, then convert
+              const sumX = ring.reduce((sum: number, coord: number[]) => sum + coord[0], 0);
+              const sumY = ring.reduce((sum: number, coord: number[]) => sum + coord[1], 0);
+              const centroid = webMercatorToLatLng(sumX / ring.length, sumY / ring.length);
+              centroidLat = centroid.lat;
+              centroidLng = centroid.lng;
+
+              // Convert polygon ring to lat/lng coordinates
+              polygon = ring.map((coord: number[]) => {
+                const converted = webMercatorToLatLng(coord[0], coord[1]);
+                return { lat: converted.lat, lng: converted.lng };
+              });
+            }
+
+            const distance = getDistanceMiles(centerLat, centerLng, centroidLat, centroidLng);
 
             lands.push({
-              id: `sma-${f.attributes.OBJECTID}-${ringIndex}`,
+              id: `${isUSFS ? 'usfs' : 'sma'}-${f.attributes.OBJECTID}-${ringIndex}`,
               name: baseName,
               managingAgency: agencyCode,
               managingAgencyFull: agencyNames[agencyCode] || agencyCode,
-              lat,
-              lng,
+              lat: centroidLat,
+              lng: centroidLng,
               distance,
               polygon,
             });
@@ -181,8 +282,8 @@ export function usePublicLands(
         // Sort by distance
         lands.sort((a, b) => a.distance - b.distance);
 
-        // Limit to 50 polygons to avoid performance issues
-        const limitedLands = lands.slice(0, 50);
+        // Limit to 100 polygons to avoid performance issues
+        const limitedLands = lands.slice(0, 100);
 
         console.log(`Found ${limitedLands.length} public land areas for dispersed camping`);
         setPublicLands(limitedLands);

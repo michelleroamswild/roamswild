@@ -156,15 +156,33 @@ function findDeadEnds(
   // Collect all endpoints from all roads
   const endpointMap = new Map<string, EndpointInfo>();
 
+  // Helper to safely get coordinate values
+  const getCoordLng = (coord: any): number | null => {
+    if (Array.isArray(coord) && typeof coord[0] === 'number') return coord[0];
+    if (coord && typeof coord.lng === 'number') return coord.lng;
+    if (coord && typeof coord.lon === 'number') return coord.lon;
+    return null;
+  };
+
+  const getCoordLat = (coord: any): number | null => {
+    if (Array.isArray(coord) && typeof coord[1] === 'number') return coord[1];
+    if (coord && typeof coord.lat === 'number') return coord.lat;
+    return null;
+  };
+
   // Process MVUM roads - these are always on public land (National Forest)
   mvumRoads.forEach(road => {
     if (!road.geometry?.coordinates?.length) return;
     const coords = road.geometry.coordinates;
 
     // Start point
-    const startKey = `${coords[0][1].toFixed(4)},${coords[0][0].toFixed(4)}`;
+    const startLng = getCoordLng(coords[0]);
+    const startLat = getCoordLat(coords[0]);
+    if (startLat === null || startLng === null) return;
+
+    const startKey = `${startLat.toFixed(4)},${startLng.toFixed(4)}`;
     const startEntry = endpointMap.get(startKey) || {
-      lat: coords[0][1], lng: coords[0][0], count: 0, roads: [],
+      lat: startLat, lng: startLng, count: 0, roads: [],
       isPublicLand: false, isHighClearance: false
     };
     startEntry.count++;
@@ -175,9 +193,13 @@ function findDeadEnds(
 
     // End point
     const endCoord = coords[coords.length - 1];
-    const endKey = `${endCoord[1].toFixed(4)},${endCoord[0].toFixed(4)}`;
+    const endLng = getCoordLng(endCoord);
+    const endLat = getCoordLat(endCoord);
+    if (endLat === null || endLng === null) return;
+
+    const endKey = `${endLat.toFixed(4)},${endLng.toFixed(4)}`;
     const endEntry = endpointMap.get(endKey) || {
-      lat: endCoord[1], lng: endCoord[0], count: 0, roads: [],
+      lat: endLat, lng: endLng, count: 0, roads: [],
       isPublicLand: false, isHighClearance: false
     };
     endEntry.count++;
@@ -195,9 +217,13 @@ function findDeadEnds(
     const coords = track.geometry.coordinates;
 
     // Start point
-    const startKey = `${coords[0][1].toFixed(4)},${coords[0][0].toFixed(4)}`;
+    const startLng = getCoordLng(coords[0]);
+    const startLat = getCoordLat(coords[0]);
+    if (startLat === null || startLng === null) return;
+
+    const startKey = `${startLat.toFixed(4)},${startLng.toFixed(4)}`;
     const startEntry = endpointMap.get(startKey) || {
-      lat: coords[0][1], lng: coords[0][0], count: 0, roads: [],
+      lat: startLat, lng: startLng, count: 0, roads: [],
       isPublicLand: false, isHighClearance: false
     };
     startEntry.count++;
@@ -208,9 +234,13 @@ function findDeadEnds(
 
     // End point
     const endCoord = coords[coords.length - 1];
-    const endKey = `${endCoord[1].toFixed(4)},${endCoord[0].toFixed(4)}`;
+    const endLng = getCoordLng(endCoord);
+    const endLat = getCoordLat(endCoord);
+    if (endLat === null || endLng === null) return;
+
+    const endKey = `${endLat.toFixed(4)},${endLng.toFixed(4)}`;
     const endEntry = endpointMap.get(endKey) || {
-      lat: endCoord[1], lng: endCoord[0], count: 0, roads: [],
+      lat: endLat, lng: endLng, count: 0, roads: [],
       isPublicLand: false, isHighClearance: false
     };
     endEntry.count++;

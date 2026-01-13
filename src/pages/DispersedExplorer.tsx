@@ -190,6 +190,27 @@ const DispersedExplorer = () => {
 
   const totalRoads = mvumRoads.length + osmTracks.length;
 
+  // Helper to safely convert coordinates to LatLng, filtering out invalid ones
+  const toLatLngPath = (coordinates: any[]): google.maps.LatLngLiteral[] => {
+    if (!Array.isArray(coordinates)) return [];
+    return coordinates
+      .map((coord) => {
+        // Handle [lng, lat] array format
+        if (Array.isArray(coord) && typeof coord[0] === 'number' && typeof coord[1] === 'number') {
+          return { lat: coord[1], lng: coord[0] };
+        }
+        // Handle {lat, lng} or {lat, lon} object format
+        if (coord && typeof coord.lat === 'number') {
+          const lng = typeof coord.lng === 'number' ? coord.lng : coord.lon;
+          if (typeof lng === 'number') {
+            return { lat: coord.lat, lng };
+          }
+        }
+        return null;
+      })
+      .filter((p): p is google.maps.LatLngLiteral => p !== null && isFinite(p.lat) && isFinite(p.lng));
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -629,37 +650,47 @@ const DispersedExplorer = () => {
               ))}
 
               {/* MVUM Roads */}
-              {mvumRoads.map((road) => (
-                <Polyline
-                  key={`mvum-${road.id}`}
-                  path={road.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }))}
-                  options={{
-                    strokeColor: getMVUMColor(road),
-                    strokeOpacity: selectedRoad === road ? 1 : 0.7,
-                    strokeWeight: selectedRoad === road ? 4 : 2,
-                    clickable: true,
-                  }}
-                  onClick={() => setSelectedRoad(road)}
-                />
-              ))}
+              {mvumRoads.map((road) => {
+                const path = toLatLngPath(road.geometry?.coordinates);
+                if (path.length < 2) return null;
+                return (
+                  <Polyline
+                    key={`mvum-${road.id}`}
+                    path={path}
+                    options={{
+                      strokeColor: getMVUMColor(road),
+                      strokeOpacity: selectedRoad === road ? 1 : 0.7,
+                      strokeWeight: selectedRoad === road ? 4 : 2,
+                      clickable: true,
+                    }}
+                    onClick={() => setSelectedRoad(road)}
+                  />
+                );
+              })}
 
               {/* OSM Tracks */}
-              {osmTracks.map((track) => (
-                <Polyline
-                  key={`osm-${track.id}`}
-                  path={track.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }))}
-                  options={{
-                    strokeColor: getOSMColor(track),
-                    strokeOpacity: selectedRoad === track ? 1 : 0.7,
-                    strokeWeight: selectedRoad === track ? 4 : 2,
-                    clickable: true,
-                  }}
-                  onClick={() => setSelectedRoad(track)}
-                />
-              ))}
+              {osmTracks.map((track) => {
+                const path = toLatLngPath(track.geometry?.coordinates);
+                if (path.length < 2) return null;
+                return (
+                  <Polyline
+                    key={`osm-${track.id}`}
+                    path={path}
+                    options={{
+                      strokeColor: getOSMColor(track),
+                      strokeOpacity: selectedRoad === track ? 1 : 0.7,
+                      strokeWeight: selectedRoad === track ? 4 : 2,
+                      clickable: true,
+                    }}
+                    onClick={() => setSelectedRoad(track)}
+                  />
+                );
+              })}
 
               {/* Potential Camp Spots */}
-              {filteredPotentialSpots.map((spot) => (
+              {filteredPotentialSpots
+                .filter((spot) => isFinite(spot.lat) && isFinite(spot.lng))
+                .map((spot) => (
                 <Marker
                   key={spot.id}
                   position={{ lat: spot.lat, lng: spot.lng }}
