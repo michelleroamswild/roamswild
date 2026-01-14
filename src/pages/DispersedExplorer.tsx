@@ -797,6 +797,58 @@ const DispersedExplorer = () => {
               </CardContent>
             </Card>
 
+            {/* Stats Cards - Shows after search when we have results */}
+            {searchLocation && !loading && (
+              <div className="grid grid-cols-4 gap-2">
+                <div className="p-2 bg-card rounded-lg border border-border text-center">
+                  <p className="text-2xl font-bold text-foreground">{filteredPotentialSpots.length}</p>
+                  <p className="text-xs font-medium text-muted-foreground mt-1">Total</p>
+                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-center cursor-pointer">
+                      <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{filteredPotentialSpots.filter(s => s.type === 'camp-site').length}</p>
+                      <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mt-1 flex items-center justify-center gap-1">
+                        Known <Info className="w-3.5 h-3.5" weight="bold" />
+                      </p>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="font-medium">Known Campsites</p>
+                    <p className="text-xs text-muted-foreground">Campsites tagged by the OSM community - verified camping locations</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 text-center cursor-pointer">
+                      <p className="text-2xl font-bold text-green-600 dark:text-green-400">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 35).length}</p>
+                      <p className="text-xs font-medium text-green-600 dark:text-green-400 mt-1 flex items-center justify-center gap-1">
+                        High <Info className="w-3.5 h-3.5" weight="bold" />
+                      </p>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="font-medium">High Confidence (Score 35+)</p>
+                    <p className="text-xs text-muted-foreground">Dead-ends on MVUM/BLM roads with multiple positive indicators</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800 text-center cursor-pointer">
+                      <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 25 && s.score < 35).length}</p>
+                      <p className="text-xs font-medium text-yellow-600 dark:text-yellow-400 mt-1 flex items-center justify-center gap-1">
+                        Medium <Info className="w-3.5 h-3.5" weight="bold" />
+                      </p>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="font-medium">Medium Confidence (Score 25-34)</p>
+                    <p className="text-xs text-muted-foreground">Dead-ends on public land tracks</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+
             {/* Top Recommendations Card */}
             {currentRecommendations.length > 0 && (
               <Card className="border-primary/30 bg-primary/5">
@@ -934,120 +986,6 @@ const DispersedExplorer = () => {
                   </p>
                 ) : (
                   <div className="space-y-4">
-                    {/* Dispersed Spots - Full width at top */}
-                    <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-medium text-orange-700 dark:text-orange-300">Dispersed Spots</p>
-                        <p className="text-2xl font-bold text-orange-700 dark:text-orange-300">{filteredPotentialSpots.length}</p>
-                      </div>
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-full bg-blue-500" />
-                            <span className="text-sm text-foreground">Known Campsites</span>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-pointer" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="font-medium">OpenStreetMap Data</p>
-                                <p className="text-xs text-muted-foreground">Campsites tagged by the OSM community - verified camping locations</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          <span className="text-sm font-medium text-foreground">{filteredPotentialSpots.filter(s => s.type === 'camp-site').length}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-full bg-green-500" />
-                            <span className="text-sm text-foreground">High Confidence</span>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-pointer" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="font-medium">Score 35+</p>
-                                <p className="text-xs text-muted-foreground">Dead-ends on MVUM/BLM roads with multiple positive indicators</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          <span className="text-sm font-medium text-foreground">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 35).length}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-full bg-yellow-500" />
-                            <span className="text-sm text-foreground">Medium Confidence</span>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-pointer" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="font-medium">Score 25-34</p>
-                                <p className="text-xs text-muted-foreground">Dead-ends on public land tracks or road intersections with good access</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          <span className="text-sm font-medium text-foreground">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 25 && s.score < 35).length}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-full bg-orange-500" />
-                            <span className="text-sm text-foreground">Worth Checking</span>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-pointer" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="font-medium">Score 15-24</p>
-                                <p className="text-xs text-muted-foreground">Road intersections or less certain locations - verify on satellite imagery</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          <span className="text-sm font-medium text-foreground">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 15 && s.score < 25).length}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Other stats - 3 column grid */}
-                    <div className="grid grid-cols-3 gap-2">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg cursor-pointer text-center">
-                            <p className="text-xl font-bold text-green-700 dark:text-green-300">{mvumRoads.length}</p>
-                            <p className="text-xs text-green-600 dark:text-green-400">MVUM Roads</p>
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="font-medium">Motor Vehicle Use Map Roads</p>
-                          <p className="text-xs text-muted-foreground">Official USFS roads open to motor vehicles</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg cursor-pointer text-center">
-                            <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{osmTracks.length}</p>
-                            <p className="text-xs text-blue-600 dark:text-blue-400">OSM Tracks</p>
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="font-medium">OpenStreetMap Tracks</p>
-                          <p className="text-xs text-muted-foreground">Community-mapped dirt roads and 4x4 trails</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg cursor-pointer text-center">
-                            <p className="text-xl font-bold text-purple-700 dark:text-purple-300">{establishedCampgrounds.length}</p>
-                            <p className="text-xs text-purple-600 dark:text-purple-400">Campgrounds</p>
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="font-medium">Established Campgrounds</p>
-                          <p className="text-xs text-muted-foreground">Official USFS/BLM campgrounds from Recreation.gov</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-
                     {/* Public Lands Toggle */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -1286,10 +1224,15 @@ const DispersedExplorer = () => {
             {establishedCampgrounds.length > 0 && (
               <Card>
                 <CardContent className="p-4">
+                  {/* Large number at top */}
+                  <div className="p-3 bg-muted/50 rounded-lg text-center mb-4">
+                    <p className="text-3xl font-bold text-foreground">{establishedCampgrounds.length}</p>
+                    <p className="text-sm text-muted-foreground mt-1">Campgrounds</p>
+                  </div>
+
                   <h3 className="font-medium text-foreground mb-3 flex items-center gap-2">
                     <TreeEvergreen className="w-4 h-4 text-purple-600" />
                     USFS/BLM Campgrounds
-                    <span className="ml-auto text-xs text-muted-foreground">{establishedCampgrounds.length} found</span>
                   </h3>
 
                   <div className="space-y-2 max-h-[200px] overflow-y-auto">
@@ -1609,6 +1552,7 @@ const DispersedExplorer = () => {
                       <div className="space-y-2 text-sm">
                         <p><span className="text-muted-foreground">Name:</span> {selectedRoad.name || 'Unnamed'}</p>
                         <p><span className="text-muted-foreground">Type:</span> {selectedRoad.highway}</p>
+                        <p><span className="text-muted-foreground">OSM Way ID:</span> <a href={`https://www.openstreetmap.org/way/${selectedRoad.id}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{selectedRoad.id}</a></p>
                         {selectedRoad.surface && (
                           <p><span className="text-muted-foreground">Surface:</span> {selectedRoad.surface}</p>
                         )}

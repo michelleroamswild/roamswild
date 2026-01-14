@@ -931,31 +931,111 @@ function findDeadEnds(
         passengerReachable: accessibility.passengerReachable,
         highClearanceReachable: accessibility.highClearanceReachable,
       });
-    } else if (entry.count >= 3) {
-      // Intersection - multiple roads meet
-      const score = 15;
-      const reasons: string[] = [`${entry.count} roads intersect here`, 'On public land'];
-
-      spots.push({
-        id: `intersection-${key}`,
-        lat: entry.lat,
-        lng: entry.lng,
-        name: `Road Junction`,
-        type: 'intersection',
-        score,
-        reasons,
-        source: 'derived',
-        isOnMVUMRoad: entry.hasMVUMRoad,
-        isOnBLMRoad: entry.hasBLMRoad,
-        isOnPublicLand: entry.isPublicLand,
-        passengerReachable: accessibility.passengerReachable,
-        highClearanceReachable: accessibility.highClearanceReachable,
-      });
+    // NOTE: Intersection spots disabled - too many false positives, rarely actual campsites
+    // Keeping code for potential future use
+    // } else if (entry.count >= 3) {
+    //   // Intersection - multiple roads meet
+    //   const score = 15;
+    //   const reasons: string[] = [`${entry.count} roads intersect here`, 'On public land'];
+    //
+    //   spots.push({
+    //     id: `intersection-${key}`,
+    //     lat: entry.lat,
+    //     lng: entry.lng,
+    //     name: `Road Junction`,
+    //     type: 'intersection',
+    //     score,
+    //     reasons,
+    //     source: 'derived',
+    //     isOnMVUMRoad: entry.hasMVUMRoad,
+    //     isOnBLMRoad: entry.hasBLMRoad,
+    //     isOnPublicLand: entry.isPublicLand,
+    //     passengerReachable: accessibility.passengerReachable,
+    //     highClearanceReachable: accessibility.highClearanceReachable,
+    //   });
+    // }
     }
   });
 
   console.log(`Found ${privateRoadPoints.length} private road points for proximity filtering`);
-  return { spots, privateRoadPoints };
+
+  // Filter out false dead-ends that are actually at intersections
+  // This happens when OSM tracks are split into segments that don't share exact coordinates
+  // If a "dead-end" is VERY close to the MIDDLE of another road segment (but NOT near its endpoints),
+  // it's likely a false dead-end caused by imprecise coordinate matching
+  const filteredSpots = spots.filter(spot => {
+    if (spot.type !== 'dead-end') return true;
+
+    // Use a tighter threshold - only filter obvious intersections
+    const INTERSECTION_THRESHOLD = 0.00012; // ~12 meters - must be very close
+
+    // Check if a point is near an interior point of a road (not its endpoints)
+    // Returns true only if the spot is near the MIDDLE of the road, not near either endpoint
+    const isNearRoadInterior = (roads: { name?: string; geometry?: { coordinates?: any[] } }[]): string | null => {
+      for (const road of roads) {
+        if (!road.geometry?.coordinates?.length) continue;
+        const coords = road.geometry.coordinates;
+
+        // Skip roads with fewer than 5 points (too short to reliably detect "interior")
+        if (coords.length < 5) continue;
+
+        // Helper to get lat/lng from coord
+        const getLatLng = (coord: any): { lat: number; lng: number } | null => {
+          if (Array.isArray(coord) && typeof coord[0] === 'number') {
+            return { lat: coord[1], lng: coord[0] };
+          } else if (coord && typeof coord.lat === 'number') {
+            return { lat: coord.lat, lng: coord.lng ?? coord.lon };
+          }
+          return null;
+        };
+
+        // Check if spot is near road's endpoints (which would be a legitimate junction)
+        const startPt = getLatLng(coords[0]);
+        const endPt = getLatLng(coords[coords.length - 1]);
+
+        if (startPt) {
+          const distToStart = Math.abs(spot.lat - startPt.lat) + Math.abs(spot.lng - startPt.lng);
+          if (distToStart < INTERSECTION_THRESHOLD * 2) continue; // Near start endpoint - legitimate junction
+        }
+        if (endPt) {
+          const distToEnd = Math.abs(spot.lat - endPt.lat) + Math.abs(spot.lng - endPt.lng);
+          if (distToEnd < INTERSECTION_THRESHOLD * 2) continue; // Near end endpoint - legitimate junction
+        }
+
+        // Check interior points only (skip first 2 and last 2 points to avoid endpoint proximity)
+        for (let i = 2; i < coords.length - 2; i++) {
+          const pt = getLatLng(coords[i]);
+          if (pt) {
+            const latDiff = Math.abs(spot.lat - pt.lat);
+            const lngDiff = Math.abs(spot.lng - pt.lng);
+            if (latDiff < INTERSECTION_THRESHOLD && lngDiff < INTERSECTION_THRESHOLD) {
+              return road.name || 'unnamed road'; // This dead-end is near the interior of another road
+            }
+          }
+        }
+      }
+      return null;
+    };
+
+    // Check if this dead-end is near the interior of any MVUM, BLM, or OSM road
+    const nearbyMVUM = isNearRoadInterior(mvumRoads);
+    const nearbyBLM = isNearRoadInterior(blmRoads);
+    const nearbyOSM = isNearRoadInterior(osmTracks);
+
+    if (nearbyMVUM || nearbyBLM || nearbyOSM) {
+      const nearbyRoad = nearbyMVUM || nearbyBLM || nearbyOSM;
+      return false; // Filter out - it's actually an intersection
+    }
+
+    return true;
+  });
+
+  const removedCount = spots.length - filteredSpots.length;
+  if (removedCount > 0) {
+    console.log(`Filtered out ${removedCount} false dead-ends (actually intersections)`);
+  }
+
+  return { spots: filteredSpots, privateRoadPoints };
 }
 
 /**
@@ -1307,6 +1387,8 @@ async function fetchAllOSMData(
       // Tracks and unpaved roads - need full geometry for dead-end detection
       way["highway"="track"](${minLat},${minLng},${maxLat},${maxLng});
       way["highway"="unclassified"]["surface"~"unpaved|gravel|dirt|ground|sand|mud"](${minLat},${minLng},${maxLat},${maxLng});
+      way["highway"="tertiary"]["surface"~"unpaved|gravel|dirt|ground|sand|mud"](${minLat},${minLng},${maxLat},${maxLng});
+      way["highway"="secondary"]["surface"~"unpaved|gravel|dirt|ground|sand|mud"](${minLat},${minLng},${maxLat},${maxLng});
       way["4wd_only"="yes"](${minLat},${minLng},${maxLat},${maxLng});
 
       // Camp sites - nodes and ways
