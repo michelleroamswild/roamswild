@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, MapPin, Trash, Star } from "@phosphor-icons/react";
+import { MapPin, Trash, Star } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
 import { toast } from "sonner";
 import { ConfirmDeleteModal } from "@/components/ConfirmDeleteModal";
+import { Header } from "@/components/Header";
 
 const SavedLocations = () => {
   const { locations, removeLocation } = useSavedLocations();
@@ -30,26 +31,16 @@ const SavedLocations = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="container px-4 md:px-6 py-4">
-          <div className="flex items-center gap-4">
-            <Link to="/">
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <ArrowLeft className="w-5 h-5" weight="bold" />
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-xl font-display font-bold text-foreground">Saved Locations</h1>
-              <p className="text-sm text-muted-foreground">
-                {locations.length} saved location{locations.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <main className="container px-4 md:px-6 py-6">
+        {/* Page Title */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-display font-bold text-foreground">Saved Locations</h1>
+          <p className="text-muted-foreground">
+            {locations.length} saved location{locations.length !== 1 ? 's' : ''}
+          </p>
+        </div>
         {locations.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {locations.map((location, index) => (
@@ -111,9 +102,9 @@ const SavedLocations = () => {
             <p className="text-muted-foreground mb-6 max-w-md">
               Search for destinations and save them to quickly access them later
             </p>
-            <Link to="/">
+            <Link to="/dispersed">
               <Button variant="primary">
-                Search Locations
+                Explore Locations
               </Button>
             </Link>
           </div>
