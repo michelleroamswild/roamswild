@@ -163,6 +163,103 @@ function getDistanceMiles(lat1: number, lng1: number, lat2: number, lng2: number
 
 
 /**
+ * Determine vehicle accessibility for a point based on nearest roads
+ * Returns the best vehicle access available to reach this point
+ */
+function determinePointAccessibility(
+  lat: number,
+  lng: number,
+  mvumRoads: MVUMRoad[],
+  blmRoads: BLMRoad[],
+  osmTracks: OSMTrack[],
+  thresholdMiles: number = 0.25
+): { passengerReachable: boolean; highClearanceReachable: boolean } {
+  let hasPassengerRoad = false;
+  let hasHighClearanceRoad = false;
+
+  // Helper to get coordinate values safely
+  const getCoordLng = (coord: any): number | null => {
+    if (Array.isArray(coord) && typeof coord[0] === 'number') return coord[0];
+    if (coord && typeof coord.lng === 'number') return coord.lng;
+    if (coord && typeof coord.lon === 'number') return coord.lon;
+    return null;
+  };
+
+  const getCoordLat = (coord: any): number | null => {
+    if (Array.isArray(coord) && typeof coord[1] === 'number') return coord[1];
+    if (coord && typeof coord.lat === 'number') return coord.lat;
+    return null;
+  };
+
+  // Check MVUM roads
+  for (const road of mvumRoads) {
+    if (!road.geometry?.coordinates?.length) continue;
+    for (const coord of road.geometry.coordinates) {
+      const coordLat = getCoordLat(coord);
+      const coordLng = getCoordLng(coord);
+      if (coordLat !== null && coordLng !== null) {
+        if (getDistanceMiles(lat, lng, coordLat, coordLng) < thresholdMiles) {
+          // Check MVUM road vehicle type
+          if (road.passengerVehicle) {
+            hasPassengerRoad = true;
+          } else if (road.highClearanceVehicle) {
+            hasHighClearanceRoad = true;
+          }
+          break; // Found a nearby point on this road, move to next road
+        }
+      }
+    }
+  }
+
+  // Check BLM roads (assume high-clearance by default)
+  for (const road of blmRoads) {
+    if (!road.geometry?.coordinates?.length) continue;
+    for (const coord of road.geometry.coordinates) {
+      const coordLat = getCoordLat(coord);
+      const coordLng = getCoordLng(coord);
+      if (coordLat !== null && coordLng !== null) {
+        if (getDistanceMiles(lat, lng, coordLat, coordLng) < thresholdMiles) {
+          // BLM roads - check surface type
+          const surfaceLower = (road.surfaceType || '').toLowerCase();
+          if (surfaceLower.includes('paved') || surfaceLower.includes('asphalt')) {
+            hasPassengerRoad = true;
+          } else {
+            hasHighClearanceRoad = true;
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  // Check OSM tracks
+  for (const track of osmTracks) {
+    if (!track.geometry?.coordinates?.length) continue;
+    for (const coord of track.geometry.coordinates) {
+      const coordLat = getCoordLat(coord);
+      const coordLng = getCoordLng(coord);
+      if (coordLat !== null && coordLng !== null) {
+        if (getDistanceMiles(lat, lng, coordLat, coordLng) < thresholdMiles) {
+          // Check OSM track vehicle type - be conservative
+          if (track.tracktype === 'grade1') {
+            hasPassengerRoad = true;
+          } else if (!track.fourWdOnly && track.tracktype !== 'grade4' && track.tracktype !== 'grade5') {
+            hasHighClearanceRoad = true;
+          }
+          // grade4, grade5, and 4WD only don't contribute to reachability
+          break;
+        }
+      }
+    }
+  }
+
+  return {
+    passengerReachable: hasPassengerRoad,
+    highClearanceReachable: hasPassengerRoad || hasHighClearanceRoad,
+  };
+}
+
+/**
  * Check if a point is near any road (for filtering out backcountry/hike-in campsites)
  * Returns true if the point is within thresholdMiles of any road segment
  */
@@ -476,18 +573,23 @@ function analyzeRoadAccessibility(
     const endKey = toNodeKey(endLat, endLng);
 
     // Determine vehicle type for OSM track
-    let vehicleType: 'passenger' | 'high-clearance' | '4wd' = 'passenger';
+    // Be conservative - OSM data quality varies significantly
+    let vehicleType: 'passenger' | 'high-clearance' | '4wd' = 'high-clearance'; // Default to high-clearance
     if (track.fourWdOnly) {
       vehicleType = '4wd';
     } else if (track.tracktype === 'grade5' || track.tracktype === 'grade4') {
       vehicleType = '4wd';
-    } else if (track.tracktype === 'grade3') {
+    } else if (track.tracktype === 'grade3' || track.tracktype === 'grade2') {
+      // grade2 (gravel) and grade3 both require high clearance to be safe
       vehicleType = 'high-clearance';
+    } else if (track.tracktype === 'grade1') {
+      // Only grade1 (paved/solid) is reliably passenger-accessible
+      vehicleType = 'passenger';
     } else if (track.highway === 'track') {
-      // Generic tracks without grade - assume high-clearance to be safe
+      // Generic tracks without grade - assume high-clearance minimum
       vehicleType = 'high-clearance';
     }
-    // unclassified roads and grade1/grade2 tracks remain 'passenger'
+    // unclassified roads without grade info - be conservative, treat as high-clearance
 
     // OSM roads at boundary OR unclassified roads are potential entry points
     const isEntry = isNearBoundary(startLat, startLng) ||
@@ -898,18 +1000,31 @@ async function fetchMVUMRoads(
 
   console.log(`MVUM API returned ${data.features.length} roads`);
 
-  return data.features.map((feature: any) => ({
-    id: feature.properties.OBJECTID?.toString() || Math.random().toString(),
-    name: feature.properties.NAME || 'Unnamed Road',
-    surfaceType: feature.properties.SURFACETYPE || 'Unknown',
-    highClearanceVehicle: feature.properties.HIGHCLEARANCEVEHICLE === 'Yes',
-    passengerVehicle: feature.properties.PASSENGERVEHICLE === 'Yes',
-    atv: feature.properties.ATV === 'Yes',
-    motorcycle: feature.properties.MOTORCYCLE === 'Yes',
-    seasonal: feature.properties.SEASONAL || '',
-    operationalMaintLevel: feature.properties.OPERATIONALMAINTLEVEL || '',
-    geometry: feature.geometry,
-  }));
+  return data.features.map((feature: any) => {
+    const maintLevel = (feature.properties.OPERATIONALMAINTLEVEL || '').toUpperCase();
+    // Check both the explicit flag AND the maintenance level for high clearance
+    const isHighClearance = feature.properties.HIGHCLEARANCEVEHICLE === 'Yes' ||
+      maintLevel.includes('HIGH CLEARANCE') ||
+      maintLevel.startsWith('2 -') || maintLevel.startsWith('2-');
+    // Passenger is OK if explicitly marked OR if it's level 3+ (maintained for passenger vehicles)
+    const isPassenger = feature.properties.PASSENGERVEHICLE === 'Yes' ||
+      maintLevel.startsWith('3 -') || maintLevel.startsWith('3-') ||
+      maintLevel.startsWith('4 -') || maintLevel.startsWith('4-') ||
+      maintLevel.startsWith('5 -') || maintLevel.startsWith('5-');
+
+    return {
+      id: feature.properties.OBJECTID?.toString() || Math.random().toString(),
+      name: feature.properties.NAME || 'Unnamed Road',
+      surfaceType: feature.properties.SURFACETYPE || 'Unknown',
+      highClearanceVehicle: isHighClearance,
+      passengerVehicle: isPassenger,
+      atv: feature.properties.ATV === 'Yes',
+      motorcycle: feature.properties.MOTORCYCLE === 'Yes',
+      seasonal: feature.properties.SEASONAL || '',
+      operationalMaintLevel: feature.properties.OPERATIONALMAINTLEVEL || '',
+      geometry: feature.geometry,
+    };
+  });
 }
 
 /**
@@ -1609,13 +1724,24 @@ export function useDispersedRoads(
 
         // Filter out backcountry/hike-in campsites that aren't near any road
         // These are for backpackers, not car camping
-        const roadAccessibleCamps = camps.filter(camp => {
-          const nearRoad = isNearRoad(camp.lat, camp.lng, mvum, osm, 0.25);
-          if (!nearRoad) {
-            console.log(`Filtering out backcountry camp: ${camp.name} (not near any road)`);
-          }
-          return nearRoad;
-        });
+        // Also determine vehicle accessibility for each camp-site based on nearby roads
+        const roadAccessibleCamps = camps
+          .filter(camp => {
+            const nearRoad = isNearRoad(camp.lat, camp.lng, mvum, osm, 0.25);
+            if (!nearRoad) {
+              console.log(`Filtering out backcountry camp: ${camp.name} (not near any road)`);
+            }
+            return nearRoad;
+          })
+          .map(camp => {
+            // Determine accessibility based on nearby roads
+            const accessibility = determinePointAccessibility(camp.lat, camp.lng, mvum, blm, osm, 0.25);
+            return {
+              ...camp,
+              passengerReachable: accessibility.passengerReachable,
+              highClearanceReachable: accessibility.highClearanceReachable,
+            };
+          });
 
         // Filter out OSM camps that are:
         // 1. Established campgrounds (already added to allCampgrounds)

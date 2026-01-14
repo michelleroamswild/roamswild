@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Card, CardContent } from '@/components/ui/card';
 import { GoogleMap } from '@/components/GoogleMap';
 import { Polyline, Marker, Polygon, InfoWindow } from '@react-google-maps/api';
-import { Autocomplete } from '@react-google-maps/api';
+import { PlaceSearch } from '@/components/PlaceSearch';
 import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
 import { usePublicLands } from '@/hooks/use-public-lands';
 import { useGoogleMaps } from '@/components/GoogleMapsProvider';
@@ -58,7 +58,6 @@ function isWithinAnyPublicLand(
 const DispersedExplorer = () => {
   const { isLoaded } = useGoogleMaps();
   const [searchLocation, setSearchLocation] = useState<SearchLocation | null>(null);
-  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: 39.5, lng: -105.5 });
   const [mapZoom, setMapZoom] = useState(7);
   const [selectedRoad, setSelectedRoad] = useState<MVUMRoad | OSMTrack | null>(null);
@@ -164,11 +163,14 @@ const DispersedExplorer = () => {
         const withinPublicLand = isWithinAnyPublicLand(spot.lat, spot.lng, publicLands);
         if (withinPublicLand) return true;
 
-        // Spot is NOT within any public land polygon
-        // Only allow if we have very limited polygon coverage (< 3 polygons)
-        // Otherwise, reject it as likely private land
+        // Spot is NOT within any public land polygon, BUT:
+        // - If we have MVUM roads in the area, we're definitely in National Forest
+        //   so trust the OSM track's isOnPublicLand flag (polygon coverage has gaps)
+        // - If no MVUM roads and good polygon coverage, reject as likely private land
+        if (hasMVUMRoads && spot.isOnPublicLand) return true;
+
         if (publicLands.length >= 3) {
-          return false; // Have good polygon coverage - reject spots outside public land
+          return false; // Have good polygon coverage and no MVUM roads - reject spots outside public land
         }
       }
 
@@ -198,10 +200,6 @@ const DispersedExplorer = () => {
     }
 
     return allSpots.filter((spot) => {
-      // Camp-sites from OSM are always shown (they're explicitly tagged camping spots)
-      // Note: Camp sites don't have reachability info, so we show them but user should verify
-      if (spot.type === 'camp-site') return true;
-
       if (roadFilter === 'passenger') {
         // Only show spots that are REACHABLE via passenger-accessible roads
         // This means the entire route from the main road to this spot uses only passenger roads
@@ -381,30 +379,27 @@ const DispersedExplorer = () => {
     return () => clearTimeout(timeoutId);
   }, [searchLocation, topRecommendations]);
 
-  const onAutocompleteLoad = useCallback((autocompleteInstance: google.maps.places.Autocomplete) => {
-    setAutocomplete(autocompleteInstance);
-  }, []);
-
-  const onPlaceChanged = useCallback(() => {
-    if (autocomplete) {
-      const place = autocomplete.getPlace();
-      if (place.geometry?.location) {
-        const lat = place.geometry.location.lat();
-        const lng = place.geometry.location.lng();
-        setSearchLocation({
-          lat,
-          lng,
-          name: place.name || place.formatted_address || 'Selected Location',
-        });
-        setMapCenter({ lat, lng });
-        setMapZoom(12);
-        setSelectedRoad(null);
-        setSelectedSpot(null);
-        setSelectedCampground(null);
-        setRecommendationPage(0); // Reset recommendations on new search
-      }
+  const handlePlaceSelect = useCallback((place: google.maps.places.PlaceResult) => {
+    if (place.geometry?.location) {
+      const lat = typeof place.geometry.location.lat === 'function'
+        ? place.geometry.location.lat()
+        : place.geometry.location.lat;
+      const lng = typeof place.geometry.location.lng === 'function'
+        ? place.geometry.location.lng()
+        : place.geometry.location.lng;
+      setSearchLocation({
+        lat,
+        lng,
+        name: place.name || place.formatted_address || 'Selected Location',
+      });
+      setMapCenter({ lat, lng });
+      setMapZoom(12);
+      setSelectedRoad(null);
+      setSelectedSpot(null);
+      setSelectedCampground(null);
+      setRecommendationPage(0); // Reset recommendations on new search
     }
-  }, [autocomplete]);
+  }, []);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -435,9 +430,13 @@ const DispersedExplorer = () => {
 
   const getOSMColor = (track: OSMTrack) => {
     if (track.fourWdOnly) return '#ef4444'; // Red - 4WD only
-    if (track.tracktype === 'grade5' || track.tracktype === 'grade4') return '#f97316'; // Orange - rough
-    if (track.tracktype === 'grade3') return '#eab308'; // Yellow - moderate
-    return '#3b82f6'; // Blue - unknown/passable
+    if (track.tracktype === 'grade5' || track.tracktype === 'grade4') return '#ef4444'; // Red - 4WD
+    if (track.tracktype === 'grade3') return '#f97316'; // Orange - high clearance
+    if (track.tracktype === 'grade2') return '#f97316'; // Orange - gravel, be conservative
+    if (track.tracktype === 'grade1') return '#3b82f6'; // Blue - paved/solid, likely OK
+    // Unknown grade - be conservative, treat as high clearance
+    if (track.highway === 'track') return '#f97316'; // Orange - tracks are usually rough
+    return '#eab308'; // Yellow - unclassified roads, unknown conditions
   };
 
   // Filter roads based on selected filter
@@ -455,12 +454,13 @@ const DispersedExplorer = () => {
     if (roadFilter === 'all') return osmTracks;
     return osmTracks.filter(track => {
       if (roadFilter === 'passenger') {
-        // Only show tracks that are likely passable by passenger vehicles
-        return !track.fourWdOnly && track.tracktype !== 'grade5' && track.tracktype !== 'grade4';
+        // Only show grade1 (paved) tracks for passenger vehicles
+        // OSM data quality varies too much to trust grade2+ as passenger-accessible
+        return !track.fourWdOnly && track.tracktype === 'grade1';
       }
       if (roadFilter === 'high-clearance') {
-        // Show tracks passable by high clearance (exclude 4WD only)
-        return !track.fourWdOnly;
+        // Show grade1-3 tracks (exclude grade4/5 and 4WD only)
+        return !track.fourWdOnly && track.tracktype !== 'grade5' && track.tracktype !== 'grade4';
       }
       if (roadFilter === '4wd') return true; // Show all for 4WD
       return true;
@@ -525,12 +525,12 @@ const DispersedExplorer = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <Header />
 
-      <div className="grid lg:grid-cols-2">
+      <div className="flex-1 grid lg:grid-cols-2">
         {/* Map - Left side on desktop, bottom on mobile */}
-        <div className="order-2 lg:order-1 h-[400px] lg:h-[calc(100vh-120px)] lg:sticky lg:top-[120px] relative">
+        <div className="order-2 lg:order-1 h-[400px] lg:h-auto lg:min-h-[calc(100vh-64px)] lg:sticky lg:top-[64px] relative">
           {/* Click instruction overlay */}
           {!searchLocation && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-background/90 backdrop-blur-sm px-4 py-2 rounded-full border border-border shadow-lg flex items-center gap-2">
@@ -750,7 +750,7 @@ const DispersedExplorer = () => {
         </div>
 
         {/* Sidebar - Right side on desktop, top on mobile */}
-        <div className="order-1 lg:order-2 space-y-4 p-4 md:p-6 lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
+        <div className="order-1 lg:order-2 space-y-4 p-4 md:p-6 lg:max-h-[calc(100vh-64px)] lg:overflow-y-auto">
             {/* Search Card */}
             <Card>
               <CardContent className="p-4">
@@ -758,35 +758,11 @@ const DispersedExplorer = () => {
                   <MagnifyingGlass className="w-4 h-4" />
                   Search Location
                 </h3>
-                {isLoaded ? (
-                  <Autocomplete
-                    onLoad={onAutocompleteLoad}
-                    onPlaceChanged={onPlaceChanged}
-                    options={{
-                      types: ['geocode', 'establishment'],
-                      componentRestrictions: { country: 'us' },
-                    }}
-                  >
-                    <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <input
-                        type="text"
-                        placeholder="Search a location..."
-                        className="w-full pl-10 pr-4 py-2.5 bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      />
-                    </div>
-                  </Autocomplete>
-                ) : (
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <input
-                      type="text"
-                      placeholder="Loading..."
-                      disabled
-                      className="w-full pl-10 pr-4 py-2.5 bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground opacity-50 cursor-not-allowed"
-                    />
-                  </div>
-                )}
+                <PlaceSearch
+                  onPlaceSelect={handlePlaceSelect}
+                  placeholder="Search a location..."
+                  defaultValue={searchLocation?.name}
+                />
 
                 {searchLocation && (
                   <div className="mt-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
@@ -1577,53 +1553,96 @@ const DispersedExplorer = () => {
             {selectedRoad && (
               <Card>
                 <CardContent className="p-4">
-                  <h3 className="font-medium text-foreground mb-3 flex items-center gap-2">
-                    <TreeEvergreen className="w-4 h-4 text-green-600" />
-                    Road Details
-                  </h3>
                   {'highClearanceVehicle' in selectedRoad ? (
                     // MVUM Road
-                    <div className="space-y-2 text-sm">
-                      <p><span className="text-muted-foreground">Name:</span> {selectedRoad.name}</p>
-                      <p><span className="text-muted-foreground">Surface:</span> {selectedRoad.surfaceType}</p>
-                      <p><span className="text-muted-foreground">Maintenance:</span> {selectedRoad.operationalMaintLevel}</p>
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {selectedRoad.passengerVehicle && (
-                          <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">Passenger</span>
-                        )}
-                        {selectedRoad.highClearanceVehicle && (
-                          <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">High Clearance</span>
-                        )}
-                        {selectedRoad.atv && (
-                          <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">ATV</span>
-                        )}
-                        {selectedRoad.motorcycle && (
-                          <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">Motorcycle</span>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-medium text-foreground flex items-center gap-2">
+                          <TreeEvergreen className="w-4 h-4 text-green-600" />
+                          Road Details
+                        </h3>
+                        <span className="px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded text-xs font-medium">
+                          USFS MVUM
+                        </span>
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        <p><span className="text-muted-foreground">Name:</span> {selectedRoad.name}</p>
+                        <p><span className="text-muted-foreground">Surface:</span> {selectedRoad.surfaceType}</p>
+                        <p><span className="text-muted-foreground">Maintenance:</span> {selectedRoad.operationalMaintLevel}</p>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {selectedRoad.passengerVehicle && (
+                            <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">Passenger OK</span>
+                          )}
+                          {selectedRoad.highClearanceVehicle && (
+                            <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">High Clearance</span>
+                          )}
+                          {selectedRoad.atv && (
+                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">ATV</span>
+                          )}
+                          {selectedRoad.motorcycle && (
+                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">Motorcycle</span>
+                          )}
+                          {!selectedRoad.passengerVehicle && !selectedRoad.highClearanceVehicle && !selectedRoad.atv && !selectedRoad.motorcycle && (
+                            <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">No vehicle info</span>
+                          )}
+                        </div>
+                        {selectedRoad.seasonal && (
+                          <p className="text-xs text-muted-foreground mt-2">Seasonal: {selectedRoad.seasonal}</p>
                         )}
                       </div>
-                      {selectedRoad.seasonal && (
-                        <p className="text-xs text-muted-foreground mt-2">Seasonal: {selectedRoad.seasonal}</p>
-                      )}
+                      <p className="text-[10px] text-muted-foreground border-t border-border pt-2">
+                        Source: USFS Motor Vehicle Use Map (official Forest Service data)
+                      </p>
                     </div>
                   ) : (
                     // OSM Track
-                    <div className="space-y-2 text-sm">
-                      <p><span className="text-muted-foreground">Name:</span> {selectedRoad.name || 'Unnamed'}</p>
-                      <p><span className="text-muted-foreground">Type:</span> {selectedRoad.highway}</p>
-                      {selectedRoad.surface && (
-                        <p><span className="text-muted-foreground">Surface:</span> {selectedRoad.surface}</p>
-                      )}
-                      {selectedRoad.tracktype && (
-                        <p><span className="text-muted-foreground">Grade:</span> {selectedRoad.tracktype}</p>
-                      )}
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {selectedRoad.fourWdOnly && (
-                          <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">4WD Only</span>
-                        )}
-                        {selectedRoad.access && (
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{selectedRoad.access}</span>
-                        )}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-medium text-foreground flex items-center gap-2">
+                          <Path className="w-4 h-4 text-blue-600" />
+                          Road Details
+                        </h3>
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded text-xs font-medium">
+                          OpenStreetMap
+                        </span>
                       </div>
+                      <div className="space-y-2 text-sm">
+                        <p><span className="text-muted-foreground">Name:</span> {selectedRoad.name || 'Unnamed'}</p>
+                        <p><span className="text-muted-foreground">Type:</span> {selectedRoad.highway}</p>
+                        {selectedRoad.surface && (
+                          <p><span className="text-muted-foreground">Surface:</span> {selectedRoad.surface}</p>
+                        )}
+                        {selectedRoad.tracktype && (
+                          <p><span className="text-muted-foreground">Grade:</span> {selectedRoad.tracktype}
+                            <span className="text-muted-foreground ml-1">
+                              ({selectedRoad.tracktype === 'grade1' ? 'paved/solid' :
+                                selectedRoad.tracktype === 'grade2' ? 'gravel - verify conditions' :
+                                selectedRoad.tracktype === 'grade3' ? 'unpaved - high clearance' :
+                                selectedRoad.tracktype === 'grade4' ? 'rough - 4WD likely' :
+                                selectedRoad.tracktype === 'grade5' ? 'very rough - 4WD required' : ''})
+                            </span>
+                          </p>
+                        )}
+                        {!selectedRoad.tracktype && selectedRoad.surface && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">
+                            No grade info - verify road conditions before travel
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {selectedRoad.fourWdOnly && (
+                            <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">4WD Only</span>
+                          )}
+                          {selectedRoad.access && (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{selectedRoad.access}</span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground border-t border-border pt-2">
+                        Source: OpenStreetMap (community data - may not reflect actual conditions)
+                      </p>
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                        OSM grades don't account for steepness, obstacles, or seasonal conditions. Always verify before travel.
+                      </p>
                     </div>
                   )}
                 </CardContent>
