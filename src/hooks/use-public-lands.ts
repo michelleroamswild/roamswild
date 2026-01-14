@@ -50,7 +50,14 @@ const agencyNames: Record<string, string> = {
   'FS': 'US Forest Service',
   'FWS': 'Fish & Wildlife Service',
   'NPS': 'National Park Service',
+  'STATE': 'State Park',
 };
+
+// Overpass API endpoints for redundancy
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
 
 // USA Federal Lands service (based on PAD-US ownership data, not administrative boundaries)
 // This excludes private inholdings within forest boundaries
@@ -132,11 +139,26 @@ export function usePublicLands(
           f: 'json',
         });
 
-        console.log('Fetching public lands from BLM SMA and USA Federal Lands (PAD-US) services');
+        // OSM Overpass query for state parks
+        const minLat = centerLat - (radiusMiles / 69);
+        const maxLat = centerLat + (radiusMiles / 69);
+        const minLng = centerLng - (radiusMiles / 50);
+        const maxLng = centerLng + (radiusMiles / 50);
+
+        const osmQuery = `
+          [out:json][timeout:30];
+          (
+            relation["boundary"="protected_area"]["protection_title"~"State Park|State Recreation Area|State Reserve"](${minLat},${minLng},${maxLat},${maxLng});
+            way["boundary"="protected_area"]["protection_title"~"State Park|State Recreation Area|State Reserve"](${minLat},${minLng},${maxLat},${maxLng});
+          );
+          out geom;
+        `;
+
+        console.log('Fetching public lands from BLM SMA, USA Federal Lands (PAD-US), and OSM (state parks)');
         console.log(`Search area: ${centerLat.toFixed(4)}, ${centerLng.toFixed(4)} - radius ${radiusMiles}mi`);
 
-        // Fetch both in parallel - handle failures gracefully
-        const [blmResult, federalLandsResult] = await Promise.all([
+        // Fetch all three in parallel - handle failures gracefully
+        const [blmResult, federalLandsResult, osmResult] = await Promise.all([
           fetch(`/api/blm-sma/BLM_Natl_SMA_Cached_with_PriUnk/MapServer/1/query?${blmParams.toString()}`)
             .then(async (res) => {
               if (!res.ok) {
@@ -161,6 +183,24 @@ export function usePublicLands(
               console.warn('USA Federal Lands fetch failed:', err);
               return null;
             }),
+          // Fetch state parks from OSM
+          (async () => {
+            for (const endpoint of OVERPASS_ENDPOINTS) {
+              try {
+                const response = await fetch(endpoint, {
+                  method: 'POST',
+                  body: `data=${encodeURIComponent(osmQuery)}`,
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                });
+                if (response.ok) {
+                  return response.json();
+                }
+              } catch (err) {
+                console.warn(`OSM endpoint ${endpoint} failed:`, err);
+              }
+            }
+            return null;
+          })(),
         ]);
 
         let features: any[] = [];
@@ -199,6 +239,171 @@ export function usePublicLands(
           features = features.concat(federalFeatures);
         }
 
+        // Process OSM state parks response
+        if (osmResult && osmResult.elements) {
+          console.log(`OSM returned ${osmResult.elements.length} state park features`);
+          osmResult.elements.forEach((element: any) => {
+            const parkName = element.tags?.name || 'State Park';
+
+            // Get the geometry - ways have geometry directly, relations have it in members
+            let coords: { lat: number; lng: number }[] = [];
+
+            if (element.geometry) {
+              // Way with geometry - simple case
+              coords = element.geometry.map((node: any) => ({
+                lat: node.lat,
+                lng: node.lon,
+              }));
+            } else if (element.members) {
+              // Relation - need to stitch outer ways together in correct order
+              const outerWays = element.members
+                .filter((m: any) => m.role === 'outer' && m.geometry && m.geometry.length > 0)
+                .map((m: any) => m.geometry.map((n: any) => ({ lat: n.lat, lng: n.lon })));
+
+              // State park with multiple outer ways
+
+              if (outerWays.length > 0) {
+                // Check if ways are already closed loops (start == end)
+                const tolerance = 0.0001;
+                const closedWays = outerWays.filter((way: { lat: number; lng: number }[]) => {
+                  const first = way[0];
+                  const last = way[way.length - 1];
+                  return Math.abs(first.lat - last.lat) < tolerance &&
+                         Math.abs(first.lng - last.lng) < tolerance;
+                });
+
+                if (closedWays.length === outerWays.length && outerWays.length > 1) {
+                  // All ways are already closed loops - create separate features for each
+                  outerWays.forEach((way: { lat: number; lng: number }[], idx: number) => {
+                    if (way.length >= 3) {
+                      const ring = way.map((c: { lat: number; lng: number }) => [c.lng, c.lat]);
+                      features.push({
+                        attributes: {
+                          OBJECTID: `${element.id}-${idx}`,
+                          ADMIN_UNIT_NAME: parkName,
+                          ADMIN_AGENCY_CODE: 'STATE',
+                        },
+                        geometry: { rings: [ring] },
+                        source: 'osm',
+                      });
+                    }
+                  });
+                  // Skip the normal processing since we already added the features
+                  return;
+                } else if (closedWays.length === outerWays.length) {
+                  // Single closed loop
+                  coords = [...outerWays[0]];
+                } else {
+                  // Ways need to be stitched together - build endpoint graph
+                  type Endpoint = { wayIndex: number; isStart: boolean; lat: number; lng: number };
+                  const endpoints: Endpoint[] = [];
+
+                  outerWays.forEach((way: { lat: number; lng: number }[], idx: number) => {
+                    endpoints.push({ wayIndex: idx, isStart: true, lat: way[0].lat, lng: way[0].lng });
+                    endpoints.push({ wayIndex: idx, isStart: false, lat: way[way.length - 1].lat, lng: way[way.length - 1].lng });
+                  });
+
+                  // Find matching endpoint pairs
+                  const stitchTolerance = 0.001;
+                  const connections: Map<string, string[]> = new Map();
+
+                  for (let i = 0; i < endpoints.length; i++) {
+                    const key = `${endpoints[i].wayIndex}-${endpoints[i].isStart ? 's' : 'e'}`;
+                    connections.set(key, []);
+
+                    for (let j = 0; j < endpoints.length; j++) {
+                      if (endpoints[i].wayIndex === endpoints[j].wayIndex) continue;
+                      const dist = Math.sqrt(
+                        Math.pow(endpoints[i].lat - endpoints[j].lat, 2) +
+                        Math.pow(endpoints[i].lng - endpoints[j].lng, 2)
+                      );
+                      if (dist < stitchTolerance) {
+                        const targetKey = `${endpoints[j].wayIndex}-${endpoints[j].isStart ? 's' : 'e'}`;
+                        connections.get(key)!.push(targetKey);
+                      }
+                    }
+                  }
+
+                  // Build the ring by following connections
+                  const usedWays = new Set<number>();
+                  const orderedWays: { wayIndex: number; reversed: boolean }[] = [];
+
+                  orderedWays.push({ wayIndex: 0, reversed: false });
+                  usedWays.add(0);
+                  let currentEndpoint = `0-e`;
+
+                  while (usedWays.size < outerWays.length) {
+                    const connectedTo = connections.get(currentEndpoint) || [];
+                    let foundNext = false;
+
+                    for (const targetKey of connectedTo) {
+                      const [wayIdxStr, endType] = targetKey.split('-');
+                      const wayIdx = parseInt(wayIdxStr);
+
+                      if (usedWays.has(wayIdx)) continue;
+
+                      const reversed = endType === 'e';
+                      orderedWays.push({ wayIndex: wayIdx, reversed });
+                      usedWays.add(wayIdx);
+                      currentEndpoint = `${wayIdx}-${reversed ? 's' : 'e'}`;
+                      foundNext = true;
+                      break;
+                    }
+
+                    if (!foundNext) {
+                      for (let i = 0; i < outerWays.length; i++) {
+                        if (!usedWays.has(i)) {
+                          orderedWays.push({ wayIndex: i, reversed: false });
+                          usedWays.add(i);
+                          break;
+                        }
+                      }
+                    }
+                  }
+
+                  // Build coords from ordered ways
+                  coords = [];
+                  orderedWays.forEach(({ wayIndex, reversed }, idx) => {
+                    let wayCoords = outerWays[wayIndex];
+                    if (reversed) {
+                      wayCoords = [...wayCoords].reverse();
+                    }
+                    if (idx === 0) {
+                      coords = [...wayCoords];
+                    } else {
+                      coords = coords.concat(wayCoords.slice(1));
+                    }
+                  });
+                }
+
+                // Ensure polygon is closed
+                if (coords.length > 0) {
+                  const first = coords[0];
+                  const last = coords[coords.length - 1];
+                  if (Math.abs(first.lat - last.lat) > tolerance ||
+                      Math.abs(first.lng - last.lng) > tolerance) {
+                    coords.push({ lat: first.lat, lng: first.lng });
+                  }
+                }
+              }
+            }
+
+            if (coords.length >= 3) {
+              // Convert to rings format for consistency with other sources
+              const ring = coords.map(c => [c.lng, c.lat]);
+              features.push({
+                attributes: {
+                  OBJECTID: element.id,
+                  ADMIN_UNIT_NAME: element.tags?.name || 'State Park',
+                  ADMIN_AGENCY_CODE: 'STATE',
+                },
+                geometry: { rings: [ring] },
+                source: 'osm',
+              });
+            }
+          });
+        }
+
         console.log(`Fetched ${features.length} total public land features`);
 
         // If no features from either source, that's okay - just show empty
@@ -218,7 +423,7 @@ export function usePublicLands(
 
           const agencyCode = f.attributes.ADMIN_AGENCY_CODE || 'UNK';
           const baseName = f.attributes.ADMIN_UNIT_NAME || agencyNames[agencyCode] || 'Public Land';
-          const isFederalLands = f.source === 'federal';
+          const isLatLngFormat = f.source === 'federal' || f.source === 'osm';
 
           // Process each ring - the API already filtered for intersection, so we trust those results
           // Only process the first ring (outer boundary) for each feature to avoid holes being treated as separate polygons
@@ -232,8 +437,8 @@ export function usePublicLands(
             let centroidLat: number;
             let centroidLng: number;
 
-            if (isFederalLands) {
-              // Federal Lands data is already in lat/lng (4326)
+            if (isLatLngFormat) {
+              // Federal Lands and OSM data is already in lat/lng (4326)
               // Ring format is [lng, lat]
 
               // Calculate centroid
@@ -267,7 +472,7 @@ export function usePublicLands(
             const distance = getDistanceMiles(centerLat, centerLng, centroidLat, centroidLng);
 
             lands.push({
-              id: `${isFederalLands ? 'federal' : 'sma'}-${f.attributes.OBJECTID}-${ringIndex}`,
+              id: `${f.source}-${f.attributes.OBJECTID}-${ringIndex}`,
               name: baseName,
               managingAgency: agencyCode,
               managingAgencyFull: agencyNames[agencyCode] || agencyCode,

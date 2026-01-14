@@ -82,29 +82,50 @@ const DispersedExplorer = () => {
     25 // 25 mile radius for public lands
   );
 
-  // Helper to check if a point is within any NPS (National Park) polygon
-  // Dispersed camping is not allowed in National Parks
-  const isWithinNationalPark = useCallback(
+  // Helper to check if a point is within a restricted area (NPS or State Park)
+  // Dispersed camping is typically not allowed in National Parks or State Parks
+  const isWithinRestrictedArea = useCallback(
     (lat: number, lng: number): boolean => {
-      const npsLands = publicLands.filter((l) => l.managingAgency === 'NPS');
-      return npsLands.some(
+      const restrictedLands = publicLands.filter(
+        (l) => l.managingAgency === 'NPS' || l.managingAgency === 'STATE'
+      );
+      return restrictedLands.some(
         (land) => land.polygon && isPointInPolygon({ lat, lng }, land.polygon)
       );
     },
     [publicLands]
   );
 
+  // Helper to check if a spot is near an established campground
+  const isNearEstablishedCampground = useCallback(
+    (lat: number, lng: number, thresholdMiles: number = 0.3): boolean => {
+      // Convert threshold to approximate degrees (1 degree ≈ 69 miles at this latitude)
+      const thresholdDeg = thresholdMiles / 69;
+      return establishedCampgrounds.some((cg) => {
+        const latDiff = Math.abs(lat - cg.lat);
+        const lngDiff = Math.abs(lng - cg.lng);
+        // Quick bounding box check first
+        if (latDiff > thresholdDeg || lngDiff > thresholdDeg) return false;
+        // More accurate distance check
+        const dist = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
+        return dist < thresholdDeg;
+      });
+    },
+    [establishedCampgrounds]
+  );
+
   // Filter potential spots with smart rules:
   // - OSM camp sites: Always show (they're verified camping locations)
   // - MVUM-derived spots: Always show (MVUM roads are definitely on National Forest)
   // - OSM-derived spots: Validate against public land polygons when available
-  // - EXCLUDE spots within National Parks (dispersed camping not allowed)
+  // - EXCLUDE spots within National Parks or State Parks (dispersed camping not allowed)
+  // - EXCLUDE spots near established campgrounds (use the campground instead)
   const filteredPotentialSpots = useMemo(() => {
     // Always show OSM camp sites - they're explicitly tagged as camping locations
-    // But still exclude those in National Parks
+    // But still exclude those in National Parks and State Parks
     const campSites = potentialSpots
       .filter((spot) => spot.type === 'camp-site')
-      .filter((spot) => !isWithinNationalPark(spot.lat, spot.lng));
+      .filter((spot) => !isWithinRestrictedArea(spot.lat, spot.lng));
 
     // Get derived spots (dead-ends, intersections)
     const derivedSpots = potentialSpots.filter((spot) => spot.type !== 'camp-site');
@@ -118,10 +139,14 @@ const DispersedExplorer = () => {
     // - Always include if marked as public land (from road characteristics like track type)
     // - If we have public land polygons, validate remaining spots against them
     // - If no polygons but we have MVUM roads in the area, show OSM spots too (area is NF)
-    // - EXCLUDE spots within National Parks
+    // - EXCLUDE spots within National Parks or State Parks
+    // - EXCLUDE spots near established campgrounds
     const filteredDerived = derivedSpots.filter((spot) => {
-      // First check: exclude spots in National Parks (dispersed camping not allowed)
-      if (isWithinNationalPark(spot.lat, spot.lng)) return false;
+      // First check: exclude spots in National Parks or State Parks (dispersed camping not allowed)
+      if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
+
+      // Exclude spots near established campgrounds (use the campground instead)
+      if (isNearEstablishedCampground(spot.lat, spot.lng)) return false;
 
       // MVUM roads are definitely on public land (National Forest) - always include
       if (spot.isOnMVUMRoad) return true;
@@ -146,11 +171,12 @@ const DispersedExplorer = () => {
     const blmPolygons = publicLands.filter(l => l.managingAgency === 'BLM').length;
     const usfsPolygons = publicLands.filter(l => l.managingAgency === 'USFS' || l.managingAgency === 'FS').length;
     const npsPolygons = publicLands.filter(l => l.managingAgency === 'NPS').length;
+    const statePolygons = publicLands.filter(l => l.managingAgency === 'STATE').length;
     const publicLandSpots = derivedSpots.filter(s => s.isOnPublicLand).length;
-    console.log(`Filtered spots: ${campSites.length} camps, ${filteredDerived.length}/${derivedSpots.length} derived (${derivedSpots.filter(s => s.isOnMVUMRoad).length} MVUM, ${derivedSpots.filter(s => s.isOnBLMRoad).length} BLM road, ${publicLandSpots} public land) | Polygons: ${blmPolygons} BLM, ${usfsPolygons} USFS, ${npsPolygons} NPS, ${publicLands.length} total`);
+    console.log(`Filtered spots: ${campSites.length} camps, ${filteredDerived.length}/${derivedSpots.length} derived (${derivedSpots.filter(s => s.isOnMVUMRoad).length} MVUM, ${derivedSpots.filter(s => s.isOnBLMRoad).length} BLM road, ${publicLandSpots} public land) | Polygons: ${blmPolygons} BLM, ${usfsPolygons} USFS, ${npsPolygons} NPS, ${statePolygons} State, ${publicLands.length} total`);
 
     return [...campSites, ...filteredDerived];
-  }, [potentialSpots, publicLands, mvumRoads, isWithinNationalPark]);
+  }, [potentialSpots, publicLands, mvumRoads, isWithinRestrictedArea, isNearEstablishedCampground]);
 
   const onAutocompleteLoad = useCallback((autocompleteInstance: google.maps.places.Autocomplete) => {
     setAutocomplete(autocompleteInstance);
@@ -456,6 +482,10 @@ const DispersedExplorer = () => {
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 bg-amber-500/30 border border-amber-600 rounded" />
                           <span>BLM Land</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-blue-500/30 border border-blue-600 rounded" />
+                          <span>State Park</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 bg-purple-500 rounded-full" />
@@ -803,8 +833,10 @@ const DispersedExplorer = () => {
                 // Different colors for different agencies
                 const isBLM = land.managingAgency === 'BLM';
                 const isNPS = land.managingAgency === 'NPS';
-                const fillColor = isBLM ? '#d97706' : isNPS ? '#7c3aed' : '#10b981'; // orange for BLM, purple for NPS, green for USFS
-                const strokeColor = isBLM ? '#b45309' : isNPS ? '#6d28d9' : '#059669';
+                const isState = land.managingAgency === 'STATE';
+                // orange for BLM, purple for NPS, blue for State Parks, green for USFS
+                const fillColor = isBLM ? '#d97706' : isNPS ? '#7c3aed' : isState ? '#3b82f6' : '#10b981';
+                const strokeColor = isBLM ? '#b45309' : isNPS ? '#6d28d9' : isState ? '#2563eb' : '#059669';
 
                 return (
                   <Polygon

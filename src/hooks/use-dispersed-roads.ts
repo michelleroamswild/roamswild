@@ -914,10 +914,23 @@ async function fetchAllOSMData(
         tags.leisure === 'firepit';
     })
     .map((el: any) => {
-      const lat = el.lat || el.center?.lat;
-      const lng = el.lon || el.center?.lon;
-      const tags = el.tags || {};
+      // For nodes, use lat/lon directly
+      // For ways, calculate center from geometry
+      let lat = el.lat || el.center?.lat;
+      let lng = el.lon || el.center?.lon;
 
+      // If no direct coordinates, calculate center from geometry (for ways/polygons)
+      if (!lat && el.geometry && el.geometry.length > 0) {
+        const sumLat = el.geometry.reduce((sum: number, pt: any) => sum + pt.lat, 0);
+        const sumLng = el.geometry.reduce((sum: number, pt: any) => sum + pt.lon, 0);
+        lat = sumLat / el.geometry.length;
+        lng = sumLng / el.geometry.length;
+      }
+
+      const tags = el.tags || {};
+      const name = tags.name || '';
+
+      // Determine if this is a dispersed/backcountry site
       const isBackcountry = tags.backcountry === 'yes' ||
         tags.camp_site === 'basic' ||
         tags.camp_type === 'wildcamp' ||
@@ -925,8 +938,30 @@ async function fetchAllOSMData(
 
       const isFirepit = tags.leisure === 'firepit';
 
-      let name = tags.name || 'Camp Site';
-      if (isFirepit && !tags.name) name = 'Fire Ring';
+      // Determine if this is an established campground (vs dispersed site)
+      // Indicators of established campground:
+      const isWayOrArea = el.type === 'way' || el.type === 'relation';
+      const hasFee = tags.fee === 'yes';
+      const hasAmenities = tags.toilets || tags.drinking_water || tags.shower ||
+                          tags.power_supply || tags.internet_access;
+      const hasCapacity = tags.capacity && parseInt(tags.capacity) > 5;
+      const nameIndicatesCampground = /campground|camp\s|camping|rv\s*park|yurt/i.test(name);
+      const isIndividualSite = /^Site\s*\d/i.test(name) || tags.tourism === 'camp_pitch';
+
+      // Score how likely this is an established campground (not dispersed)
+      let establishedScore = 0;
+      if (isWayOrArea) establishedScore += 3;  // Polygons are usually campgrounds
+      if (hasFee) establishedScore += 2;
+      if (hasAmenities) establishedScore += 2;
+      if (hasCapacity) establishedScore += 1;
+      if (nameIndicatesCampground) establishedScore += 2;
+      if (isBackcountry) establishedScore -= 3;  // Definitely not established
+      if (isIndividualSite) establishedScore -= 1;  // Individual sites within campgrounds
+
+      const isEstablishedCampground = establishedScore >= 3 && !isBackcountry;
+
+      let displayName = name || 'Camp Site';
+      if (isFirepit && !name) displayName = 'Fire Ring';
 
       let score = 30;
       const reasons: string[] = [];
@@ -937,8 +972,10 @@ async function fetchAllOSMData(
       } else if (isBackcountry) {
         score = 40;
         reasons.push('Known camp site', 'Backcountry/primitive');
+      } else if (isEstablishedCampground) {
+        reasons.push('Established campground');
       } else if (tags.tourism === 'camp_site') {
-        reasons.push('Known camp site', 'Established site');
+        reasons.push('Known camp site');
       } else if (tags.camp_site || tags.camp_type) {
         score = 35;
         reasons.push('Mapped camping location');
@@ -950,11 +987,14 @@ async function fetchAllOSMData(
         id: `camp-${el.id}`,
         lat,
         lng,
-        name,
+        name: displayName,
         type: 'camp-site' as const,
         score,
         reasons,
         source: 'osm' as const,
+        isEstablishedCampground,
+        isBackcountry,
+        isIndividualSite,
       };
     })
     .filter((s: any) => s.lat && s.lng);
@@ -1054,7 +1094,33 @@ export function useDispersedRoads(
           }
         });
 
-        console.log(`Total campgrounds: ${allCampgrounds.length} (${ridbCampgrounds.length} RIDB + ${usfsCampgrounds.length - (allCampgrounds.length - ridbCampgrounds.length)} USFS unique)`);
+        // Add OSM campgrounds (established campgrounds with amenities, not dispersed sites)
+        // Use the isEstablishedCampground flag computed during parsing
+        const osmCampgrounds = camps.filter((camp: any) => camp.isEstablishedCampground);
+
+        osmCampgrounds.forEach(osmCg => {
+          // Only add if not already in list (check by name similarity AND proximity)
+          const alreadyExists = allCampgrounds.some(cg => {
+            const dist = getDistanceMiles(osmCg.lat, osmCg.lng, cg.lat, cg.lng);
+            // Consider duplicate only if very close (<0.1 miles) OR same name and close (<0.5 miles)
+            const sameNameish = cg.name.toLowerCase().includes(osmCg.name.toLowerCase().split(' ')[0]) ||
+                               osmCg.name.toLowerCase().includes(cg.name.toLowerCase().split(' ')[0]);
+            return (dist < 0.1) || (sameNameish && dist < 0.5);
+          });
+          if (!alreadyExists) {
+            allCampgrounds.push({
+              id: osmCg.id,
+              name: osmCg.name,
+              lat: osmCg.lat,
+              lng: osmCg.lng,
+              facilityType: 'Campground',
+              agencyName: 'OSM',
+              reservable: false,
+            });
+          }
+        });
+
+        console.log(`Total campgrounds: ${allCampgrounds.length} (${ridbCampgrounds.length} RIDB, ${usfsCampgrounds.length} USFS, ${osmCampgrounds.length} OSM)`);
 
         setMvumRoads(mvum);
         setBlmRoads(blm);
@@ -1096,12 +1162,32 @@ export function useDispersedRoads(
           return nearRoad;
         });
 
-        // Also filter out OSM camps that are actually established campgrounds
-        const trulyDispersedCamps = roadAccessibleCamps.filter(camp => {
-          const isEstablished = allCampgrounds.some(cg =>
+        // Filter out OSM camps that are:
+        // 1. Established campgrounds (already added to allCampgrounds)
+        // 2. Individual sites within established campgrounds (Site 1, Site 2, etc.)
+        // 3. Any camp too close to an established campground
+        const trulyDispersedCamps = roadAccessibleCamps.filter((camp: any) => {
+          // Skip if this is an established campground (already in establishedCampgrounds)
+          if (camp.isEstablishedCampground) return false;
+
+          // Skip individual sites within established campgrounds
+          if (camp.isIndividualSite) {
+            const nearEstablished = allCampgrounds.some(cg =>
+              getDistanceMiles(camp.lat, camp.lng, cg.lat, cg.lng) < 0.5
+            );
+            if (nearEstablished) return false;
+          }
+
+          // Skip "Host" sites (camp hosts at established campgrounds)
+          if (/^Host$/i.test(camp.name || '') || /CAMP HOST/i.test(camp.name || '')) {
+            return false;
+          }
+
+          // Also exclude any camp within 0.25 miles of an established campground
+          const tooCloseToEstablished = allCampgrounds.some(cg =>
             getDistanceMiles(camp.lat, camp.lng, cg.lat, cg.lng) < 0.25
           );
-          return !isEstablished;
+          return !tooCloseToEstablished;
         });
 
         console.log('Dispersed data:', {
