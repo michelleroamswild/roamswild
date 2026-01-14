@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Jeep, List, Path, SignOut, Tent, Compass, Heart, House, Moon, Sun, MapTrifold } from "@phosphor-icons/react";
+import { Jeep, List, Path, SignOut, Tent, Compass, Heart, Moon, Sun, MapTrifold } from "@phosphor-icons/react";
 import { Button } from "./ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -66,10 +66,10 @@ export const Header = () => {
 
         <nav className="hidden md:flex items-center gap-2">
           <Link
-            to="/"
+            to="/dispersed"
             className={cn(
               "text-base font-bold transition-colors px-3 py-1.5 rounded-full",
-              isActive('/')
+              isActive('/dispersed')
                 ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted"
             )}
@@ -125,20 +125,12 @@ export const Header = () => {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {showDevFeatures && (
-                <>
-                  <DropdownMenuItem asChild>
-                    <Link to="/campsites" className="flex items-center">
-                      <Tent className="w-4 h-4 mr-2" weight="bold" />
-                      Campsites
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/dispersed" className="flex items-center">
-                      <MapTrifold className="w-4 h-4 mr-2" weight="bold" />
-                      Dispersed Explorer
-                    </Link>
-                  </DropdownMenuItem>
-                </>
+                <DropdownMenuItem asChild>
+                  <Link to="/campsites" className="flex items-center">
+                    <Tent className="w-4 h-4 mr-2" weight="bold" />
+                    Campsites
+                  </Link>
+                </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={toggleTheme} className="flex items-center cursor-pointer">
@@ -191,16 +183,16 @@ export const Header = () => {
               {/* Navigation Links */}
               <nav className="flex flex-col gap-1 mt-4">
                 <Link
-                  to="/"
+                  to="/dispersed"
                   onClick={closeMobileMenu}
                   className={cn(
                     "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
-                    isActive('/')
+                    isActive('/dispersed')
                       ? "bg-accent text-accent-foreground"
                       : "text-foreground hover:bg-muted"
                   )}
                 >
-                  <House className="w-5 h-5" weight={isActive('/') ? "fill" : "regular"} />
+                  <MapTrifold className="w-5 h-5" weight={isActive('/dispersed') ? "fill" : "regular"} />
                   Explore
                 </Link>
                 <Link
@@ -230,34 +222,19 @@ export const Header = () => {
                   Saved
                 </Link>
                 {showDevFeatures && (
-                  <>
-                    <Link
-                      to="/campsites"
-                      onClick={closeMobileMenu}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
-                        isActive('/campsites')
-                          ? "bg-accent text-accent-foreground"
-                          : "text-foreground hover:bg-muted"
-                      )}
-                    >
-                      <Tent className="w-5 h-5" weight={isActive('/campsites') ? "fill" : "regular"} />
-                      Campsites
-                    </Link>
-                    <Link
-                      to="/dispersed"
-                      onClick={closeMobileMenu}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
-                        isActive('/dispersed')
-                          ? "bg-accent text-accent-foreground"
-                          : "text-foreground hover:bg-muted"
-                      )}
-                    >
-                      <MapTrifold className="w-5 h-5" weight={isActive('/dispersed') ? "fill" : "regular"} />
-                      Dispersed Explorer
-                    </Link>
-                  </>
+                  <Link
+                    to="/campsites"
+                    onClick={closeMobileMenu}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
+                      isActive('/campsites')
+                        ? "bg-accent text-accent-foreground"
+                        : "text-foreground hover:bg-muted"
+                    )}
+                  >
+                    <Tent className="w-5 h-5" weight={isActive('/campsites') ? "fill" : "regular"} />
+                    Campsites
+                  </Link>
                 )}
               </nav>
 

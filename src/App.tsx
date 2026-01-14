@@ -84,11 +84,9 @@ const App = () => (
                   <Route path="/trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
                   <Route path="/my-trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
                   <Route path="/join/:token" element={<ProtectedRoute><JoinTrip /></ProtectedRoute>} />
+                  <Route path="/dispersed" element={<ProtectedRoute><DispersedExplorer /></ProtectedRoute>} />
                   <Route path="/campsites" element={<ProtectedRoute><Campsites /></ProtectedRoute>} />
                   <Route path="/campsites/:id" element={<ProtectedRoute><CampsiteDetail /></ProtectedRoute>} />
-                  {showDevFeatures && (
-                    <Route path="/dispersed" element={<ProtectedRoute><DispersedExplorer /></ProtectedRoute>} />
-                  )}
                   <Route path="/style-guide" element={<StyleGuide />} />
 
                   {/* Catch-all */}
