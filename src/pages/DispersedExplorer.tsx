@@ -12,6 +12,7 @@ import { useCampsites } from '@/context/CampsitesContext';
 import { useGoogleMaps } from '@/components/GoogleMapsProvider';
 import { Header } from '@/components/Header';
 import { ConfirmSpotDialog } from '@/components/ConfirmSpotDialog';
+import { createMarkerIcon } from '@/utils/mapMarkers';
 import type { Campsite } from '@/types/campsite';
 
 interface SearchLocation {
@@ -493,11 +494,36 @@ const DispersedExplorer = () => {
     });
   }, [osmTracks, roadFilter]);
 
-  // Get marker icon URL based on spot type and score
-  const getSpotMarkerIcon = (spot: PotentialSpot) => {
+  // Check if a spot has been confirmed in the database
+  const isSpotConfirmed = useCallback((spot: PotentialSpot): Campsite | null => {
+    // Check if this spot exists in explorerSpots (within ~50m)
+    const radiusDegrees = 50 / 111000;
+    return explorerSpots.find(es =>
+      Math.abs(es.lat - spot.lat) < radiusDegrees &&
+      Math.abs(es.lng - spot.lng) < radiusDegrees
+    ) || null;
+  }, [explorerSpots]);
+
+  // Get marker icon for a spot - uses camp icon for confirmed spots
+  const getSpotMarkerIcon = useCallback((spot: PotentialSpot, isSelected: boolean) => {
+    const confirmedSpot = isSpotConfirmed(spot);
+
+    // If this spot has been confirmed by users, use the camp marker
+    if (confirmedSpot) {
+      return createMarkerIcon('camp', {
+        isActive: isSelected,
+        size: isSelected ? 44 : 36,
+        // Use green for verified (3+), amber for pending
+        customColor: confirmedSpot.isConfirmed ? '#22c55e' : '#ea9b0c'
+      });
+    }
+
     // Known campsites from OSM get a distinct blue color
     if (spot.type === 'camp-site') {
-      return 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png';
+      return {
+        url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+        scaledSize: new google.maps.Size(isSelected ? 40 : 32, isSelected ? 40 : 32),
+      };
     }
 
     // Use different colors based on confidence score for derived spots
@@ -506,9 +532,11 @@ const DispersedExplorer = () => {
     else if (spot.score >= 25) color = 'yellow';
     else if (spot.score >= 15) color = 'orange';
 
-    // Use Google Maps default marker icons (HTTPS to avoid mixed content blocking)
-    return `https://maps.google.com/mapfiles/ms/icons/${color}-dot.png`;
-  };
+    return {
+      url: `https://maps.google.com/mapfiles/ms/icons/${color}-dot.png`,
+      scaledSize: new google.maps.Size(isSelected ? 40 : 32, isSelected ? 40 : 32),
+    };
+  }, [isSpotConfirmed]);
 
   const getSpotIcon = (type: PotentialSpot['type']) => {
     switch (type) {
@@ -664,13 +692,7 @@ const DispersedExplorer = () => {
                 key={spot.id}
                 position={{ lat: spot.lat, lng: spot.lng }}
                 title={`${spot.name} (Score: ${spot.score})`}
-                icon={{
-                  url: getSpotMarkerIcon(spot),
-                  scaledSize: new google.maps.Size(
-                    selectedSpot === spot ? 40 : 32,
-                    selectedSpot === spot ? 40 : 32
-                  ),
-                }}
+                icon={getSpotMarkerIcon(spot, selectedSpot === spot)}
                 onClick={() => {
                   setSelectedSpot(spot);
                   setSelectedRoad(null);
