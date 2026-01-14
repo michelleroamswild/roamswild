@@ -61,6 +61,9 @@ export interface PotentialSpot {
   isOnMVUMRoad?: boolean; // True if this spot is on a USFS MVUM road (definitely public land)
   isOnBLMRoad?: boolean; // True if this spot is on a BLM road (definitely public land)
   isOnPublicLand?: boolean; // True if this spot is likely on public land (based on road characteristics)
+  // Route accessibility - can you REACH this spot via passenger/high-clearance roads?
+  passengerReachable?: boolean; // True if reachable via only passenger-accessible roads
+  highClearanceReachable?: boolean; // True if reachable via passenger + high-clearance roads (no 4WD required)
 }
 
 // BLM Road from GTLF (Ground Transportation Linear Feature)
@@ -324,11 +327,298 @@ interface PrivateRoadPoint {
   lng: number;
 }
 
+/**
+ * Road segment for network analysis
+ */
+interface RoadSegment {
+  id: string;
+  startKey: string;
+  endKey: string;
+  vehicleType: 'passenger' | 'high-clearance' | '4wd';
+  isEntryRoad: boolean; // Road likely connects to main road network
+}
+
+/**
+ * Analyze road network to determine which spots are reachable by different vehicle types
+ *
+ * This builds a graph of road connectivity and determines if each endpoint can be
+ * reached from "entry points" (places where back roads connect to main roads)
+ * using only roads accessible to specific vehicle types.
+ */
+function analyzeRoadAccessibility(
+  mvumRoads: MVUMRoad[],
+  blmRoads: BLMRoad[],
+  osmTracks: OSMTrack[],
+  searchBounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }
+): Map<string, { passengerReachable: boolean; highClearanceReachable: boolean }> {
+  const segments: RoadSegment[] = [];
+  const nodeConnections = new Map<string, Set<string>>(); // node -> connected nodes
+  const edgeVehicleTypes = new Map<string, 'passenger' | 'high-clearance' | '4wd'>(); // edge key -> vehicle type
+
+  // Helper to round coordinates to ~100m precision for node matching
+  const toNodeKey = (lat: number, lng: number): string => {
+    return `${lat.toFixed(3)},${lng.toFixed(3)}`;
+  };
+
+  // Helper to check if a point is near the edge of search bounds (likely connects to main roads)
+  const isNearBoundary = (lat: number, lng: number, margin: number = 0.02): boolean => {
+    return lat <= searchBounds.minLat + margin ||
+           lat >= searchBounds.maxLat - margin ||
+           lng <= searchBounds.minLng + margin ||
+           lng >= searchBounds.maxLng - margin;
+  };
+
+  // Helper to safely get coordinates
+  const getCoordLng = (coord: any): number | null => {
+    if (Array.isArray(coord) && typeof coord[0] === 'number') return coord[0];
+    if (coord && typeof coord.lng === 'number') return coord.lng;
+    if (coord && typeof coord.lon === 'number') return coord.lon;
+    return null;
+  };
+  const getCoordLat = (coord: any): number | null => {
+    if (Array.isArray(coord) && typeof coord[1] === 'number') return coord[1];
+    if (coord && typeof coord.lat === 'number') return coord.lat;
+    return null;
+  };
+
+  // Process MVUM roads
+  mvumRoads.forEach(road => {
+    if (!road.geometry?.coordinates?.length) return;
+    const coords = road.geometry.coordinates;
+
+    const startLat = getCoordLat(coords[0]);
+    const startLng = getCoordLng(coords[0]);
+    const endLat = getCoordLat(coords[coords.length - 1]);
+    const endLng = getCoordLng(coords[coords.length - 1]);
+
+    if (startLat === null || startLng === null || endLat === null || endLng === null) return;
+
+    const startKey = toNodeKey(startLat, startLng);
+    const endKey = toNodeKey(endLat, endLng);
+
+    // Determine vehicle type for MVUM road
+    let vehicleType: 'passenger' | 'high-clearance' | '4wd' = 'passenger';
+    if (road.highClearanceVehicle && !road.passengerVehicle) {
+      vehicleType = 'high-clearance';
+    } else if (!road.passengerVehicle && !road.highClearanceVehicle && (road.atv || road.motorcycle)) {
+      vehicleType = '4wd';
+    }
+
+    // MVUM roads at boundary are entry points
+    const isEntry = isNearBoundary(startLat, startLng) || isNearBoundary(endLat, endLng);
+
+    segments.push({ id: road.id, startKey, endKey, vehicleType, isEntryRoad: isEntry });
+
+    // Add to node connections
+    if (!nodeConnections.has(startKey)) nodeConnections.set(startKey, new Set());
+    if (!nodeConnections.has(endKey)) nodeConnections.set(endKey, new Set());
+    nodeConnections.get(startKey)!.add(endKey);
+    nodeConnections.get(endKey)!.add(startKey);
+
+    // Store edge vehicle type (both directions)
+    const edgeKey1 = `${startKey}-${endKey}`;
+    const edgeKey2 = `${endKey}-${startKey}`;
+    edgeVehicleTypes.set(edgeKey1, vehicleType);
+    edgeVehicleTypes.set(edgeKey2, vehicleType);
+  });
+
+  // Process BLM roads (assume high-clearance unless surface indicates otherwise)
+  blmRoads.forEach(road => {
+    if (!road.geometry?.coordinates?.length) return;
+    const coords = road.geometry.coordinates;
+
+    const startLat = getCoordLat(coords[0]);
+    const startLng = getCoordLng(coords[0]);
+    const endLat = getCoordLat(coords[coords.length - 1]);
+    const endLng = getCoordLng(coords[coords.length - 1]);
+
+    if (startLat === null || startLng === null || endLat === null || endLng === null) return;
+
+    const startKey = toNodeKey(startLat, startLng);
+    const endKey = toNodeKey(endLat, endLng);
+
+    // BLM roads - assume high-clearance by default
+    const surfaceLower = (road.surfaceType || '').toLowerCase();
+    let vehicleType: 'passenger' | 'high-clearance' | '4wd' = 'high-clearance';
+    if (surfaceLower.includes('paved') || surfaceLower.includes('asphalt') || surfaceLower.includes('gravel')) {
+      vehicleType = 'passenger';
+    }
+
+    const isEntry = isNearBoundary(startLat, startLng) || isNearBoundary(endLat, endLng);
+
+    segments.push({ id: road.id, startKey, endKey, vehicleType, isEntryRoad: isEntry });
+
+    if (!nodeConnections.has(startKey)) nodeConnections.set(startKey, new Set());
+    if (!nodeConnections.has(endKey)) nodeConnections.set(endKey, new Set());
+    nodeConnections.get(startKey)!.add(endKey);
+    nodeConnections.get(endKey)!.add(startKey);
+
+    const edgeKey1 = `${startKey}-${endKey}`;
+    const edgeKey2 = `${endKey}-${startKey}`;
+    // Only set if not already set (MVUM takes precedence)
+    if (!edgeVehicleTypes.has(edgeKey1)) edgeVehicleTypes.set(edgeKey1, vehicleType);
+    if (!edgeVehicleTypes.has(edgeKey2)) edgeVehicleTypes.set(edgeKey2, vehicleType);
+  });
+
+  // Process OSM tracks
+  osmTracks.forEach(track => {
+    if (!track.geometry?.coordinates?.length) return;
+    const coords = track.geometry.coordinates;
+
+    const startLat = getCoordLat(coords[0]);
+    const startLng = getCoordLng(coords[0]);
+    const endLat = getCoordLat(coords[coords.length - 1]);
+    const endLng = getCoordLng(coords[coords.length - 1]);
+
+    if (startLat === null || startLng === null || endLat === null || endLng === null) return;
+
+    const startKey = toNodeKey(startLat, startLng);
+    const endKey = toNodeKey(endLat, endLng);
+
+    // Determine vehicle type for OSM track
+    let vehicleType: 'passenger' | 'high-clearance' | '4wd' = 'passenger';
+    if (track.fourWdOnly) {
+      vehicleType = '4wd';
+    } else if (track.tracktype === 'grade5' || track.tracktype === 'grade4') {
+      vehicleType = '4wd';
+    } else if (track.tracktype === 'grade3') {
+      vehicleType = 'high-clearance';
+    } else if (track.highway === 'track') {
+      // Generic tracks without grade - assume high-clearance to be safe
+      vehicleType = 'high-clearance';
+    }
+    // unclassified roads and grade1/grade2 tracks remain 'passenger'
+
+    // OSM roads at boundary OR unclassified roads are potential entry points
+    const isEntry = isNearBoundary(startLat, startLng) ||
+                    isNearBoundary(endLat, endLng) ||
+                    (track.highway === 'unclassified' && vehicleType === 'passenger');
+
+    segments.push({ id: String(track.id), startKey, endKey, vehicleType, isEntryRoad: isEntry });
+
+    if (!nodeConnections.has(startKey)) nodeConnections.set(startKey, new Set());
+    if (!nodeConnections.has(endKey)) nodeConnections.set(endKey, new Set());
+    nodeConnections.get(startKey)!.add(endKey);
+    nodeConnections.get(endKey)!.add(startKey);
+
+    const edgeKey1 = `${startKey}-${endKey}`;
+    const edgeKey2 = `${endKey}-${startKey}`;
+    // Only set if not already set (earlier roads take precedence)
+    if (!edgeVehicleTypes.has(edgeKey1)) edgeVehicleTypes.set(edgeKey1, vehicleType);
+    if (!edgeVehicleTypes.has(edgeKey2)) edgeVehicleTypes.set(edgeKey2, vehicleType);
+  });
+
+  // Find entry nodes (nodes on roads that connect to main road network)
+  const entryNodes = new Set<string>();
+  segments.forEach(seg => {
+    if (seg.isEntryRoad) {
+      entryNodes.add(seg.startKey);
+      entryNodes.add(seg.endKey);
+    }
+  });
+
+  console.log(`Road network: ${segments.length} segments, ${nodeConnections.size} nodes, ${entryNodes.size} entry nodes`);
+
+  // BFS to find passenger-reachable nodes
+  const passengerReachable = new Set<string>();
+  const passengerQueue: string[] = [];
+
+  // Start from entry nodes that have at least one passenger-accessible connection
+  entryNodes.forEach(node => {
+    const neighbors = nodeConnections.get(node);
+    if (neighbors) {
+      for (const neighbor of neighbors) {
+        const edgeKey = `${node}-${neighbor}`;
+        const vehicleType = edgeVehicleTypes.get(edgeKey);
+        if (vehicleType === 'passenger') {
+          passengerReachable.add(node);
+          passengerQueue.push(node);
+          break;
+        }
+      }
+    }
+  });
+
+  // BFS for passenger reachability
+  while (passengerQueue.length > 0) {
+    const current = passengerQueue.shift()!;
+    const neighbors = nodeConnections.get(current);
+    if (!neighbors) continue;
+
+    for (const neighbor of neighbors) {
+      if (passengerReachable.has(neighbor)) continue;
+
+      const edgeKey = `${current}-${neighbor}`;
+      const vehicleType = edgeVehicleTypes.get(edgeKey);
+
+      // Only traverse passenger-accessible edges
+      if (vehicleType === 'passenger') {
+        passengerReachable.add(neighbor);
+        passengerQueue.push(neighbor);
+      }
+    }
+  }
+
+  // BFS to find high-clearance-reachable nodes (includes passenger roads)
+  const highClearanceReachable = new Set<string>();
+  const hcQueue: string[] = [];
+
+  // Start from entry nodes
+  entryNodes.forEach(node => {
+    const neighbors = nodeConnections.get(node);
+    if (neighbors) {
+      for (const neighbor of neighbors) {
+        const edgeKey = `${node}-${neighbor}`;
+        const vehicleType = edgeVehicleTypes.get(edgeKey);
+        if (vehicleType === 'passenger' || vehicleType === 'high-clearance') {
+          highClearanceReachable.add(node);
+          hcQueue.push(node);
+          break;
+        }
+      }
+    }
+  });
+
+  // BFS for high-clearance reachability
+  while (hcQueue.length > 0) {
+    const current = hcQueue.shift()!;
+    const neighbors = nodeConnections.get(current);
+    if (!neighbors) continue;
+
+    for (const neighbor of neighbors) {
+      if (highClearanceReachable.has(neighbor)) continue;
+
+      const edgeKey = `${current}-${neighbor}`;
+      const vehicleType = edgeVehicleTypes.get(edgeKey);
+
+      // Traverse passenger or high-clearance edges (not 4WD)
+      if (vehicleType === 'passenger' || vehicleType === 'high-clearance') {
+        highClearanceReachable.add(neighbor);
+        hcQueue.push(neighbor);
+      }
+    }
+  }
+
+  console.log(`Reachability: ${passengerReachable.size} passenger-reachable nodes, ${highClearanceReachable.size} high-clearance-reachable nodes`);
+
+  // Build result map
+  const result = new Map<string, { passengerReachable: boolean; highClearanceReachable: boolean }>();
+  nodeConnections.forEach((_, nodeKey) => {
+    result.set(nodeKey, {
+      passengerReachable: passengerReachable.has(nodeKey),
+      highClearanceReachable: highClearanceReachable.has(nodeKey),
+    });
+  });
+
+  return result;
+}
+
 function findDeadEnds(
   mvumRoads: MVUMRoad[],
   blmRoads: BLMRoad[],
   osmTracks: OSMTrack[],
-  publicLands: PublicLandArea[]
+  publicLands: PublicLandArea[],
+  accessibilityMap: Map<string, { passengerReachable: boolean; highClearanceReachable: boolean }>
 ): { spots: PotentialSpot[]; privateRoadPoints: PrivateRoadPoint[] } {
   const spots: PotentialSpot[] = [];
   const privateRoadPoints: PrivateRoadPoint[] = [];
@@ -493,6 +783,12 @@ function findDeadEnds(
   });
   console.log('Endpoint count distribution:', countDistribution, 'Public land endpoints:', publicLandCount);
 
+  // Helper to look up accessibility (accessibility map uses 3-decimal precision)
+  const getAccessibility = (lat: number, lng: number) => {
+    const accessKey = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+    return accessibilityMap.get(accessKey) || { passengerReachable: false, highClearanceReachable: false };
+  };
+
   // Find dead-ends (endpoints that only appear once = true dead end)
   // and intersections (endpoints that appear 3+ times)
   // ONLY include spots that are on public land
@@ -502,6 +798,9 @@ function findDeadEnds(
 
     // Skip if not on public land (either from road characteristics OR boundary check)
     if (!entry.isPublicLand && !withinPublicLandBoundary) return;
+
+    // Get route accessibility for this spot
+    const accessibility = getAccessibility(entry.lat, entry.lng);
 
     if (entry.count === 1) {
       // Dead end - road terminus
@@ -527,6 +826,8 @@ function findDeadEnds(
         isOnMVUMRoad: entry.hasMVUMRoad,
         isOnBLMRoad: entry.hasBLMRoad,
         isOnPublicLand: entry.isPublicLand,
+        passengerReachable: accessibility.passengerReachable,
+        highClearanceReachable: accessibility.highClearanceReachable,
       });
     } else if (entry.count >= 3) {
       // Intersection - multiple roads meet
@@ -545,6 +846,8 @@ function findDeadEnds(
         isOnMVUMRoad: entry.hasMVUMRoad,
         isOnBLMRoad: entry.hasBLMRoad,
         isOnPublicLand: entry.isPublicLand,
+        passengerReachable: accessibility.passengerReachable,
+        highClearanceReachable: accessibility.highClearanceReachable,
       });
     }
   });
@@ -1251,9 +1554,14 @@ export function useDispersedRoads(
         setOsmTracks(osm);
         setEstablishedCampgrounds(allCampgrounds);
 
+        // Analyze road network accessibility to determine which spots are reachable
+        // by passenger vehicles vs requiring high-clearance/4WD
+        const searchBounds = { minLat, maxLat, minLng, maxLng };
+        const accessibilityMap = analyzeRoadAccessibility(mvum, blm, osm, searchBounds);
+
         // Find dead-ends and intersections from road geometry
-        // Pass publicLands for additional boundary checking
-        const { spots: derivedSpots, privateRoadPoints } = findDeadEnds(mvum, blm, osm, publicLands);
+        // Pass publicLands for additional boundary checking and accessibilityMap for route reachability
+        const { spots: derivedSpots, privateRoadPoints } = findDeadEnds(mvum, blm, osm, publicLands, accessibilityMap);
 
         // Helper to check if a point is near any private road
         // Using 0.5 mile buffer since industrial areas often have many unmarked internal roads

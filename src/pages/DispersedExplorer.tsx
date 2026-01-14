@@ -1,10 +1,10 @@
-import { useState, useCallback, useRef, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, MapPin, MagnifyingGlass, Path, Jeep, SpinnerGap, TreeEvergreen, Warning, Crosshair, Tent, Star, Drop, MapPinLine, Eye, EyeSlash } from '@phosphor-icons/react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import { MapPin, MagnifyingGlass, Path, SpinnerGap, TreeEvergreen, Warning, Crosshair, Tent, Drop, MapPinLine, Eye, EyeSlash, Info, Star, NavigationArrow, Car, Jeep, Copy, Check, MapTrifold } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent } from '@/components/ui/card';
 import { GoogleMap } from '@/components/GoogleMap';
-import { Polyline, Marker, Polygon } from '@react-google-maps/api';
+import { Polyline, Marker, Polygon, InfoWindow } from '@react-google-maps/api';
 import { Autocomplete } from '@react-google-maps/api';
 import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
 import { usePublicLands } from '@/hooks/use-public-lands';
@@ -64,6 +64,11 @@ const DispersedExplorer = () => {
   const [selectedRoad, setSelectedRoad] = useState<MVUMRoad | OSMTrack | null>(null);
   const [selectedSpot, setSelectedSpot] = useState<PotentialSpot | null>(null);
   const [showPublicLands, setShowPublicLands] = useState(true);
+  const [roadFilter, setRoadFilter] = useState<'all' | 'passenger' | 'high-clearance' | '4wd'>('all');
+  const [recommendationPage, setRecommendationPage] = useState(0);
+  const [osrmDistances, setOsrmDistances] = useState<Record<string, number>>({});
+  const [osrmLoading, setOsrmLoading] = useState(false);
+  const [copiedCoords, setCopiedCoords] = useState(false);
   const mapRef = useRef<google.maps.Map | null>(null);
 
   const { mvumRoads, osmTracks, potentialSpots, establishedCampgrounds, loading, error } = useDispersedRoads(
@@ -183,8 +188,198 @@ const DispersedExplorer = () => {
     const filterOnlyPolygons = publicLands.filter(l => !l.renderOnMap).length;
     console.log(`Filtered spots: ${campSites.length} camps, ${filteredDerived.length}/${derivedSpots.length} derived (${derivedSpots.filter(s => s.isOnMVUMRoad).length} MVUM, ${derivedSpots.filter(s => s.isOnBLMRoad).length} BLM road, ${publicLandSpots} public land) | Polygons: ${blmPolygons} BLM, ${usfsPolygons} USFS, ${npsPolygons} NPS, ${statePolygons} State, ${publicLands.length} total (${filterOnlyPolygons} filter-only)`);
 
-    return [...campSites, ...filteredDerived];
-  }, [potentialSpots, publicLands, mvumRoads, isWithinRestrictedArea, isNearEstablishedCampground]);
+    const allSpots = [...campSites, ...filteredDerived];
+
+    // Apply road type filter to spots based on ROUTE REACHABILITY
+    // This checks if you can actually reach the spot via roads accessible to your vehicle type
+    // (not just whether the spot is near a road of that type)
+    if (roadFilter === 'all') {
+      return allSpots;
+    }
+
+    return allSpots.filter((spot) => {
+      // Camp-sites from OSM are always shown (they're explicitly tagged camping spots)
+      // Note: Camp sites don't have reachability info, so we show them but user should verify
+      if (spot.type === 'camp-site') return true;
+
+      if (roadFilter === 'passenger') {
+        // Only show spots that are REACHABLE via passenger-accessible roads
+        // This means the entire route from the main road to this spot uses only passenger roads
+        return spot.passengerReachable === true;
+      }
+
+      if (roadFilter === 'high-clearance') {
+        // Show spots reachable by high-clearance vehicles (passenger + high-clearance roads, no 4WD)
+        return spot.highClearanceReachable === true;
+      }
+
+      // '4wd' filter - show all spots (4WD can get anywhere)
+      return true;
+    });
+  }, [potentialSpots, publicLands, mvumRoads, osmTracks, isWithinRestrictedArea, isNearEstablishedCampground, roadFilter]);
+
+  // Calculate top recommendations based on multiple factors
+  const topRecommendations = useMemo(() => {
+    if (!searchLocation || filteredPotentialSpots.length === 0) return [];
+
+    // Helper to calculate distance in miles (straight-line)
+    const getStraightLineDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+      const R = 3959; // Earth's radius in miles
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    };
+
+    // Estimate driving distance using terrain multiplier
+    // Rural/mountain roads are typically 1.4-1.6x longer than straight-line
+    const DRIVING_MULTIPLIER = 1.5;
+    const getDrivingDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+      return getStraightLineDistance(lat1, lng1, lat2, lng2) * DRIVING_MULTIPLIER;
+    };
+
+    // Helper to count nearby spots (cluster density) - uses straight-line for speed
+    const countNearbySpots = (spot: PotentialSpot, allSpots: PotentialSpot[], radiusMiles: number = 0.5) => {
+      return allSpots.filter(s =>
+        s.id !== spot.id && getStraightLineDistance(spot.lat, spot.lng, s.lat, s.lng) <= radiusMiles
+      ).length;
+    };
+
+    // Score each spot for recommendation
+    const scoredSpots = filteredPotentialSpots.map(spot => {
+      let recScore = 0;
+      // Use estimated driving distance for user-facing values
+      const drivingDistance = getDrivingDistance(searchLocation.lat, searchLocation.lng, spot.lat, spot.lng);
+      const nearbyCount = countNearbySpots(spot, filteredPotentialSpots);
+
+      // 1. Base score from spot confidence (0-15 points)
+      if (spot.score >= 35) recScore += 15;
+      else if (spot.score >= 25) recScore += 10;
+      else if (spot.score >= 15) recScore += 5;
+
+      // 2. Distance score - sweet spot is 3-12 miles driving (0-20 points)
+      if (drivingDistance >= 3 && drivingDistance <= 12) recScore += 20;
+      else if (drivingDistance >= 1.5 && drivingDistance <= 15) recScore += 12;
+      else if (drivingDistance < 1.5) recScore += 4; // Too close
+      else if (drivingDistance <= 20) recScore += 8;
+      // > 20 miles driving gets 0 points
+
+      // 3. Cluster density bonus (0-40 points) - HEAVILY weighted
+      // More nearby spots = more options and fallback camping areas
+      if (nearbyCount >= 15) recScore += 40;
+      else if (nearbyCount >= 10) recScore += 35;
+      else if (nearbyCount >= 6) recScore += 28;
+      else if (nearbyCount >= 3) recScore += 20;
+      else if (nearbyCount >= 1) recScore += 10;
+      // Isolated spots (0 nearby) get no cluster bonus
+
+      // 4. Road reliability bonus (0-5 points) - reduced since users can filter
+      if (spot.isOnMVUMRoad) recScore += 5;
+      else if (spot.isOnBLMRoad) recScore += 4;
+      else if (spot.isOnPublicLand) recScore += 2;
+
+      // 5. Spot type bonus (0-10 points)
+      if (spot.type === 'camp-site') recScore += 10; // Explicitly tagged
+      else if (spot.type === 'dead-end') recScore += 6; // Good for privacy
+      else if (spot.type === 'intersection') recScore += 2; // Less ideal
+
+      return {
+        spot,
+        recScore,
+        drivingDistance,
+        nearbyCount,
+      };
+    });
+
+    // Sort by recommendation score
+    const sortedSpots = scoredSpots.sort((a, b) => b.recScore - a.recScore);
+
+    // Pick spots from different clusters (at least 1 mile apart)
+    const minClusterDistance = 1; // miles
+    const selectedRecs: typeof sortedSpots = [];
+
+    for (const candidate of sortedSpots) {
+      // Check if this spot is far enough from already selected spots
+      const isFarEnough = selectedRecs.every(selected =>
+        getStraightLineDistance(candidate.spot.lat, candidate.spot.lng, selected.spot.lat, selected.spot.lng) >= minClusterDistance
+      );
+
+      if (isFarEnough) {
+        selectedRecs.push(candidate);
+      }
+
+      // We want enough for multiple pages (e.g., 12 recommendations = 4 pages of 3)
+      if (selectedRecs.length >= 12) break;
+    }
+
+    return selectedRecs;
+  }, [filteredPotentialSpots, searchLocation]);
+
+  // Get current page of recommendations
+  const currentRecommendations = useMemo(() => {
+    const startIndex = recommendationPage * 3;
+    return topRecommendations.slice(startIndex, startIndex + 3);
+  }, [topRecommendations, recommendationPage]);
+
+  const hasMoreRecommendations = (recommendationPage + 1) * 3 < topRecommendations.length;
+
+  // Fetch actual driving distances from OSRM for top recommendations
+  useEffect(() => {
+    if (!searchLocation || topRecommendations.length === 0) {
+      setOsrmDistances({});
+      return;
+    }
+
+    const fetchOsrmDistances = async () => {
+      setOsrmLoading(true);
+      try {
+        // Build coordinates string: origin first, then all destinations
+        const spots = topRecommendations.map(r => r.spot);
+        const coords = [
+          `${searchLocation.lng},${searchLocation.lat}`,
+          ...spots.map(s => `${s.lng},${s.lat}`)
+        ].join(';');
+
+        // Use OSRM table endpoint - gets distances from source (0) to all destinations
+        const url = `https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&destinations=${spots.map((_, i) => i + 1).join(';')}&annotations=distance`;
+
+        const response = await fetch(url);
+        if (!response.ok) {
+          console.warn('OSRM request failed:', response.status);
+          return;
+        }
+
+        const data = await response.json();
+        if (data.code !== 'Ok' || !data.distances?.[0]) {
+          console.warn('OSRM returned error:', data.code);
+          return;
+        }
+
+        // Convert meters to miles and store by spot ID
+        const distances: Record<string, number> = {};
+        spots.forEach((spot, index) => {
+          const meters = data.distances[0][index];
+          if (meters !== null && meters !== undefined) {
+            distances[spot.id] = meters / 1609.34; // Convert meters to miles
+          }
+        });
+
+        setOsrmDistances(distances);
+        console.log('OSRM distances fetched for', Object.keys(distances).length, 'spots');
+      } catch (err) {
+        console.warn('OSRM fetch failed:', err);
+      } finally {
+        setOsrmLoading(false);
+      }
+    };
+
+    // Debounce the fetch to avoid too many requests
+    const timeoutId = setTimeout(fetchOsrmDistances, 500);
+    return () => clearTimeout(timeoutId);
+  }, [searchLocation, topRecommendations]);
 
   const onAutocompleteLoad = useCallback((autocompleteInstance: google.maps.places.Autocomplete) => {
     setAutocomplete(autocompleteInstance);
@@ -206,6 +401,7 @@ const DispersedExplorer = () => {
         setSelectedRoad(null);
         setSelectedSpot(null);
         setSelectedCampground(null);
+        setRecommendationPage(0); // Reset recommendations on new search
       }
     }
   }, [autocomplete]);
@@ -223,6 +419,7 @@ const DispersedExplorer = () => {
         lng,
         name: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
       });
+      setRecommendationPage(0); // Reset recommendations on new search
       setSelectedRoad(null);
       setSelectedSpot(null);
       setSelectedCampground(null);
@@ -243,9 +440,41 @@ const DispersedExplorer = () => {
     return '#3b82f6'; // Blue - unknown/passable
   };
 
+  // Filter roads based on selected filter
+  const filteredMvumRoads = useMemo(() => {
+    if (roadFilter === 'all') return mvumRoads;
+    return mvumRoads.filter(road => {
+      if (roadFilter === 'passenger') return road.passengerVehicle || (!road.highClearanceVehicle && !road.atv && !road.motorcycle);
+      if (roadFilter === 'high-clearance') return road.highClearanceVehicle || road.passengerVehicle;
+      if (roadFilter === '4wd') return true; // MVUM roads are generally accessible
+      return true;
+    });
+  }, [mvumRoads, roadFilter]);
+
+  const filteredOsmTracks = useMemo(() => {
+    if (roadFilter === 'all') return osmTracks;
+    return osmTracks.filter(track => {
+      if (roadFilter === 'passenger') {
+        // Only show tracks that are likely passable by passenger vehicles
+        return !track.fourWdOnly && track.tracktype !== 'grade5' && track.tracktype !== 'grade4';
+      }
+      if (roadFilter === 'high-clearance') {
+        // Show tracks passable by high clearance (exclude 4WD only)
+        return !track.fourWdOnly;
+      }
+      if (roadFilter === '4wd') return true; // Show all for 4WD
+      return true;
+    });
+  }, [osmTracks, roadFilter]);
+
   // Get marker icon URL based on spot type and score
   const getSpotMarkerIcon = (spot: PotentialSpot) => {
-    // Use different colors based on score
+    // Known campsites from OSM get a distinct blue color
+    if (spot.type === 'camp-site') {
+      return 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png';
+    }
+
+    // Use different colors based on confidence score for derived spots
     let color = 'red'; // Default
     if (spot.score >= 35) color = 'green';
     else if (spot.score >= 25) color = 'yellow';
@@ -299,26 +528,229 @@ const DispersedExplorer = () => {
     <div className="min-h-screen bg-background">
       <Header />
 
-      <main className="container px-4 md:px-6 py-6">
-        {/* Page Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <Link to="/">
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-display font-bold text-foreground flex items-center gap-2">
-              <Jeep className="w-6 h-6 text-primary" />
-              Dispersed Camping Explorer
-            </h1>
-            <p className="text-muted-foreground">Find offroad tracks and dispersed camping spots on public lands</p>
-          </div>
+      <div className="grid lg:grid-cols-2">
+        {/* Map - Left side on desktop, bottom on mobile */}
+        <div className="order-2 lg:order-1 h-[400px] lg:h-[calc(100vh-120px)] lg:sticky lg:top-[120px] relative">
+          {/* Click instruction overlay */}
+          {!searchLocation && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-background/90 backdrop-blur-sm px-4 py-2 rounded-full border border-border shadow-lg flex items-center gap-2">
+              <Crosshair className="w-4 h-4 text-primary" />
+              <span className="text-sm text-foreground">Click anywhere on the map to search that area</span>
+            </div>
+          )}
+          <GoogleMap
+            center={mapCenter}
+            zoom={mapZoom}
+            className="w-full h-full"
+            onLoad={onMapLoad}
+            onClick={onMapClick}
+            options={{
+              mapTypeId: 'hybrid',
+              mapTypeControl: true,
+              mapTypeControlOptions: {
+                position: google.maps.ControlPosition?.TOP_RIGHT,
+              },
+            }}
+          >
+            {/* Search location marker */}
+            {searchLocation && (
+              <Marker
+                position={{ lat: searchLocation.lat, lng: searchLocation.lng }}
+                title={searchLocation.name}
+              />
+            )}
+
+            {/* Public Lands Overlay (BLM, USFS, etc.) */}
+            {/* Note: Large polygons (renderOnMap=false) are skipped for rendering but still used for filtering */}
+            {showPublicLands && publicLands.map((land) => {
+              if (!land.polygon) return null;
+              // Skip very large polygons to avoid performance issues
+              // These are still used for point-in-polygon filtering
+              if (!land.renderOnMap) return null;
+
+              // Different colors for different agencies
+              const isBLM = land.managingAgency === 'BLM';
+              const isNPS = land.managingAgency === 'NPS';
+              const isState = land.managingAgency === 'STATE';
+              // orange for BLM, purple for NPS, blue for State Parks, green for USFS
+              const fillColor = isBLM ? '#d97706' : isNPS ? '#7c3aed' : isState ? '#3b82f6' : '#10b981';
+              const strokeColor = isBLM ? '#b45309' : isNPS ? '#6d28d9' : isState ? '#2563eb' : '#059669';
+
+              return (
+                <Polygon
+                  key={land.id}
+                  paths={land.polygon}
+                  options={{
+                    fillColor,
+                    fillOpacity: 0.25,
+                    strokeColor,
+                    strokeOpacity: 0.7,
+                    strokeWeight: 2,
+                    clickable: false,
+                  }}
+                />
+              );
+            })}
+
+            {/* MVUM Roads */}
+            {filteredMvumRoads.map((road) => {
+              const path = toLatLngPath(road.geometry?.coordinates);
+              if (path.length < 2) return null;
+              return (
+                <Polyline
+                  key={`mvum-${road.id}`}
+                  path={path}
+                  options={{
+                    strokeColor: getMVUMColor(road),
+                    strokeOpacity: selectedRoad === road ? 1 : 0.7,
+                    strokeWeight: selectedRoad === road ? 4 : 2,
+                    clickable: true,
+                  }}
+                  onClick={() => setSelectedRoad(road)}
+                />
+              );
+            })}
+
+            {/* OSM Tracks */}
+            {filteredOsmTracks.map((track) => {
+              const path = toLatLngPath(track.geometry?.coordinates);
+              if (path.length < 2) return null;
+              return (
+                <Polyline
+                  key={`osm-${track.id}`}
+                  path={path}
+                  options={{
+                    strokeColor: getOSMColor(track),
+                    strokeOpacity: selectedRoad === track ? 1 : 0.7,
+                    strokeWeight: selectedRoad === track ? 4 : 2,
+                    clickable: true,
+                  }}
+                  onClick={() => setSelectedRoad(track)}
+                />
+              );
+            })}
+
+            {/* Potential Camp Spots */}
+            {filteredPotentialSpots
+              .filter((spot) => isFinite(spot.lat) && isFinite(spot.lng))
+              .map((spot) => (
+              <Marker
+                key={spot.id}
+                position={{ lat: spot.lat, lng: spot.lng }}
+                title={`${spot.name} (Score: ${spot.score})`}
+                icon={{
+                  url: getSpotMarkerIcon(spot),
+                  scaledSize: new google.maps.Size(
+                    selectedSpot === spot ? 40 : 32,
+                    selectedSpot === spot ? 40 : 32
+                  ),
+                }}
+                onClick={() => {
+                  setSelectedSpot(spot);
+                  setSelectedRoad(null);
+                  setSelectedCampground(null);
+                  setCopiedCoords(false);
+                }}
+                zIndex={selectedSpot === spot ? 1000 : spot.score}
+              />
+            ))}
+
+            {/* Info window for selected spot */}
+            {selectedSpot && (
+              <InfoWindow
+                position={{ lat: selectedSpot.lat, lng: selectedSpot.lng }}
+                onCloseClick={() => setSelectedSpot(null)}
+                options={{ pixelOffset: new google.maps.Size(0, -32) }}
+              >
+                <div className="min-w-[220px] max-w-[280px]">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h4 className="font-semibold text-gray-900 text-sm leading-tight">
+                      {selectedSpot.name || 'Unnamed Spot'}
+                    </h4>
+                    <span className={`flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1 ${
+                      selectedSpot.type === 'camp-site' ? 'bg-blue-500' :
+                      selectedSpot.score >= 35 ? 'bg-green-500' :
+                      selectedSpot.score >= 25 ? 'bg-yellow-500' : 'bg-orange-500'
+                    }`} />
+                  </div>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {selectedSpot.isOnMVUMRoad && (
+                      <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium">USFS</span>
+                    )}
+                    {selectedSpot.isOnBLMRoad && (
+                      <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-medium">BLM</span>
+                    )}
+                    {selectedSpot.passengerReachable && (
+                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">Passenger OK</span>
+                    )}
+                    {selectedSpot.highClearanceReachable && !selectedSpot.passengerReachable && (
+                      <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px] font-medium">High Clearance</span>
+                    )}
+                    {!selectedSpot.passengerReachable && !selectedSpot.highClearanceReachable && (
+                      <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-[10px] font-medium">4WD</span>
+                    )}
+                  </div>
+                  <p className="text-gray-600 text-xs mb-3">
+                    {selectedSpot.type === 'camp-site' ? 'Known camp site' :
+                     selectedSpot.type === 'dead-end' ? 'Road terminus' : 'Road junction'}
+                    {selectedSpot.roadName && ` • ${selectedSpot.roadName}`}
+                  </p>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => {
+                        window.open(
+                          `https://www.google.com/maps/@${selectedSpot.lat},${selectedSpot.lng},500m/data=!3m1!1e3`,
+                          '_blank'
+                        );
+                      }}
+                      className="flex-1 px-2 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded hover:bg-emerald-700 transition-colors"
+                    >
+                      Satellite
+                    </button>
+                    <button
+                      onClick={() => {
+                        window.open(
+                          `https://www.google.com/maps/dir/?api=1&destination=${selectedSpot.lat},${selectedSpot.lng}`,
+                          '_blank'
+                        );
+                      }}
+                      className="flex-1 px-2 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                    >
+                      Directions
+                    </button>
+                  </div>
+                </div>
+              </InfoWindow>
+            )}
+
+            {/* Established Campgrounds */}
+            {establishedCampgrounds
+              .filter((cg) => isFinite(cg.lat) && isFinite(cg.lng))
+              .map((cg) => (
+              <Marker
+                key={cg.id}
+                position={{ lat: cg.lat, lng: cg.lng }}
+                title={cg.name}
+                icon={{
+                  url: 'https://maps.google.com/mapfiles/ms/icons/purple-dot.png',
+                  scaledSize: new google.maps.Size(
+                    selectedCampground === cg ? 44 : 36,
+                    selectedCampground === cg ? 44 : 36
+                  ),
+                }}
+                onClick={() => {
+                  setSelectedCampground(cg);
+                  setSelectedSpot(null);
+                  setSelectedRoad(null);
+                }}
+                zIndex={selectedCampground === cg ? 1001 : 500}
+              />
+            ))}
+          </GoogleMap>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Sidebar */}
-          <div className="space-y-4">
+        {/* Sidebar - Right side on desktop, top on mobile */}
+        <div className="order-1 lg:order-2 space-y-4 p-4 md:p-6 lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
             {/* Search Card */}
             <Card>
               <CardContent className="p-4">
@@ -389,6 +821,120 @@ const DispersedExplorer = () => {
               </CardContent>
             </Card>
 
+            {/* Top Recommendations Card */}
+            {currentRecommendations.length > 0 && (
+              <Card className="border-primary/30 bg-primary/5">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-medium text-foreground flex items-center gap-2">
+                      <Star className="w-4 h-4 text-primary" weight="fill" />
+                      Top Recommendations
+                    </h3>
+                    {topRecommendations.length > 3 && (
+                      <span className="text-xs text-muted-foreground">
+                        {recommendationPage + 1} of {Math.ceil(topRecommendations.length / 3)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {currentRecommendations.map((rec, index) => {
+                      const confidenceColor = rec.spot.score >= 35 ? 'bg-green-500' : rec.spot.score >= 25 ? 'bg-yellow-500' : 'bg-orange-500';
+                      const confidenceLabel = rec.spot.score >= 35 ? 'High' : rec.spot.score >= 25 ? 'Medium' : 'Lower';
+                      const globalIndex = recommendationPage * 3 + index + 1;
+
+                      return (
+                        <button
+                          key={rec.spot.id}
+                          onClick={() => {
+                            setSelectedSpot(rec.spot);
+                            setSelectedRoad(null);
+                            setSelectedCampground(null);
+                            if (mapRef.current) {
+                              mapRef.current.panTo({ lat: rec.spot.lat, lng: rec.spot.lng });
+                              mapRef.current.setZoom(14);
+                            }
+                          }}
+                          className={`w-full text-left p-3 rounded-lg border transition-all hover:shadow-md ${
+                            selectedSpot?.id === rec.spot.id
+                              ? 'border-primary bg-primary/10 shadow-md'
+                              : 'border-border bg-background hover:border-primary/50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-medium text-foreground">#{globalIndex}</span>
+                                <span className={`w-2 h-2 rounded-full ${confidenceColor}`} />
+                                <span className="text-xs text-muted-foreground">{confidenceLabel} confidence</span>
+                              </div>
+                              <p className="text-sm text-foreground truncate">{rec.spot.name || rec.spot.roadName || 'Unnamed spot'}</p>
+                              <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <NavigationArrow className="w-3 h-3" />
+                                  {osrmDistances[rec.spot.id] !== undefined ? (
+                                    <>{osrmDistances[rec.spot.id].toFixed(1)} mi</>
+                                  ) : osrmLoading ? (
+                                    <SpinnerGap className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <>~{rec.drivingDistance.toFixed(1)} mi</>
+                                  )}
+                                </span>
+                                {rec.nearbyCount > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <MapPin className="w-3 h-3" />
+                                    {rec.nearbyCount} nearby
+                                  </span>
+                                )}
+                                {rec.spot.isOnMVUMRoad && (
+                                  <span className="text-green-600 dark:text-green-400">USFS</span>
+                                )}
+                                {rec.spot.isOnBLMRoad && (
+                                  <span className="text-amber-600 dark:text-amber-400">BLM</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Pagination buttons */}
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                    <p className="text-[10px] text-muted-foreground">
+                      {Object.keys(osrmDistances).length > 0
+                        ? 'Driving distances via OSM'
+                        : osrmLoading
+                          ? 'Loading driving distances...'
+                          : '~distances are estimates'}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {recommendationPage > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setRecommendationPage(p => p - 1)}
+                        >
+                          Previous
+                        </Button>
+                      )}
+                      {hasMoreRecommendations && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-3 text-xs"
+                          onClick={() => setRecommendationPage(p => p + 1)}
+                        >
+                          Next options
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Results Card */}
             <Card>
               <CardContent className="p-4">
@@ -412,24 +958,118 @@ const DispersedExplorer = () => {
                   </p>
                 ) : (
                   <div className="space-y-4">
-                    {/* Summary */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                        <p className="text-xl font-bold text-green-700 dark:text-green-300">{mvumRoads.length}</p>
-                        <p className="text-xs text-green-600 dark:text-green-400">MVUM Roads</p>
+                    {/* Dispersed Spots - Full width at top */}
+                    <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-medium text-orange-700 dark:text-orange-300">Dispersed Spots</p>
+                        <p className="text-2xl font-bold text-orange-700 dark:text-orange-300">{filteredPotentialSpots.length}</p>
                       </div>
-                      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                        <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{osmTracks.length}</p>
-                        <p className="text-xs text-blue-600 dark:text-blue-400">OSM Tracks</p>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full bg-blue-500" />
+                            <span className="text-sm text-foreground">Known Campsites</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-pointer" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="font-medium">OpenStreetMap Data</p>
+                                <p className="text-xs text-muted-foreground">Campsites tagged by the OSM community - verified camping locations</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <span className="text-sm font-medium text-foreground">{filteredPotentialSpots.filter(s => s.type === 'camp-site').length}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full bg-green-500" />
+                            <span className="text-sm text-foreground">High Confidence</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-pointer" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="font-medium">Score 35+</p>
+                                <p className="text-xs text-muted-foreground">Dead-ends on MVUM/BLM roads with multiple positive indicators</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <span className="text-sm font-medium text-foreground">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 35).length}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full bg-yellow-500" />
+                            <span className="text-sm text-foreground">Medium Confidence</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-pointer" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="font-medium">Score 25-34</p>
+                                <p className="text-xs text-muted-foreground">Dead-ends on public land tracks or road intersections with good access</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <span className="text-sm font-medium text-foreground">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 25 && s.score < 35).length}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full bg-orange-500" />
+                            <span className="text-sm text-foreground">Worth Checking</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-pointer" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="font-medium">Score 15-24</p>
+                                <p className="text-xs text-muted-foreground">Road intersections or less certain locations - verify on satellite imagery</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <span className="text-sm font-medium text-foreground">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 15 && s.score < 25).length}</span>
+                        </div>
                       </div>
-                      <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                        <p className="text-xl font-bold text-orange-700 dark:text-orange-300">{filteredPotentialSpots.length}</p>
-                        <p className="text-xs text-orange-600 dark:text-orange-400">Dispersed Spots</p>
-                      </div>
-                      <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                        <p className="text-xl font-bold text-purple-700 dark:text-purple-300">{establishedCampgrounds.length}</p>
-                        <p className="text-xs text-purple-600 dark:text-purple-400">USFS/BLM Sites</p>
-                      </div>
+                    </div>
+
+                    {/* Other stats - 3 column grid */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg cursor-pointer text-center">
+                            <p className="text-xl font-bold text-green-700 dark:text-green-300">{mvumRoads.length}</p>
+                            <p className="text-xs text-green-600 dark:text-green-400">MVUM Roads</p>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="font-medium">Motor Vehicle Use Map Roads</p>
+                          <p className="text-xs text-muted-foreground">Official USFS roads open to motor vehicles</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg cursor-pointer text-center">
+                            <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{osmTracks.length}</p>
+                            <p className="text-xs text-blue-600 dark:text-blue-400">OSM Tracks</p>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="font-medium">OpenStreetMap Tracks</p>
+                          <p className="text-xs text-muted-foreground">Community-mapped dirt roads and 4x4 trails</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg cursor-pointer text-center">
+                            <p className="text-xl font-bold text-purple-700 dark:text-purple-300">{establishedCampgrounds.length}</p>
+                            <p className="text-xs text-purple-600 dark:text-purple-400">Campgrounds</p>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="font-medium">Established Campgrounds</p>
+                          <p className="text-xs text-muted-foreground">Official USFS/BLM campgrounds from Recreation.gov</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
 
                     {/* Public Lands Toggle */}
@@ -461,30 +1101,68 @@ const DispersedExplorer = () => {
                       </Button>
                     </div>
 
+                    {/* Road Type Filter */}
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Filter by Vehicle</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          onClick={() => setRoadFilter('all')}
+                          className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                            roadFilter === 'all'
+                              ? 'bg-foreground text-background border-foreground'
+                              : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                          }`}
+                        >
+                          All Roads
+                        </button>
+                        <button
+                          onClick={() => setRoadFilter('passenger')}
+                          className={`px-2.5 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
+                            roadFilter === 'passenger'
+                              ? 'text-white border-[#3b82f6]'
+                              : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                          }`}
+                          style={roadFilter === 'passenger' ? { backgroundColor: '#3b82f6' } : {}}
+                        >
+                          <span className="w-2 h-0.5 rounded" style={{ backgroundColor: '#3b82f6' }} />
+                          Passenger OK
+                        </button>
+                        <button
+                          onClick={() => setRoadFilter('high-clearance')}
+                          className={`px-2.5 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
+                            roadFilter === 'high-clearance'
+                              ? 'text-white border-[#f97316]'
+                              : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                          }`}
+                          style={roadFilter === 'high-clearance' ? { backgroundColor: '#f97316' } : {}}
+                        >
+                          <span className="w-2 h-0.5 rounded" style={{ backgroundColor: '#f97316' }} />
+                          High Clearance
+                        </button>
+                        <button
+                          onClick={() => setRoadFilter('4wd')}
+                          className={`px-2.5 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
+                            roadFilter === '4wd'
+                              ? 'text-white border-[#ef4444]'
+                              : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                          }`}
+                          style={roadFilter === '4wd' ? { backgroundColor: '#ef4444' } : {}}
+                        >
+                          <span className="w-2 h-0.5 rounded" style={{ backgroundColor: '#ef4444' }} />
+                          4WD / All
+                        </button>
+                      </div>
+                      {roadFilter !== 'all' && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Spots filtered by route accessibility (entire path to spot)
+                        </p>
+                      )}
+                    </div>
+
                     {/* Legend */}
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Legend</p>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-1 bg-green-500 rounded" />
-                          <span>Passenger OK</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-1 bg-orange-500 rounded" />
-                          <span>High Clearance</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-1 bg-yellow-500 rounded" />
-                          <span>OHV/Moderate</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-1 bg-red-500 rounded" />
-                          <span>4WD Only</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-1 bg-blue-500 rounded" />
-                          <span>OSM Track</span>
-                        </div>
+                      <div className="grid grid-cols-2 gap-1.5 text-xs">
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 bg-emerald-500/30 border border-emerald-600 rounded" />
                           <span>USFS Land</span>
@@ -712,36 +1390,184 @@ const DispersedExplorer = () => {
 
             {/* Selected Spot Details */}
             {selectedSpot && (
-              <Card>
+              <Card className="border-primary/30">
                 <CardContent className="p-4">
                   <h3 className="font-medium text-foreground mb-3 flex items-center gap-2">
-                    {getSpotIcon(selectedSpot.type)}
-                    Spot Details
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <p><span className="text-muted-foreground">Name:</span> {selectedSpot.name}</p>
-                    <p><span className="text-muted-foreground">Type:</span> {selectedSpot.type.replace('-', ' ')}</p>
-                    <p><span className="text-muted-foreground">Score:</span> <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${getScoreColor(selectedSpot.score)}`}>{selectedSpot.score}</span></p>
-                    <p><span className="text-muted-foreground">Coordinates:</span> {selectedSpot.lat.toFixed(5)}, {selectedSpot.lng.toFixed(5)}</p>
-                    {selectedSpot.roadName && (
-                      <p><span className="text-muted-foreground">Road:</span> {selectedSpot.roadName}</p>
+                    {selectedSpot.type === 'camp-site' ? (
+                      <Tent className="w-5 h-5 text-green-600" />
+                    ) : selectedSpot.type === 'dead-end' ? (
+                      <MapPinLine className="w-5 h-5 text-orange-600" />
+                    ) : (
+                      <Path className="w-5 h-5 text-blue-600" />
                     )}
-                    <div className="mt-2">
-                      <p className="text-muted-foreground text-xs mb-1">Why it's promising:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {selectedSpot.reasons.map((reason, i) => (
-                          <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
-                            {reason}
-                          </span>
-                        ))}
+                    {selectedSpot.name || 'Unnamed Spot'}
+                  </h3>
+
+                  <div className="space-y-4">
+                    {/* Confidence Score */}
+                    <div className="flex items-center justify-between p-2.5 bg-muted/50 rounded-lg">
+                      <span className="text-sm font-medium">
+                        {selectedSpot.type === 'camp-site' ? 'Type' : 'Confidence'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${
+                          selectedSpot.type === 'camp-site' ? 'bg-blue-500' :
+                          selectedSpot.score >= 35 ? 'bg-green-500' :
+                          selectedSpot.score >= 25 ? 'bg-yellow-500' : 'bg-orange-500'
+                        }`} />
+                        <span className="text-sm font-medium">
+                          {selectedSpot.type === 'camp-site' ? 'Known Campsite' :
+                           selectedSpot.score >= 35 ? 'High' : selectedSpot.score >= 25 ? 'Medium' : 'Lower'}
+                        </span>
+                        {selectedSpot.type !== 'camp-site' && (
+                          <span className="text-xs text-muted-foreground">({selectedSpot.score} pts)</span>
+                        )}
                       </div>
                     </div>
-                    {selectedSpot.nearWater && (
-                      <div className="flex items-center gap-1 text-cyan-600 mt-2">
-                        <Drop className="w-4 h-4" />
-                        <span className="text-xs">Near water source</span>
+
+                    {/* Data Source */}
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Data Source</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedSpot.isOnMVUMRoad && (
+                          <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full text-xs font-medium flex items-center gap-1">
+                            <TreeEvergreen className="w-3 h-3" />
+                            USFS MVUM
+                          </span>
+                        )}
+                        {selectedSpot.isOnBLMRoad && (
+                          <span className="px-2 py-1 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded-full text-xs font-medium">
+                            BLM Road
+                          </span>
+                        )}
+                        {selectedSpot.source === 'osm' && (
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 rounded-full text-xs font-medium flex items-center gap-1">
+                            <MapTrifold className="w-3 h-3" />
+                            OpenStreetMap
+                          </span>
+                        )}
+                        {selectedSpot.source === 'derived' && !selectedSpot.isOnMVUMRoad && !selectedSpot.isOnBLMRoad && (
+                          <span className="px-2 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 rounded-full text-xs font-medium">
+                            OSM Track Analysis
+                          </span>
+                        )}
+                        {selectedSpot.isOnPublicLand && !selectedSpot.isOnMVUMRoad && !selectedSpot.isOnBLMRoad && (
+                          <span className="px-2 py-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 rounded-full text-xs font-medium">
+                            On Public Land
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Vehicle Access */}
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Vehicle Access</p>
+                      <div className="flex items-center gap-2">
+                        <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
+                          selectedSpot.passengerReachable
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                            : 'bg-muted text-muted-foreground'
+                        }`}>
+                          <Car className="w-3.5 h-3.5" />
+                          Passenger
+                          {selectedSpot.passengerReachable && ' ✓'}
+                        </div>
+                        <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
+                          selectedSpot.highClearanceReachable
+                            ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
+                            : 'bg-muted text-muted-foreground'
+                        }`}>
+                          <Jeep className="w-3.5 h-3.5" />
+                          High Clearance
+                          {selectedSpot.highClearanceReachable && ' ✓'}
+                        </div>
+                      </div>
+                      {!selectedSpot.passengerReachable && !selectedSpot.highClearanceReachable && (
+                        <p className="text-xs text-muted-foreground">4WD may be required to reach this spot</p>
+                      )}
+                    </div>
+
+                    {/* Why it's promising */}
+                    {selectedSpot.reasons.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Why It's Promising</p>
+                        <div className="flex flex-wrap gap-1">
+                          {selectedSpot.reasons.map((reason, i) => (
+                            <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+                              {reason}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     )}
+
+                    {/* Road Name */}
+                    {selectedSpot.roadName && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Road</p>
+                        <p className="text-sm">{selectedSpot.roadName}</p>
+                      </div>
+                    )}
+
+                    {/* Coordinates */}
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Coordinates</p>
+                      <div className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2">
+                        <code className="text-xs font-mono">
+                          {selectedSpot.lat.toFixed(6)}, {selectedSpot.lng.toFixed(6)}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2"
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${selectedSpot.lat.toFixed(6)}, ${selectedSpot.lng.toFixed(6)}`);
+                            setCopiedCoords(true);
+                            setTimeout(() => setCopiedCoords(false), 2000);
+                          }}
+                        >
+                          {copiedCoords ? (
+                            <Check className="w-3.5 h-3.5 text-green-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-xs"
+                        onClick={() => {
+                          window.open(
+                            `https://www.google.com/maps/search/?api=1&query=${selectedSpot.lat},${selectedSpot.lng}`,
+                            '_blank'
+                          );
+                        }}
+                      >
+                        Google Maps
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-xs"
+                        onClick={() => {
+                          window.open(
+                            `https://www.google.com/maps/@${selectedSpot.lat},${selectedSpot.lng},500m/data=!3m1!1e3`,
+                            '_blank'
+                          );
+                        }}
+                      >
+                        Satellite View
+                      </Button>
+                    </div>
+
+                    <p className="text-[10px] text-muted-foreground text-center pt-1">
+                      Always verify on satellite imagery and check local regulations
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -803,160 +1629,8 @@ const DispersedExplorer = () => {
                 </CardContent>
               </Card>
             )}
-          </div>
-
-          {/* Map */}
-          <div className="lg:col-span-2 h-[600px] lg:h-[calc(100vh-200px)] rounded-xl overflow-hidden border border-border relative">
-            {/* Click instruction overlay */}
-            {!searchLocation && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-background/90 backdrop-blur-sm px-4 py-2 rounded-full border border-border shadow-lg flex items-center gap-2">
-                <Crosshair className="w-4 h-4 text-primary" />
-                <span className="text-sm text-foreground">Click anywhere on the map to search that area</span>
-              </div>
-            )}
-            <GoogleMap
-              center={mapCenter}
-              zoom={mapZoom}
-              className="w-full h-full"
-              onLoad={onMapLoad}
-              onClick={onMapClick}
-              options={{
-                mapTypeId: 'hybrid',
-                mapTypeControl: true,
-                mapTypeControlOptions: {
-                  position: google.maps.ControlPosition?.TOP_RIGHT,
-                },
-              }}
-            >
-              {/* Search location marker */}
-              {searchLocation && (
-                <Marker
-                  position={{ lat: searchLocation.lat, lng: searchLocation.lng }}
-                  title={searchLocation.name}
-                />
-              )}
-
-              {/* Public Lands Overlay (BLM, USFS, etc.) */}
-              {/* Note: Large polygons (renderOnMap=false) are skipped for rendering but still used for filtering */}
-              {showPublicLands && publicLands.map((land) => {
-                if (!land.polygon) return null;
-                // Skip very large polygons to avoid performance issues
-                // These are still used for point-in-polygon filtering
-                if (!land.renderOnMap) return null;
-
-                // Different colors for different agencies
-                const isBLM = land.managingAgency === 'BLM';
-                const isNPS = land.managingAgency === 'NPS';
-                const isState = land.managingAgency === 'STATE';
-                // orange for BLM, purple for NPS, blue for State Parks, green for USFS
-                const fillColor = isBLM ? '#d97706' : isNPS ? '#7c3aed' : isState ? '#3b82f6' : '#10b981';
-                const strokeColor = isBLM ? '#b45309' : isNPS ? '#6d28d9' : isState ? '#2563eb' : '#059669';
-
-                return (
-                  <Polygon
-                    key={land.id}
-                    paths={land.polygon}
-                    options={{
-                      fillColor,
-                      fillOpacity: 0.25,
-                      strokeColor,
-                      strokeOpacity: 0.7,
-                      strokeWeight: 2,
-                      clickable: false,
-                    }}
-                  />
-                );
-              })}
-
-              {/* MVUM Roads */}
-              {mvumRoads.map((road) => {
-                const path = toLatLngPath(road.geometry?.coordinates);
-                if (path.length < 2) return null;
-                return (
-                  <Polyline
-                    key={`mvum-${road.id}`}
-                    path={path}
-                    options={{
-                      strokeColor: getMVUMColor(road),
-                      strokeOpacity: selectedRoad === road ? 1 : 0.7,
-                      strokeWeight: selectedRoad === road ? 4 : 2,
-                      clickable: true,
-                    }}
-                    onClick={() => setSelectedRoad(road)}
-                  />
-                );
-              })}
-
-              {/* OSM Tracks */}
-              {osmTracks.map((track) => {
-                const path = toLatLngPath(track.geometry?.coordinates);
-                if (path.length < 2) return null;
-                return (
-                  <Polyline
-                    key={`osm-${track.id}`}
-                    path={path}
-                    options={{
-                      strokeColor: getOSMColor(track),
-                      strokeOpacity: selectedRoad === track ? 1 : 0.7,
-                      strokeWeight: selectedRoad === track ? 4 : 2,
-                      clickable: true,
-                    }}
-                    onClick={() => setSelectedRoad(track)}
-                  />
-                );
-              })}
-
-              {/* Potential Camp Spots */}
-              {filteredPotentialSpots
-                .filter((spot) => isFinite(spot.lat) && isFinite(spot.lng))
-                .map((spot) => (
-                <Marker
-                  key={spot.id}
-                  position={{ lat: spot.lat, lng: spot.lng }}
-                  title={`${spot.name} (Score: ${spot.score})`}
-                  icon={{
-                    url: getSpotMarkerIcon(spot),
-                    scaledSize: new google.maps.Size(
-                      selectedSpot === spot ? 40 : 32,
-                      selectedSpot === spot ? 40 : 32
-                    ),
-                  }}
-                  onClick={() => {
-                    setSelectedSpot(spot);
-                    setSelectedRoad(null);
-                    setSelectedCampground(null);
-                  }}
-                  zIndex={selectedSpot === spot ? 1000 : spot.score}
-                />
-              ))}
-
-              {/* Established Campgrounds */}
-              {establishedCampgrounds
-                .filter((cg) => isFinite(cg.lat) && isFinite(cg.lng))
-                .map((cg) => (
-                <Marker
-                  key={cg.id}
-                  position={{ lat: cg.lat, lng: cg.lng }}
-                  title={cg.name}
-                  icon={{
-                    url: 'https://maps.google.com/mapfiles/ms/icons/purple-dot.png',
-                    scaledSize: new google.maps.Size(
-                      selectedCampground === cg ? 44 : 36,
-                      selectedCampground === cg ? 44 : 36
-                    ),
-                  }}
-                  onClick={() => {
-                    setSelectedCampground(cg);
-                    setSelectedSpot(null);
-                    setSelectedRoad(null);
-                  }}
-                  zIndex={selectedCampground === cg ? 1001 : 500}
-                />
-              ))}
-            </GoogleMap>
-          </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 };
