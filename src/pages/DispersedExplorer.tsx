@@ -8,6 +8,7 @@ import { Polyline, Marker, Polygon } from '@react-google-maps/api';
 import { Autocomplete } from '@react-google-maps/api';
 import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
 import { usePublicLands } from '@/hooks/use-public-lands';
+import { useGoogleMaps } from '@/components/GoogleMapsProvider';
 import { Header } from '@/components/Header';
 
 interface SearchLocation {
@@ -55,6 +56,7 @@ function isWithinAnyPublicLand(
 }
 
 const DispersedExplorer = () => {
+  const { isLoaded } = useGoogleMaps();
   const [searchLocation, setSearchLocation] = useState<SearchLocation | null>(null);
   const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: 39.5, lng: -105.5 });
@@ -80,13 +82,29 @@ const DispersedExplorer = () => {
     25 // 25 mile radius for public lands
   );
 
+  // Helper to check if a point is within any NPS (National Park) polygon
+  // Dispersed camping is not allowed in National Parks
+  const isWithinNationalPark = useCallback(
+    (lat: number, lng: number): boolean => {
+      const npsLands = publicLands.filter((l) => l.managingAgency === 'NPS');
+      return npsLands.some(
+        (land) => land.polygon && isPointInPolygon({ lat, lng }, land.polygon)
+      );
+    },
+    [publicLands]
+  );
+
   // Filter potential spots with smart rules:
   // - OSM camp sites: Always show (they're verified camping locations)
   // - MVUM-derived spots: Always show (MVUM roads are definitely on National Forest)
   // - OSM-derived spots: Validate against public land polygons when available
+  // - EXCLUDE spots within National Parks (dispersed camping not allowed)
   const filteredPotentialSpots = useMemo(() => {
     // Always show OSM camp sites - they're explicitly tagged as camping locations
-    const campSites = potentialSpots.filter((spot) => spot.type === 'camp-site');
+    // But still exclude those in National Parks
+    const campSites = potentialSpots
+      .filter((spot) => spot.type === 'camp-site')
+      .filter((spot) => !isWithinNationalPark(spot.lat, spot.lng));
 
     // Get derived spots (dead-ends, intersections)
     const derivedSpots = potentialSpots.filter((spot) => spot.type !== 'camp-site');
@@ -96,14 +114,26 @@ const DispersedExplorer = () => {
 
     // Filter derived spots:
     // - Always include if on MVUM road (definitely National Forest)
-    // - If we have public land polygons, validate OSM spots against them
+    // - Always include if on BLM road (definitely BLM land)
+    // - Always include if marked as public land (from road characteristics like track type)
+    // - If we have public land polygons, validate remaining spots against them
     // - If no polygons but we have MVUM roads in the area, show OSM spots too (area is NF)
-    // - If no polygons AND no MVUM roads, hide OSM spots (could be anywhere)
+    // - EXCLUDE spots within National Parks
     const filteredDerived = derivedSpots.filter((spot) => {
-      // MVUM roads are definitely on public land - always include
+      // First check: exclude spots in National Parks (dispersed camping not allowed)
+      if (isWithinNationalPark(spot.lat, spot.lng)) return false;
+
+      // MVUM roads are definitely on public land (National Forest) - always include
       if (spot.isOnMVUMRoad) return true;
 
-      // If we have polygon data, validate against it
+      // BLM roads are definitely on public land (BLM) - always include
+      if (spot.isOnBLMRoad) return true;
+
+      // Spots flagged as public land from road characteristics (e.g., OSM tracks) - include
+      // The isLikelyPublicLand heuristic already filtered out private/suburban roads
+      if (spot.isOnPublicLand) return true;
+
+      // If we have polygon data, validate against it as a final check
       if (publicLands.length > 0) {
         return isWithinAnyPublicLand(spot.lat, spot.lng, publicLands);
       }
@@ -113,10 +143,14 @@ const DispersedExplorer = () => {
       return hasMVUMRoads;
     });
 
-    console.log(`Filtered spots: ${campSites.length} camps, ${filteredDerived.length}/${derivedSpots.length} derived (${derivedSpots.filter(s => s.isOnMVUMRoad).length} MVUM, ${publicLands.length} polygons, hasMVUM: ${hasMVUMRoads})`);
+    const blmPolygons = publicLands.filter(l => l.managingAgency === 'BLM').length;
+    const usfsPolygons = publicLands.filter(l => l.managingAgency === 'USFS' || l.managingAgency === 'FS').length;
+    const npsPolygons = publicLands.filter(l => l.managingAgency === 'NPS').length;
+    const publicLandSpots = derivedSpots.filter(s => s.isOnPublicLand).length;
+    console.log(`Filtered spots: ${campSites.length} camps, ${filteredDerived.length}/${derivedSpots.length} derived (${derivedSpots.filter(s => s.isOnMVUMRoad).length} MVUM, ${derivedSpots.filter(s => s.isOnBLMRoad).length} BLM road, ${publicLandSpots} public land) | Polygons: ${blmPolygons} BLM, ${usfsPolygons} USFS, ${npsPolygons} NPS, ${publicLands.length} total`);
 
     return [...campSites, ...filteredDerived];
-  }, [potentialSpots, publicLands, mvumRoads]);
+  }, [potentialSpots, publicLands, mvumRoads, isWithinNationalPark]);
 
   const onAutocompleteLoad = useCallback((autocompleteInstance: google.maps.places.Autocomplete) => {
     setAutocomplete(autocompleteInstance);
@@ -258,23 +292,35 @@ const DispersedExplorer = () => {
                   <MagnifyingGlass className="w-4 h-4" />
                   Search Location
                 </h3>
-                <Autocomplete
-                  onLoad={onAutocompleteLoad}
-                  onPlaceChanged={onPlaceChanged}
-                  options={{
-                    types: ['geocode', 'establishment'],
-                    componentRestrictions: { country: 'us' },
-                  }}
-                >
+                {isLoaded ? (
+                  <Autocomplete
+                    onLoad={onAutocompleteLoad}
+                    onPlaceChanged={onPlaceChanged}
+                    options={{
+                      types: ['geocode', 'establishment'],
+                      componentRestrictions: { country: 'us' },
+                    }}
+                  >
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <input
+                        type="text"
+                        placeholder="Search a location..."
+                        className="w-full pl-10 pr-4 py-2.5 bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      />
+                    </div>
+                  </Autocomplete>
+                ) : (
                   <div className="relative">
                     <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <input
                       type="text"
-                      placeholder="Search a location..."
-                      className="w-full pl-10 pr-4 py-2.5 bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      placeholder="Loading..."
+                      disabled
+                      className="w-full pl-10 pr-4 py-2.5 bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground opacity-50 cursor-not-allowed"
                     />
                   </div>
-                </Autocomplete>
+                )}
 
                 {searchLocation && (
                   <div className="mt-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
@@ -355,7 +401,10 @@ const DispersedExplorer = () => {
                     {/* Public Lands Toggle */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 bg-emerald-500/30 border-2 border-emerald-600 rounded" />
+                        <div className="flex gap-0.5">
+                          <div className="w-2 h-4 bg-emerald-500/40 border border-emerald-600 rounded-l" title="USFS" />
+                          <div className="w-2 h-4 bg-amber-500/40 border border-amber-600 rounded-r" title="BLM" />
+                        </div>
                         <span className="text-sm font-medium">Public Lands</span>
                         {publicLandsLoading && <SpinnerGap className="w-3 h-3 animate-spin text-muted-foreground" />}
                         {publicLands.length > 0 && (
@@ -402,7 +451,11 @@ const DispersedExplorer = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 bg-emerald-500/30 border border-emerald-600 rounded" />
-                          <span>BLM/USFS Land</span>
+                          <span>USFS Land</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-amber-500/30 border border-amber-600 rounded" />
+                          <span>BLM Land</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 bg-purple-500 rounded-full" />
@@ -743,23 +796,31 @@ const DispersedExplorer = () => {
                 />
               )}
 
-              {/* Public Lands Overlay (BLM, USFS) */}
-              {showPublicLands && publicLands.map((land) => (
-                land.polygon ? (
+              {/* Public Lands Overlay (BLM, USFS, etc.) */}
+              {showPublicLands && publicLands.map((land) => {
+                if (!land.polygon) return null;
+
+                // Different colors for different agencies
+                const isBLM = land.managingAgency === 'BLM';
+                const isNPS = land.managingAgency === 'NPS';
+                const fillColor = isBLM ? '#d97706' : isNPS ? '#7c3aed' : '#10b981'; // orange for BLM, purple for NPS, green for USFS
+                const strokeColor = isBLM ? '#b45309' : isNPS ? '#6d28d9' : '#059669';
+
+                return (
                   <Polygon
                     key={land.id}
                     paths={land.polygon}
                     options={{
-                      fillColor: '#10b981',
+                      fillColor,
                       fillOpacity: 0.25,
-                      strokeColor: '#059669',
+                      strokeColor,
                       strokeOpacity: 0.7,
                       strokeWeight: 2,
                       clickable: false,
                     }}
                   />
-                ) : null
-              ))}
+                );
+              })}
 
               {/* MVUM Roads */}
               {mvumRoads.map((road) => {

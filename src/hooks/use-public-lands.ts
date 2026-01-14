@@ -213,10 +213,6 @@ export function usePublicLands(
         // Each feature may have multiple rings (multi-polygon), so we flatten them
         const lands: PublicLand[] = [];
 
-        // Convert search center to Web Mercator for comparison (BLM data)
-        const searchCenter = latLngToWebMercator(centerLat, centerLng);
-        const searchRadiusMeters = radiusMiles * 1609;
-
         features.forEach((f: any) => {
           if (!f.geometry?.rings?.length) return;
 
@@ -224,26 +220,21 @@ export function usePublicLands(
           const baseName = f.attributes.ADMIN_UNIT_NAME || agencyNames[agencyCode] || 'Public Land';
           const isFederalLands = f.source === 'federal';
 
-          // Process each ring - find rings that have ANY point within search area
+          // Process each ring - the API already filtered for intersection, so we trust those results
+          // Only process the first ring (outer boundary) for each feature to avoid holes being treated as separate polygons
           f.geometry.rings.forEach((ring: number[][], ringIndex: number) => {
             if (ring.length < 3) return; // Need at least 3 points for a polygon
+            // Skip inner rings (holes) - they typically wind in the opposite direction
+            // We only want the outer boundary (first ring)
+            if (ringIndex > 0) return;
 
-            let hasPointInArea: boolean;
             let polygon: { lat: number; lng: number }[];
             let centroidLat: number;
             let centroidLng: number;
 
             if (isFederalLands) {
-              // USFS data is already in lat/lng (4326)
+              // Federal Lands data is already in lat/lng (4326)
               // Ring format is [lng, lat]
-              hasPointInArea = ring.some((coord: number[]) => {
-                const coordLng = coord[0];
-                const coordLat = coord[1];
-                return Math.abs(coordLat - centerLat) < (radiusMiles / 69) &&
-                       Math.abs(coordLng - centerLng) < (radiusMiles / 50);
-              });
-
-              if (!hasPointInArea) return;
 
               // Calculate centroid
               const sumLng = ring.reduce((sum: number, coord: number[]) => sum + coord[0], 0);
@@ -257,14 +248,7 @@ export function usePublicLands(
                 lng: coord[0],
               }));
             } else {
-              // BLM data is in Web Mercator (102100)
-              hasPointInArea = ring.some((coord: number[]) => {
-                const dx = Math.abs(coord[0] - searchCenter.x);
-                const dy = Math.abs(coord[1] - searchCenter.y);
-                return dx < searchRadiusMeters && dy < searchRadiusMeters;
-              });
-
-              if (!hasPointInArea) return;
+              // BLM SMA data is in Web Mercator (102100)
 
               // Calculate centroid in Web Mercator, then convert
               const sumX = ring.reduce((sum: number, coord: number[]) => sum + coord[0], 0);

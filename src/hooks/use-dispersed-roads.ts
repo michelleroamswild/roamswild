@@ -52,36 +52,94 @@ export interface PotentialSpot {
   lat: number;
   lng: number;
   name: string;
-  type: 'dead-end' | 'camp-site' | 'intersection' | 'water-access';
+  type: 'dead-end' | 'camp-site' | 'intersection';
   score: number;
   reasons: string[];
-  source: 'mvum' | 'osm' | 'derived';
+  source: 'mvum' | 'osm' | 'blm' | 'derived';
   roadName?: string;
-  nearWater?: boolean;
   highClearance?: boolean;
   isOnMVUMRoad?: boolean; // True if this spot is on a USFS MVUM road (definitely public land)
+  isOnBLMRoad?: boolean; // True if this spot is on a BLM road (definitely public land)
+  isOnPublicLand?: boolean; // True if this spot is likely on public land (based on road characteristics)
 }
 
-// Water feature from OSM
-export interface WaterFeature {
-  id: number;
-  name?: string;
-  type: string; // stream, river, lake, pond
-  lat: number;
-  lng: number;
+// BLM Road from GTLF (Ground Transportation Linear Feature)
+export interface BLMRoad {
+  id: string;
+  name: string;
+  surfaceType: string;
+  routeType: string; // road, primitive_road, trail, etc.
+  geometry: {
+    type: 'LineString';
+    coordinates: [number, number][];
+  };
 }
 
 export interface DispersedRoadsResult {
   mvumRoads: MVUMRoad[];
+  blmRoads: BLMRoad[];
   osmTracks: OSMTrack[];
   potentialSpots: PotentialSpot[];
-  waterFeatures: WaterFeature[];
   establishedCampgrounds: EstablishedCampground[];
   loading: boolean;
   error: string | null;
 }
 
 const USFS_MVUM_API = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_MVUM_01/MapServer/1/query';
+
+// BLM road data endpoints by state
+// Note: Service names and layer IDs vary by state - only states with verified working endpoints are included
+// States without road services: CA (OHV areas only), OR, WY, NM, NV, ID (empty folder)
+interface BLMEndpointConfig {
+  url: string;
+  nameField: string;
+  surfaceField: string;
+  typeField: string;
+}
+
+const BLM_ROAD_ENDPOINTS: Record<string, BLMEndpointConfig> = {
+  'CO': {
+    url: 'https://gis.blm.gov/coarcgis/rest/services/transportation/BLM_CO_GTLF/FeatureServer/5/query',
+    nameField: 'ROUTE_PRMRY_NM',
+    surfaceField: 'OBSRVE_SRFCE_TYPE',
+    typeField: 'PLAN_MODE_TRNSPRT',
+  },
+  'AZ': {
+    url: 'https://gis.blm.gov/azarcgis/rest/services/transportation/BLM_AZ_TMAP/FeatureServer/0/query',
+    nameField: 'ROUTE_PRMRY_NM',
+    surfaceField: 'OBSRVE_SRFCE_TYPE',
+    typeField: 'PLAN_MODE_TRNSPRT',
+  },
+  'UT': {
+    url: 'https://gis.blm.gov/utarcgis/rest/services/transportation/BLM_UT_TMA/FeatureServer/0/query',
+    nameField: 'ROUTE_PRMRY_NM',
+    surfaceField: 'OBSRVE_SRFCE_TYPE',
+    typeField: 'PLAN_MODE_TRNSPRT',
+  },
+};
+
+// State boundaries for states with working BLM road endpoints
+const STATE_BOUNDS: Record<string, { minLat: number; maxLat: number; minLng: number; maxLng: number }> = {
+  'AZ': { minLat: 31.33, maxLat: 37.00, minLng: -114.82, maxLng: -109.04 },
+  'CO': { minLat: 36.99, maxLat: 41.00, minLng: -109.05, maxLng: -102.04 },
+  'UT': { minLat: 36.99, maxLat: 42.00, minLng: -114.05, maxLng: -109.04 },
+};
+
+/**
+ * Get states that overlap with a bounding box
+ */
+function getStatesForBounds(minLat: number, minLng: number, maxLat: number, maxLng: number): string[] {
+  const states: string[] = [];
+  for (const [state, bounds] of Object.entries(STATE_BOUNDS)) {
+    // Check if bounding boxes overlap
+    if (minLat <= bounds.maxLat && maxLat >= bounds.minLat &&
+        minLng <= bounds.maxLng && maxLng >= bounds.minLng) {
+      states.push(state);
+    }
+  }
+  return states;
+}
+
 // Multiple Overpass endpoints for redundancy
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -102,12 +160,6 @@ function getDistanceMiles(lat1: number, lng1: number, lat2: number, lng2: number
   return R * c;
 }
 
-/**
- * Check if a point is near any water feature
- */
-function isNearWater(lat: number, lng: number, waterFeatures: WaterFeature[], thresholdMiles: number = 0.5): boolean {
-  return waterFeatures.some(w => getDistanceMiles(lat, lng, w.lat, w.lng) < thresholdMiles);
-}
 
 /**
  * Check if a point is near any road (for filtering out backcountry/hike-in campsites)
@@ -176,6 +228,7 @@ interface EndpointInfo {
   isPublicLand: boolean; // At least one road is on public land
   isHighClearance: boolean;
   hasMVUMRoad: boolean; // At least one MVUM road contributes to this endpoint
+  hasBLMRoad: boolean; // At least one BLM road contributes to this endpoint
 }
 
 /**
@@ -220,8 +273,8 @@ function isLikelyPublicLand(track: OSMTrack): boolean {
 
 function findDeadEnds(
   mvumRoads: MVUMRoad[],
+  blmRoads: BLMRoad[],
   osmTracks: OSMTrack[],
-  waterFeatures: WaterFeature[],
   publicLands: PublicLandArea[]
 ): PotentialSpot[] {
   const spots: PotentialSpot[] = [];
@@ -256,7 +309,7 @@ function findDeadEnds(
     const startKey = `${startLat.toFixed(4)},${startLng.toFixed(4)}`;
     const startEntry = endpointMap.get(startKey) || {
       lat: startLat, lng: startLng, count: 0, roads: [],
-      isPublicLand: false, isHighClearance: false, hasMVUMRoad: false
+      isPublicLand: false, isHighClearance: false, hasMVUMRoad: false, hasBLMRoad: false
     };
     startEntry.count++;
     startEntry.roads.push(road.name);
@@ -274,13 +327,52 @@ function findDeadEnds(
     const endKey = `${endLat.toFixed(4)},${endLng.toFixed(4)}`;
     const endEntry = endpointMap.get(endKey) || {
       lat: endLat, lng: endLng, count: 0, roads: [],
-      isPublicLand: false, isHighClearance: false, hasMVUMRoad: false
+      isPublicLand: false, isHighClearance: false, hasMVUMRoad: false, hasBLMRoad: false
     };
     endEntry.count++;
     endEntry.roads.push(road.name);
     endEntry.isPublicLand = true; // MVUM = public land
     endEntry.isHighClearance = endEntry.isHighClearance || road.highClearanceVehicle;
     endEntry.hasMVUMRoad = true; // This endpoint has an MVUM road
+    endpointMap.set(endKey, endEntry);
+  });
+
+  // Process BLM roads - these are always on public land
+  blmRoads.forEach(road => {
+    if (!road.geometry?.coordinates?.length) return;
+    const coords = road.geometry.coordinates;
+
+    // Start point
+    const startLng = getCoordLng(coords[0]);
+    const startLat = getCoordLat(coords[0]);
+    if (startLat === null || startLng === null) return;
+
+    const startKey = `${startLat.toFixed(4)},${startLng.toFixed(4)}`;
+    const startEntry = endpointMap.get(startKey) || {
+      lat: startLat, lng: startLng, count: 0, roads: [],
+      isPublicLand: false, isHighClearance: false, hasMVUMRoad: false, hasBLMRoad: false
+    };
+    startEntry.count++;
+    startEntry.roads.push(road.name);
+    startEntry.isPublicLand = true; // BLM = public land
+    startEntry.hasBLMRoad = true; // This endpoint has a BLM road
+    endpointMap.set(startKey, startEntry);
+
+    // End point
+    const endCoord = coords[coords.length - 1];
+    const endLng = getCoordLng(endCoord);
+    const endLat = getCoordLat(endCoord);
+    if (endLat === null || endLng === null) return;
+
+    const endKey = `${endLat.toFixed(4)},${endLng.toFixed(4)}`;
+    const endEntry = endpointMap.get(endKey) || {
+      lat: endLat, lng: endLng, count: 0, roads: [],
+      isPublicLand: false, isHighClearance: false, hasMVUMRoad: false, hasBLMRoad: false
+    };
+    endEntry.count++;
+    endEntry.roads.push(road.name);
+    endEntry.isPublicLand = true; // BLM = public land
+    endEntry.hasBLMRoad = true; // This endpoint has a BLM road
     endpointMap.set(endKey, endEntry);
   });
 
@@ -299,7 +391,7 @@ function findDeadEnds(
     const startKey = `${startLat.toFixed(4)},${startLng.toFixed(4)}`;
     const startEntry = endpointMap.get(startKey) || {
       lat: startLat, lng: startLng, count: 0, roads: [],
-      isPublicLand: false, isHighClearance: false, hasMVUMRoad: false
+      isPublicLand: false, isHighClearance: false, hasMVUMRoad: false, hasBLMRoad: false
     };
     startEntry.count++;
     startEntry.roads.push(track.name || 'Unnamed Track');
@@ -317,7 +409,7 @@ function findDeadEnds(
     const endKey = `${endLat.toFixed(4)},${endLng.toFixed(4)}`;
     const endEntry = endpointMap.get(endKey) || {
       lat: endLat, lng: endLng, count: 0, roads: [],
-      isPublicLand: false, isHighClearance: false, hasMVUMRoad: false
+      isPublicLand: false, isHighClearance: false, hasMVUMRoad: false, hasBLMRoad: false
     };
     endEntry.count++;
     endEntry.roads.push(track.name || 'Unnamed Track');
@@ -346,17 +438,10 @@ function findDeadEnds(
     // Skip if not on public land (either from road characteristics OR boundary check)
     if (!entry.isPublicLand && !withinPublicLandBoundary) return;
 
-    const nearWater = isNearWater(entry.lat, entry.lng, waterFeatures);
-
     if (entry.count === 1) {
       // Dead end - road terminus
       let score = 25; // Base score for dead end
       const reasons: string[] = ['Road terminus (dead-end)', 'On public land'];
-
-      if (nearWater) {
-        score += 15;
-        reasons.push('Near water');
-      }
 
       if (entry.isHighClearance) {
         score += 10;
@@ -373,19 +458,15 @@ function findDeadEnds(
         reasons,
         source: 'derived',
         roadName: entry.roads[0],
-        nearWater,
         highClearance: entry.isHighClearance,
         isOnMVUMRoad: entry.hasMVUMRoad,
+        isOnBLMRoad: entry.hasBLMRoad,
+        isOnPublicLand: entry.isPublicLand,
       });
     } else if (entry.count >= 3) {
       // Intersection - multiple roads meet
-      let score = 15;
+      const score = 15;
       const reasons: string[] = [`${entry.count} roads intersect here`, 'On public land'];
-
-      if (nearWater) {
-        score += 15;
-        reasons.push('Near water');
-      }
 
       spots.push({
         id: `intersection-${key}`,
@@ -396,8 +477,9 @@ function findDeadEnds(
         score,
         reasons,
         source: 'derived',
-        nearWater,
         isOnMVUMRoad: entry.hasMVUMRoad,
+        isOnBLMRoad: entry.hasBLMRoad,
+        isOnPublicLand: entry.isPublicLand,
       });
     }
   });
@@ -459,6 +541,88 @@ async function fetchMVUMRoads(
     operationalMaintLevel: feature.properties.OPERATIONALMAINTLEVEL || '',
     geometry: feature.geometry,
   }));
+}
+
+/**
+ * Query BLM roads in a bounding box
+ * Fetches from all relevant state endpoints based on the search area
+ * Currently supports: CO, AZ, UT (states with verified working road endpoints)
+ */
+async function fetchBLMRoads(
+  minLat: number,
+  minLng: number,
+  maxLat: number,
+  maxLng: number
+): Promise<BLMRoad[]> {
+  // Determine which states overlap with the search area
+  const states = getStatesForBounds(minLat, minLng, maxLat, maxLng);
+
+  if (states.length === 0) {
+    console.log('No BLM road data available for this area (supported: CO, AZ, UT)');
+    return [];
+  }
+
+  console.log(`Fetching BLM roads for states: ${states.join(', ')}`);
+
+  // Query all relevant state endpoints in parallel
+  const statePromises = states.map(async (state) => {
+    const config = BLM_ROAD_ENDPOINTS[state];
+    if (!config) return [];
+
+    try {
+      const params = new URLSearchParams({
+        where: '1=1',
+        geometry: JSON.stringify({
+          xmin: minLng,
+          ymin: minLat,
+          xmax: maxLng,
+          ymax: maxLat,
+          spatialReference: { wkid: 4326 },
+        }),
+        geometryType: 'esriGeometryEnvelope',
+        spatialRel: 'esriSpatialRelIntersects',
+        outFields: `OBJECTID,${config.nameField},${config.surfaceField},${config.typeField}`,
+        returnGeometry: 'true',
+        outSR: '4326',
+        f: 'geojson',
+      });
+
+      const response = await fetch(`${config.url}?${params}`);
+      if (!response.ok) {
+        console.warn(`BLM ${state} API returned ${response.status}`);
+        return [];
+      }
+
+      const data = await response.json();
+
+      if (!data.features) {
+        console.log(`BLM ${state} API returned no features`);
+        return [];
+      }
+
+      console.log(`BLM ${state} API returned ${data.features.length} roads`);
+
+      return data.features.map((feature: any) => {
+        const props = feature.properties || {};
+        return {
+          id: `blm-${state}-${props.OBJECTID || Math.random().toString()}`,
+          name: props[config.nameField] || 'Unnamed BLM Road',
+          surfaceType: props[config.surfaceField] || 'Unknown',
+          routeType: props[config.typeField] || 'road',
+          geometry: feature.geometry,
+        };
+      });
+    } catch (error) {
+      console.error(`BLM ${state} fetch error:`, error);
+      return [];
+    }
+  });
+
+  const stateResults = await Promise.all(statePromises);
+  const allRoads = stateResults.flat();
+
+  console.log(`Total BLM roads fetched: ${allRoads.length}`);
+  return allRoads;
 }
 
 // USFS Recreation Opportunities API - has campgrounds not in RIDB
@@ -542,6 +706,7 @@ async function fetchRIDBCampgrounds(
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
     const params = new URLSearchParams({
       endpoint: '/facilities',
@@ -553,9 +718,12 @@ async function fetchRIDBCampgrounds(
 
     console.log('Fetching RIDB campgrounds for dispersed explorer');
 
+    // Use session token if available, otherwise fall back to anon key
+    const authToken = session?.access_token || supabaseAnonKey;
+
     const response = await fetch(`${supabaseUrl}/functions/v1/ridb-proxy?${params}`, {
       headers: {
-        'Authorization': `Bearer ${session?.access_token || ''}`,
+        'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json',
       },
     });
@@ -620,13 +788,12 @@ export interface PublicLandArea {
 }
 
 /**
- * Combined OSM query for tracks, camp sites, water features, and public lands
- * This reduces API calls from 3 to 1 to avoid rate limiting
+ * Combined OSM query for tracks and camp sites
+ * This reduces API calls to avoid rate limiting
  */
 interface OSMCombinedResult {
   tracks: OSMTrack[];
   campSites: PotentialSpot[];
-  waterFeatures: WaterFeature[];
   publicLands: PublicLandArea[];
 }
 
@@ -637,7 +804,6 @@ async function fetchAllOSMData(
   maxLng: number
 ): Promise<OSMCombinedResult> {
   // Optimized Overpass query - removed expensive public lands (using BLM API instead)
-  // and simplified water features to avoid timeouts
   const query = `
     [out:json][timeout:45];
     (
@@ -653,11 +819,6 @@ async function fetchAllOSMData(
       node["camp_site"](${minLat},${minLng},${maxLat},${maxLng});
       node["camp_type"](${minLat},${minLng},${maxLat},${maxLng});
       node["leisure"="firepit"](${minLat},${minLng},${maxLat},${maxLng});
-
-      // Water features - only nodes/points to reduce query size
-      node["natural"="spring"](${minLat},${minLng},${maxLat},${maxLng});
-      node["natural"="water"](${minLat},${minLng},${maxLat},${maxLng});
-      node["amenity"="drinking_water"](${minLat},${minLng},${maxLat},${maxLng});
     );
     out geom;
   `;
@@ -712,7 +873,7 @@ async function fetchAllOSMData(
 
   if (!data.elements) {
     console.log('No elements in OSM response');
-    return { tracks: [], campSites: [], waterFeatures: [], publicLands: [] };
+    return { tracks: [], campSites: [], publicLands: [] };
   }
 
   console.log('OSM response elements:', data.elements.length, 'total');
@@ -798,25 +959,10 @@ async function fetchAllOSMData(
     })
     .filter((s: any) => s.lat && s.lng);
 
-  // Parse water features (springs, water points, drinking water)
-  const waterFeatures: WaterFeature[] = data.elements
-    .filter((el: any) => {
-      const tags = el.tags || {};
-      return tags.natural === 'water' || tags.natural === 'spring' || tags.amenity === 'drinking_water';
-    })
-    .map((el: any) => ({
-      id: el.id,
-      name: el.tags?.name,
-      type: el.tags?.natural || el.tags?.amenity || 'water',
-      lat: el.lat || el.center?.lat,
-      lng: el.lon || el.center?.lon,
-    }))
-    .filter((w: WaterFeature) => w.lat && w.lng);
-
   // Public lands are now fetched from BLM SMA API separately, return empty array
   const publicLands: PublicLandArea[] = [];
 
-  return { tracks, campSites, waterFeatures, publicLands };
+  return { tracks, campSites, publicLands };
 }
 
 /**
@@ -828,9 +974,9 @@ export function useDispersedRoads(
   radiusMiles: number = 15
 ): DispersedRoadsResult {
   const [mvumRoads, setMvumRoads] = useState<MVUMRoad[]>([]);
+  const [blmRoads, setBlmRoads] = useState<BLMRoad[]>([]);
   const [osmTracks, setOsmTracks] = useState<OSMTrack[]>([]);
   const [potentialSpots, setPotentialSpots] = useState<PotentialSpot[]>([]);
-  const [waterFeatures, setWaterFeatures] = useState<WaterFeature[]>([]);
   const [establishedCampgrounds, setEstablishedCampgrounds] = useState<EstablishedCampground[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -838,9 +984,9 @@ export function useDispersedRoads(
   useEffect(() => {
     if (lat === null || lng === null) {
       setMvumRoads([]);
+      setBlmRoads([]);
       setOsmTracks([]);
       setPotentialSpots([]);
-      setWaterFeatures([]);
       setEstablishedCampgrounds([]);
       return;
     }
@@ -851,9 +997,9 @@ export function useDispersedRoads(
 
       // Clear previous data immediately when starting a new search
       setMvumRoads([]);
+      setBlmRoads([]);
       setOsmTracks([]);
       setPotentialSpots([]);
-      setWaterFeatures([]);
       setEstablishedCampgrounds([]);
 
       // Calculate bounding box from center point and radius
@@ -866,10 +1012,16 @@ export function useDispersedRoads(
       const maxLng = lng + lngDelta;
 
       try {
-        // Fetch MVUM, OSM data, RIDB campgrounds, and USFS campgrounds in parallel
-        const [mvum, osmData, ridbCampgrounds, usfsCampgrounds] = await Promise.all([
+        // Fetch MVUM, BLM, OSM data, and USFS campgrounds in parallel
+        // Note: RIDB is skipped here as it requires user auth and is for established campgrounds
+        // which aren't the focus for dispersed camping. USFS Recreation API covers similar data.
+        const [mvum, blm, osmData, usfsCampgrounds] = await Promise.all([
           fetchMVUMRoads(minLat, minLng, maxLat, maxLng).catch((err) => {
             console.error('MVUM fetch error:', err);
+            return [];
+          }),
+          fetchBLMRoads(minLat, minLng, maxLat, maxLng).catch((err) => {
+            console.error('BLM fetch error:', err);
             return [];
           }),
           fetchAllOSMData(minLat, minLng, maxLat, maxLng).then((data) => {
@@ -877,11 +1029,7 @@ export function useDispersedRoads(
             return data;
           }).catch((err) => {
             console.error('OSM fetch error:', err);
-            return { tracks: [], campSites: [], waterFeatures: [], publicLands: [] };
-          }),
-          fetchRIDBCampgrounds(lat, lng, radiusMiles).catch((err) => {
-            console.error('RIDB fetch error:', err);
-            return [];
+            return { tracks: [], campSites: [], publicLands: [] };
           }),
           fetchUSFSCampgrounds(minLat, minLng, maxLat, maxLng).catch((err) => {
             console.error('USFS campgrounds fetch error:', err);
@@ -889,7 +1037,10 @@ export function useDispersedRoads(
           }),
         ]);
 
-        const { tracks: osm, campSites: camps, waterFeatures: water, publicLands } = osmData;
+        // RIDB campgrounds skipped - would require fixing Edge Function auth
+        const ridbCampgrounds: EstablishedCampground[] = [];
+
+        const { tracks: osm, campSites: camps, publicLands } = osmData;
 
         // Merge RIDB and USFS campgrounds, deduplicating by proximity
         const allCampgrounds = [...ridbCampgrounds];
@@ -906,13 +1057,13 @@ export function useDispersedRoads(
         console.log(`Total campgrounds: ${allCampgrounds.length} (${ridbCampgrounds.length} RIDB + ${usfsCampgrounds.length - (allCampgrounds.length - ridbCampgrounds.length)} USFS unique)`);
 
         setMvumRoads(mvum);
+        setBlmRoads(blm);
         setOsmTracks(osm);
-        setWaterFeatures(water);
         setEstablishedCampgrounds(allCampgrounds);
 
         // Find dead-ends and intersections from road geometry
         // Pass publicLands for additional boundary checking
-        const derivedSpots = findDeadEnds(mvum, osm, water, publicLands);
+        const derivedSpots = findDeadEnds(mvum, blm, osm, publicLands);
 
         // Filter out derived spots that are within 0.5 miles of:
         // 1. Known OSM camp sites
@@ -955,6 +1106,7 @@ export function useDispersedRoads(
 
         console.log('Dispersed data:', {
           mvumRoads: mvum.length,
+          blmRoads: blm.length,
           osmTracks: osm.length,
           establishedCampgrounds: allCampgrounds.length,
           ridbCampgrounds: ridbCampgrounds.length,
@@ -962,7 +1114,6 @@ export function useDispersedRoads(
           osmCampsTotal: camps.length,
           osmCampsNearRoads: roadAccessibleCamps.length,
           trulyDispersedCamps: trulyDispersedCamps.length,
-          waterFeatures: water.length,
           derivedSpots: derivedSpots.length,
           filteredDerivedSpots: filteredDerivedSpots.length,
         });
@@ -985,5 +1136,5 @@ export function useDispersedRoads(
     fetchRoads();
   }, [lat, lng, radiusMiles]);
 
-  return { mvumRoads, osmTracks, potentialSpots, waterFeatures, establishedCampgrounds, loading, error };
+  return { mvumRoads, blmRoads, osmTracks, potentialSpots, establishedCampgrounds, loading, error };
 }
