@@ -18,6 +18,9 @@ import {
   Tag,
   X,
   NoteBlank,
+  Users,
+  CheckCircle,
+  Compass,
 } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -54,6 +57,11 @@ const roadAccessLabels: Record<string, string> = {
   '4wd_hard': '4WD Hard',
 };
 
+const sourceTypeLabels: Record<string, string> = {
+  manual: 'Added',
+  explorer: 'Explorer',
+};
+
 const Campsites = () => {
   const navigate = useNavigate();
   const { campsites, publicCampsites, isLoading, deleteCampsite, exportToGeoJSON, fetchPublicCampsites } = useCampsites();
@@ -65,7 +73,7 @@ const Campsites = () => {
   });
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'mine' | 'discover'>('mine');
+  const [activeTab, setActiveTab] = useState<'mine' | 'explorer' | 'public'>('mine');
   const [sortBy, setSortBy] = useState<'name-asc' | 'name-desc' | 'newest' | 'oldest'>('newest');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<CampsiteType | 'all'>('all');
@@ -75,37 +83,68 @@ const Campsites = () => {
   const [filterHasNotes, setFilterHasNotes] = useState(false);
   const [selectedCampsiteId, setSelectedCampsiteId] = useState<string | null>(null);
 
-  // Load public campsites when switching to discover tab
-  const handleTabChange = (tab: 'mine' | 'discover') => {
+  // Load public campsites when switching tabs
+  const handleTabChange = (tab: 'mine' | 'explorer' | 'public') => {
     setActiveTab(tab);
-    if (tab === 'discover' && publicCampsites.length === 0) {
+    if ((tab === 'explorer' || tab === 'public') && publicCampsites.length === 0) {
       fetchPublicCampsites();
+    }
+  };
+
+  // Filter campsites for each tab
+  const explorerSpots = useMemo(() => {
+    // Explorer spots are confirmed spots from the dispersed explorer (source_type = 'explorer')
+    // Combine user's explorer spots with public confirmed explorer spots
+    const userExplorerSpots = campsites.filter(c => c.sourceType === 'explorer');
+    const publicExplorerSpots = publicCampsites.filter(c => c.sourceType === 'explorer' && c.isConfirmed);
+    // Dedupe by id
+    const seen = new Set(userExplorerSpots.map(c => c.id));
+    const combined = [...userExplorerSpots];
+    publicExplorerSpots.forEach(c => {
+      if (!seen.has(c.id)) {
+        combined.push(c);
+      }
+    });
+    return combined;
+  }, [campsites, publicCampsites]);
+
+  // Get the correct list based on active tab
+  const getListForTab = () => {
+    switch (activeTab) {
+      case 'mine':
+        return campsites;
+      case 'explorer':
+        return explorerSpots;
+      case 'public':
+        return publicCampsites;
+      default:
+        return campsites;
     }
   };
 
   // Get unique states for filter dropdown
   const availableStates = useMemo(() => {
-    const list = activeTab === 'mine' ? campsites : publicCampsites;
+    const list = getListForTab();
     const states = new Set<string>();
     list.forEach(c => {
       if (c.state) states.add(c.state);
     });
     return Array.from(states).sort();
-  }, [campsites, publicCampsites, activeTab]);
+  }, [campsites, publicCampsites, explorerSpots, activeTab]);
 
   // Get unique tags for filter pills
   const availableTags = useMemo(() => {
-    const list = activeTab === 'mine' ? campsites : publicCampsites;
+    const list = getListForTab();
     const tags = new Set<string>();
     list.forEach(c => {
       c.tags?.forEach(t => tags.add(t));
     });
     return Array.from(tags).sort();
-  }, [campsites, publicCampsites, activeTab]);
+  }, [campsites, publicCampsites, explorerSpots, activeTab]);
 
   // Filter and sort campsites
   const displayedCampsites = useMemo(() => {
-    let list = activeTab === 'mine' ? campsites : publicCampsites;
+    let list = getListForTab();
 
     // Filter by search
     if (searchQuery) {
@@ -293,17 +332,33 @@ const Campsites = () => {
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            My Campsites
+            My Spots
           </button>
           <button
-            onClick={() => handleTabChange('discover')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'discover'
+            onClick={() => handleTabChange('explorer')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+              activeTab === 'explorer'
                 ? 'bg-white text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            Discover
+            <Compass className="w-4 h-4" />
+            Explorer
+            {explorerSpots.length > 0 && (
+              <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
+                {explorerSpots.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => handleTabChange('public')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeTab === 'public'
+                ? 'bg-white text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Public
           </button>
         </div>
 
@@ -490,11 +545,31 @@ const Campsites = () => {
                               )}
                             </div>
 
-                            {/* Type badge */}
-                            <div className="flex items-center gap-2 mt-2">
+                            {/* Type and source badges */}
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
                               <span className="inline-block px-2 py-0.5 bg-secondary rounded-full text-xs font-medium text-foreground">
                                 {typeLabels[campsite.type]}
                               </span>
+                              {campsite.sourceType === 'explorer' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">
+                                  <Compass className="w-3 h-3" />
+                                  Explorer
+                                </span>
+                              )}
+                              {campsite.sourceType === 'explorer' && campsite.confirmationCount > 0 && (
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  campsite.isConfirmed
+                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                                }`}>
+                                  {campsite.isConfirmed ? (
+                                    <CheckCircle className="w-3 h-3" />
+                                  ) : (
+                                    <Users className="w-3 h-3" />
+                                  )}
+                                  {campsite.confirmationCount} {campsite.isConfirmed ? 'Verified' : 'Pending'}
+                                </span>
+                              )}
                               {campsite.roadAccess && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-secondary rounded-full text-xs font-medium text-foreground">
                                   <Car className="w-3 h-3" />

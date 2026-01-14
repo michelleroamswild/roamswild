@@ -7,9 +7,11 @@ import {
   CampsiteRow,
   CampsiteVisibility,
   ParsedImportLocation,
+  OriginalSpotData,
   campsiteFromRow,
   campsiteToRow,
 } from '@/types/campsite';
+import type { PotentialSpot } from '@/hooks/use-dispersed-roads';
 
 interface CampsitesContextType {
   // User's campsites (owned)
@@ -31,6 +33,12 @@ interface CampsitesContextType {
   // Discovery
   fetchPublicCampsites: () => Promise<void>;
   searchNearbyCampsites: (lat: number, lng: number, radiusMiles: number) => Promise<Campsite[]>;
+
+  // Explorer spot confirmations
+  confirmExplorerSpot: (spot: PotentialSpot, notes?: string) => Promise<Campsite | null>;
+  hasUserConfirmed: (campsiteId: string) => Promise<boolean>;
+  getExplorerSpots: (lat: number, lng: number, radiusMiles: number) => Promise<Campsite[]>;
+  findExistingExplorerSpot: (lat: number, lng: number) => Promise<Campsite | null>;
 
   // Refresh
   refreshCampsites: () => Promise<void>;
@@ -369,6 +377,173 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
     await fetchCampsites();
   };
 
+  // Find existing explorer spot by coordinates (within ~50 meters)
+  const findExistingExplorerSpot = async (lat: number, lng: number): Promise<Campsite | null> => {
+    const radiusDegrees = 50 / 111000; // ~50 meters in degrees
+
+    try {
+      const { data, error } = await supabase
+        .from('campsites')
+        .select('*')
+        .eq('source_type', 'explorer')
+        .gte('lat', lat - radiusDegrees)
+        .lte('lat', lat + radiusDegrees)
+        .gte('lng', lng - radiusDegrees)
+        .lte('lng', lng + radiusDegrees)
+        .limit(1)
+        .single();
+
+      if (error || !data) {
+        return null;
+      }
+
+      return campsiteFromRow(data as CampsiteRow);
+    } catch {
+      return null;
+    }
+  };
+
+  // Confirm an explorer spot (create new or add confirmation to existing)
+  const confirmExplorerSpot = async (spot: PotentialSpot, notes?: string): Promise<Campsite | null> => {
+    if (!user) return null;
+
+    try {
+      // Check if this spot already exists in the database
+      const existingSpot = await findExistingExplorerSpot(spot.lat, spot.lng);
+
+      if (existingSpot) {
+        // Add confirmation to existing spot
+        const { error: confirmError } = await supabase
+          .from('spot_confirmations')
+          .insert({
+            campsite_id: existingSpot.id,
+            user_id: user.id,
+            notes: notes || null,
+          });
+
+        if (confirmError) {
+          // User may have already confirmed this spot
+          if (confirmError.code === '23505') {
+            console.log('User has already confirmed this spot');
+            return existingSpot;
+          }
+          console.error('Failed to add confirmation:', confirmError);
+          return null;
+        }
+
+        // Trigger will update confirmation_count and is_confirmed
+        // Fetch the updated spot
+        const { data: updated } = await supabase
+          .from('campsites')
+          .select('*')
+          .eq('id', existingSpot.id)
+          .single();
+
+        return updated ? campsiteFromRow(updated as CampsiteRow) : existingSpot;
+      }
+
+      // Create new explorer spot
+      const originalSpotData: OriginalSpotData = {
+        score: spot.score,
+        reasons: spot.reasons,
+        roadName: spot.roadName,
+        spotType: spot.type,
+      };
+
+      const rowData = campsiteToRow(
+        {
+          name: spot.name || spot.roadName || `Campsite at ${spot.lat.toFixed(4)}, ${spot.lng.toFixed(4)}`,
+          lat: spot.lat,
+          lng: spot.lng,
+          type: 'dispersed',
+          visibility: 'public',
+          roadAccess: spot.highClearance ? '4wd_moderate' : '2wd',
+          sourceType: 'explorer',
+          originalSpotData,
+        },
+        user.id
+      );
+
+      const { data: newSpot, error: insertError } = await supabase
+        .from('campsites')
+        .insert(rowData)
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('Failed to create explorer spot:', insertError);
+        return null;
+      }
+
+      const createdSpot = campsiteFromRow(newSpot as CampsiteRow);
+
+      // Add the user's confirmation
+      await supabase
+        .from('spot_confirmations')
+        .insert({
+          campsite_id: createdSpot.id,
+          user_id: user.id,
+          notes: notes || null,
+        });
+
+      return createdSpot;
+    } catch (e) {
+      console.error('Error confirming explorer spot:', e);
+      return null;
+    }
+  };
+
+  // Check if user has already confirmed a spot
+  const hasUserConfirmed = async (campsiteId: string): Promise<boolean> => {
+    if (!user) return false;
+
+    try {
+      const { data, error } = await supabase
+        .from('spot_confirmations')
+        .select('id')
+        .eq('campsite_id', campsiteId)
+        .eq('user_id', user.id)
+        .single();
+
+      return !error && !!data;
+    } catch {
+      return false;
+    }
+  };
+
+  // Get confirmed explorer spots in an area
+  const getExplorerSpots = async (lat: number, lng: number, radiusMiles: number): Promise<Campsite[]> => {
+    const radiusDegrees = radiusMiles / 69;
+
+    try {
+      const { data, error } = await supabase
+        .from('campsites')
+        .select('*')
+        .eq('source_type', 'explorer')
+        .gte('lat', lat - radiusDegrees)
+        .lte('lat', lat + radiusDegrees)
+        .gte('lng', lng - radiusDegrees)
+        .lte('lng', lng + radiusDegrees);
+
+      if (error) {
+        console.error('Failed to get explorer spots:', error);
+        return [];
+      }
+
+      const rows = data as CampsiteRow[] | null;
+      const results = (rows || []).map(campsiteFromRow);
+
+      // Calculate actual distance and filter by radius
+      return results.filter(campsite => {
+        const distance = getDistanceMiles(lat, lng, campsite.lat, campsite.lng);
+        return distance <= radiusMiles;
+      });
+    } catch (e) {
+      console.error('Error getting explorer spots:', e);
+      return [];
+    }
+  };
+
   return (
     <CampsitesContext.Provider
       value={{
@@ -383,6 +558,10 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
         exportToGeoJSON,
         fetchPublicCampsites,
         searchNearbyCampsites,
+        confirmExplorerSpot,
+        hasUserConfirmed,
+        getExplorerSpots,
+        findExistingExplorerSpot,
         refreshCampsites,
       }}
     >

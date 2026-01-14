@@ -1,6 +1,6 @@
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, MapPin, MagnifyingGlass, Path, Jeep, SpinnerGap, TreeEvergreen, Warning, Crosshair, Tent, Star, Drop, MapPinLine, Eye, EyeSlash } from '@phosphor-icons/react';
+import { ArrowLeft, MapPin, MagnifyingGlass, Path, Jeep, SpinnerGap, TreeEvergreen, Warning, Crosshair, Tent, Star, Drop, MapPinLine, Eye, EyeSlash, CheckCircle, NavigationArrow, Users } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { GoogleMap } from '@/components/GoogleMap';
@@ -8,7 +8,10 @@ import { Polyline, Marker, Polygon } from '@react-google-maps/api';
 import { Autocomplete } from '@react-google-maps/api';
 import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
 import { usePublicLands } from '@/hooks/use-public-lands';
+import { useCampsites } from '@/context/CampsitesContext';
 import { Header } from '@/components/Header';
+import { ConfirmSpotDialog } from '@/components/ConfirmSpotDialog';
+import type { Campsite } from '@/types/campsite';
 
 interface SearchLocation {
   lat: number;
@@ -62,7 +65,12 @@ const DispersedExplorer = () => {
   const [selectedRoad, setSelectedRoad] = useState<MVUMRoad | OSMTrack | null>(null);
   const [selectedSpot, setSelectedSpot] = useState<PotentialSpot | null>(null);
   const [showPublicLands, setShowPublicLands] = useState(true);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [existingCampsiteForSpot, setExistingCampsiteForSpot] = useState<Campsite | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+
+  const { findExistingExplorerSpot, getExplorerSpots } = useCampsites();
+  const [explorerSpots, setExplorerSpots] = useState<Campsite[]>([]);
 
   const { mvumRoads, osmTracks, potentialSpots, establishedCampgrounds, loading, error } = useDispersedRoads(
     searchLocation?.lat ?? null,
@@ -117,6 +125,24 @@ const DispersedExplorer = () => {
 
     return [...campSites, ...filteredDerived];
   }, [potentialSpots, publicLands, mvumRoads]);
+
+  // Fetch confirmed explorer spots from database when search location changes
+  useEffect(() => {
+    if (searchLocation) {
+      getExplorerSpots(searchLocation.lat, searchLocation.lng, 25).then(setExplorerSpots);
+    } else {
+      setExplorerSpots([]);
+    }
+  }, [searchLocation, getExplorerSpots]);
+
+  // Check if selected spot already exists in database
+  useEffect(() => {
+    if (selectedSpot) {
+      findExistingExplorerSpot(selectedSpot.lat, selectedSpot.lng).then(setExistingCampsiteForSpot);
+    } else {
+      setExistingCampsiteForSpot(null);
+    }
+  }, [selectedSpot, findExistingExplorerSpot]);
 
   const onAutocompleteLoad = useCallback((autocompleteInstance: google.maps.places.Autocomplete) => {
     setAutocomplete(autocompleteInstance);
@@ -649,6 +675,47 @@ const DispersedExplorer = () => {
                         <span className="text-xs">Near water source</span>
                       </div>
                     )}
+
+                    {/* Confirmation Status */}
+                    {existingCampsiteForSpot && (
+                      <div className="mt-3 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                        <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                          <Users className="w-4 h-4" />
+                          <span className="text-sm font-medium">
+                            {existingCampsiteForSpot.confirmationCount} {existingCampsiteForSpot.confirmationCount === 1 ? 'user has' : 'users have'} confirmed
+                          </span>
+                        </div>
+                        {existingCampsiteForSpot.isConfirmed && (
+                          <div className="flex items-center gap-1 mt-1 text-green-600 dark:text-green-400">
+                            <CheckCircle className="w-3 h-3" />
+                            <span className="text-xs">Verified camping spot</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 mt-4">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => setConfirmDialogOpen(true)}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        {existingCampsiteForSpot ? 'Add Confirmation' : 'Confirm Spot'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const url = `https://www.google.com/maps/dir/?api=1&destination=${selectedSpot.lat},${selectedSpot.lng}`;
+                          window.open(url, '_blank');
+                        }}
+                      >
+                        <NavigationArrow className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -850,6 +917,23 @@ const DispersedExplorer = () => {
           </div>
         </div>
       </main>
+
+      {/* Confirm Spot Dialog */}
+      {selectedSpot && (
+        <ConfirmSpotDialog
+          spot={selectedSpot}
+          open={confirmDialogOpen}
+          onOpenChange={setConfirmDialogOpen}
+          onConfirmed={() => {
+            // Refresh the existing campsite data for this spot
+            findExistingExplorerSpot(selectedSpot.lat, selectedSpot.lng).then(setExistingCampsiteForSpot);
+            // Refresh explorer spots list
+            if (searchLocation) {
+              getExplorerSpots(searchLocation.lat, searchLocation.lng, 25).then(setExplorerSpots);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };
