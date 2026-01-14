@@ -69,7 +69,7 @@ const DispersedExplorer = () => {
   const { mvumRoads, osmTracks, potentialSpots, establishedCampgrounds, loading, error } = useDispersedRoads(
     searchLocation?.lat ?? null,
     searchLocation?.lng ?? null,
-    20 // 20 mile radius
+    10 // 10 mile radius
   );
 
   // Selected established campground
@@ -79,7 +79,7 @@ const DispersedExplorer = () => {
   const { publicLands, loading: publicLandsLoading } = usePublicLands(
     searchLocation?.lat ?? 0,
     searchLocation?.lng ?? 0,
-    25 // 25 mile radius for public lands
+    12 // 12 mile radius for public lands (slightly larger than road search to ensure coverage)
   );
 
   // Helper to check if a point is within a restricted area (NPS or State Park)
@@ -134,13 +134,12 @@ const DispersedExplorer = () => {
     const hasMVUMRoads = mvumRoads.length > 0;
 
     // Filter derived spots:
-    // - Always include if on MVUM road (definitely National Forest)
-    // - Always include if on BLM road (definitely BLM land)
-    // - Always include if marked as public land (from road characteristics like track type)
-    // - If we have public land polygons, validate remaining spots against them
-    // - If no polygons but we have MVUM roads in the area, show OSM spots too (area is NF)
+    // - MVUM roads: definitely National Forest - always include
+    // - BLM roads: definitely BLM land - always include
+    // - OSM tracks: REQUIRE polygon validation if we have polygon coverage
     // - EXCLUDE spots within National Parks or State Parks
     // - EXCLUDE spots near established campgrounds
+    // - EXCLUDE spots outside public land polygons (e.g., Potash fields, private land)
     const filteredDerived = derivedSpots.filter((spot) => {
       // First check: exclude spots in National Parks or State Parks (dispersed camping not allowed)
       if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
@@ -154,17 +153,25 @@ const DispersedExplorer = () => {
       // BLM roads are definitely on public land (BLM) - always include
       if (spot.isOnBLMRoad) return true;
 
-      // Spots flagged as public land from road characteristics (e.g., OSM tracks) - include
-      // The isLikelyPublicLand heuristic already filtered out private/suburban roads
-      if (spot.isOnPublicLand) return true;
-
-      // If we have polygon data, validate against it as a final check
+      // For OSM-derived spots, check if within a public land polygon
+      // This is the key filter for private land like Potash fields
       if (publicLands.length > 0) {
-        return isWithinAnyPublicLand(spot.lat, spot.lng, publicLands);
+        const withinPublicLand = isWithinAnyPublicLand(spot.lat, spot.lng, publicLands);
+        if (withinPublicLand) return true;
+
+        // Spot is NOT within any public land polygon
+        // Only allow if we have very limited polygon coverage (< 3 polygons)
+        // Otherwise, reject it as likely private land
+        if (publicLands.length >= 3) {
+          return false; // Have good polygon coverage - reject spots outside public land
+        }
       }
 
-      // No polygon data - use MVUM presence as proxy for "in National Forest"
-      // If we have MVUM roads in this area, OSM-derived spots are likely valid
+      // Only fall back to heuristics when we have minimal polygon coverage
+      // The isOnPublicLand flag is based on OSM track characteristics
+      if (spot.isOnPublicLand) return true;
+
+      // Use MVUM presence as proxy for "in National Forest area"
       return hasMVUMRoads;
     });
 
@@ -173,7 +180,8 @@ const DispersedExplorer = () => {
     const npsPolygons = publicLands.filter(l => l.managingAgency === 'NPS').length;
     const statePolygons = publicLands.filter(l => l.managingAgency === 'STATE').length;
     const publicLandSpots = derivedSpots.filter(s => s.isOnPublicLand).length;
-    console.log(`Filtered spots: ${campSites.length} camps, ${filteredDerived.length}/${derivedSpots.length} derived (${derivedSpots.filter(s => s.isOnMVUMRoad).length} MVUM, ${derivedSpots.filter(s => s.isOnBLMRoad).length} BLM road, ${publicLandSpots} public land) | Polygons: ${blmPolygons} BLM, ${usfsPolygons} USFS, ${npsPolygons} NPS, ${statePolygons} State, ${publicLands.length} total`);
+    const filterOnlyPolygons = publicLands.filter(l => !l.renderOnMap).length;
+    console.log(`Filtered spots: ${campSites.length} camps, ${filteredDerived.length}/${derivedSpots.length} derived (${derivedSpots.filter(s => s.isOnMVUMRoad).length} MVUM, ${derivedSpots.filter(s => s.isOnBLMRoad).length} BLM road, ${publicLandSpots} public land) | Polygons: ${blmPolygons} BLM, ${usfsPolygons} USFS, ${npsPolygons} NPS, ${statePolygons} State, ${publicLands.length} total (${filterOnlyPolygons} filter-only)`);
 
     return [...campSites, ...filteredDerived];
   }, [potentialSpots, publicLands, mvumRoads, isWithinRestrictedArea, isNearEstablishedCampground]);
@@ -434,7 +442,9 @@ const DispersedExplorer = () => {
                         <span className="text-sm font-medium">Public Lands</span>
                         {publicLandsLoading && <SpinnerGap className="w-3 h-3 animate-spin text-muted-foreground" />}
                         {publicLands.length > 0 && (
-                          <span className="text-xs text-muted-foreground">({publicLands.length})</span>
+                          <span className="text-xs text-muted-foreground" title={`${publicLands.filter(l => l.renderOnMap).length} rendered, ${publicLands.filter(l => !l.renderOnMap).length} filter-only`}>
+                            ({publicLands.length})
+                          </span>
                         )}
                       </div>
                       <Button
@@ -827,8 +837,12 @@ const DispersedExplorer = () => {
               )}
 
               {/* Public Lands Overlay (BLM, USFS, etc.) */}
+              {/* Note: Large polygons (renderOnMap=false) are skipped for rendering but still used for filtering */}
               {showPublicLands && publicLands.map((land) => {
                 if (!land.polygon) return null;
+                // Skip very large polygons to avoid performance issues
+                // These are still used for point-in-polygon filtering
+                if (!land.renderOnMap) return null;
 
                 // Different colors for different agencies
                 const isBLM = land.managingAgency === 'BLM';

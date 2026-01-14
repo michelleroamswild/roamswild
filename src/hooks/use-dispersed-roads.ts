@@ -97,6 +97,9 @@ interface BLMEndpointConfig {
   typeField: string;
 }
 
+// BLM road data endpoints by state
+// Note: Utah does NOT have a GTLF road service - only TMA (Travel Management Area) polygons
+// Utah BLM roads will rely on OSM tracks and PAD-US polygon filtering instead
 const BLM_ROAD_ENDPOINTS: Record<string, BLMEndpointConfig> = {
   'CO': {
     url: 'https://gis.blm.gov/coarcgis/rest/services/transportation/BLM_CO_GTLF/FeatureServer/5/query',
@@ -110,19 +113,14 @@ const BLM_ROAD_ENDPOINTS: Record<string, BLMEndpointConfig> = {
     surfaceField: 'OBSRVE_SRFCE_TYPE',
     typeField: 'PLAN_MODE_TRNSPRT',
   },
-  'UT': {
-    url: 'https://gis.blm.gov/utarcgis/rest/services/transportation/BLM_UT_TMA/FeatureServer/0/query',
-    nameField: 'ROUTE_PRMRY_NM',
-    surfaceField: 'OBSRVE_SRFCE_TYPE',
-    typeField: 'PLAN_MODE_TRNSPRT',
-  },
+  // Utah removed - BLM_UT_TMA is polygon data only, no road lines available
 };
 
 // State boundaries for states with working BLM road endpoints
 const STATE_BOUNDS: Record<string, { minLat: number; maxLat: number; minLng: number; maxLng: number }> = {
   'AZ': { minLat: 31.33, maxLat: 37.00, minLng: -114.82, maxLng: -109.04 },
   'CO': { minLat: 36.99, maxLat: 41.00, minLng: -109.05, maxLng: -102.04 },
-  'UT': { minLat: 36.99, maxLat: 42.00, minLng: -114.05, maxLng: -109.04 },
+  // Utah removed - no BLM road line data available
 };
 
 /**
@@ -244,12 +242,62 @@ function isWithinPublicLand(lat: number, lng: number, publicLands: PublicLandAre
 }
 
 /**
+ * Point-in-polygon check using ray casting algorithm
+ * Returns true if the point (lat, lng) is inside the polygon
+ */
+function isPointInPolygon(lat: number, lng: number, polygon: [number, number][]): boolean {
+  if (polygon.length < 3) return false;
+
+  let inside = false;
+  const x = lng;
+  const y = lat;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0]; // lng
+    const yi = polygon[i][1]; // lat
+    const xj = polygon[j][0];
+    const yj = polygon[j][1];
+
+    const intersect = ((yi > y) !== (yj > y)) &&
+      (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+}
+
+/**
+ * Check if a point is within or near any private/industrial land area
+ * bufferMiles: additional buffer around polygons to catch nearby spots
+ */
+function isWithinPrivateLand(lat: number, lng: number, privateLands: PrivateLandArea[], bufferMiles: number = 0.5): { isPrivate: boolean; landName?: string; landType?: string } {
+  for (const land of privateLands) {
+    // Check if point is inside polygon
+    if (isPointInPolygon(lat, lng, land.geometry.coordinates)) {
+      return { isPrivate: true, landName: land.name, landType: land.type };
+    }
+
+    // Check if point is within buffer distance of any polygon vertex
+    for (const coord of land.geometry.coordinates) {
+      const polyLng = coord[0];
+      const polyLat = coord[1];
+      const distance = getDistanceMiles(lat, lng, polyLat, polyLng);
+      if (distance < bufferMiles) {
+        return { isPrivate: true, landName: land.name, landType: `near ${land.type}` };
+      }
+    }
+  }
+  return { isPrivate: false };
+}
+
+/**
  * Check if an OSM track is likely on public land (not a suburban cul-de-sac)
  * We err on the side of inclusion - the visual polygon overlay helps users verify
  */
 function isLikelyPublicLand(track: OSMTrack): boolean {
-  // Definitely exclude if marked private
-  if (track.access === 'private' || track.access === 'no') return false;
+  // Definitely exclude if marked private or restricted
+  if (track.access === 'private' || track.access === 'no' || track.access === 'customers') return false;
 
   // Definitely include if marked for off-road/backcountry use
   if (track.fourWdOnly) return true;
@@ -271,13 +319,19 @@ function isLikelyPublicLand(track: OSMTrack): boolean {
   return true;
 }
 
+interface PrivateRoadPoint {
+  lat: number;
+  lng: number;
+}
+
 function findDeadEnds(
   mvumRoads: MVUMRoad[],
   blmRoads: BLMRoad[],
   osmTracks: OSMTrack[],
   publicLands: PublicLandArea[]
-): PotentialSpot[] {
+): { spots: PotentialSpot[]; privateRoadPoints: PrivateRoadPoint[] } {
   const spots: PotentialSpot[] = [];
+  const privateRoadPoints: PrivateRoadPoint[] = [];
 
   // Collect all endpoints from all roads
   const endpointMap = new Map<string, EndpointInfo>();
@@ -383,6 +437,17 @@ function findDeadEnds(
     const likelyPublic = isLikelyPublicLand(track);
     const coords = track.geometry.coordinates;
 
+    // If this road is marked private, collect its coordinates for proximity filtering
+    if (track.access === 'private' || track.access === 'no' || track.access === 'customers') {
+      coords.forEach(coord => {
+        const lat = getCoordLat(coord);
+        const lng = getCoordLng(coord);
+        if (lat !== null && lng !== null) {
+          privateRoadPoints.push({ lat, lng });
+        }
+      });
+    }
+
     // Start point
     const startLng = getCoordLng(coords[0]);
     const startLat = getCoordLat(coords[0]);
@@ -484,7 +549,8 @@ function findDeadEnds(
     }
   });
 
-  return spots;
+  console.log(`Found ${privateRoadPoints.length} private road points for proximity filtering`);
+  return { spots, privateRoadPoints };
 }
 
 /**
@@ -787,6 +853,17 @@ export interface PublicLandArea {
   };
 }
 
+// Private/industrial land areas from OSM
+export interface PrivateLandArea {
+  id: number;
+  name?: string;
+  type: string; // industrial, quarry, commercial, private
+  geometry: {
+    type: 'Polygon';
+    coordinates: [number, number][];
+  };
+}
+
 /**
  * Combined OSM query for tracks and camp sites
  * This reduces API calls to avoid rate limiting
@@ -795,6 +872,7 @@ interface OSMCombinedResult {
   tracks: OSMTrack[];
   campSites: PotentialSpot[];
   publicLands: PublicLandArea[];
+  privateLands: PrivateLandArea[];
 }
 
 async function fetchAllOSMData(
@@ -804,6 +882,7 @@ async function fetchAllOSMData(
   maxLng: number
 ): Promise<OSMCombinedResult> {
   // Optimized Overpass query - removed expensive public lands (using BLM API instead)
+  // Added private/industrial land areas to filter out spots on private property
   const query = `
     [out:json][timeout:45];
     (
@@ -819,6 +898,20 @@ async function fetchAllOSMData(
       node["camp_site"](${minLat},${minLng},${maxLat},${maxLng});
       node["camp_type"](${minLat},${minLng},${maxLat},${maxLng});
       node["leisure"="firepit"](${minLat},${minLng},${maxLat},${maxLng});
+
+      // Private/industrial land areas - to exclude from dispersed camping
+      way["landuse"="industrial"](${minLat},${minLng},${maxLat},${maxLng});
+      way["landuse"="quarry"](${minLat},${minLng},${maxLat},${maxLng});
+      way["landuse"="landfill"](${minLat},${minLng},${maxLat},${maxLng});
+      way["landuse"="military"](${minLat},${minLng},${maxLat},${maxLng});
+      way["access"="private"]["landuse"](${minLat},${minLng},${maxLat},${maxLng});
+      // Industrial water features (evaporation ponds, settling basins, etc.)
+      way["water"="basin"](${minLat},${minLng},${maxLat},${maxLng});
+      way["water"="reservoir"]["reservoir_type"="evaporation"](${minLat},${minLng},${maxLat},${maxLng});
+      way["man_made"="evaporation_pond"](${minLat},${minLng},${maxLat},${maxLng});
+      way["man_made"="tailings_pond"](${minLat},${minLng},${maxLat},${maxLng});
+      // Ponds near private/industrial roads are likely industrial (evaporation ponds)
+      way["water"="pond"](${minLat},${minLng},${maxLat},${maxLng});
     );
     out geom;
   `;
@@ -873,7 +966,7 @@ async function fetchAllOSMData(
 
   if (!data.elements) {
     console.log('No elements in OSM response');
-    return { tracks: [], campSites: [], publicLands: [] };
+    return { tracks: [], campSites: [], publicLands: [], privateLands: [] };
   }
 
   console.log('OSM response elements:', data.elements.length, 'total');
@@ -1002,7 +1095,38 @@ async function fetchAllOSMData(
   // Public lands are now fetched from BLM SMA API separately, return empty array
   const publicLands: PublicLandArea[] = [];
 
-  return { tracks, campSites, publicLands };
+  // Parse private/industrial land areas
+  const privateLands: PrivateLandArea[] = data.elements
+    .filter((el: any) => {
+      if (el.type !== 'way' || !el.geometry || el.geometry.length < 3) return false;
+      const tags = el.tags || {};
+      return tags.landuse === 'industrial' ||
+        tags.landuse === 'quarry' ||
+        tags.landuse === 'landfill' ||
+        tags.landuse === 'military' ||
+        (tags.access === 'private' && tags.landuse) ||
+        tags.water === 'basin' ||
+        tags.water === 'pond' ||
+        tags['reservoir_type'] === 'evaporation' ||
+        tags.man_made === 'evaporation_pond' ||
+        tags.man_made === 'tailings_pond';
+    })
+    .map((el: any) => {
+      const tags = el.tags || {};
+      return {
+        id: el.id,
+        name: tags.name,
+        type: tags.landuse || 'private',
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: el.geometry.map((pt: any) => [pt.lon, pt.lat]),
+        },
+      };
+    });
+
+  console.log(`Found ${privateLands.length} private/industrial land areas from OSM`);
+
+  return { tracks, campSites, publicLands, privateLands };
 }
 
 /**
@@ -1065,11 +1189,11 @@ export function useDispersedRoads(
             return [];
           }),
           fetchAllOSMData(minLat, minLng, maxLat, maxLng).then((data) => {
-            console.log('OSM data fetched:', data.tracks.length, 'tracks,', data.campSites.length, 'camps,', data.publicLands.length, 'public lands');
+            console.log('OSM data fetched:', data.tracks.length, 'tracks,', data.campSites.length, 'camps,', data.publicLands.length, 'public lands,', data.privateLands.length, 'private lands');
             return data;
           }).catch((err) => {
             console.error('OSM fetch error:', err);
-            return { tracks: [], campSites: [], publicLands: [] };
+            return { tracks: [], campSites: [], publicLands: [], privateLands: [] };
           }),
           fetchUSFSCampgrounds(minLat, minLng, maxLat, maxLng).catch((err) => {
             console.error('USFS campgrounds fetch error:', err);
@@ -1080,7 +1204,7 @@ export function useDispersedRoads(
         // RIDB campgrounds skipped - would require fixing Edge Function auth
         const ridbCampgrounds: EstablishedCampground[] = [];
 
-        const { tracks: osm, campSites: camps, publicLands } = osmData;
+        const { tracks: osm, campSites: camps, publicLands, privateLands } = osmData;
 
         // Merge RIDB and USFS campgrounds, deduplicating by proximity
         const allCampgrounds = [...ridbCampgrounds];
@@ -1129,12 +1253,35 @@ export function useDispersedRoads(
 
         // Find dead-ends and intersections from road geometry
         // Pass publicLands for additional boundary checking
-        const derivedSpots = findDeadEnds(mvum, blm, osm, publicLands);
+        const { spots: derivedSpots, privateRoadPoints } = findDeadEnds(mvum, blm, osm, publicLands);
 
-        // Filter out derived spots that are within 0.5 miles of:
-        // 1. Known OSM camp sites
-        // 2. Established campgrounds (RIDB + USFS)
+        // Helper to check if a point is near any private road
+        // Using 0.5 mile buffer since industrial areas often have many unmarked internal roads
+        const isNearPrivateRoad = (lat: number, lng: number, thresholdMiles: number = 0.5): boolean => {
+          return privateRoadPoints.some(pt =>
+            getDistanceMiles(lat, lng, pt.lat, pt.lng) < thresholdMiles
+          );
+        };
+
+        // Filter out derived spots that are:
+        // 1. Within 0.5 miles of known OSM camp sites
+        // 2. Within 0.5 miles of established campgrounds (RIDB + USFS)
+        // 3. Within private/industrial land areas (Potash fields, mines, etc.)
+        // 4. Near roads marked as private (0.3 mile buffer)
         const filteredDerivedSpots = derivedSpots.filter(spot => {
+          // Check if within private/industrial land
+          const privateCheck = isWithinPrivateLand(spot.lat, spot.lng, privateLands);
+          if (privateCheck.isPrivate) {
+            console.log(`Filtering out spot on private land: ${spot.name} (${privateCheck.landType}: ${privateCheck.landName || 'unnamed'})`);
+            return false;
+          }
+
+          // Check if near a road marked as private
+          if (isNearPrivateRoad(spot.lat, spot.lng)) {
+            console.log(`Filtering out spot near private road: ${spot.name}`);
+            return false;
+          }
+
           // Check OSM camp sites
           const tooCloseToOSMCamp = camps.some(camp =>
             getDistanceMiles(spot.lat, spot.lng, camp.lat, camp.lng) < 0.5
@@ -1166,9 +1313,23 @@ export function useDispersedRoads(
         // 1. Established campgrounds (already added to allCampgrounds)
         // 2. Individual sites within established campgrounds (Site 1, Site 2, etc.)
         // 3. Any camp too close to an established campground
+        // 4. Within private/industrial land areas
         const trulyDispersedCamps = roadAccessibleCamps.filter((camp: any) => {
           // Skip if this is an established campground (already in establishedCampgrounds)
           if (camp.isEstablishedCampground) return false;
+
+          // Skip if within private/industrial land
+          const privateCheck = isWithinPrivateLand(camp.lat, camp.lng, privateLands);
+          if (privateCheck.isPrivate) {
+            console.log(`Filtering out camp on private land: ${camp.name} (${privateCheck.landType}: ${privateCheck.landName || 'unnamed'})`);
+            return false;
+          }
+
+          // Skip if near a road marked as private
+          if (isNearPrivateRoad(camp.lat, camp.lng)) {
+            console.log(`Filtering out camp near private road: ${camp.name}`);
+            return false;
+          }
 
           // Skip individual sites within established campgrounds
           if (camp.isIndividualSite) {
@@ -1202,6 +1363,8 @@ export function useDispersedRoads(
           trulyDispersedCamps: trulyDispersedCamps.length,
           derivedSpots: derivedSpots.length,
           filteredDerivedSpots: filteredDerivedSpots.length,
+          privateLandAreas: privateLands.length,
+          privateRoadPoints: privateRoadPoints.length,
         });
 
         // Combine all potential spots: truly dispersed OSM camp sites + filtered derived spots

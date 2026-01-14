@@ -10,6 +10,10 @@ export interface PublicLand {
   distance: number;
   // Polygon coordinates for overlay (array of {lat, lng} points)
   polygon?: { lat: number; lng: number }[];
+  // Whether to render this polygon on the map (false for very large polygons to avoid performance issues)
+  renderOnMap: boolean;
+  // Number of vertices in the polygon (for debugging)
+  vertexCount?: number;
 }
 
 // Haversine formula to calculate distance between two points in miles
@@ -113,13 +117,14 @@ export function usePublicLands(
           spatialRel: 'esriSpatialRelIntersects',
           outFields: 'OBJECTID,ADMIN_UNIT_NAME,ADMIN_AGENCY_CODE',
           returnGeometry: 'true',
-          resultRecordCount: '100',
+          resultRecordCount: '200',
           f: 'json',
         });
 
         // USA Federal Lands query (PAD-US based) - uses lat/lng (4326)
         // Include all major federal land agencies for complete coverage
         // Field is "Agency" with full names like "Forest Service", "Bureau of Land Management"
+        // Use maxAllowableOffset to simplify large polygons on the server side
         const federalLandsParams = new URLSearchParams({
           where: "Agency IN ('Forest Service', 'Bureau of Land Management', 'National Park Service', 'Fish and Wildlife Service', 'Department of Defense', 'Bureau of Reclamation')",
           geometry: JSON.stringify({
@@ -135,7 +140,11 @@ export function usePublicLands(
           spatialRel: 'esriSpatialRelIntersects',
           outFields: 'OBJECTID,unit_name,Agency',
           returnGeometry: 'true',
-          resultRecordCount: '100',
+          resultRecordCount: '200',
+          // Simplify geometry on server side - 0.001 degrees ≈ 100m tolerance
+          // This reduces polygon complexity while maintaining general shape
+          maxAllowableOffset: '0.001',
+          geometryPrecision: '5',
           f: 'json',
         });
 
@@ -217,6 +226,15 @@ export function usePublicLands(
         // Process USA Federal Lands (PAD-US) response
         if (federalLandsResult && !federalLandsResult.error && federalLandsResult.features) {
           console.log(`USA Federal Lands returned ${federalLandsResult.features.length} features`);
+          // Log each BLM feature to debug
+          const blmFeatures = federalLandsResult.features.filter((f: any) => f.attributes.Agency === 'Bureau of Land Management');
+          console.log(`  - ${blmFeatures.length} BLM features from PAD-US`);
+          blmFeatures.forEach((f: any) => {
+            const hasGeom = f.geometry && f.geometry.rings && f.geometry.rings.length > 0;
+            const ringCount = hasGeom ? f.geometry.rings.length : 0;
+            const vertexCount = hasGeom ? f.geometry.rings.reduce((sum: number, ring: any[]) => sum + ring.length, 0) : 0;
+            console.log(`    BLM OBJECTID ${f.attributes.OBJECTID}: ${f.attributes.unit_name || 'unnamed'} - ${hasGeom ? `${ringCount} rings, ${vertexCount} vertices` : 'NO GEOMETRY'}`);
+          });
           // Map full agency names to codes
           const agencyToCode: Record<string, string> = {
             'Forest Service': 'USFS',
@@ -237,6 +255,8 @@ export function usePublicLands(
             source: 'federal',
           }));
           features = features.concat(federalFeatures);
+        } else if (federalLandsResult?.error) {
+          console.error('USA Federal Lands API error:', federalLandsResult.error);
         }
 
         // Process OSM state parks response
@@ -425,13 +445,14 @@ export function usePublicLands(
           const baseName = f.attributes.ADMIN_UNIT_NAME || agencyNames[agencyCode] || 'Public Land';
           const isLatLngFormat = f.source === 'federal' || f.source === 'osm';
 
-          // Process each ring - the API already filtered for intersection, so we trust those results
-          // Only process the first ring (outer boundary) for each feature to avoid holes being treated as separate polygons
+          // Process all rings - BLM land can have many separate parcels stored as different rings
+          // Limit to first 500 rings to avoid performance issues with highly fragmented land
+          const maxRings = 500;
+          let processedRings = 0;
+
           f.geometry.rings.forEach((ring: number[][], ringIndex: number) => {
-            if (ring.length < 3) return; // Need at least 3 points for a polygon
-            // Skip inner rings (holes) - they typically wind in the opposite direction
-            // We only want the outer boundary (first ring)
-            if (ringIndex > 0) return;
+            if (processedRings >= maxRings) return;
+            if (ring.length < 4) return; // Need at least 4 points for a meaningful polygon (triangle + close)
 
             let polygon: { lat: number; lng: number }[];
             let centroidLat: number;
@@ -470,6 +491,16 @@ export function usePublicLands(
             }
 
             const distance = getDistanceMiles(centerLat, centerLng, centroidLat, centroidLng);
+            const vertexCount = polygon.length;
+
+            // Very large polygons (>5000 vertices) still work for point-in-polygon filtering
+            // but skip rendering to avoid performance issues
+            const MAX_RENDER_VERTICES = 5000;
+            const renderOnMap = vertexCount <= MAX_RENDER_VERTICES;
+
+            if (!renderOnMap) {
+              console.log(`Large polygon ${baseName} (${agencyCode}) has ${vertexCount} vertices - using for filtering only`);
+            }
 
             lands.push({
               id: `${f.source}-${f.attributes.OBJECTID}-${ringIndex}`,
@@ -480,17 +511,23 @@ export function usePublicLands(
               lng: centroidLng,
               distance,
               polygon,
+              renderOnMap,
+              vertexCount,
             });
+            processedRings++;
           });
         });
 
         // Sort by distance
         lands.sort((a, b) => a.distance - b.distance);
 
-        // Limit to 100 polygons to avoid performance issues
-        const limitedLands = lands.slice(0, 100);
+        // Limit to 1000 polygons total for filtering, but only render smaller ones
+        // This allows comprehensive coverage for point-in-polygon checks
+        const limitedLands = lands.slice(0, 1000);
 
-        console.log(`Found ${limitedLands.length} public land areas (PAD-US ownership data)`);
+        const renderableCount = limitedLands.filter(l => l.renderOnMap).length;
+        const filterOnlyCount = limitedLands.filter(l => !l.renderOnMap).length;
+        console.log(`Found ${limitedLands.length} public land polygons (${renderableCount} renderable, ${filterOnlyCount} filter-only) from ${features.length} features`);
         setPublicLands(limitedLands);
       } catch (err) {
         console.error('Error fetching public lands:', err);
