@@ -10,6 +10,10 @@ export interface PublicLand {
   distance: number;
   // Polygon coordinates for overlay (array of {lat, lng} points)
   polygon?: { lat: number; lng: number }[];
+  // Whether to render this polygon on the map (false for very large polygons to avoid performance issues)
+  renderOnMap: boolean;
+  // Number of vertices in the polygon (for debugging)
+  vertexCount?: number;
 }
 
 // Haversine formula to calculate distance between two points in miles
@@ -50,7 +54,14 @@ const agencyNames: Record<string, string> = {
   'FS': 'US Forest Service',
   'FWS': 'Fish & Wildlife Service',
   'NPS': 'National Park Service',
+  'STATE': 'State Park',
 };
+
+// Overpass API endpoints for redundancy
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
 
 // USA Federal Lands service (based on PAD-US ownership data, not administrative boundaries)
 // This excludes private inholdings within forest boundaries
@@ -106,13 +117,14 @@ export function usePublicLands(
           spatialRel: 'esriSpatialRelIntersects',
           outFields: 'OBJECTID,ADMIN_UNIT_NAME,ADMIN_AGENCY_CODE',
           returnGeometry: 'true',
-          resultRecordCount: '100',
+          resultRecordCount: '200',
           f: 'json',
         });
 
         // USA Federal Lands query (PAD-US based) - uses lat/lng (4326)
         // Include all major federal land agencies for complete coverage
         // Field is "Agency" with full names like "Forest Service", "Bureau of Land Management"
+        // Use maxAllowableOffset to simplify large polygons on the server side
         const federalLandsParams = new URLSearchParams({
           where: "Agency IN ('Forest Service', 'Bureau of Land Management', 'National Park Service', 'Fish and Wildlife Service', 'Department of Defense', 'Bureau of Reclamation')",
           geometry: JSON.stringify({
@@ -128,15 +140,34 @@ export function usePublicLands(
           spatialRel: 'esriSpatialRelIntersects',
           outFields: 'OBJECTID,unit_name,Agency',
           returnGeometry: 'true',
-          resultRecordCount: '100',
+          resultRecordCount: '200',
+          // Simplify geometry on server side - 0.001 degrees ≈ 100m tolerance
+          // This reduces polygon complexity while maintaining general shape
+          maxAllowableOffset: '0.001',
+          geometryPrecision: '5',
           f: 'json',
         });
 
-        console.log('Fetching public lands from BLM SMA and USA Federal Lands (PAD-US) services');
+        // OSM Overpass query for state parks
+        const minLat = centerLat - (radiusMiles / 69);
+        const maxLat = centerLat + (radiusMiles / 69);
+        const minLng = centerLng - (radiusMiles / 50);
+        const maxLng = centerLng + (radiusMiles / 50);
+
+        const osmQuery = `
+          [out:json][timeout:30];
+          (
+            relation["boundary"="protected_area"]["protection_title"~"State Park|State Recreation Area|State Reserve"](${minLat},${minLng},${maxLat},${maxLng});
+            way["boundary"="protected_area"]["protection_title"~"State Park|State Recreation Area|State Reserve"](${minLat},${minLng},${maxLat},${maxLng});
+          );
+          out geom;
+        `;
+
+        console.log('Fetching public lands from BLM SMA, USA Federal Lands (PAD-US), and OSM (state parks)');
         console.log(`Search area: ${centerLat.toFixed(4)}, ${centerLng.toFixed(4)} - radius ${radiusMiles}mi`);
 
-        // Fetch both in parallel - handle failures gracefully
-        const [blmResult, federalLandsResult] = await Promise.all([
+        // Fetch all three in parallel - handle failures gracefully
+        const [blmResult, federalLandsResult, osmResult] = await Promise.all([
           fetch(`/api/blm-sma/BLM_Natl_SMA_Cached_with_PriUnk/MapServer/1/query?${blmParams.toString()}`)
             .then(async (res) => {
               if (!res.ok) {
@@ -161,6 +192,24 @@ export function usePublicLands(
               console.warn('USA Federal Lands fetch failed:', err);
               return null;
             }),
+          // Fetch state parks from OSM
+          (async () => {
+            for (const endpoint of OVERPASS_ENDPOINTS) {
+              try {
+                const response = await fetch(endpoint, {
+                  method: 'POST',
+                  body: `data=${encodeURIComponent(osmQuery)}`,
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                });
+                if (response.ok) {
+                  return response.json();
+                }
+              } catch (err) {
+                console.warn(`OSM endpoint ${endpoint} failed:`, err);
+              }
+            }
+            return null;
+          })(),
         ]);
 
         let features: any[] = [];
@@ -177,6 +226,15 @@ export function usePublicLands(
         // Process USA Federal Lands (PAD-US) response
         if (federalLandsResult && !federalLandsResult.error && federalLandsResult.features) {
           console.log(`USA Federal Lands returned ${federalLandsResult.features.length} features`);
+          // Log each BLM feature to debug
+          const blmFeatures = federalLandsResult.features.filter((f: any) => f.attributes.Agency === 'Bureau of Land Management');
+          console.log(`  - ${blmFeatures.length} BLM features from PAD-US`);
+          blmFeatures.forEach((f: any) => {
+            const hasGeom = f.geometry && f.geometry.rings && f.geometry.rings.length > 0;
+            const ringCount = hasGeom ? f.geometry.rings.length : 0;
+            const vertexCount = hasGeom ? f.geometry.rings.reduce((sum: number, ring: any[]) => sum + ring.length, 0) : 0;
+            console.log(`    BLM OBJECTID ${f.attributes.OBJECTID}: ${f.attributes.unit_name || 'unnamed'} - ${hasGeom ? `${ringCount} rings, ${vertexCount} vertices` : 'NO GEOMETRY'}`);
+          });
           // Map full agency names to codes
           const agencyToCode: Record<string, string> = {
             'Forest Service': 'USFS',
@@ -197,6 +255,173 @@ export function usePublicLands(
             source: 'federal',
           }));
           features = features.concat(federalFeatures);
+        } else if (federalLandsResult?.error) {
+          console.error('USA Federal Lands API error:', federalLandsResult.error);
+        }
+
+        // Process OSM state parks response
+        if (osmResult && osmResult.elements) {
+          console.log(`OSM returned ${osmResult.elements.length} state park features`);
+          osmResult.elements.forEach((element: any) => {
+            const parkName = element.tags?.name || 'State Park';
+
+            // Get the geometry - ways have geometry directly, relations have it in members
+            let coords: { lat: number; lng: number }[] = [];
+
+            if (element.geometry) {
+              // Way with geometry - simple case
+              coords = element.geometry.map((node: any) => ({
+                lat: node.lat,
+                lng: node.lon,
+              }));
+            } else if (element.members) {
+              // Relation - need to stitch outer ways together in correct order
+              const outerWays = element.members
+                .filter((m: any) => m.role === 'outer' && m.geometry && m.geometry.length > 0)
+                .map((m: any) => m.geometry.map((n: any) => ({ lat: n.lat, lng: n.lon })));
+
+              // State park with multiple outer ways
+
+              if (outerWays.length > 0) {
+                // Check if ways are already closed loops (start == end)
+                const tolerance = 0.0001;
+                const closedWays = outerWays.filter((way: { lat: number; lng: number }[]) => {
+                  const first = way[0];
+                  const last = way[way.length - 1];
+                  return Math.abs(first.lat - last.lat) < tolerance &&
+                         Math.abs(first.lng - last.lng) < tolerance;
+                });
+
+                if (closedWays.length === outerWays.length && outerWays.length > 1) {
+                  // All ways are already closed loops - create separate features for each
+                  outerWays.forEach((way: { lat: number; lng: number }[], idx: number) => {
+                    if (way.length >= 3) {
+                      const ring = way.map((c: { lat: number; lng: number }) => [c.lng, c.lat]);
+                      features.push({
+                        attributes: {
+                          OBJECTID: `${element.id}-${idx}`,
+                          ADMIN_UNIT_NAME: parkName,
+                          ADMIN_AGENCY_CODE: 'STATE',
+                        },
+                        geometry: { rings: [ring] },
+                        source: 'osm',
+                      });
+                    }
+                  });
+                  // Skip the normal processing since we already added the features
+                  return;
+                } else if (closedWays.length === outerWays.length) {
+                  // Single closed loop
+                  coords = [...outerWays[0]];
+                } else {
+                  // Ways need to be stitched together - build endpoint graph
+                  type Endpoint = { wayIndex: number; isStart: boolean; lat: number; lng: number };
+                  const endpoints: Endpoint[] = [];
+
+                  outerWays.forEach((way: { lat: number; lng: number }[], idx: number) => {
+                    endpoints.push({ wayIndex: idx, isStart: true, lat: way[0].lat, lng: way[0].lng });
+                    endpoints.push({ wayIndex: idx, isStart: false, lat: way[way.length - 1].lat, lng: way[way.length - 1].lng });
+                  });
+
+                  // Find matching endpoint pairs
+                  const stitchTolerance = 0.001;
+                  const connections: Map<string, string[]> = new Map();
+
+                  for (let i = 0; i < endpoints.length; i++) {
+                    const key = `${endpoints[i].wayIndex}-${endpoints[i].isStart ? 's' : 'e'}`;
+                    connections.set(key, []);
+
+                    for (let j = 0; j < endpoints.length; j++) {
+                      if (endpoints[i].wayIndex === endpoints[j].wayIndex) continue;
+                      const dist = Math.sqrt(
+                        Math.pow(endpoints[i].lat - endpoints[j].lat, 2) +
+                        Math.pow(endpoints[i].lng - endpoints[j].lng, 2)
+                      );
+                      if (dist < stitchTolerance) {
+                        const targetKey = `${endpoints[j].wayIndex}-${endpoints[j].isStart ? 's' : 'e'}`;
+                        connections.get(key)!.push(targetKey);
+                      }
+                    }
+                  }
+
+                  // Build the ring by following connections
+                  const usedWays = new Set<number>();
+                  const orderedWays: { wayIndex: number; reversed: boolean }[] = [];
+
+                  orderedWays.push({ wayIndex: 0, reversed: false });
+                  usedWays.add(0);
+                  let currentEndpoint = `0-e`;
+
+                  while (usedWays.size < outerWays.length) {
+                    const connectedTo = connections.get(currentEndpoint) || [];
+                    let foundNext = false;
+
+                    for (const targetKey of connectedTo) {
+                      const [wayIdxStr, endType] = targetKey.split('-');
+                      const wayIdx = parseInt(wayIdxStr);
+
+                      if (usedWays.has(wayIdx)) continue;
+
+                      const reversed = endType === 'e';
+                      orderedWays.push({ wayIndex: wayIdx, reversed });
+                      usedWays.add(wayIdx);
+                      currentEndpoint = `${wayIdx}-${reversed ? 's' : 'e'}`;
+                      foundNext = true;
+                      break;
+                    }
+
+                    if (!foundNext) {
+                      for (let i = 0; i < outerWays.length; i++) {
+                        if (!usedWays.has(i)) {
+                          orderedWays.push({ wayIndex: i, reversed: false });
+                          usedWays.add(i);
+                          break;
+                        }
+                      }
+                    }
+                  }
+
+                  // Build coords from ordered ways
+                  coords = [];
+                  orderedWays.forEach(({ wayIndex, reversed }, idx) => {
+                    let wayCoords = outerWays[wayIndex];
+                    if (reversed) {
+                      wayCoords = [...wayCoords].reverse();
+                    }
+                    if (idx === 0) {
+                      coords = [...wayCoords];
+                    } else {
+                      coords = coords.concat(wayCoords.slice(1));
+                    }
+                  });
+                }
+
+                // Ensure polygon is closed
+                if (coords.length > 0) {
+                  const first = coords[0];
+                  const last = coords[coords.length - 1];
+                  if (Math.abs(first.lat - last.lat) > tolerance ||
+                      Math.abs(first.lng - last.lng) > tolerance) {
+                    coords.push({ lat: first.lat, lng: first.lng });
+                  }
+                }
+              }
+            }
+
+            if (coords.length >= 3) {
+              // Convert to rings format for consistency with other sources
+              const ring = coords.map(c => [c.lng, c.lat]);
+              features.push({
+                attributes: {
+                  OBJECTID: element.id,
+                  ADMIN_UNIT_NAME: element.tags?.name || 'State Park',
+                  ADMIN_AGENCY_CODE: 'STATE',
+                },
+                geometry: { rings: [ring] },
+                source: 'osm',
+              });
+            }
+          });
         }
 
         console.log(`Fetched ${features.length} total public land features`);
@@ -213,37 +438,29 @@ export function usePublicLands(
         // Each feature may have multiple rings (multi-polygon), so we flatten them
         const lands: PublicLand[] = [];
 
-        // Convert search center to Web Mercator for comparison (BLM data)
-        const searchCenter = latLngToWebMercator(centerLat, centerLng);
-        const searchRadiusMeters = radiusMiles * 1609;
-
         features.forEach((f: any) => {
           if (!f.geometry?.rings?.length) return;
 
           const agencyCode = f.attributes.ADMIN_AGENCY_CODE || 'UNK';
           const baseName = f.attributes.ADMIN_UNIT_NAME || agencyNames[agencyCode] || 'Public Land';
-          const isFederalLands = f.source === 'federal';
+          const isLatLngFormat = f.source === 'federal' || f.source === 'osm';
 
-          // Process each ring - find rings that have ANY point within search area
+          // Process all rings - BLM land can have many separate parcels stored as different rings
+          // Limit to first 500 rings to avoid performance issues with highly fragmented land
+          const maxRings = 500;
+          let processedRings = 0;
+
           f.geometry.rings.forEach((ring: number[][], ringIndex: number) => {
-            if (ring.length < 3) return; // Need at least 3 points for a polygon
+            if (processedRings >= maxRings) return;
+            if (ring.length < 4) return; // Need at least 4 points for a meaningful polygon (triangle + close)
 
-            let hasPointInArea: boolean;
             let polygon: { lat: number; lng: number }[];
             let centroidLat: number;
             let centroidLng: number;
 
-            if (isFederalLands) {
-              // USFS data is already in lat/lng (4326)
+            if (isLatLngFormat) {
+              // Federal Lands and OSM data is already in lat/lng (4326)
               // Ring format is [lng, lat]
-              hasPointInArea = ring.some((coord: number[]) => {
-                const coordLng = coord[0];
-                const coordLat = coord[1];
-                return Math.abs(coordLat - centerLat) < (radiusMiles / 69) &&
-                       Math.abs(coordLng - centerLng) < (radiusMiles / 50);
-              });
-
-              if (!hasPointInArea) return;
 
               // Calculate centroid
               const sumLng = ring.reduce((sum: number, coord: number[]) => sum + coord[0], 0);
@@ -257,14 +474,7 @@ export function usePublicLands(
                 lng: coord[0],
               }));
             } else {
-              // BLM data is in Web Mercator (102100)
-              hasPointInArea = ring.some((coord: number[]) => {
-                const dx = Math.abs(coord[0] - searchCenter.x);
-                const dy = Math.abs(coord[1] - searchCenter.y);
-                return dx < searchRadiusMeters && dy < searchRadiusMeters;
-              });
-
-              if (!hasPointInArea) return;
+              // BLM SMA data is in Web Mercator (102100)
 
               // Calculate centroid in Web Mercator, then convert
               const sumX = ring.reduce((sum: number, coord: number[]) => sum + coord[0], 0);
@@ -281,9 +491,19 @@ export function usePublicLands(
             }
 
             const distance = getDistanceMiles(centerLat, centerLng, centroidLat, centroidLng);
+            const vertexCount = polygon.length;
+
+            // Very large polygons (>5000 vertices) still work for point-in-polygon filtering
+            // but skip rendering to avoid performance issues
+            const MAX_RENDER_VERTICES = 5000;
+            const renderOnMap = vertexCount <= MAX_RENDER_VERTICES;
+
+            if (!renderOnMap) {
+              console.log(`Large polygon ${baseName} (${agencyCode}) has ${vertexCount} vertices - using for filtering only`);
+            }
 
             lands.push({
-              id: `${isFederalLands ? 'federal' : 'sma'}-${f.attributes.OBJECTID}-${ringIndex}`,
+              id: `${f.source}-${f.attributes.OBJECTID}-${ringIndex}`,
               name: baseName,
               managingAgency: agencyCode,
               managingAgencyFull: agencyNames[agencyCode] || agencyCode,
@@ -291,17 +511,23 @@ export function usePublicLands(
               lng: centroidLng,
               distance,
               polygon,
+              renderOnMap,
+              vertexCount,
             });
+            processedRings++;
           });
         });
 
         // Sort by distance
         lands.sort((a, b) => a.distance - b.distance);
 
-        // Limit to 100 polygons to avoid performance issues
-        const limitedLands = lands.slice(0, 100);
+        // Limit to 1000 polygons total for filtering, but only render smaller ones
+        // This allows comprehensive coverage for point-in-polygon checks
+        const limitedLands = lands.slice(0, 1000);
 
-        console.log(`Found ${limitedLands.length} public land areas (PAD-US ownership data)`);
+        const renderableCount = limitedLands.filter(l => l.renderOnMap).length;
+        const filterOnlyCount = limitedLands.filter(l => !l.renderOnMap).length;
+        console.log(`Found ${limitedLands.length} public land polygons (${renderableCount} renderable, ${filterOnlyCount} filter-only) from ${features.length} features`);
         setPublicLands(limitedLands);
       } catch (err) {
         console.error('Error fetching public lands:', err);
