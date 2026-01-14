@@ -1,27 +1,43 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { SpinnerGap, CheckCircle, MapPin, Jeep } from '@phosphor-icons/react';
+import { SpinnerGap, CheckCircle, MapPin, Jeep, Check } from '@phosphor-icons/react';
 import { PotentialSpot } from '@/hooks/use-dispersed-roads';
 import { useCampsites } from '@/context/CampsitesContext';
-import type { RoadAccess } from '@/types/campsite';
+import type { RoadAccess, Campsite } from '@/types/campsite';
 
 interface ConfirmSpotDialogProps {
   spot: PotentialSpot;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirmed?: () => void;
+  existingCampsite?: Campsite | null;
 }
 
-export function ConfirmSpotDialog({ spot, open, onOpenChange, onConfirmed }: ConfirmSpotDialogProps) {
-  const { confirmExplorerSpot } = useCampsites();
+export function ConfirmSpotDialog({ spot, open, onOpenChange, onConfirmed, existingCampsite }: ConfirmSpotDialogProps) {
+  const { confirmExplorerSpot, hasUserConfirmed } = useCampsites();
   const [notes, setNotes] = useState('');
   const [roadAccess, setRoadAccess] = useState<RoadAccess>(spot.highClearance ? '4wd_moderate' : '2wd');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [alreadyConfirmed, setAlreadyConfirmed] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+
+  // Check if user has already confirmed this spot when dialog opens
+  useEffect(() => {
+    if (open && existingCampsite) {
+      setCheckingStatus(true);
+      hasUserConfirmed(existingCampsite.id).then((confirmed) => {
+        setAlreadyConfirmed(confirmed);
+        setCheckingStatus(false);
+      });
+    } else {
+      setAlreadyConfirmed(false);
+    }
+  }, [open, existingCampsite, hasUserConfirmed]);
 
   const handleConfirm = async () => {
     setIsSubmitting(true);
@@ -52,17 +68,40 @@ export function ConfirmSpotDialog({ spot, open, onOpenChange, onConfirmed }: Con
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-green-600" />
-            Confirm Camping Spot
+            {alreadyConfirmed ? 'Already Confirmed' : 'Confirm Camping Spot'}
           </DialogTitle>
         </DialogHeader>
 
-        {isSuccess ? (
+        {checkingStatus ? (
+          <div className="py-8 text-center">
+            <SpinnerGap className="w-8 h-8 text-primary mx-auto mb-3 animate-spin" />
+            <p className="text-sm text-muted-foreground">Checking status...</p>
+          </div>
+        ) : isSuccess ? (
           <div className="py-8 text-center">
             <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-3" />
             <p className="text-lg font-medium text-foreground">Spot Confirmed!</p>
             <p className="text-sm text-muted-foreground mt-1">
               Thank you for helping verify this location.
             </p>
+          </div>
+        ) : alreadyConfirmed ? (
+          <div className="py-6 text-center">
+            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Check className="w-8 h-8 text-green-600" />
+            </div>
+            <p className="text-lg font-medium text-foreground">You've already confirmed this spot</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              {existingCampsite && (
+                <>
+                  This spot has {existingCampsite.confirmationCount} {existingCampsite.confirmationCount === 1 ? 'confirmation' : 'confirmations'}.
+                  {existingCampsite.isConfirmed ? ' It\'s now verified!' : ` ${3 - existingCampsite.confirmationCount} more needed to verify.`}
+                </>
+              )}
+            </p>
+            <Button className="mt-6" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
           </div>
         ) : (
           <>
@@ -87,6 +126,15 @@ export function ConfirmSpotDialog({ spot, open, onOpenChange, onConfirmed }: Con
                   </span>
                 </div>
               </div>
+
+              {/* Existing confirmations */}
+              {existingCampsite && existingCampsite.confirmationCount > 0 && (
+                <div className="p-2.5 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    {existingCampsite.confirmationCount} {existingCampsite.confirmationCount === 1 ? 'person has' : 'people have'} already confirmed this spot
+                  </p>
+                </div>
+              )}
 
               {/* Road Access */}
               <div className="space-y-2">

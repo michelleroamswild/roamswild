@@ -1678,6 +1678,7 @@ const DispersedExplorer = () => {
           spot={selectedSpot}
           open={confirmDialogOpen}
           onOpenChange={setConfirmDialogOpen}
+          existingCampsite={existingCampsiteForSpot}
           onConfirmed={() => {
             // Refresh the existing campsite data for this spot
             findExistingExplorerSpot(selectedSpot.lat, selectedSpot.lng).then(setExistingCampsiteForSpot);
