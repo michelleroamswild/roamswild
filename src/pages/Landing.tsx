@@ -184,8 +184,8 @@ const AppScreenshot = () => (
           </div>
           {/* Stop 2 */}
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-softamber/20 flex items-center justify-center">
-              <Tent className="w-2.5 h-2.5 text-softamber" weight="fill" />
+            <div className="w-5 h-5 rounded-full bg-wildviolet/20 flex items-center justify-center">
+              <Tent className="w-2.5 h-2.5 text-wildviolet" weight="fill" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[9px] font-medium text-foreground truncate">BLM Dispersed - Willow Springs</p>
@@ -230,8 +230,8 @@ const AppScreenshot = () => (
           </div>
           {/* Stop 3 */}
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-softamber/20 flex items-center justify-center">
-              <Tent className="w-2.5 h-2.5 text-softamber" weight="fill" />
+            <div className="w-5 h-5 rounded-full bg-wildviolet/20 flex items-center justify-center">
+              <Tent className="w-2.5 h-2.5 text-wildviolet" weight="fill" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[9px] font-medium text-foreground truncate">Horsethief Campground</p>

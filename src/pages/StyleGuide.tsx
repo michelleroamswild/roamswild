@@ -538,8 +538,8 @@ const StyleGuide = () => {
                   <span className="text-xs text-foreground">Hike</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-softamber/20 flex items-center justify-center">
-                    <Tent className="w-5 h-5 text-softamber" />
+                  <div className="w-10 h-10 rounded-full bg-wildviolet/20 flex items-center justify-center">
+                    <Tent className="w-5 h-5 text-wildviolet" />
                   </div>
                   <span className="text-xs text-foreground">Camp</span>
                 </div>
@@ -649,7 +649,7 @@ const StyleGuide = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <Boot className="w-4 h-4 text-pinesoft" />
-                      <Tent className="w-4 h-4 text-softamber" />
+                      <Tent className="w-4 h-4 text-wildviolet" />
                     </div>
                   </div>
                 </Card>
@@ -679,7 +679,7 @@ const StyleGuide = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <Boot className="w-4 h-4 text-pinesoft" />
-                      <Tent className="w-4 h-4 text-softamber" />
+                      <Tent className="w-4 h-4 text-wildviolet" />
                     </div>
                   </div>
                 </Card>
@@ -978,8 +978,8 @@ const StyleGuide = () => {
                   <span className="text-xs">Hike</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-softamber/20 flex items-center justify-center">
-                    <Tent className="w-5 h-5 text-softamber" />
+                  <div className="w-10 h-10 rounded-full bg-wildviolet/20 flex items-center justify-center">
+                    <Tent className="w-5 h-5 text-wildviolet" />
                   </div>
                   <span className="text-xs">Camp</span>
                 </div>
@@ -1179,7 +1179,7 @@ const StyleGuide = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Boot className="w-4 h-4 text-pinesoft" />
-                  <Tent className="w-4 h-4 text-softamber" />
+                  <Tent className="w-4 h-4 text-wildviolet" />
                   <Button variant="secondary" size="sm">
                     <NavigationArrow className="w-3 h-3 mr-1" />
                     Preview
@@ -1213,7 +1213,7 @@ const StyleGuide = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Boot className="w-4 h-4 text-pinesoft" />
-                  <Tent className="w-4 h-4 text-softamber" />
+                  <Tent className="w-4 h-4 text-wildviolet" />
                   <Button variant="secondary" size="sm">
                     <NavigationArrow className="w-3 h-3 mr-1" />
                     Exit Preview

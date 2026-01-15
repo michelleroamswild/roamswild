@@ -296,7 +296,7 @@ export const Suggestions = () => {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <Tent className="w-5 h-5 text-softamber" />
+                  <Tent className="w-5 h-5 text-wildviolet" />
                   <h3 className="text-lg font-semibold text-foreground">Top Campsites</h3>
                 </div>
               </div>
@@ -451,7 +451,7 @@ const CampsiteCard = ({ campsite, index, isSelected, onClick }: CampsiteCardProp
           <div className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 ${
             isSelected ? 'bg-softamber/30' : 'bg-softamber/20'
           }`}>
-            <Tent className="w-5 h-5 text-softamber" />
+            <Tent className="w-5 h-5 text-wildviolet" />
           </div>
           <div className="flex-1 min-w-0">
             <h4 className={`font-semibold truncate transition-colors ${

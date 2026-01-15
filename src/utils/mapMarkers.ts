@@ -5,7 +5,7 @@
 // Original accent colors preserved in CSS, these are just for map icon visibility
 const MARKER_COLORS = {
   hike: { bg: '#3c8a79', text: '#ffffff' },      // accent-pinesoft darkened hsl(167 39% 39%)
-  camp: { bg: '#ea9b0c', text: '#ffffff' },      // accent-softamber darkened hsl(40 83% 50%)
+  camp: { bg: '#a855f7', text: '#ffffff' },      // accent-wildviolet darkened hsl(280 80% 54%)
   viewpoint: { bg: '#4a96ed', text: '#ffffff' }, // accent-skyblue darkened hsl(212 86% 62%)
   gas: { bg: '#e85a9a', text: '#ffffff' },       // accent-blushorchid darkened hsl(332 76% 63%)
   photo: { bg: '#e85a9a', text: '#ffffff' },     // accent-blushorchid darkened hsl(332 76% 63%)
@@ -20,7 +20,7 @@ const MARKER_COLORS = {
 const bootPath = `M192,112H160V56a16,16,0,0,0-16-16H32A16,16,0,0,0,16.29,65.07c10.53,27.46,8.29,79.31-.5,109.21A16.1,16.1,0,0,0,16,176v24a16,16,0,0,0,16,16H66.11a16,16,0,0,0,7.16-1.69L85.89,208h16.22l12.62,6.31a16,16,0,0,0,7.16,1.69h28.22a16,16,0,0,0,7.16-1.69L169.89,208h16.22l12.62,6.31a16,16,0,0,0,7.16,1.69H232a16,16,0,0,0,16-16V168A56.06,56.06,0,0,0,192,112ZM32,176V169.73c9.77-33.22,12-88.59.82-119.73H144v62H112a8,8,0,0,0,0,16h32v-8h48a40,40,0,0,1,40,40v16H32Zm200,24H205.89l-12.62-6.31a16,16,0,0,0-7.16-1.69H169.89a16,16,0,0,0-7.16,1.69L150.11,200H121.89l-12.62-6.31a16,16,0,0,0-7.16-1.69H85.89a16,16,0,0,0-7.16,1.69L66.11,200H32v-8H232Z`;
 
 // Tent icon - Phosphor regular weight (256x256 viewBox)
-const tentPath = `M255.31,188.75l-64-144A8,8,0,0,0,184,40H72a8,8,0,0,0-7.31,4.75l-64,144A8,8,0,0,0,8,200H248a8,8,0,0,0,7.31-11.25ZM72,56h6.92L72,72.61Zm-8,29.39L20.31,184H64ZM80,184V85.7L123.69,184Zm60.31,0L128,155.54,115.69,184ZM184,56l64,128H140.31L184,72.61V56Z`;
+const tentPath = `M255.31,188.75l-64-144A8,8,0,0,0,184,40H72a8,8,0,0,0-7.27,4.69.21.21,0,0,0,0,.06l0,.12,0,0L.69,188.75A8,8,0,0,0,8,200H248a8,8,0,0,0,7.31-11.25ZM64,184H20.31L64,85.7Zm16,0V85.7L123.69,184Zm61.2,0L84.31,56H178.8l56.89,128Z`;
 
 // Eye icon - Phosphor regular weight (256x256 viewBox)
 const eyePath = `M247.31,124.76c-.35-.79-8.82-19.58-27.65-38.41C194.57,61.26,162.88,48,128,48S61.43,61.26,36.34,86.35C17.51,105.18,9,124,8.69,124.76a8,8,0,0,0,0,6.5c.35.79,8.82,19.57,27.65,38.4C61.43,194.74,93.12,208,128,208s66.57-13.26,91.66-38.34c18.83-18.83,27.3-37.61,27.65-38.4A8,8,0,0,0,247.31,124.76ZM128,192c-30.78,0-57.67-11.19-79.93-33.25A133.47,133.47,0,0,1,25,128,133.33,133.33,0,0,1,48.07,97.25C70.33,75.19,97.22,64,128,64s57.67,11.19,79.93,33.25A133.46,133.46,0,0,1,231.05,128C223.84,141.46,192.43,192,128,192Zm0-112a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z`;
@@ -142,7 +142,7 @@ export function getTypeStyles(type: string): string {
     case 'hike':
       return 'bg-pinesoft/20 text-pinesoft border-pinesoft/30';
     case 'camp':
-      return 'bg-softamber/20 text-softamber border-softamber/30';
+      return 'bg-wildviolet/20 text-wildviolet border-wildviolet/30';
     case 'viewpoint':
       return 'bg-skyblue/20 text-skyblue border-skyblue/30';
     case 'gas':

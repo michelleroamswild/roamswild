@@ -76,8 +76,10 @@ const DispersedExplorer = () => {
   const [existingCampsiteForSpot, setExistingCampsiteForSpot] = useState<Campsite | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
 
-  const { findExistingExplorerSpot, getExplorerSpots } = useCampsites();
+  const { findExistingExplorerSpot, getExplorerSpots, campsites } = useCampsites();
   const [explorerSpots, setExplorerSpots] = useState<Campsite[]>([]);
+  const [showMyCampsites, setShowMyCampsites] = useState(true);
+  const [selectedCampsite, setSelectedCampsite] = useState<Campsite | null>(null);
 
   const { mvumRoads, osmTracks, potentialSpots, establishedCampgrounds, loading, error } = useDispersedRoads(
     searchLocation?.lat ?? null,
@@ -504,43 +506,41 @@ const DispersedExplorer = () => {
     ) || null;
   }, [explorerSpots]);
 
-  // Get marker icon for a spot - uses camp icon for confirmed spots
+  // Get marker icon for a spot
+  // - Tent icons for confirmed spots and OSM camp-sites
+  // - Simple colored circles for derived/potential spots
   const getSpotMarkerIcon = useCallback((spot: PotentialSpot, isSelected: boolean) => {
     const confirmedSpot = isSpotConfirmed(spot);
 
-    // If this spot has been confirmed by users, use the camp marker
+    // Confirmed spots get tent icon
     if (confirmedSpot) {
       return createMarkerIcon('camp', {
         isActive: isSelected,
-        size: isSelected ? 44 : 36,
-        // Use green for verified (3+), amber for pending
-        customColor: confirmedSpot.isConfirmed ? '#22c55e' : '#ea9b0c'
+        size: isSelected ? 40 : 32
       });
     }
 
-    // Known campsites from OSM get a distinct blue color
-    if (spot.type === 'camp-site') {
-      return {
-        url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
-        scaledSize: new google.maps.Size(isSelected ? 40 : 32, isSelected ? 40 : 32),
-      };
-    }
+    // All non-confirmed spots get simple circles with confidence-based colors
+    // OSM camp-sites (known) get mossgreen, derived spots get colors based on score
+    let fillColor = '#e83a3a'; // accent-coralred darkened hsl(0 83% 51%) - low confidence
+    if (spot.type === 'camp-site') fillColor = '#3d7a40'; // accent-mossgreen darkened hsl(118 39% 30%)
+    else if (spot.score >= 35) fillColor = '#eab308'; // Yellow - high confidence
+    else if (spot.score >= 25) fillColor = '#f97316'; // Orange - medium confidence
 
-    // Use different colors based on confidence score for derived spots
-    let color = 'red'; // Default
-    if (spot.score >= 35) color = 'green';
-    else if (spot.score >= 25) color = 'yellow';
-    else if (spot.score >= 15) color = 'orange';
-
+    const size = isSelected ? 10 : 7;
     return {
-      url: `https://maps.google.com/mapfiles/ms/icons/${color}-dot.png`,
-      scaledSize: new google.maps.Size(isSelected ? 40 : 32, isSelected ? 40 : 32),
+      path: google.maps.SymbolPath.CIRCLE,
+      fillColor,
+      fillOpacity: 1,
+      strokeColor: isSelected ? '#3f3e2c' : '#ffffff',
+      strokeWeight: isSelected ? 2 : 1,
+      scale: size,
     };
   }, [isSpotConfirmed]);
 
   const getSpotIcon = (type: PotentialSpot['type']) => {
     switch (type) {
-      case 'camp-site': return <Tent className="w-4 h-4 text-green-600" />;
+      case 'camp-site': return <Tent className="w-4 h-4 text-mossgreen" />;
       case 'dead-end': return <MapPinLine className="w-4 h-4 text-orange-600" />;
       case 'intersection': return <Path className="w-4 h-4 text-blue-600" />;
       case 'water-access': return <Drop className="w-4 h-4 text-cyan-600" />;
@@ -549,10 +549,9 @@ const DispersedExplorer = () => {
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 35) return 'text-green-600 bg-green-100';
-    if (score >= 25) return 'text-yellow-600 bg-yellow-100';
-    if (score >= 15) return 'text-orange-600 bg-orange-100';
-    return 'text-red-600 bg-red-100';
+    if (score >= 35) return 'text-softamber bg-softamber/20';
+    if (score >= 25) return 'text-orange-600 bg-orange-100';
+    return 'text-coralred bg-coralred/20';
   };
 
   const totalRoads = mvumRoads.length + osmTracks.length;
@@ -579,12 +578,13 @@ const DispersedExplorer = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background overflow-x-hidden">
       <Header />
 
-      <div className="flex-1 grid lg:grid-cols-2">
-        {/* Map - Left side on desktop, bottom on mobile */}
-        <div className="order-2 lg:order-1 h-[400px] lg:h-auto lg:min-h-[calc(100vh-64px)] lg:sticky lg:top-[64px] relative">
+      <main className="w-full">
+        <div className="grid lg:grid-cols-2">
+          {/* Map - Left side on desktop, bottom on mobile */}
+          <div className="order-2 lg:order-1 h-[400px] lg:h-[calc(100vh-64px)] lg:sticky lg:top-[64px] relative">
           {/* Click instruction overlay */}
           {!searchLocation && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-background/90 backdrop-blur-sm px-4 py-2 rounded-full border border-border shadow-lg flex items-center gap-2">
@@ -697,6 +697,7 @@ const DispersedExplorer = () => {
                   setSelectedSpot(spot);
                   setSelectedRoad(null);
                   setSelectedCampground(null);
+                  setSelectedCampsite(null);
                   setCopiedCoords(false);
                 }}
                 zIndex={selectedSpot === spot ? 1000 : spot.score}
@@ -716,9 +717,9 @@ const DispersedExplorer = () => {
                       {selectedSpot.name || 'Unnamed Spot'}
                     </h4>
                     <span className={`flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1 ${
-                      selectedSpot.type === 'camp-site' ? 'bg-blue-500' :
-                      selectedSpot.score >= 35 ? 'bg-green-500' :
-                      selectedSpot.score >= 25 ? 'bg-yellow-500' : 'bg-orange-500'
+                      selectedSpot.type === 'camp-site' ? 'bg-mossgreen' :
+                      selectedSpot.score >= 35 ? 'bg-softamber' :
+                      selectedSpot.score >= 25 ? 'bg-orange-500' : 'bg-coralred'
                     }`} />
                   </div>
                   <div className="flex flex-wrap gap-1 mb-2">
@@ -790,15 +791,95 @@ const DispersedExplorer = () => {
                   setSelectedCampground(cg);
                   setSelectedSpot(null);
                   setSelectedRoad(null);
+                  setSelectedCampsite(null);
                 }}
                 zIndex={selectedCampground === cg ? 1001 : 500}
               />
             ))}
-          </GoogleMap>
-        </div>
 
-        {/* Sidebar - Right side on desktop, top on mobile */}
-        <div className="order-1 lg:order-2 space-y-4 p-4 md:p-6 lg:max-h-[calc(100vh-64px)] lg:overflow-y-auto">
+            {/* User's Saved Campsites */}
+            {showMyCampsites && campsites
+              .filter((cs) => isFinite(cs.lat) && isFinite(cs.lng))
+              .map((cs) => (
+              <Marker
+                key={`my-${cs.id}`}
+                position={{ lat: cs.lat, lng: cs.lng }}
+                title={cs.name}
+                icon={createMarkerIcon('camp', {
+                  isActive: selectedCampsite?.id === cs.id,
+                  size: selectedCampsite?.id === cs.id ? 44 : 36
+                })}
+                onClick={() => {
+                  setSelectedCampsite(cs);
+                  setSelectedSpot(null);
+                  setSelectedRoad(null);
+                  setSelectedCampground(null);
+                }}
+                zIndex={selectedCampsite?.id === cs.id ? 1002 : 600}
+              />
+            ))}
+
+            {/* Info window for selected user campsite */}
+            {selectedCampsite && (
+              <InfoWindow
+                position={{ lat: selectedCampsite.lat, lng: selectedCampsite.lng }}
+                onCloseClick={() => setSelectedCampsite(null)}
+                options={{ pixelOffset: new google.maps.Size(0, -32) }}
+              >
+                <div className="min-w-[200px] max-w-[260px]">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h4 className="font-semibold text-gray-900 text-sm leading-tight">
+                      {selectedCampsite.name}
+                    </h4>
+                    <span className="flex-shrink-0 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium">
+                      My Spot
+                    </span>
+                  </div>
+                  {selectedCampsite.description && (
+                    <p className="text-gray-600 text-xs mb-2 line-clamp-2">{selectedCampsite.description}</p>
+                  )}
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {selectedCampsite.roadAccess && (
+                      <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px] font-medium">
+                        {selectedCampsite.roadAccess === '2wd' ? '2WD OK' : selectedCampsite.roadAccess.toUpperCase()}
+                      </span>
+                    )}
+                    {selectedCampsite.waterAvailable && (
+                      <span className="px-1.5 py-0.5 bg-cyan-100 text-cyan-700 rounded text-[10px] font-medium">Water</span>
+                    )}
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => {
+                        window.open(
+                          `https://www.google.com/maps/@${selectedCampsite.lat},${selectedCampsite.lng},500m/data=!3m1!1e3`,
+                          '_blank'
+                        );
+                      }}
+                      className="flex-1 px-2 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded hover:bg-emerald-700 transition-colors"
+                    >
+                      Satellite
+                    </button>
+                    <button
+                      onClick={() => {
+                        window.open(
+                          `https://www.google.com/maps/dir/?api=1&destination=${selectedCampsite.lat},${selectedCampsite.lng}`,
+                          '_blank'
+                        );
+                      }}
+                      className="flex-1 px-2 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                    >
+                      Directions
+                    </button>
+                  </div>
+                </div>
+              </InfoWindow>
+            )}
+          </GoogleMap>
+          </div>
+
+          {/* Sidebar - Right side on desktop, top on mobile */}
+          <div className="order-1 lg:order-2 space-y-4 p-4 md:p-6 lg:h-[calc(100vh-64px)] lg:overflow-y-auto">
             {/* Search Card */}
             <Card>
               <CardContent className="p-4">
@@ -854,9 +935,9 @@ const DispersedExplorer = () => {
                 </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-center cursor-pointer">
-                      <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{filteredPotentialSpots.filter(s => s.type === 'camp-site').length}</p>
-                      <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mt-1 flex items-center justify-center gap-1">
+                    <div className="p-2 bg-mossgreen/10 dark:bg-mossgreen/20 rounded-lg border border-mossgreen/30 text-center cursor-pointer">
+                      <p className="text-2xl font-bold text-mossgreen">{filteredPotentialSpots.filter(s => s.type === 'camp-site').length}</p>
+                      <p className="text-xs font-medium text-mossgreen mt-1 flex items-center justify-center gap-1">
                         Known <Info className="w-3.5 h-3.5" weight="bold" />
                       </p>
                     </div>
@@ -868,9 +949,9 @@ const DispersedExplorer = () => {
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 text-center cursor-pointer">
-                      <p className="text-2xl font-bold text-green-600 dark:text-green-400">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 35).length}</p>
-                      <p className="text-xs font-medium text-green-600 dark:text-green-400 mt-1 flex items-center justify-center gap-1">
+                    <div className="p-2 bg-softamber/10 dark:bg-softamber/20 rounded-lg border border-softamber/30 text-center cursor-pointer">
+                      <p className="text-2xl font-bold text-softamber">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 35).length}</p>
+                      <p className="text-xs font-medium text-softamber mt-1 flex items-center justify-center gap-1">
                         High <Info className="w-3.5 h-3.5" weight="bold" />
                       </p>
                     </div>
@@ -882,9 +963,9 @@ const DispersedExplorer = () => {
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800 text-center cursor-pointer">
-                      <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 25 && s.score < 35).length}</p>
-                      <p className="text-xs font-medium text-yellow-600 dark:text-yellow-400 mt-1 flex items-center justify-center gap-1">
+                    <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800 text-center cursor-pointer">
+                      <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 25 && s.score < 35).length}</p>
+                      <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mt-1 flex items-center justify-center gap-1">
                         Medium <Info className="w-3.5 h-3.5" weight="bold" />
                       </p>
                     </div>
@@ -914,8 +995,9 @@ const DispersedExplorer = () => {
                   </div>
                   <div className="space-y-2">
                     {currentRecommendations.map((rec, index) => {
-                      const confidenceColor = rec.spot.score >= 35 ? 'bg-green-500' : rec.spot.score >= 25 ? 'bg-yellow-500' : 'bg-orange-500';
-                      const confidenceLabel = rec.spot.score >= 35 ? 'High' : rec.spot.score >= 25 ? 'Medium' : 'Lower';
+                      const isKnownSite = rec.spot.type === 'camp-site';
+                      const confidenceColor = isKnownSite ? 'bg-mossgreen' : rec.spot.score >= 35 ? 'bg-softamber' : rec.spot.score >= 25 ? 'bg-orange-500' : 'bg-coralred';
+                      const confidenceLabel = isKnownSite ? 'Known' : rec.spot.score >= 35 ? 'High' : rec.spot.score >= 25 ? 'Medium' : 'Lower';
                       const globalIndex = recommendationPage * 3 + index + 1;
 
                       return (
@@ -1063,6 +1145,31 @@ const DispersedExplorer = () => {
                       </Button>
                     </div>
 
+                    {/* My Campsites Toggle */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Tent className="w-4 h-4 text-wildviolet" />
+                        <span className="text-sm font-medium">My Campsites</span>
+                        {campsites.length > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            ({campsites.length})
+                          </span>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={() => setShowMyCampsites(!showMyCampsites)}
+                      >
+                        {showMyCampsites ? (
+                          <Eye className="w-4 h-4" />
+                        ) : (
+                          <EyeSlash className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
+
                     {/* Road Type Filter */}
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Filter by Vehicle</p>
@@ -1141,6 +1248,10 @@ const DispersedExplorer = () => {
                           <div className="w-3 h-3 bg-purple-500 rounded-full" />
                           <span>Campground</span>
                         </div>
+                        <div className="flex items-center gap-2">
+                          <Tent className="w-3 h-3 text-wildviolet" />
+                          <span>My Campsites</span>
+                        </div>
                       </div>
                     </div>
 
@@ -1202,7 +1313,7 @@ const DispersedExplorer = () => {
               <Card>
                 <CardContent className="p-4">
                   <h3 className="font-medium text-foreground mb-3 flex items-center gap-2">
-                    <Tent className="w-4 h-4 text-green-600" />
+                    <Tent className="w-4 h-4 text-wildviolet" />
                     Potential Camp Spots
                     <span className="ml-auto text-xs text-muted-foreground">{filteredPotentialSpots.length} found</span>
                   </h3>
@@ -1247,7 +1358,7 @@ const DispersedExplorer = () => {
                     <p className="text-xs text-muted-foreground mb-2">Spot Types</p>
                     <div className="grid grid-cols-2 gap-1 text-xs">
                       <div className="flex items-center gap-1">
-                        <Tent className="w-3 h-3 text-green-600" />
+                        <Tent className="w-3 h-3 text-wildviolet" />
                         <span>Camp Site</span>
                       </div>
                       <div className="flex items-center gap-1">
@@ -1361,7 +1472,7 @@ const DispersedExplorer = () => {
                 <CardContent className="p-4">
                   <h3 className="font-medium text-foreground mb-3 flex items-center gap-2">
                     {selectedSpot.type === 'camp-site' ? (
-                      <Tent className="w-5 h-5 text-green-600" />
+                      <Tent className="w-5 h-5 text-wildviolet" />
                     ) : selectedSpot.type === 'dead-end' ? (
                       <MapPinLine className="w-5 h-5 text-orange-600" />
                     ) : (
@@ -1378,9 +1489,9 @@ const DispersedExplorer = () => {
                       </span>
                       <div className="flex items-center gap-2">
                         <span className={`w-2.5 h-2.5 rounded-full ${
-                          selectedSpot.type === 'camp-site' ? 'bg-blue-500' :
-                          selectedSpot.score >= 35 ? 'bg-green-500' :
-                          selectedSpot.score >= 25 ? 'bg-yellow-500' : 'bg-orange-500'
+                          selectedSpot.type === 'camp-site' ? 'bg-mossgreen' :
+                          selectedSpot.score >= 35 ? 'bg-softamber' :
+                          selectedSpot.score >= 25 ? 'bg-orange-500' : 'bg-coralred'
                         }`} />
                         <span className="text-sm font-medium">
                           {selectedSpot.type === 'camp-site' ? 'Known Campsite' :
@@ -1669,8 +1780,9 @@ const DispersedExplorer = () => {
                 </CardContent>
               </Card>
             )}
+          </div>
         </div>
-      </div>
+      </main>
 
       {/* Confirm Spot Dialog */}
       {selectedSpot && (
