@@ -82,7 +82,7 @@ const loaderStates = [
   { icon: MapPin, color: '#34b5a5', bg: 'bg-aquateal/20', label: 'Finding locations...' },
   { icon: MapPinArea, color: '#6b5ce6', bg: 'bg-lavenderslate/20', label: 'Planning destinations...' },
   { icon: Boot, color: '#3c8a79', bg: 'bg-pinesoft/20', label: 'Discovering hikes...' },
-  { icon: Tent, color: '#ea9b0c', bg: 'bg-softamber/20', label: 'Finding campsites...' },
+  { icon: Tent, color: '#a855f7', bg: 'bg-wildviolet/20', label: 'Finding campsites...' },
 ];
 
 const RegeneratingLoader = () => {
@@ -2236,7 +2236,7 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
             />
           )}
           {day.hike && <Boot className="w-4 h-4 text-pinesoft" />}
-          {day.campsite && <Tent className="w-4 h-4 text-softamber" />}
+          {day.campsite && <Tent className="w-4 h-4 text-wildviolet" />}
           <Button
             variant="secondary"
             size="sm"

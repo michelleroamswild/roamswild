@@ -64,6 +64,9 @@
     --accent-lavenderslate: 249 80% 75%;
     --accent-softamber: 40 83% 63%;
     --accent-blushorchid: 332 76% 79%;
+    --accent-wildviolet: 280 80% 74%;
+    --accent-mossgreen: 118 39% 45%;
+    --accent-coralred: 0 83% 66%;
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -132,6 +135,9 @@
     --accent-lavenderslate: 249 80% 85%;
     --accent-softamber: 40 83% 75%;
     --accent-blushorchid: 332 76% 88%;
+    --accent-wildviolet: 280 80% 84%;
+    --accent-mossgreen: 118 39% 55%;
+    --accent-coralred: 0 83% 76%;
     --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
   }
 }

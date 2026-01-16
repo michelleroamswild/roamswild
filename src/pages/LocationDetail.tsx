@@ -851,7 +851,7 @@ const LocationDetail = () => {
                   {/* Same campsite toggle */}
                   <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
                     <div className="flex items-center gap-3">
-                      <Tent className="w-4 h-4 text-softamber" />
+                      <Tent className="w-4 h-4 text-wildviolet" />
                       <div>
                         <p className="text-sm font-medium text-foreground">Base Camp Mode</p>
                         <p className="text-xs text-muted-foreground">Stay at the same campsite each night</p>
@@ -924,8 +924,8 @@ const LocationDetail = () => {
                           }
                         }}
                       >
-                        <div className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 ${place.source === 'ridb' ? 'bg-[#213D5C]/10' : 'bg-softamber/20'}`}>
-                          <Tent className={`w-5 h-5 ${place.source === 'ridb' ? 'text-[#213D5C]' : 'text-softamber'}`} />
+                        <div className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 ${place.source === 'ridb' ? 'bg-[#213D5C]/10' : 'bg-wildviolet/20'}`}>
+                          <Tent className={`w-5 h-5 ${place.source === 'ridb' ? 'text-[#213D5C]' : 'text-wildviolet'}`} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-foreground truncate">

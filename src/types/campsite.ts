@@ -1,6 +1,15 @@
 export type CampsiteType = 'dispersed' | 'established' | 'blm' | 'usfs' | 'private';
 export type RoadAccess = '2wd' | '4wd_easy' | '4wd_moderate' | '4wd_hard';
 export type CampsiteVisibility = 'private' | 'public' | 'friends';
+export type CampsiteSourceType = 'manual' | 'explorer';
+
+// Original spot data from dispersed explorer (stored for explorer spots)
+export interface OriginalSpotData {
+  score?: number;
+  reasons?: string[];
+  roadName?: string;
+  spotType?: string;
+}
 
 export interface Campsite {
   id: string;
@@ -27,6 +36,11 @@ export interface Campsite {
   createdAt: string;
   updatedAt: string;
   metadata?: Record<string, unknown>;
+  // Confirmation tracking (for explorer spots)
+  sourceType: CampsiteSourceType;
+  confirmationCount: number;
+  isConfirmed: boolean;
+  originalSpotData?: OriginalSpotData;
 }
 
 export interface CampsitePhoto {
@@ -64,6 +78,11 @@ export interface CampsiteRow {
   created_at: string;
   updated_at: string;
   metadata: Record<string, unknown> | null;
+  // Confirmation tracking
+  source_type: string;
+  confirmation_count: number;
+  is_confirmed: boolean;
+  original_spot_data: OriginalSpotData | null;
 }
 
 export interface CampsitePhotoRow {
@@ -118,6 +137,9 @@ export interface CampsiteFormData {
   visibility: CampsiteVisibility;
   state?: string;
   tags?: string[];
+  // Confirmation tracking (optional, defaults applied on insert)
+  sourceType?: CampsiteSourceType;
+  originalSpotData?: OriginalSpotData;
 }
 
 // Helper functions to convert between row and model
@@ -146,10 +168,15 @@ export function campsiteFromRow(row: CampsiteRow): Campsite {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     metadata: row.metadata ?? undefined,
+    sourceType: (row.source_type as CampsiteSourceType) || 'manual',
+    confirmationCount: row.confirmation_count ?? 0,
+    isConfirmed: row.is_confirmed ?? (row.source_type !== 'explorer'),
+    originalSpotData: row.original_spot_data ?? undefined,
   };
 }
 
 export function campsiteToRow(campsite: CampsiteFormData, userId: string): Omit<CampsiteRow, 'id' | 'created_at' | 'updated_at'> {
+  const sourceType = campsite.sourceType ?? 'manual';
   return {
     user_id: userId,
     name: campsite.name,
@@ -171,5 +198,9 @@ export function campsiteToRow(campsite: CampsiteFormData, userId: string): Omit<
     state: campsite.state ?? null,
     tags: campsite.tags ?? null,
     metadata: null,
+    source_type: sourceType,
+    confirmation_count: sourceType === 'explorer' ? 1 : 0,
+    is_confirmed: sourceType === 'manual',
+    original_spot_data: campsite.originalSpotData ?? null,
   };
 }

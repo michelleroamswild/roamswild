@@ -116,6 +116,9 @@ export default {
   			lavenderslate: 'hsl(var(--accent-lavenderslate))',
   			softamber: 'hsl(var(--accent-softamber))',
   			blushorchid: 'hsl(var(--accent-blushorchid))',
+  			wildviolet: 'hsl(var(--accent-wildviolet))',
+  			mossgreen: 'hsl(var(--accent-mossgreen))',
+  			coralred: 'hsl(var(--accent-coralred))',
   			sidebar: {
   				DEFAULT: 'hsl(var(--sidebar-background))',
   				foreground: 'hsl(var(--sidebar-foreground))',
