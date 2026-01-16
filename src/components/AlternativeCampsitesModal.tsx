@@ -559,6 +559,14 @@ export function AlternativeCampsitesModal({
 
           <p className="text-sm text-muted-foreground mb-3">Other options nearby:</p>
 
+          {!tripStartDate && lodgingPreference !== 'dispersed' && (
+            <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                Set trip dates to see campsite availability
+              </p>
+            </div>
+          )}
+
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12">
               <SpinnerGap className="w-8 h-8 text-primary animate-spin mb-3" />
