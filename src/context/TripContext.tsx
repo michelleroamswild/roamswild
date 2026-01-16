@@ -51,6 +51,7 @@ interface TripContextType {
   updateTripStop: (dayNumber: number, oldStopId: string, newStop: TripStop) => void;
   removeTripStop: (dayNumber: number, stopId: string) => void;
   addTripStop: (dayNumber: number, stop: TripStop) => void;
+  markTripComplete: (tripId: string, complete: boolean) => Promise<void>;
   // Sharing methods
   shareTrip: (tripId: string, email: string, permission: 'view' | 'edit') => Promise<{ error?: string }>;
   createShareLink: (tripId: string, permission: 'view' | 'edit') => Promise<{ link?: string; error?: string }>;
@@ -715,6 +716,45 @@ export function TripProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const markTripComplete = async (tripId: string, complete: boolean): Promise<void> => {
+    const trip = savedTrips.find(t => t.id === tripId);
+    if (!trip) {
+      throw new Error('Trip not found');
+    }
+
+    const updatedConfig = {
+      ...trip.config,
+      completedAt: complete ? new Date().toISOString() : undefined,
+    };
+
+    const updateData: TablesUpdate<'saved_trips'> = {
+      config: updatedConfig as unknown as Json,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('saved_trips')
+      .update(updateData)
+      .eq('id', tripId);
+
+    if (error) {
+      console.error('Failed to mark trip complete:', error);
+      throw new Error(error.message);
+    }
+
+    // Update local state
+    setSavedTrips(prev => prev.map(t =>
+      t.id === tripId
+        ? { ...t, config: updatedConfig }
+        : t
+    ));
+
+    // Update current trip if it's the one being marked
+    if (generatedTrip?.id === tripId) {
+      setGeneratedTripState(prev => prev ? { ...prev, config: updatedConfig } : null);
+    }
+  };
+
   return (
     <TripContext.Provider
       value={{
@@ -742,6 +782,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
         updateTripStop,
         removeTripStop,
         addTripStop,
+        markTripComplete,
         // Sharing methods
         shareTrip,
         createShareLink,

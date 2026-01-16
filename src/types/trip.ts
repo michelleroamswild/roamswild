@@ -24,6 +24,8 @@ export interface TripStop {
   reviewCount?: number;
   note?: string;
   drivingTime?: string; // Driving time to this stop (e.g., "15 min each way")
+  bookingUrl?: string; // URL to book this campsite (for RIDB sites)
+  isReservable?: boolean; // Whether this campsite can be reserved online
 }
 
 export interface TripDay {
@@ -37,9 +39,19 @@ export interface TripDay {
 }
 
 export type VehicleType = 'sedan' | 'suv' | '4wd' | 'rv';
-export type LodgingType = 'dispersed' | 'campground' | 'cabin' | 'hotel' | 'mixed';
-export type ActivityType = 'hiking' | 'biking' | 'climbing' | 'fishing' | 'photography' | 'wildlife';
+export type LodgingType = 'dispersed' | 'campground' | 'cabin' | 'hotel' | 'mixed' | 'other';
+export type ActivityType = 'hiking' | 'biking' | 'climbing' | 'fishing' | 'photography' | 'wildlife' | 'offroading';
 export type PacePreference = 'relaxed' | 'moderate' | 'packed';
+
+export interface DestinationLodging {
+  destinationId: string;
+  lodgingType: LodgingType;
+  customLocation?: {
+    name: string;
+    coordinates: Coordinates;
+    placeId?: string;
+  };
+}
 
 export interface TripConfig {
   name: string;
@@ -54,7 +66,10 @@ export interface TripConfig {
   // Vehicle and preferences
   vehicleType?: VehicleType;
   lodgingPreference?: LodgingType;
+  useSameLodgingType?: boolean; // true = same lodging at all destinations, false = per-destination
+  destinationLodging?: DestinationLodging[]; // Per-destination lodging when useSameLodgingType is false
   activities?: ActivityType[];
+  offroadVehicleType?: '4wd-high' | 'awd-medium'; // Vehicle capability for offroading
   // Hiking preferences
   hikingPreference?: 'none' | 'surprise' | 'daily'; // none = no hikes, surprise = AI picks best days, daily = hike every day
   // Advanced options
@@ -66,6 +81,7 @@ export interface TripConfig {
   pacePreference?: PacePreference;
   maxDrivingHoursPerDay?: number; // Maximum hours of driving per day
   travelOnlyFinalDay?: boolean; // No activities on final day (travel only)
+  completedAt?: string; // ISO date string when trip was marked complete
 }
 
 export interface CachedPhotoHotspot {

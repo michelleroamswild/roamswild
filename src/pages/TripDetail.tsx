@@ -28,6 +28,7 @@ import {
   PencilSimple,
   CircleNotch,
   Plus,
+  SlidersHorizontal,
 } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -37,6 +38,7 @@ import { Marker, InfoWindow, DirectionsRenderer } from '@react-google-maps/api';
 import { TripStop, TripDay } from '@/types/trip';
 import { toast } from 'sonner';
 import { AlternativeHikesModal } from '@/components/AlternativeHikesModal';
+import { AlternativeCampsitesModal } from '@/components/AlternativeCampsitesModal';
 import { useRoutePhotoSpots, PhotoSpot } from '@/hooks/use-photo-spots';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -57,8 +59,10 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
-import { TripDestination } from '@/types/trip';
+import { TripDestination, PacePreference } from '@/types/trip';
+import { ActivityEditorModal } from '@/components/ActivityEditorModal';
 
 const getIcon = (type: string) => {
   switch (type) {
@@ -162,6 +166,7 @@ const TripDetail = () => {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [activityEditorOpen, setActivityEditorOpen] = useState(false);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [selectedStop, setSelectedStop] = useState<TripStop | null>(null);
   const [mapsLoaded, setMapsLoaded] = useState(false);
@@ -170,6 +175,11 @@ const TripDetail = () => {
   const [activeDay, setActiveDay] = useState<number | null>(null);
   const [hikeModalOpen, setHikeModalOpen] = useState(false);
   const [selectedHikeForSwap, setSelectedHikeForSwap] = useState<TripStop | null>(null);
+  const [campsiteModalOpen, setCampsiteModalOpen] = useState(false);
+  const [selectedCampsiteForSwap, setSelectedCampsiteForSwap] = useState<TripStop | null>(null);
+  const [dateEditModal, setDateEditModal] = useState(false);
+  const [editingStartDate, setEditingStartDate] = useState<string>('');
+  const [editingEndDate, setEditingEndDate] = useState<string>('');
   const [showPhotoHotspots, setShowPhotoHotspots] = useState(false);
   const [photoHotspotsExpanded, setPhotoHotspotsExpanded] = useState(false);
   const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoSpot | null>(null);
@@ -391,6 +401,35 @@ const TripDetail = () => {
     return false;
   };
 
+  const handleUpdateActivities = (data: {
+    activities: string[];
+    pacePreference: PacePreference;
+    offroadVehicleType?: '4wd-high' | 'awd-medium';
+  }) => {
+    if (!tripConfig) return;
+
+    const updatedConfig = {
+      ...tripConfig,
+      activities: data.activities as any[],
+      pacePreference: data.pacePreference,
+      offroadVehicleType: data.offroadVehicleType,
+      hikingPreference: data.activities.includes('hiking') ? 'daily' as const : 'none' as const,
+    };
+
+    setTripConfig(updatedConfig);
+
+    // If trip is saved, save the updated config
+    if (generatedTrip && isSaved) {
+      const updatedTrip = {
+        ...generatedTrip,
+        config: updatedConfig,
+      };
+      saveTrip(updatedTrip);
+    }
+
+    toast.success('Activities updated!');
+  };
+
   const handleExitClick = () => {
     if (isSaved) {
       navigate('/trips');
@@ -435,11 +474,181 @@ const TripDetail = () => {
     }
   };
 
+  const handleOpenCampsiteSwap = (campsite: TripStop) => {
+    setSelectedCampsiteForSwap(campsite);
+    setCampsiteModalOpen(true);
+  };
+
+  const handleSwapCampsite = (newCampsite: TripStop) => {
+    if (selectedCampsiteForSwap) {
+      updateTripStop(selectedCampsiteForSwap.day, selectedCampsiteForSwap.id, newCampsite);
+      toast.success('Campsite updated!', {
+        description: `Changed to ${newCampsite.name}`,
+      });
+    }
+  };
+
   const handleRemoveStop = (dayNumber: number, stop: TripStop) => {
     removeTripStop(dayNumber, stop.id);
     toast.success('Stop removed', {
       description: `Removed ${stop.name} from Day ${dayNumber}`,
     });
+  };
+
+  const handleOpenDateEdit = () => {
+    if (generatedTrip && tripConfig.startDate) {
+      const start = new Date(tripConfig.startDate);
+      const end = new Date(start);
+      end.setDate(start.getDate() + generatedTrip.days.length - 1);
+      setEditingStartDate(tripConfig.startDate);
+      setEditingEndDate(end.toISOString().split('T')[0]);
+    } else {
+      setEditingStartDate('');
+      setEditingEndDate('');
+    }
+    setDateEditModal(true);
+  };
+
+  // Calculate duration from start and end dates
+  const getEditingDuration = () => {
+    if (!editingStartDate || !editingEndDate) return 0;
+    const start = new Date(editingStartDate);
+    const end = new Date(editingEndDate);
+    const diffTime = end.getTime() - start.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return Math.max(1, diffDays);
+  };
+
+  const handleUpdateDates = async () => {
+    if (!generatedTrip || !editingStartDate || !editingEndDate) return;
+
+    const newDuration = getEditingDuration();
+    const currentDuration = generatedTrip.days.length;
+
+    // Update tripConfig with new start date and duration
+    const updatedConfig = {
+      ...tripConfig,
+      startDate: editingStartDate,
+      duration: newDuration,
+    };
+
+    // If adding days, regenerate to get new activities but keep existing day customizations
+    if (newDuration > currentDuration) {
+      setDateEditModal(false);
+      toast.loading('Generating activities for new days...', { id: 'regenerating' });
+
+      try {
+        const regeneratedTrip = await generateTrip(updatedConfig);
+        if (regeneratedTrip) {
+          // Keep existing days with their customizations, only take NEW days from regenerated trip
+          const startDate = new Date(editingStartDate);
+
+          // Update existing days with new dates but keep all customizations
+          const existingDaysUpdated = generatedTrip.days.map((day, index) => {
+            const dayDate = new Date(startDate);
+            dayDate.setDate(startDate.getDate() + index);
+            return {
+              ...day,
+              day: index + 1,
+              date: dayDate.toISOString().split('T')[0],
+            };
+          });
+
+          // The previous last day may not have had a campsite - add one from regenerated trip
+          const lastExistingDayIndex = currentDuration - 1;
+          const lastExistingDay = existingDaysUpdated[lastExistingDayIndex];
+          const hasCampsite = lastExistingDay?.campsite || lastExistingDay?.stops?.some(s => s.type === 'camp');
+
+          if (!hasCampsite && regeneratedTrip.days[lastExistingDayIndex]) {
+            const regeneratedDay = regeneratedTrip.days[lastExistingDayIndex];
+            const campsiteFromRegenerated = regeneratedDay.campsite || regeneratedDay.stops?.find(s => s.type === 'camp');
+
+            if (campsiteFromRegenerated) {
+              // Add campsite to the previously-final day
+              existingDaysUpdated[lastExistingDayIndex] = {
+                ...lastExistingDay,
+                campsite: campsiteFromRegenerated,
+                stops: [...lastExistingDay.stops, campsiteFromRegenerated],
+              };
+            }
+          }
+
+          // Get only the NEW days from the regenerated trip (days beyond current duration)
+          const newDays = regeneratedTrip.days.slice(currentDuration).map((day, index) => {
+            const dayIndex = currentDuration + index;
+            const dayDate = new Date(startDate);
+            dayDate.setDate(startDate.getDate() + dayIndex);
+            return {
+              ...day,
+              day: dayIndex + 1,
+              date: dayDate.toISOString().split('T')[0],
+            };
+          });
+
+          // Merge existing customized days with new generated days
+          const mergedDays = [...existingDaysUpdated, ...newDays];
+
+          const tripWithId = {
+            ...regeneratedTrip,
+            id: generatedTrip.id,
+            config: updatedConfig,
+            days: mergedDays,
+          };
+          setTripConfig(updatedConfig);
+          setGeneratedTrip(tripWithId);
+          await saveTrip(tripWithId);
+          toast.success(`Trip extended to ${newDuration} days! Your existing changes were preserved.`, { id: 'regenerating' });
+        } else {
+          toast.error('Failed to generate new days', { id: 'regenerating' });
+        }
+      } catch (error) {
+        toast.error('Failed to extend trip', { id: 'regenerating' });
+      }
+      return;
+    }
+
+    // For shortening or just changing dates, update without regenerating
+    const startDate = new Date(editingStartDate);
+    let updatedDays = [...generatedTrip.days];
+
+    if (newDuration < currentDuration) {
+      // Removing days - truncate the array
+      updatedDays = updatedDays.slice(0, newDuration);
+    }
+
+    // Update all day numbers and dates
+    updatedDays = updatedDays.map((day, index) => {
+      const dayDate = new Date(startDate);
+      dayDate.setDate(startDate.getDate() + index);
+      return {
+        ...day,
+        day: index + 1,
+        date: dayDate.toISOString().split('T')[0],
+      };
+    });
+
+    const updatedTrip = {
+      ...generatedTrip,
+      config: updatedConfig,
+      days: updatedDays,
+    };
+
+    // Update local state
+    setTripConfig(updatedConfig);
+    setGeneratedTrip(updatedTrip);
+
+    // Save to database
+    try {
+      await saveTrip(updatedTrip);
+      if (newDuration < currentDuration) {
+        toast.success(`Trip shortened to ${newDuration} days`);
+      } else {
+        toast.success('Trip dates updated!');
+      }
+      setDateEditModal(false);
+    } catch (error) {
+      toast.error('Failed to update dates');
+    }
   };
 
   // Start a specific day - show its route on the map
@@ -1181,6 +1390,15 @@ const TripDetail = () => {
               {collaborators.length > 1 && (
                 <CollaboratorAvatars collaborators={collaborators} size="sm" maxDisplay={4} />
               )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full"
+                onClick={() => setActivityEditorOpen(true)}
+                title="Edit Activities"
+              >
+                <SlidersHorizontal className="w-5 h-5" weight="bold" />
+              </Button>
               {isSaved && (
                 <Button
                   variant="ghost"
@@ -1215,7 +1433,7 @@ const TripDetail = () => {
 
       {/* Trip Timeline Overview */}
       {(tripConfig.startLocation || tripConfig.baseLocation) && (
-        <div className="sticky top-[73px] z-40 bg-secondary/50 border-b border-border">
+        <div className="sticky top-[73px] z-40 bg-muted/80 backdrop-blur-sm border-b border-border">
           <div className="px-4 md:px-6 py-3">
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
               {/* Start Location */}
@@ -1819,8 +2037,11 @@ const TripDetail = () => {
                 <h1 className="text-3xl font-display font-bold text-foreground">
                   {tripConfig.name || 'My Trip'}
                 </h1>
-                {tripConfig.startDate && (
-                  <div className="flex items-center gap-2 mt-1 text-sm">
+                {tripConfig.startDate ? (
+                  <button
+                    onClick={handleOpenDateEdit}
+                    className="flex items-center gap-2 mt-1 text-sm group hover:bg-secondary/50 rounded-lg px-2 py-1 -mx-2 transition-colors"
+                  >
                     <Calendar className="w-4 h-4 text-primary" />
                     <span className="text-muted-foreground">
                       {new Date(tripConfig.startDate).toLocaleDateString('en-US', {
@@ -1839,7 +2060,16 @@ const TripDetail = () => {
                         });
                       })()}
                     </span>
-                  </div>
+                    <PencilSimple className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleOpenDateEdit}
+                    className="flex items-center gap-2 mt-1 text-sm text-primary hover:underline"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    <span>Add trip dates</span>
+                  </button>
                 )}
               </div>
 
@@ -1851,27 +2081,27 @@ const TripDetail = () => {
                     <h3 className="font-semibold text-foreground text-sm">Trip Overview</h3>
                   </div>
                   <div className="grid grid-cols-4 gap-3 text-center">
-                    <div className="bg-secondary/50 rounded-lg p-2">
+                    <div className="bg-muted rounded-lg p-2">
                       <p className="text-xl font-bold text-foreground">
                         {generatedTrip.totalDistance.replace(' mi', '')}
                       </p>
-                      <p className="text-xs text-muted-foreground">Miles</p>
+                      <p className="text-xs text-foreground/70">Miles</p>
                     </div>
-                    <div className="bg-secondary/50 rounded-lg p-2">
+                    <div className="bg-muted rounded-lg p-2">
                       <p className="text-xl font-bold text-foreground">
                         {generatedTrip.totalDrivingTime.split('h')[0]}h
                       </p>
-                      <p className="text-xs text-muted-foreground">Driving</p>
+                      <p className="text-xs text-foreground/70">Driving</p>
                     </div>
-                    <div className="bg-secondary/50 rounded-lg p-2">
+                    <div className="bg-muted rounded-lg p-2">
                       <p className="text-xl font-bold text-foreground">{generatedTrip.days.length}</p>
-                      <p className="text-xs text-muted-foreground">Days</p>
+                      <p className="text-xs text-foreground/70">Days</p>
                     </div>
-                    <div className="bg-secondary/50 rounded-lg p-2">
+                    <div className="bg-muted rounded-lg p-2">
                       <p className="text-xl font-bold text-foreground capitalize">
                         {tripConfig.pacePreference || 'Mod'}
                       </p>
-                      <p className="text-xs text-muted-foreground">Pace</p>
+                      <p className="text-xs text-foreground/70">Pace</p>
                     </div>
                   </div>
                 </CardContent>
@@ -2066,6 +2296,7 @@ const TripDetail = () => {
                   onExitDay={handleExitDayMode}
                   onStopClick={setSelectedStop}
                   onSwapHike={handleOpenHikeSwap}
+                  onSwapCampsite={handleOpenCampsiteSwap}
                   onRemoveStop={handleRemoveStop}
                 />
               ))}
@@ -2102,6 +2333,109 @@ const TripDetail = () => {
         />
       )}
 
+      {/* Alternative Campsites Modal */}
+      {selectedCampsiteForSwap && (
+        <AlternativeCampsitesModal
+          isOpen={campsiteModalOpen}
+          onClose={() => {
+            setCampsiteModalOpen(false);
+            setSelectedCampsiteForSwap(null);
+          }}
+          currentCampsite={selectedCampsiteForSwap}
+          searchLat={selectedCampsiteForSwap.coordinates.lat}
+          searchLng={selectedCampsiteForSwap.coordinates.lng}
+          onSelectCampsite={handleSwapCampsite}
+          tripStartDate={tripConfig.startDate}
+          tripDuration={tripConfig.duration}
+        />
+      )}
+
+      {/* Edit Dates Modal */}
+      <Dialog open={dateEditModal} onOpenChange={setDateEditModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              {tripConfig.startDate ? 'Edit Trip Dates' : 'Set Trip Dates'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Start Date</label>
+                <input
+                  type="date"
+                  value={editingStartDate}
+                  onChange={(e) => {
+                    setEditingStartDate(e.target.value);
+                    // Auto-adjust end date if start is after end
+                    if (editingEndDate && e.target.value > editingEndDate) {
+                      setEditingEndDate(e.target.value);
+                    }
+                  }}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">End Date</label>
+                <input
+                  type="date"
+                  value={editingEndDate}
+                  min={editingStartDate}
+                  onChange={(e) => setEditingEndDate(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            {editingStartDate && editingEndDate && generatedTrip && (
+              <div className="p-3 bg-secondary/50 rounded-lg space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">{getEditingDuration()} days</span>
+                  {' '}from{' '}
+                  <span className="font-medium text-foreground">
+                    {new Date(editingStartDate).toLocaleDateString('en-US', {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </span>
+                  {' '}to{' '}
+                  <span className="font-medium text-foreground">
+                    {new Date(editingEndDate).toLocaleDateString('en-US', {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </span>
+                </p>
+                {getEditingDuration() !== generatedTrip.days.length && (
+                  <p className="text-sm">
+                    {getEditingDuration() > generatedTrip.days.length ? (
+                      <span className="text-primary">
+                        +{getEditingDuration() - generatedTrip.days.length} day(s) will be added
+                      </span>
+                    ) : (
+                      <span className="text-amber-600">
+                        {generatedTrip.days.length - getEditingDuration()} day(s) will be removed
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDateEditModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateDates} disabled={!editingStartDate || !editingEndDate}>
+              Save Dates
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Share Trip Modal */}
       {generatedTrip && (
         <ShareTripModal
@@ -2115,6 +2449,16 @@ const TripDetail = () => {
           }}
         />
       )}
+
+      {/* Activity Editor Modal */}
+      <ActivityEditorModal
+        isOpen={activityEditorOpen}
+        onClose={() => setActivityEditorOpen(false)}
+        activities={tripConfig.activities || []}
+        pacePreference={tripConfig.pacePreference}
+        offroadVehicleType={tripConfig.offroadVehicleType}
+        onSave={handleUpdateActivities}
+      />
 
       {/* Exit Confirmation Modal */}
       <Dialog open={exitConfirmModal} onOpenChange={setExitConfirmModal}>
@@ -2194,10 +2538,11 @@ interface DayCardProps {
   onExitDay: () => void;
   onStopClick: (stop: TripStop) => void;
   onSwapHike: (hike: TripStop) => void;
+  onSwapCampsite: (campsite: TripStop) => void;
   onRemoveStop: (dayNumber: number, stop: TripStop) => void;
 }
 
-const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, startLocation, returnToStart, onToggle, onStartDay, onExitDay, onStopClick, onSwapHike, onRemoveStop }: DayCardProps) => {
+const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, startLocation, returnToStart, onToggle, onStartDay, onExitDay, onStopClick, onSwapHike, onSwapCampsite, onRemoveStop }: DayCardProps) => {
   const timeEstimate = estimateDayTime(day);
 
   return (
@@ -2317,6 +2662,18 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
                             <ArrowsClockwise className="w-4 h-4" weight="bold" />
                           </button>
                         )}
+                        {stop.type === 'camp' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSwapCampsite(stop);
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-wildviolet/10 text-wildviolet transition-colors"
+                            title="Choose different campsite"
+                          >
+                            <ArrowsClockwise className="w-4 h-4" weight="bold" />
+                          </button>
+                        )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -2369,6 +2726,66 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
                           <ArrowSquareOut className="w-3 h-3" />
                           AllTrails
                         </a>
+                      )}
+                      {stop.type === 'camp' && stop.bookingUrl && (
+                        <a
+                          href={stop.bookingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1 text-wildviolet hover:text-wildviolet/80 hover:underline"
+                        >
+                          <ArrowSquareOut className="w-3 h-3" />
+                          Book Site
+                        </a>
+                      )}
+                      {stop.type === 'camp' && (
+                        <span className="flex items-center gap-1 text-muted-foreground/70">
+                          {stop.id.startsWith('ridb-') ? (
+                            <a
+                              href={`https://www.recreation.gov/camping/campgrounds/${stop.id.replace('ridb-', '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="hover:text-primary hover:underline"
+                            >
+                              Recreation.gov
+                            </a>
+                          ) : stop.id.startsWith('usfs-') ? (
+                            <a
+                              href={`https://www.google.com/search?q=${encodeURIComponent(stop.name + ' USFS campground')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="hover:text-primary hover:underline"
+                            >
+                              USFS
+                            </a>
+                          ) : stop.id.startsWith('osm-') ? (
+                            <a
+                              href={`https://www.openstreetmap.org/${stop.id.replace('osm-', '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="hover:text-primary hover:underline"
+                            >
+                              OpenStreetMap
+                            </a>
+                          ) : stop.placeId ? (
+                            <a
+                              href={`https://www.google.com/maps/place/?q=place_id:${stop.placeId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="hover:text-primary hover:underline"
+                            >
+                              Google Maps
+                            </a>
+                          ) : 'source unknown'}
+                          <span className="text-[10px] opacity-70">
+                            ({stop.coordinates.lat.toFixed(4)}, {stop.coordinates.lng.toFixed(4)})
+                          </span>
+                        </span>
                       )}
                     </div>
                   </div>

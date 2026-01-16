@@ -32,16 +32,16 @@ export function DatePicker({
         <Button
           variant="outline"
           className={cn(
-            "h-12 w-full rounded-md border-2 border-primary bg-white px-4 justify-start text-left font-normal text-base hover:bg-white hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/20 transition-colors",
+            "h-12 w-full rounded-md border-2 border-primary bg-white dark:bg-background px-4 justify-start text-left font-normal text-base hover:bg-white dark:hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/20 transition-colors",
             !value && "text-muted-foreground",
             className
           )}
         >
-          <CalendarBlank className="mr-2 h-4 w-4 text-[hsl(var(--forest))]" />
+          <CalendarBlank className="mr-2 h-4 w-4 text-[hsl(var(--forest))] dark:text-foreground" />
           {value ? format(value, "MMM d, yyyy") : <span>{placeholder}</span>}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0 bg-white" align="start">
+      <PopoverContent className="w-auto p-0 bg-background" align="start">
         <Calendar
           mode="single"
           selected={value}
