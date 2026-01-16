@@ -9,28 +9,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  console.log('[Recreation Proxy] Request received, query:', req.query);
-
-  const { id } = req.query;
+  const { id, start_date } = req.query;
   const facilityId = Array.isArray(id) ? id[0] : id;
+  const startDate = Array.isArray(start_date) ? start_date[0] : start_date;
 
-  console.log('[Recreation Proxy] Facility ID:', facilityId);
+  console.log('[Recreation Proxy] Request - facilityId:', facilityId, 'startDate:', startDate);
 
   if (!facilityId) {
-    console.log('[Recreation Proxy] No facility ID, returning 400');
-    return res.status(400).json({ error: 'Facility ID required' });
+    return res.status(400).json({ error: 'Facility ID required (pass as ?id=...)' });
   }
 
   // Build the Recreation.gov availability API URL
   const url = new URL(`https://www.recreation.gov/api/camps/availability/campground/${facilityId}/month`);
 
-  // Add query parameters (like start_date)
-  if (req.query) {
-    Object.entries(req.query).forEach(([key, value]) => {
-      if (key !== 'id' && value) {
-        url.searchParams.set(key, Array.isArray(value) ? value[0] : value);
-      }
-    });
+  if (startDate) {
+    url.searchParams.set('start_date', startDate);
   }
 
   console.log('[Recreation Proxy] Fetching:', url.toString());

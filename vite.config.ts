@@ -32,7 +32,15 @@ export default defineConfig(({ mode }) => {
       '/api/recreation-availability': {
         target: 'https://www.recreation.gov',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/recreation-availability/, '/api/camps/availability/campground'),
+        rewrite: (path) => {
+          // Parse query params to get ID and rewrite to Recreation.gov format
+          const url = new URL(path, 'http://localhost');
+          const id = url.searchParams.get('id');
+          const startDate = url.searchParams.get('start_date');
+          const newPath = `/api/camps/availability/campground/${id}/month${startDate ? `?start_date=${startDate}` : ''}`;
+          console.log('[Recreation Proxy] Rewriting to:', newPath);
+          return newPath;
+        },
       },
     },
   },

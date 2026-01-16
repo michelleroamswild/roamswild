@@ -250,8 +250,8 @@ async function checkAvailability(
     for (const facilityId of facilityIds) {
       try {
         const numericId = facilityId.replace('ridb-', '');
-        const params = new URLSearchParams({ start_date: monthStart });
-        const response = await fetch(`/api/recreation-availability/${numericId}/month?${params}`);
+        const params = new URLSearchParams({ id: numericId, start_date: monthStart });
+        const response = await fetch(`/api/recreation-availability?${params}`);
 
         if (!response.ok) {
           console.log(`[AlternativeCampsites] Availability check failed for ${numericId}: ${response.status}`);
