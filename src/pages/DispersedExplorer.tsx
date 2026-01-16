@@ -578,13 +578,12 @@ const DispersedExplorer = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background overflow-x-hidden">
+    <div className="min-h-screen bg-background flex flex-col">
       <Header />
 
-      <main className="w-full">
-        <div className="grid lg:grid-cols-2">
-          {/* Map - Left side on desktop, bottom on mobile */}
-          <div className="order-2 lg:order-1 h-[400px] lg:h-[calc(100vh-64px)] lg:sticky lg:top-[64px] relative">
+      <div className="flex-1 grid lg:grid-cols-2">
+        {/* Map - Left side on desktop, bottom on mobile */}
+        <div className="order-2 lg:order-1 h-[400px] lg:h-auto lg:min-h-[calc(100vh-64px)] lg:sticky lg:top-[64px] relative">
           {/* Click instruction overlay */}
           {!searchLocation && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-background/90 backdrop-blur-sm px-4 py-2 rounded-full border border-border shadow-lg flex items-center gap-2">
@@ -876,10 +875,10 @@ const DispersedExplorer = () => {
               </InfoWindow>
             )}
           </GoogleMap>
-          </div>
+        </div>
 
-          {/* Sidebar - Right side on desktop, top on mobile */}
-          <div className="order-1 lg:order-2 space-y-4 p-4 md:p-6 lg:h-[calc(100vh-64px)] lg:overflow-y-auto">
+        {/* Sidebar - Right side on desktop, top on mobile */}
+        <div className="order-1 lg:order-2 space-y-4 p-4 md:p-6 lg:max-h-[calc(100vh-64px)] lg:overflow-y-auto">
             {/* Search Card */}
             <Card>
               <CardContent className="p-4">
@@ -1780,9 +1779,8 @@ const DispersedExplorer = () => {
                 </CardContent>
               </Card>
             )}
-          </div>
         </div>
-      </main>
+      </div>
 
       {/* Confirm Spot Dialog */}
       {selectedSpot && (
