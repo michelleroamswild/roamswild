@@ -29,6 +29,7 @@ import Campsites from "./pages/Campsites";
 import CampsiteDetail from "./pages/CampsiteDetail";
 import DispersedExplorer from "./pages/DispersedExplorer";
 import StyleGuide from "./pages/StyleGuide";
+import RidbTest from "./pages/RidbTest";
 
 const showDevFeatures = import.meta.env.VITE_ENABLE_DEV_FEATURES === 'true';
 
@@ -88,6 +89,7 @@ const App = () => (
                   <Route path="/campsites" element={<ProtectedRoute><Campsites /></ProtectedRoute>} />
                   <Route path="/campsites/:id" element={<ProtectedRoute><CampsiteDetail /></ProtectedRoute>} />
                   <Route path="/style-guide" element={<StyleGuide />} />
+                  <Route path="/ridb-test" element={<RidbTest />} />
 
                   {/* Catch-all */}
                   <Route path="*" element={<NotFound />} />

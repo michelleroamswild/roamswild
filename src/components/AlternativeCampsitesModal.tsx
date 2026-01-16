@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, MapPin, SpinnerGap, Tent, Check, ArrowSquareOut, Cloud, Sun, CloudRain, Snowflake, Wind } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { TripStop } from '@/types/trip';
-import { supabase } from '@/integrations/supabase/client';
+import { useCampsites } from '@/context/CampsitesContext';
 
 // NOAA Weather types
 interface WeatherForecast {
@@ -94,6 +94,8 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherForecast |
   }
 }
 
+type LodgingType = 'dispersed' | 'campground' | 'cabin' | 'hotel' | 'mixed' | 'other';
+
 interface AlternativeCampsitesModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -103,6 +105,7 @@ interface AlternativeCampsitesModalProps {
   onSelectCampsite: (campsite: TripStop) => void;
   tripStartDate?: string; // ISO date string for availability checking
   tripDuration?: number; // Number of nights
+  lodgingPreference?: LodgingType; // Only search RIDB if not 'dispersed'
 }
 
 interface CampsiteOption {
@@ -143,39 +146,32 @@ interface RIDBFacility {
   FacilityTypeDescription: string;
 }
 
-// Search RIDB for campsites via Supabase Edge Function
+// Search RIDB for campsites via Vite proxy
 async function searchRIDBCampsites(
   lat: number,
   lng: number,
   radiusMiles: number = 50
 ): Promise<CampsiteOption[]> {
   try {
-    // Use Supabase Edge Function proxy (API key stored securely on server)
-    const { data: { session } } = await supabase.auth.getSession();
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-
+    // Use local Vite proxy for RIDB API (proxies to ridb.recreation.gov with API key)
     const params = new URLSearchParams({
-      endpoint: '/facilities',
       latitude: lat.toString(),
       longitude: lng.toString(),
       radius: radiusMiles.toString(),
       limit: '50',
     });
 
-    const response = await fetch(`${supabaseUrl}/functions/v1/ridb-proxy?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${session?.access_token || ''}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    console.log(`[AlternativeCampsites] Fetching RIDB facilities near ${lat}, ${lng}`);
+    const response = await fetch(`/api/ridb/facilities?${params}`);
 
     if (!response.ok) {
-      console.error('RIDB API error:', response.status);
+      console.error('[AlternativeCampsites] RIDB API error:', response.status);
       return [];
     }
 
     const data = await response.json();
     const facilities: RIDBFacility[] = data.RECDATA || [];
+    console.log(`[AlternativeCampsites] RIDB returned ${facilities.length} facilities`);
 
     const campgroundTypes = ['campground', 'camping', 'camp'];
     const campgrounds = facilities.filter(f => {
@@ -184,6 +180,8 @@ async function searchRIDBCampsites(
       const name = (f.FacilityName || '').toLowerCase();
       return campgroundTypes.some(type => typeDesc.includes(type) || name.includes(type));
     });
+
+    console.log(`[AlternativeCampsites] Filtered to ${campgrounds.length} campgrounds`);
 
     return campgrounds
       .map((facility) => {
@@ -199,11 +197,12 @@ async function searchRIDBCampsites(
           note: cleanDescription,
           distance,
           source: 'ridb' as const,
+          bookingUrl: `https://www.recreation.gov/camping/campgrounds/${facility.FacilityID}`,
         };
       })
       .sort((a, b) => a.distance - b.distance);
   } catch (error) {
-    console.error('RIDB search error:', error);
+    console.error('[AlternativeCampsites] RIDB search error:', error);
     return [];
   }
 }
@@ -228,7 +227,7 @@ async function loadSavedCampsites(): Promise<CampsiteOption[]> {
   }
 }
 
-// Check availability for RIDB campsites
+// Check availability for RIDB campsites via Vite proxy to Recreation.gov
 async function checkAvailability(
   facilityIds: string[],
   startDate: string,
@@ -240,51 +239,103 @@ async function checkAvailability(
     return availabilityMap;
   }
 
+  console.log(`[AlternativeCampsites] Checking availability for ${facilityIds.length} campgrounds`);
+
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    // Parse the start date to get the month
+    const [year, month, day] = startDate.split('-').map(Number);
+    const monthStart = `${year}-${String(month).padStart(2, '0')}-01T00:00:00.000Z`;
 
-    const response = await fetch(`${supabaseUrl}/functions/v1/recreation-availability`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session?.access_token || ''}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        facilityIds,
-        startDate,
-        numNights,
-      }),
-    });
+    // Check each facility
+    for (const facilityId of facilityIds) {
+      try {
+        const numericId = facilityId.replace('ridb-', '');
+        const params = new URLSearchParams({ start_date: monthStart });
+        const response = await fetch(`/api/recreation-availability/${numericId}/month?${params}`);
 
-    if (!response.ok) {
-      return availabilityMap;
-    }
+        if (!response.ok) {
+          console.log(`[AlternativeCampsites] Availability check failed for ${numericId}: ${response.status}`);
+          continue;
+        }
 
-    const data = await response.json();
-    if (data.availability) {
-      for (const result of data.availability) {
-        availabilityMap.set(result.facilityId, {
-          available: result.available,
-          availableSites: result.availableSites || 0,
-        });
+        const data = await response.json();
+
+        if (data.campsites) {
+          const campsites = Object.values(data.campsites) as any[];
+          let sitesWithAvailability = 0;
+
+          // Log sample of what statuses exist for debugging
+          if (campsites.length > 0 && campsites[0].availabilities) {
+            const sampleStatuses = new Set<string>();
+            const checkDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T00:00:00Z`;
+            campsites.slice(0, 10).forEach((site: any) => {
+              if (site.availabilities && site.availabilities[checkDateStr]) {
+                sampleStatuses.add(site.availabilities[checkDateStr]);
+              }
+            });
+            console.log(`[AlternativeCampsites] ${numericId} statuses for ${checkDateStr}:`, Array.from(sampleStatuses));
+          }
+
+          // Check each campsite for availability on our dates
+          for (const site of campsites) {
+            if (site.availabilities) {
+              let hasAllNights = true;
+
+              // Check each night
+              const checkDate = new Date(year, month - 1, day);
+              for (let i = 0; i < numNights; i++) {
+                const y = checkDate.getFullYear();
+                const m = String(checkDate.getMonth() + 1).padStart(2, '0');
+                const d = String(checkDate.getDate()).padStart(2, '0');
+                const dateKey = `${y}-${m}-${d}T00:00:00Z`;
+
+                const status = site.availabilities[dateKey];
+                // Recreation.gov uses "Available" for bookable sites, "Open" for walk-up
+                const isAvailable = status === 'Available' || status === 'Open';
+
+                if (!isAvailable) {
+                  hasAllNights = false;
+                  break;
+                }
+                checkDate.setDate(checkDate.getDate() + 1);
+              }
+
+              if (hasAllNights) {
+                sitesWithAvailability++;
+              }
+            }
+          }
+
+          availabilityMap.set(facilityId, {
+            available: sitesWithAvailability > 0,
+            availableSites: sitesWithAvailability,
+          });
+
+          console.log(`[AlternativeCampsites] ${numericId}: ${sitesWithAvailability}/${campsites.length} sites available for ${startDate}`);
+        }
+      } catch (err) {
+        console.error(`[AlternativeCampsites] Error checking ${facilityId}:`, err);
       }
     }
+
     return availabilityMap;
   } catch (error) {
-    console.error('Availability check error:', error);
+    console.error('[AlternativeCampsites] Availability check error:', error);
     return availabilityMap;
   }
 }
 
 // Find alternative campsites near a location
+// For 'dispersed' lodging, dispersedCampsites should be passed from the context
 async function findAlternativeCampsites(
   lat: number,
   lng: number,
   excludeId?: string,
   radiusMiles: number = 50,
   tripStartDate?: string,
-  tripDuration?: number
+  tripDuration?: number,
+  lodgingPreference?: LodgingType,
+  dispersedCampsites?: CampsiteOption[]
 ): Promise<CampsiteOption[]> {
   // Load saved campsites
   const savedCampsites = await loadSavedCampsites();
@@ -299,11 +350,30 @@ async function findAlternativeCampsites(
     .sort((a, b) => a.distance - b.distance)
     .slice(0, 5);
 
-  // Also search RIDB
+  // For dispersed camping, use the dispersed campsites database instead of RIDB
+  if (lodgingPreference === 'dispersed') {
+    console.log(`[findAlternativeCampsites] Using dispersed campsites (${dispersedCampsites?.length || 0} available)`);
+
+    // Filter and sort dispersed campsites
+    const nearbyDispersed = (dispersedCampsites || [])
+      .map(site => ({
+        ...site,
+        distance: getDistanceMiles(lat, lng, site.lat, site.lng),
+        source: 'osm' as const,
+      }))
+      .filter(site => site.distance <= radiusMiles && site.id !== excludeId)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 10);
+
+    // Return dispersed spots first, then saved spots
+    return [...nearbyDispersed, ...nearbySaved].slice(0, 10);
+  }
+
+  // For established camping (campground, cabin, hotel, etc.), search RIDB
   const ridbCampsites = await searchRIDBCampsites(lat, lng, radiusMiles);
   let nearbyRidb = ridbCampsites
     .filter(site => site.id !== excludeId)
-    .slice(0, 10); // Get more to account for availability filtering
+    .slice(0, 15); // Get more to account for availability filtering
 
   // Check availability for RIDB campsites if trip dates provided
   if (tripStartDate && tripDuration && nearbyRidb.length > 0) {
@@ -324,20 +394,22 @@ async function findAlternativeCampsites(
       return site;
     });
 
-    // Sort to show available ones first
-    nearbyRidb.sort((a, b) => {
-      if (a.hasAvailability && !b.hasAvailability) return -1;
-      if (!a.hasAvailability && b.hasAvailability) return 1;
-      return a.distance - b.distance;
-    });
+    // Filter out campsites with no availability - only show available ones
+    nearbyRidb = nearbyRidb.filter(s => s.hasAvailability !== false);
+
+    // Sort by distance (all remaining have availability or unknown)
+    nearbyRidb.sort((a, b) => a.distance - b.distance);
+
+    console.log(`[findAlternativeCampsites] ${nearbyRidb.length} RIDB campsites with availability for ${tripStartDate}`);
   }
 
-  // Combine: RIDB with availability first, then saved, then other RIDB
-  const withAvailability = nearbyRidb.filter(s => s.hasAvailability);
-  const withoutAvailability = nearbyRidb.filter(s => s.hasAvailability === false);
+  // Combine: RIDB with availability first, then saved spots
+  // Only include RIDB campsites that have confirmed availability
+  const withAvailability = nearbyRidb.filter(s => s.hasAvailability === true);
   const unknownAvailability = nearbyRidb.filter(s => s.hasAvailability === undefined);
 
-  return [...withAvailability, ...nearbySaved, ...unknownAvailability, ...withoutAvailability]
+  // Return available RIDB first, then saved spots, then unknown availability RIDB
+  return [...withAvailability, ...nearbySaved, ...unknownAvailability]
     .slice(0, 10);
 }
 
@@ -350,28 +422,59 @@ export function AlternativeCampsitesModal({
   onSelectCampsite,
   tripStartDate,
   tripDuration,
+  lodgingPreference,
 }: AlternativeCampsitesModalProps) {
   const [alternatives, setAlternatives] = useState<CampsiteOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Get dispersed campsites from context for dispersed camping mode
+  const { getExplorerSpots } = useCampsites();
+
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
       setSelectedId(null);
-      findAlternativeCampsites(
-        searchLat,
-        searchLng,
-        currentCampsite.id,
-        50,
-        tripStartDate,
-        tripDuration
-      ).then((sites) => {
+
+      // For dispersed camping, first fetch dispersed spots from database
+      const fetchAlternatives = async () => {
+        let dispersedCampsites: CampsiteOption[] | undefined;
+
+        if (lodgingPreference === 'dispersed') {
+          try {
+            const spots = await getExplorerSpots(searchLat, searchLng, 50);
+            dispersedCampsites = spots.map(spot => ({
+              id: spot.id,
+              name: spot.name,
+              lat: spot.lat,
+              lng: spot.lng,
+              note: spot.description || spot.road_type || 'Dispersed camping spot',
+              distance: 0, // Will be calculated in findAlternativeCampsites
+              source: 'osm' as const,
+            }));
+            console.log(`[AlternativeCampsitesModal] Loaded ${dispersedCampsites.length} dispersed spots from database`);
+          } catch (err) {
+            console.error('[AlternativeCampsitesModal] Error loading dispersed spots:', err);
+          }
+        }
+
+        const sites = await findAlternativeCampsites(
+          searchLat,
+          searchLng,
+          currentCampsite.id,
+          50,
+          tripStartDate,
+          tripDuration,
+          lodgingPreference,
+          dispersedCampsites
+        );
         setAlternatives(sites);
         setLoading(false);
-      });
+      };
+
+      fetchAlternatives();
     }
-  }, [isOpen, searchLat, searchLng, currentCampsite.id, tripStartDate, tripDuration]);
+  }, [isOpen, searchLat, searchLng, currentCampsite.id, tripStartDate, tripDuration, lodgingPreference, getExplorerSpots]);
 
   const handleSelect = (campsite: CampsiteOption) => {
     const newStop: TripStop = {

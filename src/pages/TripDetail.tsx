@@ -2285,6 +2285,7 @@ const TripDetail = () => {
                   key={day.day}
                   day={day}
                   tripName={tripConfig.name}
+                  tripStartDate={tripConfig.startDate}
                   expanded={expandedDays.includes(day.day)}
                   isActive={activeDay === day.day}
                   isFirstDay={day.day === 1}
@@ -2345,8 +2346,19 @@ const TripDetail = () => {
           searchLat={selectedCampsiteForSwap.coordinates.lat}
           searchLng={selectedCampsiteForSwap.coordinates.lng}
           onSelectCampsite={handleSwapCampsite}
-          tripStartDate={tripConfig.startDate}
-          tripDuration={tripConfig.duration}
+          tripStartDate={tripConfig.startDate ? (() => {
+            // Calculate the specific date for this campsite's day
+            const [year, month, day] = tripConfig.startDate!.split('-').map(Number);
+            const date = new Date(year, month - 1, day + (selectedCampsiteForSwap.day || 1) - 1);
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+          })() : undefined}
+          tripDuration={1}
+          lodgingPreference={
+            // If user clicked "Search for established campgrounds" on a no-dispersed marker, force campground search
+            selectedCampsiteForSwap.id === 'no-dispersed-found' || selectedCampsiteForSwap.note === 'NO_DISPERSED_SITES_FOUND'
+              ? 'campground'
+              : tripConfig.lodgingPreference
+          }
         />
       )}
 
@@ -2527,6 +2539,7 @@ const TripDetail = () => {
 interface DayCardProps {
   day: TripDay;
   tripName?: string;
+  tripStartDate?: string; // ISO date string (YYYY-MM-DD)
   expanded: boolean;
   isActive: boolean;
   isFirstDay: boolean;
@@ -2542,8 +2555,15 @@ interface DayCardProps {
   onRemoveStop: (dayNumber: number, stop: TripStop) => void;
 }
 
-const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, startLocation, returnToStart, onToggle, onStartDay, onExitDay, onStopClick, onSwapHike, onSwapCampsite, onRemoveStop }: DayCardProps) => {
+const DayCard = ({ day, tripName, tripStartDate, expanded, isActive, isFirstDay, isLastDay, startLocation, returnToStart, onToggle, onStartDay, onExitDay, onStopClick, onSwapHike, onSwapCampsite, onRemoveStop }: DayCardProps) => {
   const timeEstimate = estimateDayTime(day);
+
+  // Calculate the date for this day
+  const dayDate = tripStartDate ? (() => {
+    const [year, month, dayNum] = tripStartDate.split('-').map(Number);
+    const date = new Date(year, month - 1, dayNum + day.day - 1);
+    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  })() : null;
 
   return (
     <Card className={`overflow-hidden ${isActive ? 'ring-2 ring-primary border-primary' : ''}`}>
@@ -2559,6 +2579,7 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
           <div className="text-left">
             <p className="font-medium text-foreground">
               Day {day.day}
+              {dayDate && <span className="ml-2 text-sm font-normal text-muted-foreground">{dayDate}</span>}
               {isActive && <span className="ml-2 text-xs text-primary font-normal">(Previewing)</span>}
             </p>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
@@ -2628,6 +2649,37 @@ const DayCard = ({ day, tripName, expanded, isActive, isFirstDay, isLastDay, sta
           {day.stops.map((stop, index) => {
             const Icon = getIcon(stop.type);
             const typeStyles = getTypeStyles(stop.type);
+
+            // Special handling for "no dispersed sites found" marker
+            if (stop.id === 'no-dispersed-found' || stop.note === 'NO_DISPERSED_SITES_FOUND') {
+              return (
+                <div
+                  key={stop.id}
+                  className="p-4 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-100 dark:bg-amber-800/30">
+                      <Warning className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-medium text-amber-800 dark:text-amber-200">No dispersed campsites found</h4>
+                      <p className="text-sm text-amber-700 dark:text-amber-300 mt-0.5">
+                        There are no known dispersed camping spots in this area.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-300 dark:hover:bg-amber-800/30"
+                        onClick={() => onSwapCampsite(stop)}
+                      >
+                        <Tent className="w-4 h-4 mr-2" />
+                        Search for established campgrounds instead
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
 
             return (
               <div

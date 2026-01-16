@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 
 // Established campground from RIDB (USFS, BLM, NPS, etc.)
 export interface EstablishedCampground {
@@ -1260,7 +1259,7 @@ async function fetchUSFSCampgrounds(
 }
 
 /**
- * Fetch established campgrounds from RIDB via Supabase Edge Function
+ * Fetch established campgrounds from RIDB via Vite proxy
  */
 async function fetchRIDBCampgrounds(
   lat: number,
@@ -1268,32 +1267,20 @@ async function fetchRIDBCampgrounds(
   radiusMiles: number
 ): Promise<EstablishedCampground[]> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
+    // Use local Vite proxy for RIDB API (proxies to ridb.recreation.gov with API key)
     const params = new URLSearchParams({
-      endpoint: '/facilities',
       latitude: lat.toString(),
       longitude: lng.toString(),
       radius: radiusMiles.toString(),
       limit: '100',
     });
 
-    console.log('Fetching RIDB campgrounds for dispersed explorer');
+    console.log('[fetchRIDBCampgrounds] Fetching RIDB campgrounds for dispersed explorer');
 
-    // Use session token if available, otherwise fall back to anon key
-    const authToken = session?.access_token || supabaseAnonKey;
-
-    const response = await fetch(`${supabaseUrl}/functions/v1/ridb-proxy?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await fetch(`/api/ridb/facilities?${params}`);
 
     if (!response.ok) {
-      console.error('RIDB API error:', response.status);
+      console.error('[fetchRIDBCampgrounds] RIDB API error:', response.status);
       return [];
     }
 
@@ -1312,7 +1299,7 @@ async function fetchRIDBCampgrounds(
       );
     });
 
-    console.log(`Found ${campgrounds.length} established campgrounds from RIDB (from ${facilities.length} total facilities)`);
+    console.log(`[fetchRIDBCampgrounds] Found ${campgrounds.length} established campgrounds from RIDB (from ${facilities.length} total facilities)`);
 
     return campgrounds.map((facility: any) => {
       // Clean up the description - remove HTML tags
@@ -1329,11 +1316,11 @@ async function fetchRIDBCampgrounds(
         facilityType: facility.FacilityTypeDescription || 'Campground',
         agencyName: facility.FACILITYUSEFEE ? 'Fee Area' : undefined,
         reservable: facility.Reservable === true,
-        url: facility.FacilityReservationURL || undefined,
+        url: `https://www.recreation.gov/camping/campgrounds/${facility.FacilityID}`,
       };
     });
   } catch (error) {
-    console.error('RIDB campground fetch error:', error);
+    console.error('[fetchRIDBCampgrounds] RIDB campground fetch error:', error);
     return [];
   }
 }
@@ -1676,10 +1663,8 @@ export function useDispersedRoads(
       const maxLng = lng + lngDelta;
 
       try {
-        // Fetch MVUM, BLM, OSM data, and USFS campgrounds in parallel
-        // Note: RIDB is skipped here as it requires user auth and is for established campgrounds
-        // which aren't the focus for dispersed camping. USFS Recreation API covers similar data.
-        const [mvum, blm, osmData, usfsCampgrounds] = await Promise.all([
+        // Fetch MVUM, BLM, OSM data, USFS campgrounds, and RIDB campgrounds in parallel
+        const [mvum, blm, osmData, usfsCampgrounds, ridbCampgrounds] = await Promise.all([
           fetchMVUMRoads(minLat, minLng, maxLat, maxLng).catch((err) => {
             console.error('MVUM fetch error:', err);
             return [];
@@ -1699,10 +1684,11 @@ export function useDispersedRoads(
             console.error('USFS campgrounds fetch error:', err);
             return [];
           }),
+          fetchRIDBCampgrounds(lat, lng, radiusMiles).catch((err) => {
+            console.error('RIDB campgrounds fetch error:', err);
+            return [];
+          }),
         ]);
-
-        // RIDB campgrounds skipped - would require fixing Edge Function auth
-        const ridbCampgrounds: EstablishedCampground[] = [];
 
         const { tracks: osm, campSites: camps, publicLands, privateLands } = osmData;
 
