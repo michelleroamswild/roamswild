@@ -9,10 +9,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
+  console.log('[Recreation Proxy] Request received, query:', req.query);
+
   const { id } = req.query;
   const facilityId = Array.isArray(id) ? id[0] : id;
 
+  console.log('[Recreation Proxy] Facility ID:', facilityId);
+
   if (!facilityId) {
+    console.log('[Recreation Proxy] No facility ID, returning 400');
     return res.status(400).json({ error: 'Facility ID required' });
   }
 
@@ -40,6 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const data = await response.text();
+    console.log('[Recreation Proxy] Response status:', response.status, 'Data length:', data.length);
 
     // Set CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
