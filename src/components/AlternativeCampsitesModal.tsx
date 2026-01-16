@@ -161,7 +161,6 @@ async function searchRIDBCampsites(
       limit: '50',
     });
 
-    console.log(`[AlternativeCampsites] Fetching RIDB facilities near ${lat}, ${lng}`);
     const response = await fetch(`/api/ridb/facilities?${params}`);
 
     if (!response.ok) {
@@ -171,7 +170,6 @@ async function searchRIDBCampsites(
 
     const data = await response.json();
     const facilities: RIDBFacility[] = data.RECDATA || [];
-    console.log(`[AlternativeCampsites] RIDB returned ${facilities.length} facilities`);
 
     const campgroundTypes = ['campground', 'camping', 'camp'];
     const campgrounds = facilities.filter(f => {
@@ -180,8 +178,6 @@ async function searchRIDBCampsites(
       const name = (f.FacilityName || '').toLowerCase();
       return campgroundTypes.some(type => typeDesc.includes(type) || name.includes(type));
     });
-
-    console.log(`[AlternativeCampsites] Filtered to ${campgrounds.length} campgrounds`);
 
     return campgrounds
       .map((facility) => {
@@ -239,8 +235,6 @@ async function checkAvailability(
     return availabilityMap;
   }
 
-  console.log(`[AlternativeCampsites] Checking availability for ${facilityIds.length} campgrounds`);
-
   try {
     // Parse the start date to get the month
     const [year, month, day] = startDate.split('-').map(Number);
@@ -254,7 +248,6 @@ async function checkAvailability(
         const response = await fetch(`/api/recreation-availability?${params}`);
 
         if (!response.ok) {
-          console.log(`[AlternativeCampsites] Availability check failed for ${numericId}: ${response.status}`);
           continue;
         }
 
@@ -263,18 +256,6 @@ async function checkAvailability(
         if (data.campsites) {
           const campsites = Object.values(data.campsites) as any[];
           let sitesWithAvailability = 0;
-
-          // Log sample of what statuses exist for debugging
-          if (campsites.length > 0 && campsites[0].availabilities) {
-            const sampleStatuses = new Set<string>();
-            const checkDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T00:00:00Z`;
-            campsites.slice(0, 10).forEach((site: any) => {
-              if (site.availabilities && site.availabilities[checkDateStr]) {
-                sampleStatuses.add(site.availabilities[checkDateStr]);
-              }
-            });
-            console.log(`[AlternativeCampsites] ${numericId} statuses for ${checkDateStr}:`, Array.from(sampleStatuses));
-          }
 
           // Check each campsite for availability on our dates
           for (const site of campsites) {
@@ -310,8 +291,6 @@ async function checkAvailability(
             available: sitesWithAvailability > 0,
             availableSites: sitesWithAvailability,
           });
-
-          console.log(`[AlternativeCampsites] ${numericId}: ${sitesWithAvailability}/${campsites.length} sites available for ${startDate}`);
         }
       } catch (err) {
         console.error(`[AlternativeCampsites] Error checking ${facilityId}:`, err);
@@ -352,7 +331,6 @@ async function findAlternativeCampsites(
 
   // For dispersed camping, use the dispersed campsites database instead of RIDB
   if (lodgingPreference === 'dispersed') {
-    console.log(`[findAlternativeCampsites] Using dispersed campsites (${dispersedCampsites?.length || 0} available)`);
 
     // Filter and sort dispersed campsites
     const nearbyDispersed = (dispersedCampsites || [])
@@ -376,12 +354,9 @@ async function findAlternativeCampsites(
     .slice(0, 15); // Get more to account for availability filtering
 
   // Check availability for RIDB campsites if trip dates provided
-  console.log(`[findAlternativeCampsites] tripStartDate=${tripStartDate}, tripDuration=${tripDuration}, ridbCount=${nearbyRidb.length}`);
   if (tripStartDate && tripDuration && nearbyRidb.length > 0) {
     const ridbIds = nearbyRidb.map(c => c.id);
-    console.log(`[findAlternativeCampsites] Checking availability for:`, ridbIds);
     const availabilityMap = await checkAvailability(ridbIds, tripStartDate, tripDuration);
-    console.log(`[findAlternativeCampsites] Availability results:`, Array.from(availabilityMap.entries()));
 
     // Update campsites with availability info
     nearbyRidb = nearbyRidb.map(site => {
@@ -402,8 +377,6 @@ async function findAlternativeCampsites(
 
     // Sort by distance (all remaining have availability or unknown)
     nearbyRidb.sort((a, b) => a.distance - b.distance);
-
-    console.log(`[findAlternativeCampsites] ${nearbyRidb.length} RIDB campsites with availability for ${tripStartDate}`);
   }
 
   // Combine: RIDB with availability first, then saved spots
@@ -455,7 +428,6 @@ export function AlternativeCampsitesModal({
               distance: 0, // Will be calculated in findAlternativeCampsites
               source: 'osm' as const,
             }));
-            console.log(`[AlternativeCampsitesModal] Loaded ${dispersedCampsites.length} dispersed spots from database`);
           } catch (err) {
             console.error('[AlternativeCampsitesModal] Error loading dispersed spots:', err);
           }

@@ -13,8 +13,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const facilityId = Array.isArray(id) ? id[0] : id;
   const startDate = Array.isArray(start_date) ? start_date[0] : start_date;
 
-  console.log('[Recreation Proxy] Request - facilityId:', facilityId, 'startDate:', startDate);
-
   if (!facilityId) {
     return res.status(400).json({ error: 'Facility ID required (pass as ?id=...)' });
   }
@@ -26,8 +24,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     url.searchParams.set('start_date', startDate);
   }
 
-  console.log('[Recreation Proxy] Fetching:', url.toString());
-
   try {
     const response = await fetch(url.toString(), {
       method: 'GET',
@@ -38,7 +34,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const data = await response.text();
-    console.log('[Recreation Proxy] Response status:', response.status, 'Data length:', data.length);
 
     // Set CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');

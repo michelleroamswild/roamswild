@@ -82,8 +82,6 @@ async function searchRIDBCampsites(
       limit: '200',
     });
 
-    console.log(`[searchRIDBCampsites] Fetching RIDB facilities near ${lat}, ${lng} within ${radiusMiles} miles`);
-
     const response = await fetch(`/api/ridb/facilities?${params}`);
 
     if (!response.ok) {
@@ -94,8 +92,6 @@ async function searchRIDBCampsites(
     const data = await response.json();
     let allFacilities: RIDBFacility[] = data.RECDATA || [];
 
-    console.log(`[searchRIDBCampsites] RIDB returned ${allFacilities.length} total facilities`);
-
     // Filter for campgrounds by type or name
     const campgroundKeywords = ['campground', 'camping', 'camp'];
     let facilities = allFacilities.filter(f => {
@@ -103,8 +99,6 @@ async function searchRIDBCampsites(
       const name = (f.FacilityName || '').toLowerCase();
       return campgroundKeywords.some(kw => typeDesc.includes(kw) || name.includes(kw));
     });
-
-    console.log(`[searchRIDBCampsites] Filtered to ${facilities.length} campgrounds from direct search`);
 
     // Also search for recreation areas (national parks, etc.) and get their facilities
     const recAreaParams = new URLSearchParams({
@@ -119,7 +113,6 @@ async function searchRIDBCampsites(
     if (recAreaResponse.ok) {
       const recAreaData = await recAreaResponse.json();
       const recAreas = recAreaData.RECDATA || [];
-      console.log(`[searchRIDBCampsites] Found ${recAreas.length} recreation areas nearby:`, recAreas.map((r: any) => r.RecAreaName));
 
       // Get facilities from each recreation area (up to 5 areas to avoid too many requests)
       for (const recArea of recAreas.slice(0, 5)) {
@@ -130,21 +123,14 @@ async function searchRIDBCampsites(
           if (areaResponse.ok) {
             const areaData = await areaResponse.json();
             const allAreaFacilities: RIDBFacility[] = areaData.RECDATA || [];
-            console.log(`[searchRIDBCampsites] ${recArea.RecAreaName} has ${allAreaFacilities.length} total facilities`);
 
             // Filter for campgrounds
             const campgroundKeywords = ['campground', 'camping', 'camp'];
             const areaFacilities = allAreaFacilities.filter(f => {
               const typeDesc = (f.FacilityTypeDescription || '').toLowerCase();
               const name = (f.FacilityName || '').toLowerCase();
-              const isCampground = campgroundKeywords.some(kw => typeDesc.includes(kw) || name.includes(kw));
-              if (isCampground) {
-                console.log(`[searchRIDBCampsites] Found campground in ${recArea.RecAreaName}: ${f.FacilityName} (ID: ${f.FacilityID})`);
-              }
-              return isCampground;
+              return campgroundKeywords.some(kw => typeDesc.includes(kw) || name.includes(kw));
             });
-
-            console.log(`[searchRIDBCampsites] Found ${areaFacilities.length} campgrounds in ${recArea.RecAreaName}`);
 
             // Add facilities that aren't already in our list
             const existingIds = new Set(facilities.map(f => f.FacilityID));
@@ -163,19 +149,8 @@ async function searchRIDBCampsites(
       }
     }
 
-    console.log(`[searchRIDBCampsites] Total RIDB facilities after rec area search: ${facilities.length}`);
-
     // Filter to only include valid facilities with coordinates
-    // Since we're using activity=9 (Camping), all results should be camping-related
-    const campgrounds = facilities.filter(f => {
-      if (!f.FacilityLatitude || !f.FacilityLongitude) {
-        console.log(`[searchRIDBCampsites] Skipping ${f.FacilityName} - no coordinates`);
-        return false;
-      }
-      return true;
-    });
-
-    console.log(`[searchRIDBCampsites] Found ${campgrounds.length} campgrounds from RIDB`);
+    const campgrounds = facilities.filter(f => f.FacilityLatitude && f.FacilityLongitude);
 
     // Keywords that indicate national park/monument campgrounds
     const npKeywords = ['national park', 'national monument', 'national recreation area', 'national seashore', 'national lakeshore'];
@@ -678,31 +653,10 @@ async function checkCampgroundAvailability(
     return availabilityMap;
   }
 
-  console.log(`[checkCampgroundAvailability] Checking ${facilityIds.length} campgrounds for ${startDate}, ${numNights} nights`);
-
-  // Parse dates - ensure we handle the date string correctly
-  // startDate is expected to be YYYY-MM-DD format
-  console.log(`[checkCampgroundAvailability] Input startDate: "${startDate}", numNights: ${numNights}`);
-
   // Parse the date carefully to avoid timezone issues
   const [year, month, day] = startDate.split('-').map(Number);
-  const checkInDate = new Date(year, month - 1, day); // month is 0-indexed
+  const checkInDate = new Date(year, month - 1, day);
   const checkOutDate = new Date(year, month - 1, day + numNights);
-
-  console.log(`[checkCampgroundAvailability] Parsed checkInDate: ${checkInDate.toISOString()}`);
-  console.log(`[checkCampgroundAvailability] Parsed checkOutDate: ${checkOutDate.toISOString()}`);
-
-  // Log the exact dates we're checking
-  const datesToCheck: string[] = [];
-  const tempDate = new Date(checkInDate);
-  for (let i = 0; i < numNights; i++) {
-    const y = tempDate.getFullYear();
-    const m = String(tempDate.getMonth() + 1).padStart(2, '0');
-    const d = String(tempDate.getDate()).padStart(2, '0');
-    datesToCheck.push(`${y}-${m}-${d}`);
-    tempDate.setDate(tempDate.getDate() + 1);
-  }
-  console.log(`[checkCampgroundAvailability] Dates to check (${datesToCheck.length} nights): ${datesToCheck.join(', ')}`);
 
   // Get all months we need to check
   const monthsToCheck = new Set<string>();
@@ -712,7 +666,6 @@ async function checkCampgroundAvailability(
     monthsToCheck.add(monthStart);
     currentDate.setMonth(currentDate.getMonth() + 1);
   }
-  console.log(`[checkCampgroundAvailability] Months to fetch: ${Array.from(monthsToCheck).join(', ')}`)
 
   // Check availability for each facility (limit concurrent requests)
   const checkFacility = async (facilityId: string): Promise<void> => {
@@ -738,33 +691,18 @@ async function checkCampgroundAvailability(
       // Check each month needed
       for (const monthStart of monthsToCheck) {
         const params = new URLSearchParams({ id: numericId, start_date: `${monthStart}T00:00:00.000Z` });
-        const availabilityUrl = `/api/recreation-availability?${params}`;
-        console.log(`[checkCampgroundAvailability] Fetching: ${availabilityUrl}`);
-
-        const response = await fetch(availabilityUrl);
+        const response = await fetch(`/api/recreation-availability?${params}`);
 
         if (!response.ok) {
-          const errorText = await response.text();
-          console.log(`[checkCampgroundAvailability] Failed for facility ${numericId}: ${response.status}`, errorText.slice(0, 200));
           continue;
         }
 
         const data = await response.json();
-        const campsiteCount = data.campsites ? Object.keys(data.campsites).length : 0;
-        console.log(`[checkCampgroundAvailability] Got data for ${numericId}, campsites: ${campsiteCount}`);
 
         // Recreation.gov returns availability by campsite
         if (data.campsites) {
           const campsites = Object.values(data.campsites) as any[];
           totalSites = Math.max(totalSites, campsites.length);
-
-          // Log sample availability keys to understand the format
-          if (campsites.length > 0 && campsites[0].availabilities) {
-            const sampleKeys = Object.keys(campsites[0].availabilities).slice(0, 5);
-            console.log(`[checkCampgroundAvailability] Sample availability keys for ${numericId}:`, sampleKeys);
-            const sampleValues = sampleKeys.map(k => ({ key: k, value: campsites[0].availabilities[k] }));
-            console.log(`[checkCampgroundAvailability] Sample availability values:`, sampleValues);
-          }
 
           // Check each campsite for availability
           for (const site of campsites) {
@@ -817,10 +755,6 @@ async function checkCampgroundAvailability(
               }
             }
           }
-
-          // Log per-night results for debugging
-          console.log(`[checkCampgroundAvailability] Per-night counts for ${numericId}:`,
-            Array.from(perNightCounts.entries()).map(([d, c]) => `${d}: ${c} sites`));
         }
       }
 
@@ -852,7 +786,6 @@ async function checkCampgroundAvailability(
     await Promise.all(batch.map(checkFacility));
   }
 
-  console.log(`[checkCampgroundAvailability] Got availability for ${availabilityMap.size} campgrounds`);
   return availabilityMap;
 }
 
@@ -871,8 +804,6 @@ async function findNearbyCampsites(
   // For established/campground camping, combine RIDB, USFS, and OSM sources
   const useEstablished = lodgingPreference === 'established' || lodgingPreference === 'campground';
   if (useEstablished) {
-    console.log('[findNearbyCampsites] Fetching established campgrounds from RIDB, USFS, and OSM');
-
     // Fetch from all three sources in parallel
     const [ridbCampsites, usfsCampsites, osmCampsites] = await Promise.all([
       searchRIDBCampsites(lat, lng, radiusMiles),
@@ -880,36 +811,13 @@ async function findNearbyCampsites(
       searchOSMCampgrounds(lat, lng, radiusMiles),
     ]);
 
-    console.log(`[findNearbyCampsites] Found: ${ridbCampsites.length} RIDB, ${usfsCampsites.length} USFS, ${osmCampsites.length} OSM`);
-
-    // Log first few RIDB campgrounds for debugging
-    if (ridbCampsites.length > 0) {
-      console.log('[findNearbyCampsites] RIDB campgrounds found:', ridbCampsites.slice(0, 5).map(c => ({
-        name: c.name,
-        id: c.id,
-        distance: c.distance.toFixed(1) + ' mi',
-        coords: `${c.lat}, ${c.lng}`,
-      })));
-    } else {
-      console.warn('[findNearbyCampsites] NO RIDB campgrounds found! OSM will be used as fallback.');
-    }
-
     // Check availability for RIDB campsites if trip date is provided
     let availabilityMap = new Map<string, AvailabilityResult>();
     if (tripStartDate && ridbCampsites.length > 0) {
       const ridbFacilityIds = ridbCampsites
         .filter(c => c.facilityId)
-        .map(c => c.id); // Use the full ID like "ridb-12345"
-      console.log(`[findNearbyCampsites] Checking availability for ${ridbFacilityIds.length} RIDB campsites:`, ridbFacilityIds);
+        .map(c => c.id);
       availabilityMap = await checkCampgroundAvailability(ridbFacilityIds, tripStartDate, tripDuration);
-      console.log(`[findNearbyCampsites] Availability results:`, Array.from(availabilityMap.entries()).map(([id, avail]) => ({
-        id,
-        available: avail.available,
-        availableSites: avail.availableSites,
-        perNight: avail.perNight?.map(n => `${n.date}: ${n.availableSites}`),
-      })));
-    } else {
-      console.log(`[findNearbyCampsites] Skipping availability check - tripStartDate: ${tripStartDate}, ridbCampsites: ${ridbCampsites.length}`);
     }
 
     // Filter RIDB campsites to only include those with availability
@@ -937,9 +845,6 @@ async function findNearbyCampsites(
 
       // Filter OUT RIDB campsites that have no availability - only show available ones
       const availableRidbCampsites = ridbCampsites.filter(c => c.note?.startsWith('✓'));
-      const unavailableCount = ridbCampsites.length - availableRidbCampsites.length;
-
-      console.log(`[findNearbyCampsites] ${availableRidbCampsites.length}/${ridbCampsites.length} RIDB campgrounds have availability (filtered out ${unavailableCount} unavailable)`);
 
       // Replace ridbCampsites with only available ones
       ridbCampsites.length = 0;
@@ -967,7 +872,6 @@ async function findNearbyCampsites(
       const newName = normalizeName(newCamp.name);
       const existingName = normalizeName(existing.name);
       if (newName === existingName || newName.includes(existingName) || existingName.includes(newName)) {
-        console.log(`[findNearbyCampsites] Name-based dedup: "${newCamp.name}" matches "${existing.name}"`);
         return true;
       }
       return false;
@@ -1012,12 +916,10 @@ async function findNearbyCampsites(
       // 4. Then by distance
       return a.distance - b.distance;
     });
-    console.log(`[findNearbyCampsites] Total unique established campgrounds: ${allCampsites.length}`);
 
     if (allCampsites.length > 0) {
       return allCampsites;
     }
-    console.log('[findNearbyCampsites] No established campgrounds found, falling back to dispersed search');
   }
 
   // For dispersed camping, search in this order:
@@ -1025,26 +927,20 @@ async function findNearbyCampsites(
   // 2. OSM dispersed/primitive camp sites
   // 3. Return empty with marker if nothing found (UI will prompt user)
 
-  console.log('[findNearbyCampsites] Searching for dispersed campsites (database)');
   const dispersedCampsites = await searchDispersedCampsites(lat, lng, radiusMiles);
 
   if (dispersedCampsites.length > 0) {
-    console.log(`[findNearbyCampsites] Found ${dispersedCampsites.length} dispersed sites from database`);
     return dispersedCampsites as CampsiteWithBooking[];
   }
 
-  // Fallback 1: Search OSM for dispersed/primitive camp sites
-  console.log('[findNearbyCampsites] No database dispersed sites, searching OSM dispersed sites');
+  // Fallback: Search OSM for dispersed/primitive camp sites
   const osmDispersedSites = await searchOSMDispersedSites(lat, lng, radiusMiles);
 
   if (osmDispersedSites.length > 0) {
-    console.log(`[findNearbyCampsites] Found ${osmDispersedSites.length} OSM dispersed sites`);
     return osmDispersedSites as CampsiteWithBooking[];
   }
 
   // No dispersed sites found - return a special marker so the UI can prompt the user
-  // The marker campsite indicates that the user should be asked if they want established campgrounds
-  console.log('[findNearbyCampsites] No dispersed sites found anywhere - returning marker for UI prompt');
   const noDispersedMarker: CampsiteWithBooking = {
     id: 'no-dispersed-found',
     name: 'No dispersed campsites found',

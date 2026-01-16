@@ -20,7 +20,6 @@ export default defineConfig(({ mode }) => {
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
             proxyReq.setHeader('apikey', env.VITE_RIDB_API_KEY || '');
-            console.log('[RIDB Proxy] Adding API key to request');
           });
         },
       },
@@ -38,7 +37,6 @@ export default defineConfig(({ mode }) => {
           const id = url.searchParams.get('id');
           const startDate = url.searchParams.get('start_date');
           const newPath = `/api/camps/availability/campground/${id}/month${startDate ? `?start_date=${startDate}` : ''}`;
-          console.log('[Recreation Proxy] Rewriting to:', newPath);
           return newPath;
         },
       },
