@@ -6,28 +6,37 @@ export function useElevation(lat: number, lng: number) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!lat || !lng || !window.google?.maps) {
+    if (!lat || !lng) {
       return;
     }
 
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
 
-    const elevator = new google.maps.ElevationService();
+    // Use USGS National Map Elevation Point Query Service (free, no API key)
+    const url = `https://epqs.nationalmap.gov/v1/json?x=${lng}&y=${lat}&units=Meters&output=json`;
 
-    elevator.getElevationForLocations(
-      {
-        locations: [{ lat, lng }],
-      },
-      (results, status) => {
-        setLoading(false);
-        if (status === google.maps.ElevationStatus.OK && results && results[0]) {
-          setElevation(results[0].elevation);
+    fetch(url, { signal: controller.signal })
+      .then((res) => res.json())
+      .then((data) => {
+        const elevationValue = data?.value;
+        if (elevationValue !== undefined && elevationValue !== null) {
+          setElevation(Number(elevationValue));
         } else {
           setError('Could not fetch elevation');
         }
-      }
-    );
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          setError('Could not fetch elevation');
+        }
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+
+    return () => controller.abort();
   }, [lat, lng]);
 
   // Convert meters to feet

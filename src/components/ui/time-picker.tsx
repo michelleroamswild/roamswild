@@ -66,16 +66,16 @@ export function TimePicker({
         <Button
           variant="outline"
           className={cn(
-            "h-12 w-full rounded-xl border border-input bg-white px-4 justify-start text-left font-normal text-base hover:bg-white hover:border-primary hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary transition-colors",
+            "h-12 w-full rounded-md border-2 border-primary bg-white dark:bg-background px-4 justify-start text-left font-normal text-base hover:bg-white dark:hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/20 transition-colors",
             !value && "text-muted-foreground",
             className
           )}
         >
-          <Clock className="mr-2 h-4 w-4 text-[hsl(var(--forest))]" />
+          <Clock className="mr-2 h-4 w-4 text-[hsl(var(--forest))] dark:text-foreground" />
           {value ? formatDisplay(value) : <span>{placeholder}</span>}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-4 bg-white" align="start">
+      <PopoverContent className="w-auto p-4 bg-background" align="start">
         <div className="flex gap-4">
           {/* Hours */}
           <div className="space-y-2">
@@ -89,7 +89,7 @@ export function TimePicker({
                     "h-8 w-8 rounded-md text-sm font-medium transition-colors",
                     selectedHour === hour
                       ? "bg-[hsl(var(--forest))] text-white"
-                      : "hover:bg-muted"
+                      : "text-foreground hover:bg-muted"
                   )}
                 >
                   {hour}
@@ -110,7 +110,7 @@ export function TimePicker({
                     "h-8 w-12 rounded-md text-sm font-medium transition-colors",
                     selectedMinute === minute
                       ? "bg-[hsl(var(--forest))] text-white"
-                      : "hover:bg-muted"
+                      : "text-foreground hover:bg-muted"
                   )}
                 >
                   :{minute}
@@ -129,7 +129,7 @@ export function TimePicker({
                   "h-8 w-12 rounded-md text-sm font-medium transition-colors",
                   period === "AM"
                     ? "bg-[hsl(var(--forest))] text-white"
-                    : "hover:bg-muted"
+                    : "text-foreground hover:bg-muted"
                 )}
               >
                 AM
@@ -140,7 +140,7 @@ export function TimePicker({
                   "h-8 w-12 rounded-md text-sm font-medium transition-colors",
                   period === "PM"
                     ? "bg-[hsl(var(--forest))] text-white"
-                    : "hover:bg-muted"
+                    : "text-foreground hover:bg-muted"
                 )}
               >
                 PM

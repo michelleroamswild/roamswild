@@ -239,7 +239,7 @@ const Index = () => {
                 return (
                   <Card
                     key={trip.id}
-                    className="group hover:shadow-[0_12px_40px_rgba(0,0,0,0.25)] hover:-translate-y-1 transition-all duration-300 cursor-pointer h-full bg-card border-border"
+                    className="group hover:shadow-[0_12px_40px_rgba(0,0,0,0.25)] hover:-translate-y-1 transition-all duration-300 cursor-pointer h-full bg-card dark:bg-background border-border"
                     onClick={() => handleTripClick(trip.id, trip.config.name)}
                   >
                     <CardContent className="p-6">

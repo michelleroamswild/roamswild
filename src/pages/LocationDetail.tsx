@@ -162,38 +162,46 @@ const LocationDetail = () => {
     }
   }, [publicLands, nearbyPlaces, nearbyLoading]);
 
-  // Fetch elevation when Google Maps is loaded
+  // Fetch elevation using USGS API
   useEffect(() => {
-    if (!location || !mapsLoaded || !window.google?.maps) return;
+    if (!location) return;
 
-    const elevator = new google.maps.ElevationService();
-    elevator.getElevationForLocations(
-      { locations: [{ lat: location.lat, lng: location.lng }] },
-      (results, status) => {
-        if (status === google.maps.ElevationStatus.OK && results?.[0]) {
-          setElevation(results[0].elevation);
+    const controller = new AbortController();
+    fetch(`https://epqs.nationalmap.gov/v1/json?x=${location.lng}&y=${location.lat}&units=Meters&output=json`, {
+      signal: controller.signal
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.value !== undefined) {
+          setElevation(Number(data.value));
         }
-      }
-    );
-  }, [location, mapsLoaded]);
+      })
+      .catch(() => {});
 
-  // Fetch elevation for selected camp spot
+    return () => controller.abort();
+  }, [location]);
+
+  // Fetch elevation for selected camp spot using USGS API
   useEffect(() => {
-    if (!selectedPlace || !mapsLoaded || !window.google?.maps) {
+    if (!selectedPlace) {
       setSelectedPlaceElevation(null);
       return;
     }
 
-    const elevator = new google.maps.ElevationService();
-    elevator.getElevationForLocations(
-      { locations: [{ lat: selectedPlace.lat, lng: selectedPlace.lng }] },
-      (results, status) => {
-        if (status === google.maps.ElevationStatus.OK && results?.[0]) {
-          setSelectedPlaceElevation(results[0].elevation);
+    const controller = new AbortController();
+    fetch(`https://epqs.nationalmap.gov/v1/json?x=${selectedPlace.lng}&y=${selectedPlace.lat}&units=Meters&output=json`, {
+      signal: controller.signal
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.value !== undefined) {
+          setSelectedPlaceElevation(Number(data.value));
         }
-      }
-    );
-  }, [selectedPlace, mapsLoaded]);
+      })
+      .catch(() => {});
+
+    return () => controller.abort();
+  }, [selectedPlace]);
 
   if (!location) {
     return (
