@@ -737,8 +737,8 @@ async function checkCampgroundAvailability(
 
       // Check each month needed
       for (const monthStart of monthsToCheck) {
-        const params = new URLSearchParams({ start_date: `${monthStart}T00:00:00.000Z` });
-        const availabilityUrl = `/api/recreation-availability/${numericId}/month?${params}`;
+        const params = new URLSearchParams({ id: numericId, start_date: `${monthStart}T00:00:00.000Z` });
+        const availabilityUrl = `/api/recreation-availability?${params}`;
         console.log(`[checkCampgroundAvailability] Fetching: ${availabilityUrl}`);
 
         const response = await fetch(availabilityUrl);
