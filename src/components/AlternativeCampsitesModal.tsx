@@ -376,9 +376,12 @@ async function findAlternativeCampsites(
     .slice(0, 15); // Get more to account for availability filtering
 
   // Check availability for RIDB campsites if trip dates provided
+  console.log(`[findAlternativeCampsites] tripStartDate=${tripStartDate}, tripDuration=${tripDuration}, ridbCount=${nearbyRidb.length}`);
   if (tripStartDate && tripDuration && nearbyRidb.length > 0) {
     const ridbIds = nearbyRidb.map(c => c.id);
+    console.log(`[findAlternativeCampsites] Checking availability for:`, ridbIds);
     const availabilityMap = await checkAvailability(ridbIds, tripStartDate, tripDuration);
+    console.log(`[findAlternativeCampsites] Availability results:`, Array.from(availabilityMap.entries()));
 
     // Update campsites with availability info
     nearbyRidb = nearbyRidb.map(site => {
