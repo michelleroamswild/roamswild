@@ -9,6 +9,16 @@ export interface SunTimes {
   blueHourMorning: TimeRange;
   blueHourEvening: TimeRange;
   solarNoon: Date;
+  // Twilight times
+  civilDawn: Date;      // Sun at -6° (before sunrise)
+  civilDusk: Date;      // Sun at -6° (after sunset)
+  nauticalDawn: Date;   // Sun at -12°
+  nauticalDusk: Date;   // Sun at -12°
+  astronomicalDawn: Date; // Sun at -18°
+  astronomicalDusk: Date; // Sun at -18°
+  // Sun position at key times
+  sunriseAzimuth: number; // Degrees from north
+  sunsetAzimuth: number;  // Degrees from north
 }
 
 /**
@@ -40,6 +50,14 @@ export function getSunTimes(lat: number, lng: number, date: Date = new Date()): 
     end: times.nauticalDusk,
   };
 
+  // Get sun position at sunrise and sunset for azimuth
+  const sunrisePosition = SunCalc.getPosition(times.sunrise, lat, lng);
+  const sunsetPosition = SunCalc.getPosition(times.sunset, lat, lng);
+
+  // Convert azimuth from radians to degrees, and from south-based to north-based
+  const sunriseAzimuth = (sunrisePosition.azimuth * (180 / Math.PI) + 180) % 360;
+  const sunsetAzimuth = (sunsetPosition.azimuth * (180 / Math.PI) + 180) % 360;
+
   return {
     sunrise: times.sunrise,
     sunset: times.sunset,
@@ -48,6 +66,16 @@ export function getSunTimes(lat: number, lng: number, date: Date = new Date()): 
     blueHourMorning,
     blueHourEvening,
     solarNoon: times.solarNoon,
+    // Twilight times
+    civilDawn: times.dawn,
+    civilDusk: times.dusk,
+    nauticalDawn: times.nauticalDawn,
+    nauticalDusk: times.nauticalDusk,
+    astronomicalDawn: times.nightEnd,
+    astronomicalDusk: times.night,
+    // Azimuth
+    sunriseAzimuth,
+    sunsetAzimuth,
   };
 }
 
@@ -139,6 +167,22 @@ export function isBlueHour(lat: number, lng: number, now: Date = new Date()): bo
     (now >= times.blueHourMorning.start && now <= times.blueHourMorning.end) ||
     (now >= times.blueHourEvening.start && now <= times.blueHourEvening.end)
   );
+}
+
+/**
+ * Convert azimuth degrees to compass direction
+ */
+export function azimuthToCompass(azimuth: number): string {
+  const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  const index = Math.round(azimuth / 22.5) % 16;
+  return directions[index];
+}
+
+/**
+ * Format azimuth for display (e.g., "245° WSW")
+ */
+export function formatAzimuth(azimuth: number): string {
+  return `${Math.round(azimuth)}° ${azimuthToCompass(azimuth)}`;
 }
 
 /**
