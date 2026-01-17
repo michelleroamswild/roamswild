@@ -55,6 +55,11 @@ const agencyNames: Record<string, string> = {
   'FWS': 'Fish & Wildlife Service',
   'NPS': 'National Park Service',
   'STATE': 'State Park',
+  'SDOL': 'State Trust Land',
+  'SFW': 'State Fish & Wildlife',
+  'SPR': 'State Parks & Recreation',
+  'SDNR': 'State Natural Resources',
+  'NGO': 'Land Trust',
 };
 
 // Overpass API endpoints for redundancy
@@ -66,6 +71,9 @@ const OVERPASS_ENDPOINTS = [
 // USA Federal Lands service (based on PAD-US ownership data, not administrative boundaries)
 // This excludes private inholdings within forest boundaries
 const USA_FEDERAL_LANDS_URL = 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0/query';
+
+// PAD-US full service for state trust lands and other state-managed lands
+const PAD_US_STATE_LANDS_URL = 'https://services.arcgis.com/v01gqwM5QqNysAAi/ArcGIS/rest/services/Manager_Name/FeatureServer/0/query';
 
 export function usePublicLands(
   centerLat: number,
@@ -159,15 +167,39 @@ export function usePublicLands(
           (
             relation["boundary"="protected_area"]["protection_title"~"State Park|State Recreation Area|State Reserve"](${minLat},${minLng},${maxLat},${maxLng});
             way["boundary"="protected_area"]["protection_title"~"State Park|State Recreation Area|State Reserve"](${minLat},${minLng},${maxLat},${maxLng});
+            relation["boundary"="protected_area"]["owner"~"Trust|Conserv",i](${minLat},${minLng},${maxLat},${maxLng});
+            way["boundary"="protected_area"]["owner"~"Trust|Conserv",i](${minLat},${minLng},${maxLat},${maxLng});
+            relation["boundary"="protected_area"]["operator"~"Trust|Conserv",i](${minLat},${minLng},${maxLat},${maxLng});
+            way["boundary"="protected_area"]["operator"~"Trust|Conserv",i](${minLat},${minLng},${maxLat},${maxLng});
           );
           out geom;
         `;
 
-        console.log('Fetching public lands from BLM SMA, USA Federal Lands (PAD-US), and OSM (state parks)');
-        console.log(`Search area: ${centerLat.toFixed(4)}, ${centerLng.toFixed(4)} - radius ${radiusMiles}mi`);
+        // PAD-US State & NGO Lands query (state trust lands, land trusts, etc.)
+        // SDOL = State Dept of Lands, SFW = State Fish & Wildlife, NGO = Land Trusts
+        const stateLandsParams = new URLSearchParams({
+          where: "(Mang_Type='STAT' AND Mang_Name IN ('SDOL', 'SFW', 'SPR', 'SDNR')) OR Mang_Type='NGO'",
+          geometry: JSON.stringify({
+            xmin: centerLng - (radiusMiles / 50),
+            ymin: centerLat - (radiusMiles / 69),
+            xmax: centerLng + (radiusMiles / 50),
+            ymax: centerLat + (radiusMiles / 69),
+            spatialReference: { wkid: 4326 },
+          }),
+          geometryType: 'esriGeometryEnvelope',
+          inSR: '4326',
+          outSR: '4326',
+          spatialRel: 'esriSpatialRelIntersects',
+          outFields: 'OBJECTID,Unit_Nm,Mang_Name,Mang_Type,Pub_Access,GIS_Acres',
+          returnGeometry: 'true',
+          resultRecordCount: '100',
+          maxAllowableOffset: '0.001',
+          geometryPrecision: '5',
+          f: 'json',
+        });
 
-        // Fetch all three in parallel - handle failures gracefully
-        const [blmResult, federalLandsResult, osmResult] = await Promise.all([
+        // Fetch all four in parallel - handle failures gracefully
+        const [blmResult, federalLandsResult, stateLandsResult, osmResult] = await Promise.all([
           fetch(`/api/blm-sma/BLM_Natl_SMA_Cached_with_PriUnk/MapServer/1/query?${blmParams.toString()}`)
             .then(async (res) => {
               if (!res.ok) {
@@ -190,6 +222,19 @@ export function usePublicLands(
             })
             .catch(err => {
               console.warn('USA Federal Lands fetch failed:', err);
+              return null;
+            }),
+          // Fetch state trust lands from PAD-US
+          fetch(`${PAD_US_STATE_LANDS_URL}?${stateLandsParams.toString()}`)
+            .then(async (res) => {
+              if (!res.ok) {
+                console.warn(`PAD-US State Lands API returned ${res.status}`);
+                return null;
+              }
+              return res.json();
+            })
+            .catch(err => {
+              console.warn('PAD-US State Lands fetch failed:', err);
               return null;
             }),
           // Fetch state parks from OSM
@@ -259,11 +304,45 @@ export function usePublicLands(
           console.error('USA Federal Lands API error:', federalLandsResult.error);
         }
 
-        // Process OSM state parks response
+        // Process PAD-US State Lands response (state trust lands, wildlife areas, etc.)
+        if (stateLandsResult && !stateLandsResult.error && stateLandsResult.features) {
+          console.log(`PAD-US State Lands returned ${stateLandsResult.features.length} features`);
+          // Log breakdown by type
+          const ngoFeatures = stateLandsResult.features.filter((f: any) => f.attributes.Mang_Type === 'NGO');
+          const stateTypeFeatures = stateLandsResult.features.filter((f: any) => f.attributes.Mang_Type === 'STAT');
+          console.log(`  - ${ngoFeatures.length} NGO (land trust) features, ${stateTypeFeatures.length} state type features`);
+          ngoFeatures.forEach((f: any) => {
+            const hasGeom = f.geometry && f.geometry.rings && f.geometry.rings.length > 0;
+            console.log(`    NGO: ${f.attributes.Unit_Nm || 'unnamed'} | Mang_Name=${f.attributes.Mang_Name} | ${hasGeom ? 'has geometry' : 'NO GEOMETRY'}`);
+          });
+          // Transform state lands features to match our format
+          const stateFeatures = stateLandsResult.features.map((f: any) => ({
+            attributes: {
+              OBJECTID: f.attributes.OBJECTID,
+              ADMIN_UNIT_NAME: f.attributes.Unit_Nm || agencyNames[f.attributes.Mang_Name] || 'State Land',
+              ADMIN_AGENCY_CODE: f.attributes.Mang_Name || 'STATE',
+            },
+            geometry: f.geometry,
+            source: 'state',
+          }));
+          features = features.concat(stateFeatures);
+        } else if (stateLandsResult?.error) {
+          console.error('PAD-US State Lands API error:', stateLandsResult.error);
+        } else {
+          console.log('PAD-US State Lands: no result or no features', stateLandsResult);
+        }
+
+        // Process OSM state parks and land trusts response
         if (osmResult && osmResult.elements) {
-          console.log(`OSM returned ${osmResult.elements.length} state park features`);
+          console.log(`OSM returned ${osmResult.elements.length} protected area features`);
           osmResult.elements.forEach((element: any) => {
-            const parkName = element.tags?.name || 'State Park';
+            // Detect if this is a land trust based on owner/operator tags
+            const owner = element.tags?.owner || '';
+            const operator = element.tags?.operator || '';
+            const isLandTrust = /trust|conserv/i.test(owner) || /trust|conserv/i.test(operator);
+            const agencyCode = isLandTrust ? 'NGO' : 'STATE';
+            const defaultName = isLandTrust ? 'Land Trust' : 'State Park';
+            const parkName = element.tags?.name || defaultName;
 
             // Get the geometry - ways have geometry directly, relations have it in members
             let coords: { lat: number; lng: number }[] = [];
@@ -301,7 +380,7 @@ export function usePublicLands(
                         attributes: {
                           OBJECTID: `${element.id}-${idx}`,
                           ADMIN_UNIT_NAME: parkName,
-                          ADMIN_AGENCY_CODE: 'STATE',
+                          ADMIN_AGENCY_CODE: agencyCode,
                         },
                         geometry: { rings: [ring] },
                         source: 'osm',
@@ -415,7 +494,7 @@ export function usePublicLands(
                 attributes: {
                   OBJECTID: element.id,
                   ADMIN_UNIT_NAME: element.tags?.name || 'State Park',
-                  ADMIN_AGENCY_CODE: 'STATE',
+                  ADMIN_AGENCY_CODE: agencyCode,
                 },
                 geometry: { rings: [ring] },
                 source: 'osm',
@@ -443,7 +522,7 @@ export function usePublicLands(
 
           const agencyCode = f.attributes.ADMIN_AGENCY_CODE || 'UNK';
           const baseName = f.attributes.ADMIN_UNIT_NAME || agencyNames[agencyCode] || 'Public Land';
-          const isLatLngFormat = f.source === 'federal' || f.source === 'osm';
+          const isLatLngFormat = f.source === 'federal' || f.source === 'state' || f.source === 'osm';
 
           // Process all rings - BLM land can have many separate parcels stored as different rings
           // Limit to first 500 rings to avoid performance issues with highly fragmented land

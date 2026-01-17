@@ -215,9 +215,9 @@ const DispersedExplorer = () => {
     const usfsPolygons = publicLands.filter(l => l.managingAgency === 'USFS' || l.managingAgency === 'FS').length;
     const npsPolygons = publicLands.filter(l => l.managingAgency === 'NPS').length;
     const statePolygons = publicLands.filter(l => l.managingAgency === 'STATE').length;
-    const publicLandSpots = derivedSpots.filter(s => s.isOnPublicLand).length;
-    const filterOnlyPolygons = publicLands.filter(l => !l.renderOnMap).length;
-    console.log(`Filtered spots: ${campSites.length} camps, ${filteredDerived.length}/${derivedSpots.length} derived (${derivedSpots.filter(s => s.isOnMVUMRoad).length} MVUM, ${derivedSpots.filter(s => s.isOnBLMRoad).length} BLM road, ${publicLandSpots} public land) | Polygons: ${blmPolygons} BLM, ${usfsPolygons} USFS, ${npsPolygons} NPS, ${statePolygons} State, ${publicLands.length} total (${filterOnlyPolygons} filter-only)`);
+    const stateTrustPolygons = publicLands.filter(l => ['SDOL', 'SFW', 'SPR', 'SDNR'].includes(l.managingAgency)).length;
+    const landTrustPolygons = publicLands.filter(l => l.managingAgency === 'NGO').length;
+    console.log(`Polygons: ${blmPolygons} BLM, ${usfsPolygons} USFS, ${npsPolygons} NPS, ${statePolygons} State Park, ${stateTrustPolygons} State Trust, ${landTrustPolygons} Land Trust, ${publicLands.length} total`);
 
     const allSpots = [...campSites, ...filteredDerived];
 
@@ -625,9 +625,13 @@ const DispersedExplorer = () => {
               const isBLM = land.managingAgency === 'BLM';
               const isNPS = land.managingAgency === 'NPS';
               const isState = land.managingAgency === 'STATE';
-              // orange for BLM, purple for NPS, blue for State Parks, green for USFS
-              const fillColor = isBLM ? '#d97706' : isNPS ? '#7c3aed' : isState ? '#3b82f6' : '#10b981';
-              const strokeColor = isBLM ? '#b45309' : isNPS ? '#6d28d9' : isState ? '#2563eb' : '#059669';
+              // State trust lands (SDOL=State Dept of Lands, SFW=State Fish & Wildlife, etc.)
+              const isStateTrust = ['SDOL', 'SFW', 'SPR', 'SDNR'].includes(land.managingAgency);
+              // Land trusts (NGO = Mojave Desert Land Trust, etc.)
+              const isLandTrust = land.managingAgency === 'NGO';
+              // orange for BLM, purple for NPS, blue for State Parks, cyan for State Trust, pink for Land Trust, green for USFS
+              const fillColor = isBLM ? '#d97706' : isNPS ? '#7c3aed' : isState ? '#3b82f6' : isStateTrust ? '#06b6d4' : isLandTrust ? '#ec4899' : '#10b981';
+              const strokeColor = isBLM ? '#b45309' : isNPS ? '#6d28d9' : isState ? '#2563eb' : isStateTrust ? '#0891b2' : isLandTrust ? '#db2777' : '#059669';
 
               return (
                 <Polygon
@@ -1242,6 +1246,14 @@ const DispersedExplorer = () => {
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 bg-blue-500/30 border border-blue-600 rounded" />
                           <span>State Park</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-cyan-500/30 border border-cyan-600 rounded" />
+                          <span>State Trust</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-pink-500/30 border border-pink-600 rounded" />
+                          <span>Land Trust</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 bg-purple-500 rounded-full" />
