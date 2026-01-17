@@ -5,6 +5,7 @@ export interface PublicLand {
   name: string;
   managingAgency: string; // BLM, USFS, etc.
   managingAgencyFull: string;
+  unitName?: string; // Full unit name (e.g., "Lake Mead National Recreation Area")
   lat: number;
   lng: number;
   distance: number;
@@ -60,6 +61,7 @@ const agencyNames: Record<string, string> = {
   'SPR': 'State Parks & Recreation',
   'SDNR': 'State Natural Resources',
   'NGO': 'Land Trust',
+  'TRIB': 'Tribal Land',
 };
 
 // Overpass API endpoints for redundancy
@@ -178,7 +180,7 @@ export function usePublicLands(
         // PAD-US State & NGO Lands query (state trust lands, land trusts, etc.)
         // SDOL = State Dept of Lands, SFW = State Fish & Wildlife, NGO = Land Trusts
         const stateLandsParams = new URLSearchParams({
-          where: "(Mang_Type='STAT' AND Mang_Name IN ('SDOL', 'SFW', 'SPR', 'SDNR')) OR Mang_Type='NGO'",
+          where: "(Mang_Type='STAT' AND Mang_Name IN ('SDOL', 'SFW', 'SPR', 'SDNR')) OR Mang_Type='NGO' OR Mang_Type='TRIB'",
           geometry: JSON.stringify({
             xmin: centerLng - (radiusMiles / 50),
             ymin: centerLat - (radiusMiles / 69),
@@ -304,27 +306,32 @@ export function usePublicLands(
           console.error('USA Federal Lands API error:', federalLandsResult.error);
         }
 
-        // Process PAD-US State Lands response (state trust lands, wildlife areas, etc.)
+        // Process PAD-US State Lands response (state trust lands, wildlife areas, tribal lands, etc.)
         if (stateLandsResult && !stateLandsResult.error && stateLandsResult.features) {
           console.log(`PAD-US State Lands returned ${stateLandsResult.features.length} features`);
           // Log breakdown by type
           const ngoFeatures = stateLandsResult.features.filter((f: any) => f.attributes.Mang_Type === 'NGO');
           const stateTypeFeatures = stateLandsResult.features.filter((f: any) => f.attributes.Mang_Type === 'STAT');
-          console.log(`  - ${ngoFeatures.length} NGO (land trust) features, ${stateTypeFeatures.length} state type features`);
+          const tribalFeatures = stateLandsResult.features.filter((f: any) => f.attributes.Mang_Type === 'TRIB');
+          console.log(`  - ${ngoFeatures.length} NGO (land trust), ${stateTypeFeatures.length} state, ${tribalFeatures.length} tribal features`);
           ngoFeatures.forEach((f: any) => {
             const hasGeom = f.geometry && f.geometry.rings && f.geometry.rings.length > 0;
             console.log(`    NGO: ${f.attributes.Unit_Nm || 'unnamed'} | Mang_Name=${f.attributes.Mang_Name} | ${hasGeom ? 'has geometry' : 'NO GEOMETRY'}`);
           });
           // Transform state lands features to match our format
-          const stateFeatures = stateLandsResult.features.map((f: any) => ({
-            attributes: {
-              OBJECTID: f.attributes.OBJECTID,
-              ADMIN_UNIT_NAME: f.attributes.Unit_Nm || agencyNames[f.attributes.Mang_Name] || 'State Land',
-              ADMIN_AGENCY_CODE: f.attributes.Mang_Name || 'STATE',
-            },
-            geometry: f.geometry,
-            source: 'state',
-          }));
+          // For tribal lands, use 'TRIB' as the agency code (Mang_Type) instead of Mang_Name (which is the tribe name)
+          const stateFeatures = stateLandsResult.features.map((f: any) => {
+            const isTribal = f.attributes.Mang_Type === 'TRIB';
+            return {
+              attributes: {
+                OBJECTID: f.attributes.OBJECTID,
+                ADMIN_UNIT_NAME: f.attributes.Unit_Nm || agencyNames[f.attributes.Mang_Name] || (isTribal ? 'Tribal Land' : 'State Land'),
+                ADMIN_AGENCY_CODE: isTribal ? 'TRIB' : (f.attributes.Mang_Name || 'STATE'),
+              },
+              geometry: f.geometry,
+              source: isTribal ? 'tribal' : 'state',
+            };
+          });
           features = features.concat(stateFeatures);
         } else if (stateLandsResult?.error) {
           console.error('PAD-US State Lands API error:', stateLandsResult.error);
@@ -574,8 +581,10 @@ export function usePublicLands(
 
             // Very large polygons (>5000 vertices) still work for point-in-polygon filtering
             // but skip rendering to avoid performance issues
+            // Tribal lands are used for filtering only - no overlay shown
             const MAX_RENDER_VERTICES = 5000;
-            const renderOnMap = vertexCount <= MAX_RENDER_VERTICES;
+            const isTribalLand = agencyCode === 'TRIB';
+            const renderOnMap = !isTribalLand && vertexCount <= MAX_RENDER_VERTICES;
 
             if (!renderOnMap) {
               console.log(`Large polygon ${baseName} (${agencyCode}) has ${vertexCount} vertices - using for filtering only`);
@@ -586,6 +595,7 @@ export function usePublicLands(
               name: baseName,
               managingAgency: agencyCode,
               managingAgencyFull: agencyNames[agencyCode] || agencyCode,
+              unitName: f.attributes.ADMIN_UNIT_NAME,
               lat: centroidLat,
               lng: centroidLng,
               distance,
