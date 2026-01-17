@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   PhotoWeatherData,
   PhotoWeatherForecast,
@@ -275,139 +275,182 @@ export function usePhotoWeather(
   const [forecast, setForecast] = useState<PhotoWeatherForecast | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fetchedAt, setFetchedAt] = useState<Date | null>(null);
 
-  useEffect(() => {
+  const fetchWeather = useCallback(async (skipCache: boolean = false) => {
     // Validate inputs
     if (!lat || !lng) return;
     if (lat === 0 && lng === 0) return;
 
-    // Check cache
     const cacheKey = getCacheKey(lat, lng);
-    const cached = weatherCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-      setForecast(cached.data);
-      return;
+
+    // Check cache unless skipping
+    if (!skipCache) {
+      const cached = weatherCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        setForecast(cached.data);
+        setFetchedAt(new Date(cached.timestamp));
+        return;
+      }
+    } else {
+      // Clear this location's cache when forcing refresh
+      weatherCache.delete(cacheKey);
     }
 
-    const fetchWeather = async () => {
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        // Use Supabase Edge Function proxy (API key stored securely on server)
-        const { data: { session } } = await supabase.auth.getSession();
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    try {
+      // Use Supabase Edge Function proxy (API key stored securely on server)
+      const { data: { session } } = await supabase.auth.getSession();
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
-        const params = new URLSearchParams({
-          endpoint: '/weather/forecast',
-          location: `${lat},${lng}`,
-          timesteps: '1h,1d',
-          units: 'metric',
+      const params = new URLSearchParams({
+        endpoint: '/weather/forecast',
+        location: `${lat},${lng}`,
+        timesteps: '1h,1d',
+        units: 'metric',
+      });
+
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const response = await fetch(`${supabaseUrl}/functions/v1/weather-proxy?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${session?.access_token || anonKey}`,
+          'apikey': anonKey,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data: TomorrowioResponse = await response.json();
+
+      if (!data.timelines?.hourly?.length) {
+        throw new Error('Invalid API response');
+      }
+
+      const hourlyData = data.timelines.hourly;
+      const dailyData = data.timelines.daily;
+
+      // Get all hourly values and timestamps for trend analysis
+      const hourlyValues = hourlyData.slice(0, 24).map(d => d.values);
+      const hourlyTimestamps = hourlyData.slice(0, 24).map(d => new Date(d.time));
+
+      // Process current conditions
+      const now = new Date();
+      const currentValues = hourlyData[0].values;
+      const current = processWeatherData(
+        currentValues,
+        lat,
+        lng,
+        elevationMeters,
+        now,
+        0,
+        hourlyValues,
+        hourlyTimestamps
+      );
+
+      // Process hourly data
+      const hourly: PhotoWeatherData[] = hourlyData
+        .slice(0, 48) // Next 48 hours
+        .map((dataPoint, index) => {
+          const timestamp = new Date(dataPoint.time);
+          return processWeatherData(
+            dataPoint.values,
+            lat,
+            lng,
+            elevationMeters,
+            timestamp,
+            index,
+            hourlyValues,
+            hourlyTimestamps
+          );
         });
 
-        const response = await fetch(`${supabaseUrl}/functions/v1/weather-proxy?${params}`, {
-          headers: {
-            'Authorization': `Bearer ${session?.access_token || ''}`,
-            'Content-Type': 'application/json',
-          },
-        });
+      // Create daily summaries
+      const daily: DailyPhotoSummary[] = [];
+      const todayStr = now.toDateString();
 
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
-        }
+      if (dailyData?.length) {
+        for (let i = 0; i < Math.min(5, dailyData.length); i++) {
+          const dayDate = new Date(dailyData[i].time);
+          const isToday = dayDate.toDateString() === todayStr;
 
-        const data: TomorrowioResponse = await response.json();
+          // For today, use the current conditions to ensure consistency
+          // between PhotoWeatherCard and FiveDayPhotoForecast
+          if (isToday && current.conditions) {
+            const conditions = current.conditions;
+            let bestTime: 'sunrise' | 'sunset' | 'either' = 'either';
+            if (conditions.timing.recommendation === 'sunrise') {
+              bestTime = 'sunrise';
+            } else if (conditions.timing.recommendation === 'sunset' ||
+                       conditions.timing.recommendation === 'stay-after') {
+              bestTime = 'sunset';
+            }
 
-        if (!data.timelines?.hourly?.length) {
-          throw new Error('Invalid API response');
-        }
+            daily.push({
+              date: dayDate,
+              conditions,
+              bestTime,
+              summary: conditions.headline,
+            });
+            continue;
+          }
 
-        const hourlyData = data.timelines.hourly;
-        const dailyData = data.timelines.daily;
-
-        // Get all hourly values and timestamps for trend analysis
-        const hourlyValues = hourlyData.slice(0, 24).map(d => d.values);
-        const hourlyTimestamps = hourlyData.slice(0, 24).map(d => new Date(d.time));
-
-        // Process current conditions
-        const now = new Date();
-        const currentValues = hourlyData[0].values;
-        const current = processWeatherData(
-          currentValues,
-          lat,
-          lng,
-          elevationMeters,
-          now,
-          0,
-          hourlyValues,
-          hourlyTimestamps
-        );
-
-        // Process hourly data
-        const hourly: PhotoWeatherData[] = hourlyData
-          .slice(0, 48) // Next 48 hours
-          .map((dataPoint, index) => {
-            const timestamp = new Date(dataPoint.time);
-            return processWeatherData(
-              dataPoint.values,
-              lat,
-              lng,
-              elevationMeters,
-              timestamp,
-              index,
-              hourlyValues,
-              hourlyTimestamps
-            );
+          const dayHourly = hourly.filter((h) => {
+            const hDate = new Date(h.timestamp);
+            return hDate.toDateString() === dayDate.toDateString();
           });
 
-        // Create daily summaries
-        const daily: DailyPhotoSummary[] = [];
-        if (dailyData?.length) {
-          for (let i = 0; i < Math.min(5, dailyData.length); i++) {
-            const dayDate = new Date(dailyData[i].time);
-            const dayHourly = hourly.filter((h) => {
-              const hDate = new Date(h.timestamp);
-              return hDate.toDateString() === dayDate.toDateString();
-            });
-
-            if (dayHourly.length > 0) {
-              // Use hourly data for detailed forecast
-              daily.push(createDailySummary(dayDate, dayHourly));
-            } else {
-              // Use daily data for days without hourly coverage
-              daily.push(createDailySummaryFromDailyData(
-                dayDate,
-                dailyData[i].values,
-                lat,
-                lng,
-                elevationMeters
-              ));
-            }
+          if (dayHourly.length > 0) {
+            // Use hourly data for detailed forecast
+            daily.push(createDailySummary(dayDate, dayHourly));
+          } else {
+            // Use daily data for days without hourly coverage
+            daily.push(createDailySummaryFromDailyData(
+              dayDate,
+              dailyData[i].values,
+              lat,
+              lng,
+              elevationMeters
+            ));
           }
         }
-
-        const result: PhotoWeatherForecast = {
-          current,
-          hourly,
-          daily,
-        };
-
-        // Cache the result
-        weatherCache.set(cacheKey, { data: result, timestamp: Date.now() });
-
-        setForecast(result);
-      } catch (err) {
-        console.error('Photo weather fetch error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch weather');
-      } finally {
-        setLoading(false);
       }
-    };
 
-    fetchWeather();
+      const result: PhotoWeatherForecast = {
+        current,
+        hourly,
+        daily,
+      };
+
+      // Cache the result
+      const fetchTime = Date.now();
+      weatherCache.set(cacheKey, { data: result, timestamp: fetchTime });
+
+      setForecast(result);
+      setFetchedAt(new Date(fetchTime));
+    } catch (err) {
+      console.error('Photo weather fetch error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch weather');
+    } finally {
+      setLoading(false);
+    }
   }, [lat, lng, elevationMeters]);
 
-  return { forecast, loading, error };
+  // Initial fetch on mount/change
+  useEffect(() => {
+    fetchWeather(false);
+  }, [fetchWeather]);
+
+  // Refetch function that bypasses cache
+  const refetch = useCallback(() => {
+    fetchWeather(true);
+  }, [fetchWeather]);
+
+  return { forecast, loading, error, fetchedAt, refetch };
 }
 
 /**
@@ -453,9 +496,11 @@ export function useMultiLocationPhotoWeather(
             units: 'metric',
           });
 
+          const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
           const response = await fetch(`${supabaseUrl}/functions/v1/weather-proxy?${params}`, {
             headers: {
-              'Authorization': `Bearer ${session?.access_token || ''}`,
+              'Authorization': `Bearer ${session?.access_token || anonKey}`,
+              'apikey': anonKey,
               'Content-Type': 'application/json',
             },
           });

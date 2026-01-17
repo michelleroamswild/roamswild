@@ -25,6 +25,7 @@ import {
   Star,
   Compass,
   Image,
+  ArrowsClockwise,
 } from '@phosphor-icons/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PhotoWeatherForecast, ConditionInsight, PhotoConditions, ShotSuggestion, TimeSpecificForecast } from '@/types/weather';
@@ -35,6 +36,8 @@ interface PhotoWeatherCardProps {
   loading?: boolean;
   error?: string | null;
   locationName?: string;
+  fetchedAt?: Date | null;
+  onRefresh?: () => void;
 }
 
 // Map icon strings to Phosphor icons
@@ -162,11 +165,28 @@ function getTimeSpecificBadge(overall: TimeSpecificForecast['overall']) {
   }
 }
 
+// Format relative time (e.g., "5 min ago")
+function formatRelativeTime(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins === 1) return '1 min ago';
+  if (diffMins < 60) return `${diffMins} min ago`;
+
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours === 1) return '1 hour ago';
+  return `${diffHours} hours ago`;
+}
+
 export function PhotoWeatherCard({
   forecast,
   loading = false,
   error = null,
   locationName,
+  fetchedAt,
+  onRefresh,
 }: PhotoWeatherCardProps) {
   if (loading) {
     return (
@@ -220,24 +240,10 @@ export function PhotoWeatherCard({
   const overallBadge = getOverallBadge(conditions.overall);
   const OverallIcon = overallBadge.icon;
 
-  // Collect all insights for display (excluding wind direction which shows separately)
-  const allInsights = [
-    ...conditions.sky.filter(i => !i.label.includes('Clouds Favor') && !i.label.includes('Clouds Moving')),
-    ...conditions.atmosphere,
-    ...conditions.precipitation,
-    ...conditions.wind,
-    ...conditions.humidity,
-  ];
-
-  // Get wind direction insight separately
+  // Get wind direction insight separately for display
   const windDirectionInsight = conditions.sky.find(i =>
     i.label.includes('Clouds Favor') || i.label.includes('Clouds Moving')
   );
-
-  // Add inversion if present
-  if (conditions.inversion) {
-    allInsights.push(conditions.inversion);
-  }
 
   return (
     <Card>
@@ -258,10 +264,10 @@ export function PhotoWeatherCard({
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Headline Summary */}
+        {/* Headline Summary - Use sunset forecast for relevance */}
         <div className="bg-gradient-to-r from-blushorchid/10 to-primary/5 rounded-lg p-4 border border-blushorchid/20">
           <p className="text-sm font-medium text-foreground leading-relaxed">
-            {conditions.headline}
+            {conditions.sunsetForecast?.conditions[0]?.description || conditions.headline}
           </p>
         </div>
 
@@ -435,35 +441,37 @@ export function PhotoWeatherCard({
           </div>
         </div>
 
-        {/* Condition Insights */}
-        <div className="space-y-2">
-          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Current Conditions
-          </h4>
+        {/* Sunset Condition Details */}
+        {conditions.sunsetForecast?.conditions && conditions.sunsetForecast.conditions.length > 0 && (
           <div className="space-y-2">
-            {allInsights.slice(0, 5).map((insight, index) => {
-              const InsightIcon = getInsightIcon(insight.icon);
-              return (
-                <div
-                  key={index}
-                  className={`flex items-start gap-2.5 p-2.5 rounded-lg border ${getImpactColor(insight.impact)}`}
-                >
-                  <InsightIcon className="w-4 h-4 mt-0.5 flex-shrink-0" weight="duotone" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{insight.label}</p>
-                    <p className="text-xs opacity-80 mt-0.5">{insight.description}</p>
+            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Sunset Conditions
+            </h4>
+            <div className="space-y-2">
+              {conditions.sunsetForecast.conditions.map((insight, index) => {
+                const InsightIcon = getInsightIcon(insight.icon);
+                return (
+                  <div
+                    key={index}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-lg border ${getImpactColor(insight.impact)}`}
+                  >
+                    <InsightIcon className="w-4 h-4 mt-0.5 flex-shrink-0" weight="duotone" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{insight.label}</p>
+                      <p className="text-xs opacity-80 mt-0.5">{insight.description}</p>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Raw Metrics (collapsible summary) */}
+        {/* Raw Metrics (collapsible summary) - Current conditions */}
         <details className="group">
           <summary className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
             <ThermometerSimple className="w-3.5 h-3.5" />
-            <span>View raw data</span>
+            <span>View current conditions</span>
           </summary>
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
             <div className="flex justify-between p-2 bg-muted/30 rounded">
@@ -497,7 +505,7 @@ export function PhotoWeatherCard({
           </div>
         </details>
 
-        {/* Confidence */}
+        {/* Confidence & Last Updated */}
         <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
           <span>Forecast confidence</span>
           <span className="font-medium">
@@ -509,6 +517,25 @@ export function PhotoWeatherCard({
             ({conditions.confidence}%)
           </span>
         </div>
+
+        {/* Last Updated & Refresh */}
+        {(fetchedAt || onRefresh) && (
+          <div className="flex items-center justify-between text-xs text-muted-foreground pt-2">
+            {fetchedAt && (
+              <span>Updated {formatRelativeTime(fetchedAt)}</span>
+            )}
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                disabled={loading}
+                className="flex items-center gap-1 text-primary hover:text-primary/80 disabled:opacity-50 font-medium"
+              >
+                <ArrowsClockwise className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

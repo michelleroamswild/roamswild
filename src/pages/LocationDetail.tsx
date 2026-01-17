@@ -137,7 +137,7 @@ const LocationDetail = () => {
   );
 
   // Get photography weather conditions
-  const { forecast: photoWeather, loading: photoWeatherLoading, error: photoWeatherError } = usePhotoWeather(
+  const { forecast: photoWeather, loading: photoWeatherLoading, error: photoWeatherError, fetchedAt: photoWeatherFetchedAt, refetch: refetchPhotoWeather } = usePhotoWeather(
     location?.lat ?? 0,
     location?.lng ?? 0,
     elevation ?? 0
@@ -792,6 +792,8 @@ const LocationDetail = () => {
               forecast={photoWeather}
               loading={photoWeatherLoading}
               error={photoWeatherError}
+              fetchedAt={photoWeatherFetchedAt}
+              onRefresh={refetchPhotoWeather}
             />
 
             {/* Plan a Trip */}
