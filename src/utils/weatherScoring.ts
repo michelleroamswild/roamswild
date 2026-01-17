@@ -759,28 +759,53 @@ export function createTimeSpecificForecast(
   const windDirection = data.windDirection;
 
   // Cloud analysis for this time
-  if (cloudCover >= 20 && cloudCover <= 60 && cloudBase !== null && cloudBase >= 3) {
-    conditions.push({
-      label: type === 'sunset' ? 'Good Sunset Clouds' : 'Good Sunrise Clouds',
-      description: `${Math.round(cloudCover)}% cloud cover at ideal height for color`,
-      impact: 'positive',
-      icon: 'clouds-sun',
-    });
-  } else if (cloudCover > 85) {
+  if (cloudCover > 85) {
     conditions.push({
       label: 'Heavy Cloud Cover',
       description: `${Math.round(cloudCover)}% clouds may block direct light`,
       impact: 'caution',
       icon: 'cloud-heavy',
     });
-  } else if (cloudCover >= 60 && cloudCover <= 85) {
+  } else if (cloudCover >= 60) {
     conditions.push({
-      label: 'Partly Cloudy',
-      description: `${Math.round(cloudCover)}% coverage — watch for dramatic breaks`,
+      label: 'Mostly Cloudy',
+      description: `${Math.round(cloudCover)}% coverage — watch for dramatic breaks in clouds`,
       impact: 'neutral',
       icon: 'clouds',
     });
-  } else if (cloudCover >= 15 && cloudCover < 20) {
+  } else if (cloudCover >= 20 && cloudBase !== null && cloudBase >= 5) {
+    // High clouds at good coverage - ideal for color
+    conditions.push({
+      label: type === 'sunset' ? 'Good Sunset Clouds' : 'Good Sunrise Clouds',
+      description: `${Math.round(cloudCover)}% high cloud cover — excellent for catching color`,
+      impact: 'positive',
+      icon: 'clouds-sun',
+    });
+  } else if (cloudCover >= 20 && cloudBase !== null && cloudBase >= 2) {
+    // Mid-level clouds
+    conditions.push({
+      label: 'Mid-Level Clouds',
+      description: `${Math.round(cloudCover)}% cloud cover at ${cloudBase.toFixed(1)}km — good texture potential`,
+      impact: 'positive',
+      icon: 'clouds-sun',
+    });
+  } else if (cloudCover >= 20) {
+    // Clouds present but low or unknown height
+    conditions.push({
+      label: 'Cloudy',
+      description: `${Math.round(cloudCover)}% cloud cover — conditions may vary`,
+      impact: 'neutral',
+      icon: 'clouds',
+    });
+  } else if (cloudCover >= 10 && cloudBase !== null && cloudBase >= 6) {
+    // Light high cirrus - still good for color
+    conditions.push({
+      label: 'High Cirrus',
+      description: `Light wispy clouds at high altitude — can add subtle color`,
+      impact: 'positive',
+      icon: 'cloud-high',
+    });
+  } else if (cloudCover >= 10) {
     conditions.push({
       label: 'Light Clouds',
       description: `${Math.round(cloudCover)}% coverage — subtle color accents possible`,
@@ -789,7 +814,7 @@ export function createTimeSpecificForecast(
     });
   } else {
     conditions.push({
-      label: 'Clear Sky Expected',
+      label: 'Clear Sky',
       description: 'Minimal clouds — clean gradient light, good for silhouettes',
       impact: 'neutral',
       icon: 'sun',
@@ -820,6 +845,73 @@ export function createTimeSpecificForecast(
       description: `${visibility.toFixed(0)}km visibility — crisp, clear conditions`,
       impact: 'positive',
       icon: 'eye',
+    });
+  } else if (visibility >= 10 && visibility <= 20) {
+    conditions.push({
+      label: 'Good Visibility',
+      description: `Light haze may add atmospheric depth to photos`,
+      impact: 'neutral',
+      icon: 'layers',
+    });
+  }
+
+  // Wind conditions at target time
+  const windSpeed = data.windSpeed ?? 0;
+  const windGust = data.windGust ?? 0;
+  const windMph = windSpeed * 2.237;
+  const gustMph = windGust * 2.237;
+
+  if (windMph < 5) {
+    conditions.push({
+      label: 'Calm Winds',
+      description: 'Still air — water reflections will be mirror-like',
+      impact: 'positive',
+      icon: 'water',
+    });
+  } else if (windMph >= 5 && windMph <= 15) {
+    conditions.push({
+      label: 'Light Breeze',
+      description: `${Math.round(windMph)} mph winds — gentle movement in foliage`,
+      impact: 'neutral',
+      icon: 'wind-light',
+    });
+  } else if (windMph > 15) {
+    conditions.push({
+      label: 'Windy',
+      description: `${Math.round(windMph)} mph winds — use sturdy tripod`,
+      impact: 'caution',
+      icon: 'wind-strong',
+    });
+  }
+
+  if (gustMph > 25) {
+    conditions.push({
+      label: 'Strong Gusts',
+      description: `Gusts to ${Math.round(gustMph)} mph — not ideal for drones`,
+      impact: 'negative',
+      icon: 'drone-warning',
+    });
+  }
+
+  // Humidity at target time
+  const humidity = data.humidity ?? 50;
+  const temp = data.temperature ?? 15;
+  const dewPoint = data.dewPoint ?? 10;
+  const dewDiff = temp - dewPoint;
+
+  if (humidity < 40) {
+    conditions.push({
+      label: 'Dry Air',
+      description: 'Low humidity — crisp light with sharp contrast',
+      impact: 'positive',
+      icon: 'sparkle',
+    });
+  } else if (dewDiff <= 3 && humidity >= 85) {
+    conditions.push({
+      label: 'Fog Possible',
+      description: 'Conditions favor mist or fog — moody atmosphere',
+      impact: 'positive',
+      icon: 'fog',
     });
   }
 
