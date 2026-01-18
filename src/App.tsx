@@ -31,6 +31,7 @@ import DispersedExplorer from "./pages/DispersedExplorer";
 import StyleGuide from "./pages/StyleGuide";
 import RidbTest from "./pages/RidbTest";
 import PhotoWeatherTest from "./pages/PhotoWeatherTest";
+import TerrainValidation from "./pages/TerrainValidation";
 
 const showDevFeatures = import.meta.env.VITE_ENABLE_DEV_FEATURES === 'true';
 
@@ -92,6 +93,7 @@ const App = () => (
                   <Route path="/style-guide" element={<StyleGuide />} />
                   <Route path="/ridb-test" element={<RidbTest />} />
                   <Route path="/photo-weather-test" element={<PhotoWeatherTest />} />
+                  <Route path="/terrain-validation" element={<TerrainValidation />} />
 
                   {/* Catch-all */}
                   <Route path="*" element={<NotFound />} />
