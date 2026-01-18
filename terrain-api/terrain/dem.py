@@ -4,10 +4,12 @@ DEM (Digital Elevation Model) fetching and grid management.
 Uses Open-Meteo API for elevation data on a regular grid.
 """
 
+from __future__ import annotations
 import numpy as np
 import httpx
 from dataclasses import dataclass
 from math import radians, cos
+from typing import List, Tuple
 
 
 @dataclass
@@ -147,9 +149,9 @@ async def fetch_dem_grid(
 
 
 async def _fetch_elevations_batch(
-    points: list[tuple[float, float]],
-    batch_size: int = 100,
-) -> list[float]:
+    points: List[Tuple[float, float]],
+    batch_size: int = 50,
+) -> List[float]:
     """
     Fetch elevations for a list of points using Open-Meteo API.
 
@@ -160,6 +162,8 @@ async def _fetch_elevations_batch(
     Returns:
         List of elevations in meters
     """
+    import asyncio
+
     elevations = []
 
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -171,8 +175,17 @@ async def _fetch_elevations_batch(
 
             url = f"https://api.open-meteo.com/v1/elevation?latitude={lats_str}&longitude={lons_str}"
 
-            response = await client.get(url)
-            response.raise_for_status()
+            # Retry with exponential backoff
+            for attempt in range(3):
+                try:
+                    response = await client.get(url)
+                    response.raise_for_status()
+                    break
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 429 and attempt < 2:
+                        await asyncio.sleep(1.0 * (attempt + 1))
+                        continue
+                    raise
 
             data = response.json()
             batch_elevations = data.get("elevation", [])
@@ -182,6 +195,10 @@ async def _fetch_elevations_batch(
                 batch_elevations = [batch_elevations]
 
             elevations.extend(batch_elevations)
+
+            # Rate limit: wait between batches
+            if i + batch_size < len(points):
+                await asyncio.sleep(0.2)
 
     return elevations
 

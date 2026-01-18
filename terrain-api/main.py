@@ -36,6 +36,7 @@ class AnalyzeRequestModel(BaseModel):
     date: str = Field(..., description="Date in ISO format (YYYY-MM-DD)")
     event: Literal["sunrise", "sunset"] = Field(..., description="Event type")
     radius_km: float = Field(2.0, description="Analysis radius in km", ge=0.5, le=10)
+    use_synthetic: bool = Field(False, description="Use synthetic DEM for testing")
 
 
 def dataclass_to_dict(obj):
@@ -75,7 +76,7 @@ async def analyze(request: AnalyzeRequestModel):
             radius_km=request.radius_km,
         )
 
-        result = await analyze_terrain(internal_request)
+        result = await analyze_terrain(internal_request, use_synthetic=request.use_synthetic)
 
         # Convert dataclasses to JSON-serializable dict
         return dataclass_to_dict(result)

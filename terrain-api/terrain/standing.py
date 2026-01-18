@@ -3,6 +3,7 @@ Standing location finder: where should the photographer stand?
 
 Finds flat ground with clear line of sight to the subject.
 """
+from __future__ import annotations
 
 import math
 from dataclasses import dataclass

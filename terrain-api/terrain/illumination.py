@@ -3,6 +3,7 @@ Sun-surface illumination calculations.
 
 Computes incidence angles, glow scores, and optimal lighting windows.
 """
+from __future__ import annotations
 
 import math
 from dataclasses import dataclass

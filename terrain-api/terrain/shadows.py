@@ -3,6 +3,7 @@ Shadow checking: verify sun visibility from a point.
 
 Uses ray marching to check if terrain blocks the sun.
 """
+from __future__ import annotations
 
 import math
 from .dem import DEMGrid

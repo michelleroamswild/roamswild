@@ -3,6 +3,7 @@ Main terrain analysis pipeline.
 
 Orchestrates all modules to produce a complete analysis result.
 """
+from __future__ import annotations
 
 import uuid
 from datetime import datetime
@@ -11,7 +12,7 @@ from .types import (
     Subject, SubjectProperties, SubjectValidation,
     StandingLocation,
 )
-from .dem import fetch_dem_grid, DEMGrid
+from .dem import fetch_dem_grid, create_synthetic_dem, DEMGrid
 from .sun import generate_sun_track
 from .analysis import (
     compute_slope_aspect, compute_surface_normals,
@@ -23,12 +24,16 @@ from .shadows import check_shadow_at_peak
 from .standing import find_standing_location
 
 
-async def analyze_terrain(request: AnalyzeRequest) -> TerrainAnalysisResult:
+async def analyze_terrain(
+    request: AnalyzeRequest,
+    use_synthetic: bool = False,
+) -> TerrainAnalysisResult:
     """
     Run the complete terrain analysis pipeline.
 
     Args:
         request: Analysis request with location, date, event
+        use_synthetic: If True, use synthetic DEM for testing
 
     Returns:
         TerrainAnalysisResult with subjects, standing locations, and metadata
@@ -37,12 +42,24 @@ async def analyze_terrain(request: AnalyzeRequest) -> TerrainAnalysisResult:
     computed_at = datetime.utcnow().isoformat() + "Z"
 
     # Step 1: Fetch DEM
-    dem = await fetch_dem_grid(
-        center_lat=request.lat,
-        center_lon=request.lon,
-        radius_km=request.radius_km,
-        resolution_m=30.0,
-    )
+    if use_synthetic:
+        dem = create_synthetic_dem(
+            center_lat=request.lat,
+            center_lon=request.lon,
+            radius_km=request.radius_km,
+            base_elevation=2000.0,
+            feature_height=500.0,
+            resolution_m=50.0,
+        )
+        dem_source = "synthetic"
+    else:
+        dem = await fetch_dem_grid(
+            center_lat=request.lat,
+            center_lon=request.lon,
+            radius_km=request.radius_km,
+            resolution_m=100.0,  # Coarser resolution for faster API calls
+        )
+        dem_source = "open-meteo"
 
     # Step 2: Compute terrain derivatives
     slope_deg, aspect_deg = compute_slope_aspect(dem)
@@ -107,7 +124,7 @@ async def analyze_terrain(request: AnalyzeRequest) -> TerrainAnalysisResult:
     meta = AnalysisMeta(
         request_id=request_id,
         computed_at=computed_at,
-        dem_source="open-meteo",
+        dem_source=dem_source,
         dem_bounds=dem.bounds,
         cell_size_m=dem.cell_size_m,
         center_lat=request.lat,

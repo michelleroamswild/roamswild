@@ -3,6 +3,7 @@ Core terrain analysis: slope, aspect, surface normals.
 
 These are pure functions that operate on the DEM grid.
 """
+from __future__ import annotations
 
 import numpy as np
 import math

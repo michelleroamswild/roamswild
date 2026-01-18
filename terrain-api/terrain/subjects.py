@@ -3,6 +3,7 @@ Subject detection: find terrain features worth photographing.
 
 Subjects are steep, prominent surfaces that will catch sunrise/sunset light.
 """
+from __future__ import annotations
 
 import numpy as np
 from dataclasses import dataclass

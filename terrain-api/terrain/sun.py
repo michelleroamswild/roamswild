@@ -3,6 +3,7 @@ Sun position calculations for sunrise/sunset photography.
 
 Computes sun azimuth and altitude over time, plus sun unit vectors.
 """
+from __future__ import annotations
 
 import math
 from datetime import datetime, timedelta
