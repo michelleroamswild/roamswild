@@ -83,16 +83,20 @@ def get_usgs_3dep_url(lat: float, lon: float) -> str:
     Get the USGS 3DEP tile URL for a given point.
 
     Uses the USGS National Map 3DEP 1/3 arc-second dataset.
+    Tiles are named by their NORTHERN and WESTERN boundaries.
+
+    Example: n40w107 covers lat 39°-40°N, lon 107°-106°W
     """
-    # USGS tiles are typically 1x1 degree CONUS
-    tile_lat = floor(lat)
-    tile_lon = floor(lon)
+    # USGS tile naming: latitude is CEILING (northern boundary)
+    # longitude is CEILING of absolute value (western boundary for west)
+    tile_lat = ceil(lat)
+    tile_lon = ceil(abs(lon))
 
-    # TNM S3 bucket structure
-    lat_hemi = "n" if tile_lat >= 0 else "s"
-    lon_hemi = "w" if tile_lon < 0 else "e"
+    lat_hemi = "n" if lat >= 0 else "s"
+    lon_hemi = "w" if lon < 0 else "e"
 
-    return f"https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/13/TIFF/current/{lat_hemi}{abs(tile_lat):02d}{lon_hemi}{abs(tile_lon):03d}/USGS_13_{lat_hemi}{abs(tile_lat):02d}{lon_hemi}{abs(tile_lon):03d}.tif"
+    tile_name = f"{lat_hemi}{tile_lat:02d}{lon_hemi}{tile_lon:03d}"
+    return f"https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/13/TIFF/current/{tile_name}/USGS_13_{tile_name}.tif"
 
 
 async def fetch_authoritative_dem(
@@ -324,11 +328,9 @@ def recommend_source(lat: float, lon: float) -> AuthoritativeDEMSource:
     """
     Recommend the best authoritative DEM source for a location.
 
-    Currently uses Copernicus GLO-30 globally as it provides reliable
-    access via S3 COGs. USGS 3DEP support is planned for future
-    enhancement to provide higher accuracy (1m vertical) for US locations.
+    - USGS 3DEP for Continental US (1/3 arc-second, ~10m, ~1m vertical accuracy)
+    - Copernicus GLO-30 for everywhere else (1 arc-second, ~30m, ~4m vertical accuracy)
     """
-    # TODO: Add USGS 3DEP support when S3 COG access is verified
-    # For now, Copernicus GLO-30 provides authoritative data globally
-    # with documented 4m vertical accuracy (LE90)
+    if is_in_conus(lat, lon):
+        return AuthoritativeDEMSource.USGS_3DEP
     return AuthoritativeDEMSource.COPERNICUS_GLO30
