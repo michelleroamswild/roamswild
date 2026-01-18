@@ -39,7 +39,7 @@ import {
   LayerVisibility,
   ValidationStatus,
 } from '@/types/terrainValidation';
-import { generateMockAnalysis } from '@/utils/terrainValidationMock';
+import { useTerrainAnalysis } from '@/hooks/use-terrain-analysis';
 
 // Map container style
 const mapContainerStyle = {
@@ -71,10 +71,14 @@ export default function TerrainValidation() {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [event, setEvent] = useState<'sunrise' | 'sunset'>('sunset');
 
-  // Analysis state
-  const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<TerrainAnalysisResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Analysis hook
+  const {
+    analyze,
+    isLoading,
+    error,
+    result,
+    usingMock,
+  } = useTerrainAnalysis();
 
   // Selection state
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null);
@@ -129,25 +133,26 @@ export default function TerrainValidation() {
   const runAnalysis = useCallback(async () => {
     if (!lat || !lon) return;
 
-    setIsLoading(true);
-    setError(null);
     setSelectedSubjectId(null);
 
     try {
-      // For now, use mock data
-      // In production, this would call the backend API
-      const mockResult = generateMockAnalysis(lat, lon, date, event);
-      setResult(mockResult);
+      const analysisResult = await analyze({
+        lat,
+        lon,
+        date,
+        event,
+        radius_km: 2.0,
+      });
 
       // Set initial timeline position
-      if (mockResult.sun_track.length > 0) {
-        const midIndex = Math.floor(mockResult.sun_track.length / 2);
-        setCurrentMinutes(mockResult.sun_track[midIndex].minutes_from_start);
+      if (analysisResult.sun_track.length > 0) {
+        const midIndex = Math.floor(analysisResult.sun_track.length / 2);
+        setCurrentMinutes(analysisResult.sun_track[midIndex].minutes_from_start);
       }
 
       // Select first subject
-      if (mockResult.subjects.length > 0) {
-        setSelectedSubjectId(mockResult.subjects[0].subject_id);
+      if (analysisResult.subjects.length > 0) {
+        setSelectedSubjectId(analysisResult.subjects[0].subject_id);
       }
 
       // Center map
@@ -156,11 +161,10 @@ export default function TerrainValidation() {
         map.setZoom(15);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Analysis failed');
-    } finally {
-      setIsLoading(false);
+      // Error is already handled by the hook
+      console.error('Analysis failed:', err);
     }
-  }, [lat, lon, date, event, map]);
+  }, [lat, lon, date, event, map, analyze]);
 
   // Toggle layer
   const toggleLayer = (key: keyof LayerVisibility) => {
@@ -242,9 +246,16 @@ export default function TerrainValidation() {
         {/* Left Panel - Search & Controls */}
         <div className="w-80 border-r bg-muted/30 flex flex-col overflow-hidden">
           <div className="p-4 border-b space-y-4">
-            <div className="flex items-center gap-2 text-sm font-mono text-muted-foreground">
-              <Crosshair className="w-4 h-4" />
-              TERRAIN VALIDATOR
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-mono text-muted-foreground">
+                <Crosshair className="w-4 h-4" />
+                TERRAIN VALIDATOR
+              </div>
+              {usingMock && (
+                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-mono rounded">
+                  MOCK
+                </span>
+              )}
             </div>
 
             {/* Place Search */}
