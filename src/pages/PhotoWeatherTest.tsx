@@ -1,11 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Camera, Sun, SunHorizon, CloudSun, ArrowsClockwise, Compass, Moon, Mountains, SunDim, Star, Check, X, Question } from '@phosphor-icons/react';
+import { Camera, Sun, SunHorizon, CloudSun, ArrowsClockwise, Compass, Moon, Mountains, SunDim, Star, Check, X, Question, Crosshair, NavigationArrow } from '@phosphor-icons/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { PlaceSearch } from '@/components/PlaceSearch';
 import { Header } from '@/components/Header';
 import { formatTime, getSunTimes, formatAzimuth, SunTimes } from '@/utils/sunCalc';
 import { analyzeHorizonProfile, getElevation, HorizonProfile } from '@/utils/terrainVisibility';
 import { analyzePhotoConditions, PhotoForecast, OpenMeteoHourly } from '@/utils/photoConditionsAnalyzer';
+import { analyzePhotoSpots, fetchNearbyFeatures, RecommendedSpot, PhotoFeature } from '@/utils/photoSpotAnalyzer';
+import { analyzeTerrainFeatures, TerrainFeature } from '@/utils/terrainPhotoAnalyzer';
+import { searchGooglePhotoSpots, GooglePhotoSpot } from '@/utils/googlePlacesPhotoSpots';
 
 type SunEventType = 'sunrise' | 'sunset';
 
@@ -105,7 +110,7 @@ function getWeatherDescription(code: number): string {
 // Helper to get quality icon for a forecast
 function getQualityIcon(forecast: PhotoForecast | null, size: number = 16) {
   if (!forecast) return <Question className="text-gray-400" style={{ width: size, height: size }} />;
-  switch (forecast.overall) {
+  switch (forecast.rating) {
     case 'excellent':
       return <Star weight="fill" className="text-green-500" style={{ width: size, height: size }} />;
     case 'good':
@@ -139,6 +144,79 @@ export default function PhotoWeatherTest() {
   const [photoForecast, setPhotoForecast] = useState<PhotoForecast | null>(null);
   const [activeTab, setActiveTab] = useState<SunEventType>('sunset');
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
+
+  // GPS coordinate input
+  const [gpsLat, setGpsLat] = useState('');
+  const [gpsLng, setGpsLng] = useState('');
+  const [gpsError, setGpsError] = useState<string | null>(null);
+
+  // Photo spots (OSM)
+  const [photoSpots, setPhotoSpots] = useState<RecommendedSpot[]>([]);
+  const [photoSpotsLoading, setPhotoSpotsLoading] = useState(false);
+  const [photoSpotsError, setPhotoSpotsError] = useState<string | null>(null);
+
+  // Terrain features
+  const [terrainFeatures, setTerrainFeatures] = useState<TerrainFeature[]>([]);
+  const [terrainLoading, setTerrainLoading] = useState(false);
+  const [terrainError, setTerrainError] = useState<string | null>(null);
+
+  // Google Places spots
+  const [googleSpots, setGoogleSpots] = useState<GooglePhotoSpot[]>([]);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+
+  // Handle GPS coordinate submission
+  const handleGpsSubmit = () => {
+    setGpsError(null);
+    const lat = parseFloat(gpsLat);
+    const lng = parseFloat(gpsLng);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      setGpsError('Please enter valid coordinates');
+      return;
+    }
+
+    if (lat < -90 || lat > 90) {
+      setGpsError('Latitude must be between -90 and 90');
+      return;
+    }
+
+    if (lng < -180 || lng > 180) {
+      setGpsError('Longitude must be between -180 and 180');
+      return;
+    }
+
+    setLocation({
+      name: `GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+      lat,
+      lng,
+    });
+  };
+
+  // Use current location from browser
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setGpsError('Geolocation is not supported by your browser');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setGpsLat(lat.toFixed(6));
+        setGpsLng(lng.toFixed(6));
+        setLocation({
+          name: `Current Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+          lat,
+          lng,
+        });
+      },
+      (error) => {
+        setGpsError(`Location error: ${error.message}`);
+      }
+    );
+  };
 
   // Fetch Open-Meteo data when location changes
   useEffect(() => {
@@ -261,20 +339,26 @@ export default function PhotoWeatherTest() {
   }, [location, openMeteoData]);
 
   // Determine which day to show based on whether we've passed the event
+  // Keep showing today's event for a few hours after it occurs
   const getEffectiveDayIndex = useMemo(() => {
     if (multiDayForecast.length === 0) return 0;
 
     const now = new Date();
     const todayForecast = multiDayForecast[0];
+    const hoursAfterToKeepShowing = 3; // Show tonight's sunset for 3 hours after
 
     if (activeTab === 'sunrise') {
-      // If past today's sunrise, default to tomorrow
-      if (now > todayForecast.sunTimes.sunrise) {
+      const sunriseTime = todayForecast.sunTimes.sunrise;
+      const cutoffTime = new Date(sunriseTime.getTime() + hoursAfterToKeepShowing * 60 * 60 * 1000);
+      // If past the cutoff (3 hours after sunrise), default to tomorrow
+      if (now > cutoffTime) {
         return selectedDayIndex === 0 ? 1 : selectedDayIndex;
       }
     } else {
-      // If past today's sunset, default to tomorrow
-      if (now > todayForecast.sunTimes.sunset) {
+      const sunsetTime = todayForecast.sunTimes.sunset;
+      const cutoffTime = new Date(sunsetTime.getTime() + hoursAfterToKeepShowing * 60 * 60 * 1000);
+      // If past the cutoff (3 hours after sunset), default to tomorrow
+      if (now > cutoffTime) {
         return selectedDayIndex === 0 ? 1 : selectedDayIndex;
       }
     }
@@ -368,6 +452,121 @@ export default function PhotoWeatherTest() {
     setPhotoForecast(forecast);
   }, [openMeteoData, selectedEventIndex, horizonProfile]);
 
+  // Fetch and analyze photo spots when location and sun times are available
+  useEffect(() => {
+    if (!location || !selectedSunTimes) return;
+
+    const fetchAndAnalyzeSpots = async () => {
+      setPhotoSpotsLoading(true);
+      setPhotoSpotsError(null);
+
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+        // Fetch nearby features from OSM via our proxy
+        const features = await fetchNearbyFeatures(
+          location.lat,
+          location.lng,
+          15, // 15km radius
+          supabaseUrl,
+          anonKey
+        );
+
+        // Get the sun azimuth for the active event
+        const sunAzimuth = activeTab === 'sunrise'
+          ? selectedSunTimes.sunriseAzimuth
+          : selectedSunTimes.sunsetAzimuth;
+        const isSunrise = activeTab === 'sunrise';
+
+        // Analyze spots based on sun position
+        const spots = analyzePhotoSpots(
+          location.lat,
+          location.lng,
+          features,
+          sunAzimuth,
+          isSunrise
+        );
+
+        // Only keep top spots (score >= 40)
+        const topSpots = spots.filter(s => s.overallScore >= 40).slice(0, 10);
+        setPhotoSpots(topSpots);
+      } catch (err) {
+        console.error('Photo spots error:', err);
+        setPhotoSpotsError(err instanceof Error ? err.message : 'Failed to fetch photo spots');
+      } finally {
+        setPhotoSpotsLoading(false);
+      }
+    };
+
+    fetchAndAnalyzeSpots();
+  }, [location, selectedSunTimes, activeTab]);
+
+  // Fetch terrain features when location and sun times are available
+  useEffect(() => {
+    if (!location || !selectedSunTimes) return;
+
+    const fetchTerrainFeatures = async () => {
+      setTerrainLoading(true);
+      setTerrainError(null);
+
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+        const sunAzimuth = activeTab === 'sunrise'
+          ? selectedSunTimes.sunriseAzimuth
+          : selectedSunTimes.sunsetAzimuth;
+        const isSunrise = activeTab === 'sunrise';
+
+        const features = await analyzeTerrainFeatures(
+          location.lat,
+          location.lng,
+          sunAzimuth,
+          isSunrise,
+          10, // 10km radius
+          supabaseUrl,
+          anonKey
+        );
+
+        setTerrainFeatures(features);
+      } catch (err) {
+        console.error('Terrain analysis error:', err);
+        setTerrainError(err instanceof Error ? err.message : 'Failed to analyze terrain');
+      } finally {
+        setTerrainLoading(false);
+      }
+    };
+
+    fetchTerrainFeatures();
+  }, [location, selectedSunTimes, activeTab]);
+
+  // Fetch Google Places when location changes
+  useEffect(() => {
+    if (!location) return;
+
+    const fetchGooglePlaces = async () => {
+      setGoogleLoading(true);
+      setGoogleError(null);
+
+      try {
+        const spots = await searchGooglePhotoSpots(
+          location.lat,
+          location.lng,
+          15 // 15km radius
+        );
+        setGoogleSpots(spots);
+      } catch (err) {
+        console.error('Google Places error:', err);
+        setGoogleError(err instanceof Error ? err.message : 'Failed to fetch places');
+      } finally {
+        setGoogleLoading(false);
+      }
+    };
+
+    fetchGooglePlaces();
+  }, [location]);
+
   // Calculate recommended shoot window based on conditions
   const getShootWindow = useMemo(() => {
     if (!selectedSunTimes || !photoForecast) return null;
@@ -407,19 +606,20 @@ export default function PhotoWeatherTest() {
     let afterglowEnd: Date | null = null;
 
     // High clouds extend the afterglow window (colors persist 15-30 min)
-    const hasHighClouds = photoForecast.cloudAnalysis.high >= 20;
+    const hasHighClouds = photoForecast.clouds.high >= 20;
     if (hasHighClouds && !isSunrise) {
       afterglowEnd = new Date(sunEvent.getTime() + 30 * 60000); // 30 min afterglow
       windowEnd = new Date(Math.max(twilightEnd.getTime(), afterglowEnd.getTime()));
     }
 
-    // Adjust based on conditions
-    if (photoForecast.timing.recommendation === 'shoot-early') {
+    // Adjust based on timing recommendation
+    const timingRec = photoForecast.timing.recommendation.toLowerCase();
+    if (timingRec.includes('early')) {
       windowEnd = new Date(sunEvent.getTime() + 5 * 60000);
       peakStart = new Date(sunEvent.getTime() - 30 * 60000);
       peakEnd = sunEvent;
       afterglowEnd = null;
-    } else if (photoForecast.timing.recommendation === 'stay-after' && !isSunrise) {
+    } else if (timingRec.includes('late') && !isSunrise) {
       windowStart = new Date(sunEvent.getTime() - 15 * 60000);
       windowEnd = new Date(twilightEnd.getTime() + 15 * 60000);
       peakStart = new Date(sunEvent.getTime() + 5 * 60000);
@@ -443,7 +643,7 @@ export default function PhotoWeatherTest() {
     }
 
     // If low clouds block horizon, focus on higher sun
-    if (photoForecast.cloudAnalysis.low > 50) {
+    if (photoForecast.clouds.low > 50) {
       if (isSunrise) {
         peakStart = new Date(sunEvent.getTime() + 20 * 60000);
         windowEnd = new Date(twilightEnd.getTime() + 15 * 60000);
@@ -480,13 +680,65 @@ export default function PhotoWeatherTest() {
           <CardHeader>
             <CardTitle className="text-base">Search Location</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <PlaceSearch
               onPlaceSelect={handlePlaceSelect}
-              placeholder="Enter a location..."
+              placeholder="Search for a place..."
             />
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white px-2 text-muted-foreground">Or enter GPS coordinates</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground mb-1 block">Latitude</label>
+                <Input
+                  type="text"
+                  placeholder="e.g. 37.7749"
+                  value={gpsLat}
+                  onChange={(e) => setGpsLat(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleGpsSubmit()}
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground mb-1 block">Longitude</label>
+                <Input
+                  type="text"
+                  placeholder="e.g. -122.4194"
+                  value={gpsLng}
+                  onChange={(e) => setGpsLng(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleGpsSubmit()}
+                />
+              </div>
+              <div className="flex items-end">
+                <Button onClick={handleGpsSubmit} size="default">
+                  <Crosshair className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUseCurrentLocation}
+              className="w-full"
+            >
+              <NavigationArrow className="w-4 h-4 mr-2" />
+              Use My Current Location
+            </Button>
+
+            {gpsError && (
+              <p className="text-sm text-red-500">{gpsError}</p>
+            )}
+
             {location && (
-              <p className="mt-3 text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Selected: {location.name} ({location.lat.toFixed(4)}, {location.lng.toFixed(4)})
               </p>
             )}
@@ -532,9 +784,11 @@ export default function PhotoWeatherTest() {
                   {multiDayForecast.map((day, index) => {
                     const forecast = activeTab === 'sunrise' ? day.sunriseForecast : day.sunsetForecast;
                     const isSelected = index === getEffectiveDayIndex;
-                    const isPast = activeTab === 'sunrise'
-                      ? new Date() > day.sunTimes.sunrise && index === 0
-                      : new Date() > day.sunTimes.sunset && index === 0;
+                    // Only disable if more than 3 hours past the event
+                    const hoursAfterToKeepShowing = 3;
+                    const eventTime = activeTab === 'sunrise' ? day.sunTimes.sunrise : day.sunTimes.sunset;
+                    const cutoffTime = new Date(eventTime.getTime() + hoursAfterToKeepShowing * 60 * 60 * 1000);
+                    const isPast = index === 0 && new Date() > cutoffTime;
 
                     return (
                       <button
@@ -561,12 +815,12 @@ export default function PhotoWeatherTest() {
                         {forecast && (
                           <div className={`text-[10px] font-medium mt-0.5 ${
                             isSelected ? 'text-white/90' :
-                            forecast.overall === 'excellent' ? 'text-green-600' :
-                            forecast.overall === 'good' ? 'text-blue-600' :
-                            forecast.overall === 'fair' ? 'text-amber-600' :
+                            forecast.rating === 'excellent' ? 'text-green-600' :
+                            forecast.rating === 'good' ? 'text-blue-600' :
+                            forecast.rating === 'fair' ? 'text-amber-600' :
                             'text-gray-500'
                           }`}>
-                            {forecast.overall}
+                            {forecast.rating}
                           </div>
                         )}
                       </button>
@@ -581,9 +835,9 @@ export default function PhotoWeatherTest() {
         {/* PHOTOGRAPHY FORECAST - Main Card */}
         {photoForecast && selectedSunTimes && (
           <Card className={`mb-6 border-2 ${
-            photoForecast.overall === 'excellent' ? 'border-green-400 bg-gradient-to-br from-green-50 to-emerald-50' :
-            photoForecast.overall === 'good' ? 'border-blue-400 bg-gradient-to-br from-blue-50 to-sky-50' :
-            photoForecast.overall === 'fair' ? 'border-amber-400 bg-gradient-to-br from-amber-50 to-yellow-50' :
+            photoForecast.rating === 'excellent' ? 'border-green-400 bg-gradient-to-br from-green-50 to-emerald-50' :
+            photoForecast.rating === 'good' ? 'border-blue-400 bg-gradient-to-br from-blue-50 to-sky-50' :
+            photoForecast.rating === 'fair' ? 'border-amber-400 bg-gradient-to-br from-amber-50 to-yellow-50' :
             'border-gray-400 bg-gradient-to-br from-gray-50 to-slate-50'
           }`}>
             <CardHeader className="pb-3">
@@ -603,13 +857,18 @@ export default function PhotoWeatherTest() {
                     {formatAzimuth(activeTab === 'sunrise' ? selectedSunTimes.sunriseAzimuth : selectedSunTimes.sunsetAzimuth)}
                   </p>
                 </div>
-                <div className={`px-4 py-2 rounded-full text-white font-bold ${
-                  photoForecast.overall === 'excellent' ? 'bg-green-500' :
-                  photoForecast.overall === 'good' ? 'bg-blue-500' :
-                  photoForecast.overall === 'fair' ? 'bg-amber-500' :
-                  'bg-gray-500'
-                }`}>
-                  {photoForecast.overall.toUpperCase()}
+                <div className="text-right">
+                  <div className={`px-4 py-2 rounded-full text-white font-bold ${
+                    photoForecast.rating === 'excellent' ? 'bg-green-500' :
+                    photoForecast.rating === 'good' ? 'bg-blue-500' :
+                    photoForecast.rating === 'fair' ? 'bg-amber-500' :
+                    'bg-gray-500'
+                  }`}>
+                    {photoForecast.score}/100
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {photoForecast.rating.toUpperCase()}
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -683,153 +942,99 @@ export default function PhotoWeatherTest() {
                 </div>
               )}
 
-              {/* Cloud Analysis */}
+              {/* Score Breakdown */}
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Score Breakdown</div>
+                {photoForecast.insights.map((insight, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="w-24 text-xs text-muted-foreground">{insight.factor}</div>
+                    <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          insight.score >= 75 ? 'bg-green-500' :
+                          insight.score >= 50 ? 'bg-blue-500' :
+                          insight.score >= 30 ? 'bg-amber-500' :
+                          'bg-red-400'
+                        }`}
+                        style={{ width: `${insight.score}%` }}
+                      />
+                    </div>
+                    <div className="w-12 text-xs text-right font-medium">
+                      {insight.score}
+                      <span className="text-muted-foreground">/{insight.weight}w</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Factor Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                {photoForecast.insights.map((insight, i) => (
+                  <div
+                    key={i}
+                    className={`p-2 rounded-lg border-l-4 ${
+                      insight.score >= 75 ? 'bg-green-50 border-green-500' :
+                      insight.score >= 50 ? 'bg-blue-50 border-blue-400' :
+                      insight.score >= 30 ? 'bg-amber-50 border-amber-400' :
+                      'bg-red-50 border-red-400'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">{insight.factor}</span>
+                      <span className="text-xs">{insight.value}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {insight.description}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Cloud Layers Quick View */}
               <div className="grid grid-cols-4 gap-2 text-center">
                 <div className="p-2 bg-white/60 rounded-lg">
                   <div className="text-xs text-muted-foreground">High</div>
                   <div className={`text-xl font-bold ${
-                    photoForecast.cloudAnalysis.high >= 20 && photoForecast.cloudAnalysis.high <= 60
+                    photoForecast.clouds.high >= 20 && photoForecast.clouds.high <= 60
                       ? 'text-green-600' : 'text-gray-600'
                   }`}>
-                    {photoForecast.cloudAnalysis.high}%
+                    {Math.round(photoForecast.clouds.high)}%
                   </div>
-                  <div className="text-xs text-muted-foreground">&gt;6km</div>
                 </div>
                 <div className="p-2 bg-white/60 rounded-lg">
                   <div className="text-xs text-muted-foreground">Mid</div>
                   <div className={`text-xl font-bold ${
-                    photoForecast.cloudAnalysis.mid >= 30 && photoForecast.cloudAnalysis.mid <= 50
+                    photoForecast.clouds.mid >= 20 && photoForecast.clouds.mid <= 50
                       ? 'text-blue-600' : 'text-gray-600'
                   }`}>
-                    {photoForecast.cloudAnalysis.mid}%
+                    {Math.round(photoForecast.clouds.mid)}%
                   </div>
-                  <div className="text-xs text-muted-foreground">2-6km</div>
                 </div>
                 <div className="p-2 bg-white/60 rounded-lg">
                   <div className="text-xs text-muted-foreground">Low</div>
                   <div className={`text-xl font-bold ${
-                    photoForecast.cloudAnalysis.low >= 60 ? 'text-red-600' :
-                    photoForecast.cloudAnalysis.low >= 35 ? 'text-amber-600' :
-                    photoForecast.cloudAnalysis.low >= 15 ? 'text-green-600' :
-                    'text-gray-600'
+                    photoForecast.clouds.low < 30 ? 'text-green-600' :
+                    photoForecast.clouds.low < 50 ? 'text-amber-600' :
+                    'text-red-600'
                   }`}>
-                    {photoForecast.cloudAnalysis.low}%
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {photoForecast.cloudAnalysis.low >= 15 && photoForecast.cloudAnalysis.low < 35
-                      ? '🔥 drama'
-                      : '<2km'}
+                    {Math.round(photoForecast.clouds.low)}%
                   </div>
                 </div>
                 <div className="p-2 bg-white/60 rounded-lg">
                   <div className="text-xs text-muted-foreground">Total</div>
                   <div className="text-xl font-bold text-gray-600">
-                    {photoForecast.cloudAnalysis.total}%
+                    {Math.round(photoForecast.clouds.total)}%
                   </div>
-                  <div className="text-xs text-muted-foreground">cover</div>
                 </div>
               </div>
 
-              {/* Cloud Trend */}
-              {photoForecast.cloudAnalysis.trend.direction !== 'steady' && (
-                <div className="flex items-center gap-2 text-sm">
-                  <span className={photoForecast.cloudAnalysis.trend.direction === 'clearing' ? 'text-green-600' : 'text-amber-600'}>
-                    {photoForecast.cloudAnalysis.trend.direction === 'clearing' ? '📈 Clearing:' : '📉 Building:'}
-                  </span>
-                  <span className="text-muted-foreground">{photoForecast.cloudAnalysis.trend.description}</span>
+              {/* Conditions */}
+              {photoForecast.conditions.isClearing && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="font-medium text-green-800">🌤️ Post-Storm Clearing</div>
+                  <div className="text-sm text-green-700">Exceptional color potential as skies clear!</div>
                 </div>
               )}
-
-              {/* Terrain Impact */}
-              {photoForecast.terrain && photoForecast.terrain.effectiveHorizon > 0.5 && (
-                <div className="p-3 bg-white/60 rounded-lg">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Mountains className="w-4 h-4 text-green-700" />
-                    <span className="font-medium text-sm">Terrain Impact</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {photoForecast.terrain.effectiveHorizon.toFixed(1)}° effective horizon •
-                    {Math.round(photoForecast.terrain.goldenHourVisible)}% of golden hour visible •
-                    {photoForecast.terrain.colorImpact}
-                  </p>
-                </div>
-              )}
-
-              {/* Why This Rating - Detailed Insights */}
-              <div className="space-y-3">
-                <div className="text-sm font-medium">Why {photoForecast.overall}?</div>
-
-                {/* Positive factors */}
-                {photoForecast.insights.filter(i => i.impact === 'excellent' || i.impact === 'good').length > 0 && (
-                  <div className="space-y-1.5">
-                    {photoForecast.insights
-                      .filter(i => i.impact === 'excellent' || i.impact === 'good')
-                      .slice(0, 4)
-                      .map((insight, i) => (
-                        <div
-                          key={i}
-                          className={`p-2 rounded-lg text-sm ${
-                            insight.impact === 'excellent'
-                              ? 'bg-green-50 border-l-4 border-green-500'
-                              : 'bg-blue-50 border-l-4 border-blue-400'
-                          }`}
-                        >
-                          <div className="font-medium flex items-center gap-1.5">
-                            <span>{insight.impact === 'excellent' ? '✨' : '👍'}</span>
-                            {insight.label}
-                          </div>
-                          <div className="text-muted-foreground text-xs mt-0.5">
-                            {insight.description}
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                )}
-
-                {/* Caution factors */}
-                {photoForecast.insights.filter(i => i.impact === 'caution' || i.impact === 'poor').length > 0 && (
-                  <div className="space-y-1.5">
-                    {photoForecast.insights
-                      .filter(i => i.impact === 'caution' || i.impact === 'poor')
-                      .slice(0, 3)
-                      .map((insight, i) => (
-                        <div
-                          key={i}
-                          className={`p-2 rounded-lg text-sm ${
-                            insight.impact === 'poor'
-                              ? 'bg-red-50 border-l-4 border-red-400'
-                              : 'bg-amber-50 border-l-4 border-amber-400'
-                          }`}
-                        >
-                          <div className="font-medium flex items-center gap-1.5">
-                            <span>{insight.impact === 'poor' ? '⚠️' : '⚡'}</span>
-                            {insight.label}
-                          </div>
-                          <div className="text-muted-foreground text-xs mt-0.5">
-                            {insight.description}
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                )}
-
-                {/* Neutral insights as smaller pills */}
-                {photoForecast.insights.filter(i => i.impact === 'neutral').length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {photoForecast.insights
-                      .filter(i => i.impact === 'neutral')
-                      .map((insight, i) => (
-                        <div
-                          key={i}
-                          className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-600"
-                          title={insight.description}
-                        >
-                          {insight.label}
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
 
               {/* Atmospheric Conditions */}
               <div className="pt-3 border-t">
@@ -842,12 +1047,12 @@ export default function PhotoWeatherTest() {
                       {photoForecast.atmosphere.visibility.toFixed(0)} km
                     </div>
                     <div className={`text-xs ${
-                      photoForecast.atmosphere.visibilityRating === 'crisp' ? 'text-green-600' :
-                      photoForecast.atmosphere.visibilityRating === 'atmospheric' ? 'text-blue-600' :
+                      photoForecast.atmosphere.visibility > 20 ? 'text-green-600' :
+                      photoForecast.atmosphere.visibility > 10 ? 'text-blue-600' :
                       'text-amber-600'
                     }`}>
-                      {photoForecast.atmosphere.visibilityRating === 'crisp' ? '✨ Crystal clear' :
-                       photoForecast.atmosphere.visibilityRating === 'atmospheric' ? '🌫️ Soft atmosphere' :
+                      {photoForecast.atmosphere.visibility > 20 ? '✨ Crystal clear' :
+                       photoForecast.atmosphere.visibility > 10 ? '🌫️ Soft atmosphere' :
                        '😶‍🌫️ Hazy'}
                     </div>
                   </div>
@@ -856,32 +1061,41 @@ export default function PhotoWeatherTest() {
                   <div className="p-2 bg-white/60 rounded-lg">
                     <div className="text-muted-foreground mb-1">Humidity</div>
                     <div className="font-bold text-lg">
-                      {photoForecast.atmosphere.humidity}%
+                      {Math.round(photoForecast.atmosphere.humidity)}%
                     </div>
                     <div className={`text-xs ${
                       photoForecast.atmosphere.humidity < 40 ? 'text-green-600' :
-                      photoForecast.atmosphere.humidity > 80 ? 'text-blue-600' :
+                      photoForecast.atmosphere.humidity > 80 ? 'text-amber-600' :
                       'text-gray-600'
                     }`}>
-                      {photoForecast.atmosphere.humidityEffect}
-                      {photoForecast.atmosphere.fogRisk && ' 🌁'}
+                      {photoForecast.atmosphere.humidity < 40 ? 'Vibrant colors' :
+                       photoForecast.atmosphere.humidity > 80 ? 'Soft colors' :
+                       'Good saturation'}
                     </div>
                   </div>
 
-                  {/* Wind */}
+                  {/* AOD / Aerosols */}
                   <div className="p-2 bg-white/60 rounded-lg">
-                    <div className="text-muted-foreground mb-1">Wind</div>
+                    <div className="text-muted-foreground mb-1">Aerosols</div>
                     <div className="font-bold text-lg">
-                      {(photoForecast.wind.speed * 0.621).toFixed(0)} mph
+                      {photoForecast.atmosphere.aod !== null
+                        ? photoForecast.atmosphere.aod.toFixed(2)
+                        : 'N/A'}
                     </div>
-                    <div className="text-xs">
-                      {photoForecast.wind.reflectionsPossible ? (
-                        <span className="text-blue-600">🪞 Mirror reflections</span>
-                      ) : photoForecast.wind.tripodStable ? (
-                        <span className="text-green-600">✓ Tripod stable</span>
-                      ) : (
-                        <span className="text-amber-600">⚠️ Gusty {(photoForecast.wind.gusts * 0.621).toFixed(0)} mph</span>
-                      )}
+                    <div className={`text-xs ${
+                      photoForecast.atmosphere.aod !== null && photoForecast.atmosphere.aod >= 0.1 && photoForecast.atmosphere.aod <= 0.3
+                        ? 'text-green-600'
+                        : photoForecast.atmosphere.aod !== null && photoForecast.atmosphere.aod > 0.5
+                        ? 'text-amber-600'
+                        : 'text-gray-600'
+                    }`}>
+                      {photoForecast.atmosphere.aod !== null
+                        ? (photoForecast.atmosphere.aod >= 0.1 && photoForecast.atmosphere.aod <= 0.3
+                            ? '✨ Ideal for color'
+                            : photoForecast.atmosphere.aod > 0.5
+                            ? '🌫️ Hazy'
+                            : 'Clean air')
+                        : 'Data unavailable'}
                     </div>
                   </div>
 
@@ -889,14 +1103,12 @@ export default function PhotoWeatherTest() {
                   <div className="p-2 bg-white/60 rounded-lg">
                     <div className="text-muted-foreground mb-1">Precipitation</div>
                     <div className="font-bold text-lg">
-                      {photoForecast.precipitation.probability}%
+                      {photoForecast.conditions.precipitation}%
                     </div>
                     <div className="text-xs">
-                      {photoForecast.precipitation.postStormPotential ? (
-                        <span className="text-green-600">✨ Post-storm glow!</span>
-                      ) : photoForecast.precipitation.isClearing ? (
-                        <span className="text-blue-600">🌤️ Clearing</span>
-                      ) : photoForecast.precipitation.probability > 50 ? (
+                      {photoForecast.conditions.isClearing ? (
+                        <span className="text-green-600">🌤️ Clearing</span>
+                      ) : photoForecast.conditions.precipitation > 50 ? (
                         <span className="text-amber-600">☔ Rain likely</span>
                       ) : (
                         <span className="text-gray-600">Dry conditions</span>
@@ -906,13 +1118,392 @@ export default function PhotoWeatherTest() {
                 </div>
 
                 {/* Fog/Mist Alert */}
-                {photoForecast.atmosphere.fogRisk && (
+                {photoForecast.conditions.fogRisk && (
                   <div className="mt-2 p-2 bg-blue-50 rounded-lg text-xs text-blue-800 flex items-center gap-2">
                     <span>🌁</span>
                     <span>Temperature near dew point — fog or mist may form, creating moody atmosphere</span>
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Recommended Photo Spots */}
+        {location && selectedSunTimes && (
+          <Card className="mb-6 border-purple-200">
+            <CardHeader className="pb-2 bg-purple-50">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Camera className="w-5 h-5 text-purple-600" />
+                Recommended Photo Spots
+                <span className="text-xs font-normal text-muted-foreground ml-2">
+                  Within 15 km • Based on {activeTab} direction
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {photoSpotsLoading && (
+                <div className="flex items-center gap-2 text-muted-foreground py-4">
+                  <ArrowsClockwise className="w-4 h-4 animate-spin" />
+                  Finding nearby photo spots...
+                </div>
+              )}
+
+              {photoSpotsError && (
+                <div className="text-red-600 text-sm py-4">
+                  Error: {photoSpotsError}
+                </div>
+              )}
+
+              {!photoSpotsLoading && !photoSpotsError && photoSpots.length === 0 && (
+                <div className="text-muted-foreground text-sm py-4">
+                  No recommended photo spots found in this area for the current sun direction.
+                </div>
+              )}
+
+              {!photoSpotsLoading && photoSpots.length > 0 && (
+                <div className="space-y-3">
+                  {photoSpots.map((spot, index) => (
+                    <div
+                      key={`${spot.feature.type}-${spot.feature.id}`}
+                      className={`p-3 rounded-lg border ${
+                        spot.overallScore >= 75 ? 'bg-green-50 border-green-200' :
+                        spot.overallScore >= 55 ? 'bg-blue-50 border-blue-200' :
+                        'bg-amber-50 border-amber-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center text-white ${
+                              spot.overallScore >= 75 ? 'bg-green-500' :
+                              spot.overallScore >= 55 ? 'bg-blue-500' :
+                              'bg-amber-500'
+                            }`}>
+                              {index + 1}
+                            </span>
+                            <div>
+                              <div className="font-medium">
+                                {spot.feature.name || `Unnamed ${spot.feature.featureType}`}
+                              </div>
+                              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                                <span className="capitalize">{spot.feature.featureType}</span>
+                                <span>•</span>
+                                <span>{spot.distance.toFixed(1)} km {spot.bearingLabel}</span>
+                                {spot.feature.elevation && (
+                                  <>
+                                    <span>•</span>
+                                    <span>{spot.feature.elevation}m</span>
+                                  </>
+                                )}
+                                <span>•</span>
+                                <span className="font-mono text-[10px]">
+                                  {spot.feature.lat.toFixed(5)}, {spot.feature.lng.toFixed(5)}
+                                </span>
+                                <span>•</span>
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${spot.feature.lat},${spot.feature.lng}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  View on Map
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-2 text-sm">
+                            {spot.recommendation}
+                          </div>
+
+                          {/* Top opportunity details */}
+                          {spot.topOpportunity && (
+                            <div className="mt-2 p-2 bg-white/60 rounded text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-0.5 rounded-full font-medium ${
+                                  spot.topOpportunity.type === 'reflection' ? 'bg-blue-100 text-blue-700' :
+                                  spot.topOpportunity.type === 'alpenglow' ? 'bg-pink-100 text-pink-700' :
+                                  spot.topOpportunity.type === 'silhouette' ? 'bg-purple-100 text-purple-700' :
+                                  spot.topOpportunity.type === 'viewpoint' ? 'bg-green-100 text-green-700' :
+                                  'bg-amber-100 text-amber-700'
+                                }`}>
+                                  {spot.topOpportunity.type.replace('_', ' ')}
+                                </span>
+                                <span className="text-muted-foreground">
+                                  {spot.topOpportunity.shootingDirectionLabel}
+                                </span>
+                              </div>
+                              <div className="mt-1 text-muted-foreground">
+                                {spot.topOpportunity.description}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Arrival tip */}
+                          {spot.arrivalTip && (
+                            <div className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
+                              <span>💡</span>
+                              {spot.arrivalTip}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Score badge */}
+                        <div className={`px-3 py-1 rounded-full text-sm font-bold text-white ${
+                          spot.overallScore >= 75 ? 'bg-green-500' :
+                          spot.overallScore >= 55 ? 'bg-blue-500' :
+                          'bg-amber-500'
+                        }`}>
+                          {spot.overallScore}
+                        </div>
+                      </div>
+
+                      {/* Additional opportunities */}
+                      {spot.opportunities.length > 1 && (
+                        <div className="mt-2 pt-2 border-t border-white/50">
+                          <div className="text-xs text-muted-foreground">
+                            Also good for:{' '}
+                            {spot.opportunities.slice(1, 3).map((opp, i) => (
+                              <span key={opp.type}>
+                                {i > 0 && ', '}
+                                {opp.type.replace('_', ' ')} ({opp.score})
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Terrain-Based Photo Spots */}
+        {location && selectedSunTimes && (
+          <Card className="mb-6 border-orange-200">
+            <CardHeader className="pb-2 bg-orange-50">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Mountains className="w-5 h-5 text-orange-600" />
+                Terrain Analysis
+                <span className="text-xs font-normal text-muted-foreground ml-2">
+                  Features catching {activeTab} light
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {terrainLoading && (
+                <div className="flex items-center gap-2 text-muted-foreground py-4">
+                  <ArrowsClockwise className="w-4 h-4 animate-spin" />
+                  Analyzing terrain for photogenic features...
+                </div>
+              )}
+
+              {terrainError && (
+                <div className="text-red-600 text-sm py-4">
+                  Error: {terrainError}
+                </div>
+              )}
+
+              {!terrainLoading && !terrainError && terrainFeatures.length === 0 && (
+                <div className="text-muted-foreground text-sm py-4">
+                  No accessible terrain features found. This area may be flat, or interesting features lack nearby trail/road access.
+                </div>
+              )}
+
+              {!terrainLoading && terrainFeatures.length > 0 && (
+                <div className="space-y-3">
+                  {terrainFeatures.map((feature, index) => (
+                    <div
+                      key={`terrain-${index}`}
+                      className={`p-3 rounded-lg border ${
+                        feature.score >= 75 ? 'bg-orange-50 border-orange-200' :
+                        feature.score >= 60 ? 'bg-amber-50 border-amber-200' :
+                        'bg-yellow-50 border-yellow-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              feature.featureType === 'cliff' ? 'bg-red-100 text-red-700' :
+                              feature.featureType === 'ridge' ? 'bg-purple-100 text-purple-700' :
+                              feature.featureType === 'peak' ? 'bg-blue-100 text-blue-700' :
+                              feature.featureType === 'slope' ? 'bg-green-100 text-green-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {feature.featureType}
+                            </span>
+                            <span className="text-sm font-medium">
+                              {feature.aspectLabel}
+                            </span>
+                            {feature.curvature === 'convex' && (
+                              <span className="text-xs text-orange-600">Convex</span>
+                            )}
+                            {feature.accessible ? (
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                feature.accessType === 'road' ? 'bg-green-100 text-green-700' :
+                                feature.accessType === 'track' ? 'bg-lime-100 text-lime-700' :
+                                'bg-emerald-100 text-emerald-700'
+                              }`}>
+                                {feature.accessType} {feature.accessDistance}m
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-600">
+                                No trail access
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+                            <span>{feature.distanceKm.toFixed(1)} km {feature.bearingLabel}</span>
+                            <span>•</span>
+                            <span>{Math.round(feature.elevation)}m elev</span>
+                            <span>•</span>
+                            <span>{feature.slopeCategory} slope ({Math.round(feature.slope)}°)</span>
+                            <span>•</span>
+                            <span className="font-mono text-[10px]">
+                              {feature.lat.toFixed(5)}, {feature.lng.toFixed(5)}
+                            </span>
+                            <span>•</span>
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${feature.lat},${feature.lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              Map
+                            </a>
+                          </div>
+
+                          <div className="mt-2 text-sm">
+                            {feature.recommendation}
+                          </div>
+
+                          <div className="mt-1 text-xs text-orange-700 font-medium">
+                            {feature.lightingWindow}
+                          </div>
+                        </div>
+
+                        <div className={`px-3 py-1 rounded-full text-sm font-bold text-white ${
+                          feature.score >= 75 ? 'bg-orange-500' :
+                          feature.score >= 60 ? 'bg-amber-500' :
+                          'bg-yellow-500'
+                        }`}>
+                          {feature.score}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Google Places Photo Spots */}
+        {location && (
+          <Card className="mb-6 border-blue-200">
+            <CardHeader className="pb-2 bg-blue-50">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Compass className="w-5 h-5 text-blue-600" />
+                Scenic Viewpoints
+                <span className="text-xs font-normal text-muted-foreground ml-2">
+                  From Google Places
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {googleLoading && (
+                <div className="flex items-center gap-2 text-muted-foreground py-4">
+                  <ArrowsClockwise className="w-4 h-4 animate-spin" />
+                  Searching for scenic locations...
+                </div>
+              )}
+
+              {googleError && (
+                <div className="text-red-600 text-sm py-4">
+                  Error: {googleError}
+                </div>
+              )}
+
+              {!googleLoading && !googleError && googleSpots.length === 0 && (
+                <div className="text-muted-foreground text-sm py-4">
+                  No scenic viewpoints found nearby.
+                </div>
+              )}
+
+              {!googleLoading && googleSpots.length > 0 && (
+                <div className="space-y-3">
+                  {googleSpots.slice(0, 8).map((spot) => (
+                    <div
+                      key={spot.placeId}
+                      className={`p-3 rounded-lg border ${
+                        spot.score >= 75 ? 'bg-blue-50 border-blue-200' :
+                        spot.score >= 60 ? 'bg-sky-50 border-sky-200' :
+                        'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              spot.category === 'viewpoint' ? 'bg-green-100 text-green-700' :
+                              spot.category === 'nature' ? 'bg-emerald-100 text-emerald-700' :
+                              spot.category === 'park' ? 'bg-lime-100 text-lime-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {spot.category}
+                            </span>
+                            <span className="font-medium">{spot.name}</span>
+                          </div>
+
+                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+                            <span>{spot.distanceKm.toFixed(1)} km {spot.bearingLabel}</span>
+                            {spot.rating && (
+                              <>
+                                <span>•</span>
+                                <span className="text-amber-600">★ {spot.rating.toFixed(1)}</span>
+                                <span className="text-muted-foreground">({spot.userRatingsTotal})</span>
+                              </>
+                            )}
+                            <span>•</span>
+                            <span className="font-mono text-[10px]">
+                              {spot.lat.toFixed(5)}, {spot.lng.toFixed(5)}
+                            </span>
+                            <span>•</span>
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              View on Map
+                            </a>
+                          </div>
+
+                          {spot.vicinity && (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {spot.vicinity}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className={`px-3 py-1 rounded-full text-sm font-bold text-white ${
+                          spot.score >= 75 ? 'bg-blue-500' :
+                          spot.score >= 60 ? 'bg-sky-500' :
+                          'bg-slate-500'
+                        }`}>
+                          {spot.score}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
