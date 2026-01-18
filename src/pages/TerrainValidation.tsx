@@ -5,7 +5,7 @@
  * photo-moment terrain analysis engine.
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   Sun,
   Camera,
@@ -96,8 +96,9 @@ export default function TerrainValidation() {
     rejectedCandidates: false,
   });
 
-  // Map reference
+  // Map reference and overlays
   const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [mapOverlays, setMapOverlays] = useState<(google.maps.Polygon | google.maps.Marker)[]>([]);
 
   // Get selected subject and standing
   const selectedSubject = useMemo(() => {
@@ -110,16 +111,20 @@ export default function TerrainValidation() {
     return result.standing_locations.find((s) => s.subject_id === selectedSubjectId) || null;
   }, [result, selectedSubjectId]);
 
-  // Get sun at current time
+  // Get sun at current time (find closest)
   const currentSun = useMemo(() => {
-    if (!result) return null;
-    return result.sun_track.find((s) => s.minutes_from_start === currentMinutes) || null;
+    if (!result || result.sun_track.length === 0) return null;
+    return result.sun_track.reduce((closest, s) =>
+      Math.abs(s.minutes_from_start - currentMinutes) < Math.abs(closest.minutes_from_start - currentMinutes) ? s : closest
+    );
   }, [result, currentMinutes]);
 
-  // Get incidence at current time
+  // Get incidence at current time (find closest)
   const currentIncidence = useMemo(() => {
-    if (!selectedSubject) return null;
-    return selectedSubject.incidence_series.find((i) => i.minutes === currentMinutes) || null;
+    if (!selectedSubject || selectedSubject.incidence_series.length === 0) return null;
+    return selectedSubject.incidence_series.reduce((closest, i) =>
+      Math.abs(i.minutes - currentMinutes) < Math.abs(closest.minutes - currentMinutes) ? i : closest
+    );
   }, [selectedSubject, currentMinutes]);
 
   // Handle place selection
@@ -192,11 +197,25 @@ export default function TerrainValidation() {
     }
   };
 
-  // Render map overlays
-  const renderMapOverlays = useCallback(() => {
-    if (!result || !map) return null;
+  // Render map overlays - cleanup and recreate when dependencies change
+  const updateMapOverlays = useCallback(() => {
+    if (!map) return;
 
-    const overlays: JSX.Element[] = [];
+    // Clear existing overlays
+    mapOverlays.forEach((overlay) => {
+      if (overlay instanceof google.maps.Polygon) {
+        overlay.setMap(null);
+      } else if (overlay instanceof google.maps.Marker) {
+        overlay.setMap(null);
+      }
+    });
+
+    if (!result) {
+      setMapOverlays([]);
+      return;
+    }
+
+    const newOverlays: (google.maps.Polygon | google.maps.Marker)[] = [];
 
     // Subject polygons
     if (layers.subjects) {
@@ -205,38 +224,67 @@ export default function TerrainValidation() {
         const polygon = new google.maps.Polygon({
           paths: subject.polygon.map(([lat, lon]) => ({ lat, lng: lon })),
           strokeColor: isSelected ? '#f59e0b' : '#8b5cf6',
-          strokeWeight: isSelected ? 3 : 1,
+          strokeWeight: isSelected ? 3 : 2,
           fillColor: isSelected ? '#f59e0b' : '#8b5cf6',
-          fillOpacity: 0.3,
+          fillOpacity: isSelected ? 0.4 : 0.25,
           map,
         });
 
         polygon.addListener('click', () => {
           setSelectedSubjectId(subject.subject_id);
         });
+
+        newOverlays.push(polygon);
+
+        // Add centroid marker for subject
+        const centroidMarker = new google.maps.Marker({
+          position: { lat: subject.centroid.lat, lng: subject.centroid.lon },
+          map,
+          icon: {
+            path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+            scale: 5,
+            fillColor: isSelected ? '#f59e0b' : '#8b5cf6',
+            fillOpacity: 1,
+            strokeColor: '#fff',
+            strokeWeight: 1,
+            rotation: subject.properties.face_direction_deg,
+          },
+          title: `Subject #${subject.subject_id} - Face: ${subject.properties.face_direction_deg.toFixed(0)}°`,
+        });
+
+        newOverlays.push(centroidMarker);
       });
     }
 
     // Standing locations
     if (layers.standing) {
       result.standing_locations.forEach((standing) => {
-        new google.maps.Marker({
+        const marker = new google.maps.Marker({
           position: { lat: standing.location.lat, lng: standing.location.lon },
           map,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 8,
+            scale: 10,
             fillColor: '#10b981',
             fillOpacity: 1,
             strokeColor: '#fff',
             strokeWeight: 2,
           },
+          title: `Standing #${standing.standing_id} for Subject #${standing.subject_id}`,
         });
+
+        newOverlays.push(marker);
       });
     }
 
-    return null;
-  }, [result, map, layers, selectedSubjectId]);
+    setMapOverlays(newOverlays);
+  }, [result, map, layers, selectedSubjectId, mapOverlays]);
+
+  // Effect to update overlays when dependencies change
+  React.useEffect(() => {
+    updateMapOverlays();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, map, layers.subjects, layers.standing, selectedSubjectId]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -459,7 +507,7 @@ export default function TerrainValidation() {
                 fullscreenControl: false,
               }}
             >
-              {renderMapOverlays()}
+              {/* Overlays managed via useEffect */}
             </GoogleMap>
           ) : (
             <div className="flex items-center justify-center h-full bg-muted">
@@ -469,17 +517,21 @@ export default function TerrainValidation() {
 
           {/* Map Legend */}
           <div className="absolute bottom-4 left-4 bg-background/90 backdrop-blur p-3 rounded-lg shadow-lg">
-            <div className="text-xs font-mono space-y-1">
+            <div className="text-xs font-mono space-y-1.5">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-violet-500" />
-                <span>Subject surface</span>
+                <div className="w-4 h-3 rounded-sm bg-violet-500/50 border border-violet-500" />
+                <span>Subject polygon (steep terrain)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-b-[8px] border-b-violet-500" />
+                <span>Subject centroid (arrow = face dir)</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                <span>Standing location</span>
+                <span>Standing location (photographer)</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-amber-500" />
+                <div className="w-4 h-3 rounded-sm bg-amber-500/50 border border-amber-500" />
                 <span>Selected</span>
               </div>
             </div>

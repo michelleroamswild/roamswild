@@ -57,9 +57,9 @@ async def analyze_terrain(
             center_lat=request.lat,
             center_lon=request.lon,
             radius_km=request.radius_km,
-            resolution_m=100.0,  # Coarser resolution for faster API calls
+            resolution_m=30.0,  # Good resolution from AWS tiles
         )
-        dem_source = "open-meteo"
+        dem_source = "aws-terrain-tiles"
 
     # Step 2: Compute terrain derivatives
     slope_deg, aspect_deg = compute_slope_aspect(dem)
