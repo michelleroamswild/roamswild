@@ -61,6 +61,9 @@ class SubjectProperties:
     face_direction_deg: float
     area_m2: float
     normal: Tuple[float, float, float]  # (Nx, Ny, Nz)
+    # Graduated confidence scoring
+    confidence: float = 0.0  # 0-1 overall confidence
+    score_breakdown: Optional[Dict] = None  # slope, prominence, curvature, coherence, size
 
 
 @dataclass

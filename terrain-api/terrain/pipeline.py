@@ -255,6 +255,8 @@ async def _analyze_single_subject(
         face_direction_deg=detected.face_direction,
         area_m2=detected.area_m2,
         normal=detected.normal,
+        confidence=detected.confidence,
+        score_breakdown=detected.score_breakdown,
     )
 
     return Subject(
