@@ -150,6 +150,9 @@ class AnalysisMeta:
     cell_size_m: float
     center_lat: float
     center_lon: float
+    dem_resolution_m: Optional[float] = None
+    dem_vertical_accuracy_m: Optional[float] = None
+    dem_citation: Optional[str] = None
 
 
 @dataclass
@@ -168,3 +171,5 @@ class AnalyzeRequest:
     date: str  # ISO date string
     event: Literal["sunrise", "sunset"]
     radius_km: float = 2.0
+    dem_source: Literal["auto", "copernicus-glo30", "usgs-3dep", "aws-terrain-tiles"] = "auto"
+    # Note: aws-terrain-tiles is for visualization ONLY, not analysis

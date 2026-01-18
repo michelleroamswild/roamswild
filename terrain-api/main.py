@@ -36,6 +36,10 @@ class AnalyzeRequestModel(BaseModel):
     date: str = Field(..., description="Date in ISO format (YYYY-MM-DD)")
     event: Literal["sunrise", "sunset"] = Field(..., description="Event type")
     radius_km: float = Field(2.0, description="Analysis radius in km", ge=0.5, le=10)
+    dem_source: Literal["auto", "copernicus-glo30", "usgs-3dep", "aws-terrain-tiles"] = Field(
+        "auto",
+        description="DEM source: auto (recommended), copernicus-glo30, usgs-3dep, or aws-terrain-tiles (visualization only)"
+    )
     use_synthetic: bool = Field(False, description="Use synthetic DEM for testing")
 
 
@@ -74,6 +78,7 @@ async def analyze(request: AnalyzeRequestModel):
             date=request.date,
             event=request.event,
             radius_km=request.radius_km,
+            dem_source=request.dem_source,
         )
 
         result = await analyze_terrain(internal_request, use_synthetic=request.use_synthetic)
@@ -94,7 +99,11 @@ async def health():
         "status": "healthy",
         "version": "1.0.0",
         "modules": {
-            "dem": "open-meteo",
+            "dem": {
+                "authoritative": ["copernicus-glo30", "usgs-3dep"],
+                "visualization": ["aws-terrain-tiles"],
+                "default": "auto (USGS 3DEP for US, Copernicus elsewhere)",
+            },
             "sun": "simplified-astronomical",
             "analysis": "horn-method",
         }

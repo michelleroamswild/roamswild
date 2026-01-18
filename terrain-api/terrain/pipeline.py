@@ -2,17 +2,30 @@
 Main terrain analysis pipeline.
 
 Orchestrates all modules to produce a complete analysis result.
+
+IMPORTANT: This pipeline uses AUTHORITATIVE DEM sources (Copernicus GLO-30,
+USGS 3DEP) for all geometry calculations and photo-moment scoring.
+AWS Terrain Tiles are available for visualization only.
 """
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Optional
 from .types import (
     AnalyzeRequest, TerrainAnalysisResult, AnalysisMeta,
     Subject, SubjectProperties, SubjectValidation,
     StandingLocation,
 )
 from .dem import fetch_dem_grid, create_synthetic_dem, DEMGrid
+from .dem_authoritative import (
+    fetch_authoritative_dem,
+    AuthoritativeDEMSource,
+    DEMSourceInfo,
+    recommend_source,
+    COPERNICUS_INFO,
+    USGS_3DEP_INFO,
+)
 from .sun import generate_sun_track
 from .analysis import (
     compute_slope_aspect, compute_surface_normals,
@@ -37,11 +50,19 @@ async def analyze_terrain(
 
     Returns:
         TerrainAnalysisResult with subjects, standing locations, and metadata
+
+    Note:
+        By default, uses authoritative DEM sources (Copernicus GLO-30 or
+        USGS 3DEP) for all geometry calculations. AWS Terrain Tiles can
+        be requested for visualization-only purposes but should NOT be
+        used for photo-moment scoring.
     """
     request_id = str(uuid.uuid4())[:8]
     computed_at = datetime.utcnow().isoformat() + "Z"
 
-    # Step 1: Fetch DEM
+    # Step 1: Fetch DEM from appropriate source
+    source_info: Optional[DEMSourceInfo] = None
+
     if use_synthetic:
         dem = create_synthetic_dem(
             center_lat=request.lat,
@@ -52,14 +73,49 @@ async def analyze_terrain(
             resolution_m=50.0,
         )
         dem_source = "synthetic"
-    else:
+
+    elif request.dem_source == "aws-terrain-tiles":
+        # AWS Terrain Tiles - for visualization ONLY
+        # WARNING: Do not use for photo-moment scoring
         dem = await fetch_dem_grid(
             center_lat=request.lat,
             center_lon=request.lon,
             radius_km=request.radius_km,
-            resolution_m=30.0,  # Good resolution from AWS tiles
+            resolution_m=30.0,
         )
-        dem_source = "aws-terrain-tiles"
+        dem_source = "aws-terrain-tiles (visualization only)"
+
+    else:
+        # Use authoritative DEM source for analysis
+        if request.dem_source == "auto":
+            auth_source = recommend_source(request.lat, request.lon)
+        elif request.dem_source == "usgs-3dep":
+            auth_source = AuthoritativeDEMSource.USGS_3DEP
+        else:
+            auth_source = AuthoritativeDEMSource.COPERNICUS_GLO30
+
+        try:
+            dem, source_info = await fetch_authoritative_dem(
+                center_lat=request.lat,
+                center_lon=request.lon,
+                radius_km=request.radius_km,
+                source=auth_source,
+                target_resolution_m=30.0,
+            )
+            dem_source = source_info.source.value
+        except Exception as e:
+            # Fallback to Copernicus if USGS fails (e.g., outside CONUS)
+            if auth_source == AuthoritativeDEMSource.USGS_3DEP:
+                dem, source_info = await fetch_authoritative_dem(
+                    center_lat=request.lat,
+                    center_lon=request.lon,
+                    radius_km=request.radius_km,
+                    source=AuthoritativeDEMSource.COPERNICUS_GLO30,
+                    target_resolution_m=30.0,
+                )
+                dem_source = source_info.source.value
+            else:
+                raise
 
     # Step 2: Compute terrain derivatives
     slope_deg, aspect_deg = compute_slope_aspect(dem)
@@ -129,6 +185,9 @@ async def analyze_terrain(
         cell_size_m=dem.cell_size_m,
         center_lat=request.lat,
         center_lon=request.lon,
+        dem_resolution_m=source_info.resolution_m if source_info else None,
+        dem_vertical_accuracy_m=source_info.vertical_accuracy_m if source_info else None,
+        dem_citation=source_info.citation if source_info else None,
     )
 
     return TerrainAnalysisResult(
