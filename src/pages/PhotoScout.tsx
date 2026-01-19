@@ -231,7 +231,7 @@ function ShotCard({
           {standing ? (
             <div className="flex items-center gap-3 p-2 bg-blue-50 rounded">
               <Camera className="w-5 h-5 text-blue-500 flex-shrink-0" />
-              <div>
+              <div className="flex-1">
                 <span className="text-blue-700">
                   Stand {Math.round(standing.properties.distance_to_subject_m)}m{" "}
                   {compassToFull(degreesToCompass((standing.properties.camera_bearing_deg + 180) % 360))}
@@ -239,6 +239,18 @@ function ShotCard({
                 <span className="text-gray-500">, aim </span>
                 <span className="text-blue-700">{degreesToCompass(standing.properties.camera_bearing_deg)}</span>
               </div>
+              {standing.nav_link && (
+                <a
+                  href={standing.nav_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors"
+                >
+                  <MapPin className="w-4 h-4" />
+                  Navigate
+                </a>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-3 p-2 bg-gray-50 rounded text-gray-500">
@@ -274,30 +286,50 @@ function ShotCard({
   );
 }
 
+// Parse lat,lon from a combined string like "33.955280, -116.077957"
+function parseCoordinates(input: string): { lat: number; lon: number } | null {
+  // Remove any whitespace and split by comma
+  const parts = input.split(",").map((s) => s.trim());
+  if (parts.length !== 2) return null;
+
+  const lat = parseFloat(parts[0]);
+  const lon = parseFloat(parts[1]);
+
+  if (isNaN(lat) || isNaN(lon)) return null;
+  if (lat < -90 || lat > 90) return null;
+  if (lon < -180 || lon > 180) return null;
+
+  return { lat, lon };
+}
+
 export default function PhotoScout() {
   const { isLoaded } = useGoogleMaps();
 
-  const [lat, setLat] = useState("39.0708");
-  const [lon, setLon] = useState("-106.9890");
+  const [coordinates, setCoordinates] = useState("39.0708, -106.9890");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [event, setEvent] = useState<"sunrise" | "sunset">("sunrise");
   const [radius, setRadius] = useState("2.0");
 
   const { analyze, result, isLoading, error } = useTerrainAnalysis();
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null);
+  const [showAllPositions, setShowAllPositions] = useState(false);
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const overlaysRef = useRef<google.maps.MVCObject[]>([]);
 
+  // Parse coordinates for use
+  const parsedCoords = useMemo(() => parseCoordinates(coordinates), [coordinates]);
+
   const handleAnalyze = useCallback(() => {
+    if (!parsedCoords) return;
     analyze({
-      lat: parseFloat(lat),
-      lon: parseFloat(lon),
+      lat: parsedCoords.lat,
+      lon: parsedCoords.lon,
       date,
       event,
       radius_km: parseFloat(radius),
     });
-  }, [analyze, lat, lon, date, event, radius]);
+  }, [analyze, parsedCoords, date, event, radius]);
 
   // Auto-select first good subject
   useEffect(() => {
@@ -347,6 +379,32 @@ export default function PhotoScout() {
     });
     overlaysRef.current = [];
 
+    // Draw search location marker (crosshair)
+    if (parsedCoords) {
+      const searchMarker = new google.maps.Marker({
+        position: { lat: parsedCoords.lat, lng: parsedCoords.lon },
+        map,
+        icon: {
+          url: "data:image/svg+xml," + encodeURIComponent(`
+            <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="20" cy="20" r="16" fill="none" stroke="#7c3aed" stroke-width="2" stroke-dasharray="4 2"/>
+              <circle cx="20" cy="20" r="8" fill="none" stroke="#7c3aed" stroke-width="2"/>
+              <circle cx="20" cy="20" r="3" fill="#7c3aed"/>
+              <line x1="20" y1="0" x2="20" y2="10" stroke="#7c3aed" stroke-width="2"/>
+              <line x1="20" y1="30" x2="20" y2="40" stroke="#7c3aed" stroke-width="2"/>
+              <line x1="0" y1="20" x2="10" y2="20" stroke="#7c3aed" stroke-width="2"/>
+              <line x1="30" y1="20" x2="40" y2="20" stroke="#7c3aed" stroke-width="2"/>
+            </svg>
+          `),
+          scaledSize: new google.maps.Size(40, 40),
+          anchor: new google.maps.Point(20, 20),
+        },
+        title: "Search Location",
+        zIndex: 1000,
+      });
+      overlaysRef.current.push(searchMarker);
+    }
+
     // Draw subject polygons
     result.subjects.forEach((subject) => {
       const standing = result.standing_locations.find((sl) => sl.subject_id === subject.subject_id);
@@ -368,67 +426,72 @@ export default function PhotoScout() {
       polygon.addListener("click", () => setSelectedSubjectId(subject.subject_id));
       overlaysRef.current.push(polygon);
 
-      // Rock face marker for selected
-      if (isSelected) {
+      // Rock face marker - show for selected OR when showing all
+      if (isSelected || showAllPositions) {
         const marker = new google.maps.Marker({
           position: { lat: subject.centroid.lat, lng: subject.centroid.lon },
           map,
           icon: {
             path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-            scale: 6,
+            scale: isSelected ? 6 : 4,
             fillColor: color,
-            fillOpacity: 1,
+            fillOpacity: isSelected ? 1 : 0.7,
             strokeColor: "#fff",
-            strokeWeight: 2,
+            strokeWeight: isSelected ? 2 : 1,
           },
-          title: "Rock face",
+          title: `Rock face #${subject.subject_id}`,
         });
+        marker.addListener("click", () => setSelectedSubjectId(subject.subject_id));
         overlaysRef.current.push(marker);
       }
-    });
 
-    // Draw shooting position for selected subject
-    if (selectedStanding && selectedSubject) {
-      // Camera marker
-      const cameraMarker = new google.maps.Marker({
-        position: { lat: selectedStanding.location.lat, lng: selectedStanding.location.lon },
-        map,
-        icon: {
-          url: "data:image/svg+xml," + encodeURIComponent(`
-            <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="16" cy="16" r="14" fill="#2563eb" stroke="white" stroke-width="3"/>
-              <path d="M10 12h12a1 1 0 011 1v8a1 1 0 01-1 1H10a1 1 0 01-1-1v-8a1 1 0 011-1z" fill="white"/>
-              <path d="M13 10h6l1 2H12l1-2z" fill="white"/>
-              <circle cx="16" cy="16" r="3" fill="#2563eb"/>
-            </svg>
-          `),
-          scaledSize: new google.maps.Size(32, 32),
-          anchor: new google.maps.Point(16, 16),
-        },
-        title: "Your shooting position",
-      });
-      overlaysRef.current.push(cameraMarker);
+      // Draw shooting position - show for selected OR when showing all
+      if (standing && (isSelected || showAllPositions)) {
+        const isCurrentlySelected = isSelected;
+        const markerColor = isCurrentlySelected ? "#2563eb" : "#6b7280";
 
-      // Sight line
-      const sightLine = new google.maps.Polyline({
-        path: [
-          { lat: selectedStanding.location.lat, lng: selectedStanding.location.lon },
-          { lat: selectedSubject.centroid.lat, lng: selectedSubject.centroid.lon },
-        ],
-        strokeColor: "#2563eb",
-        strokeWeight: 2,
-        strokeOpacity: 0.8,
-        geodesic: true,
-        icons: [
-          {
-            icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 3 },
-            offset: "100%",
+        // Camera marker
+        const cameraMarker = new google.maps.Marker({
+          position: { lat: standing.location.lat, lng: standing.location.lon },
+          map,
+          icon: {
+            url: "data:image/svg+xml," + encodeURIComponent(`
+              <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="16" cy="16" r="14" fill="${markerColor}" stroke="white" stroke-width="3"/>
+                <path d="M10 12h12a1 1 0 011 1v8a1 1 0 01-1 1H10a1 1 0 01-1-1v-8a1 1 0 011-1z" fill="white"/>
+                <path d="M13 10h6l1 2H12l1-2z" fill="white"/>
+                <circle cx="16" cy="16" r="3" fill="${markerColor}"/>
+              </svg>
+            `),
+            scaledSize: new google.maps.Size(isCurrentlySelected ? 32 : 24, isCurrentlySelected ? 32 : 24),
+            anchor: new google.maps.Point(isCurrentlySelected ? 16 : 12, isCurrentlySelected ? 16 : 12),
           },
-        ],
-        map,
-      });
-      overlaysRef.current.push(sightLine);
-    }
+          title: `Shooting position for #${subject.subject_id}`,
+        });
+        cameraMarker.addListener("click", () => setSelectedSubjectId(subject.subject_id));
+        overlaysRef.current.push(cameraMarker);
+
+        // Sight line
+        const sightLine = new google.maps.Polyline({
+          path: [
+            { lat: standing.location.lat, lng: standing.location.lon },
+            { lat: subject.centroid.lat, lng: subject.centroid.lon },
+          ],
+          strokeColor: markerColor,
+          strokeWeight: isCurrentlySelected ? 2 : 1,
+          strokeOpacity: isCurrentlySelected ? 0.8 : 0.4,
+          geodesic: true,
+          icons: isCurrentlySelected ? [
+            {
+              icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 3 },
+              offset: "100%",
+            },
+          ] : [],
+          map,
+        });
+        overlaysRef.current.push(sightLine);
+      }
+    });
 
     // Fit bounds
     if (result.meta.dem_bounds) {
@@ -438,7 +501,7 @@ export default function PhotoScout() {
       );
       map.fitBounds(bounds);
     }
-  }, [map, result, selectedSubjectId, selectedStanding, selectedSubject]);
+  }, [map, result, selectedSubjectId, showAllPositions, parsedCoords]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -472,16 +535,10 @@ export default function PhotoScout() {
             <div className="flex items-center gap-2">
               <Label className="text-sm text-gray-600">Location</Label>
               <Input
-                value={lat}
-                onChange={(e) => setLat(e.target.value)}
-                className="w-24 h-8 text-sm"
-                placeholder="Lat"
-              />
-              <Input
-                value={lon}
-                onChange={(e) => setLon(e.target.value)}
-                className="w-28 h-8 text-sm"
-                placeholder="Lon"
+                value={coordinates}
+                onChange={(e) => setCoordinates(e.target.value)}
+                className={`w-48 h-8 text-sm ${!parsedCoords && coordinates ? "border-red-300" : ""}`}
+                placeholder="lat, lon"
               />
             </div>
             <div className="flex items-center gap-2">
@@ -501,7 +558,7 @@ export default function PhotoScout() {
               <option value="sunrise">Sunrise</option>
               <option value="sunset">Sunset</option>
             </select>
-            <Button onClick={handleAnalyze} disabled={isLoading} size="sm">
+            <Button onClick={handleAnalyze} disabled={isLoading || !parsedCoords} size="sm">
               {isLoading ? "Scanning..." : "Scout Location"}
             </Button>
           </div>
@@ -598,7 +655,7 @@ export default function PhotoScout() {
         <div className="flex-1 relative">
           <GoogleMap
             mapContainerStyle={mapContainerStyle}
-            center={{ lat: parseFloat(lat) || 39.0708, lng: parseFloat(lon) || -106.989 }}
+            center={{ lat: parsedCoords?.lat || 39.0708, lng: parsedCoords?.lon || -106.989 }}
             zoom={14}
             onLoad={setMap}
             options={{
@@ -630,7 +687,25 @@ export default function PhotoScout() {
                 <div className="w-4 h-4 rounded-full bg-blue-600" />
                 <span>Your shooting position</span>
               </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full border-2 border-dashed border-purple-600" />
+                <span>Search location</span>
+              </div>
             </div>
+            {/* Show all toggle */}
+            {result && result.standing_locations.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showAllPositions}
+                    onChange={(e) => setShowAllPositions(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>Show all positions</span>
+                </label>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -15,7 +15,7 @@ from typing import Optional
 from .types import (
     AnalyzeRequest, TerrainAnalysisResult, AnalysisMeta,
     Subject, SubjectProperties, SubjectValidation,
-    StandingLocation,
+    StandingLocation, ShootingTiming,
 )
 from .dem import fetch_dem_grid, create_synthetic_dem, DEMGrid
 from .dem_authoritative import (
@@ -31,7 +31,7 @@ from .analysis import (
     compute_slope_aspect, compute_surface_normals,
     validate_normal_vector, validate_aspect_normal_match,
 )
-from .subjects import detect_subjects, get_subject_polygon, DetectedSubject
+from .subjects import detect_subjects, get_subject_polygon, DetectedSubject, detect_lighting_zones
 from .illumination import analyze_subject_illumination
 from .shadows import check_shadow_at_peak
 from .standing import find_standing_location
@@ -132,15 +132,19 @@ async def analyze_terrain(
         interval_minutes=5,
     )
 
-    # Step 4: Detect subjects
+    # Step 4: Detect subjects with scale classification
     detected = detect_subjects(
         dem=dem,
         slope_deg=slope_deg,
         aspect_deg=aspect_deg,
-        min_slope_deg=30.0,
-        min_prominence_m=15.0,
-        min_curvature=0.0,
-        min_cells=3,
+        center_lat=request.lat,
+        center_lon=request.lon,
+        min_slope_deg=15.0,        # Soft minimum
+        min_prominence_m=3.0,       # Soft minimum
+        min_curvature=-0.5,         # Allow slightly concave
+        min_cells=1,                # Allow small features
+        min_confidence=0.35,        # Standard threshold
+        foreground_confidence=0.25, # Lower for close features
     )
 
     # Step 5-7: Analyze each subject
@@ -148,7 +152,7 @@ async def analyze_terrain(
     standing_locations: list[StandingLocation] = []
 
     for idx, det in enumerate(detected[:10]):  # Limit to top 10 subjects
-        subject = await _analyze_single_subject(
+        subject, shooting_timing = await _analyze_single_subject(
             dem=dem,
             detected=det,
             sun_track=sun_track,
@@ -174,7 +178,29 @@ async def analyze_terrain(
         if standing:
             standing.standing_id = len(standing_locations) + 1
             standing.subject_id = subject.subject_id
+            standing.shooting_timing = shooting_timing  # Add timing info
+            # Generate navigation link (Google Maps)
+            lat = standing.location["lat"]
+            lon = standing.location["lon"]
+            standing.nav_link = f"https://www.google.com/maps?q={lat},{lon}"
             standing_locations.append(standing)
+
+    # Sort subjects by quality tier (primary before subtle), then by confidence
+    # This ensures dramatic features always rank above surface moments
+    tier_order = {"primary": 0, "subtle": 1}
+    subjects.sort(key=lambda s: (
+        tier_order.get(s.properties.quality_tier, 1),
+        -s.properties.confidence
+    ))
+
+    # Step 8: Detect lighting zones (scale-aware)
+    # Identifies terrain zones with consistent favorable lighting
+    # Guides photographers to areas where micro-features likely exist
+    lighting_zones = detect_lighting_zones(
+        subjects=subjects,
+        dem_resolution_m=dem.cell_size_m,
+        min_members=3,
+    )
 
     # Build result
     meta = AnalysisMeta(
@@ -195,6 +221,7 @@ async def analyze_terrain(
         sun_track=sun_track,
         subjects=subjects,
         standing_locations=standing_locations,
+        lighting_zones=lighting_zones,
         debug_layers={},
     )
 
@@ -205,19 +232,23 @@ async def _analyze_single_subject(
     sun_track: list,
     slope_grid,
     subject_id: int,
-) -> Subject | None:
+) -> tuple[Subject | None, ShootingTiming | None]:
     """
     Complete analysis of a single subject.
+
+    Returns:
+        Tuple of (Subject, ShootingTiming) or (None, None) if subject doesn't qualify
     """
-    # Illumination analysis
+    # Illumination analysis (includes lighting-based subject type classification)
     illum = analyze_subject_illumination(
         normal=detected.normal,
         sun_track=sun_track,
+        mean_slope_deg=detected.mean_slope,
     )
 
     # Skip subjects without good glow windows
     if not illum.glow_in_range:
-        return None
+        return None, None
 
     # Shadow check at peak
     peak_minutes = illum.glow_window.peak_minutes if illum.glow_window else 30.0
@@ -248,6 +279,17 @@ async def _analyze_single_subject(
     # Get polygon
     polygon = get_subject_polygon(dem, detected.cells)
 
+    # Use lighting-based subject type from illumination analysis
+    # Surface moments are classified based on grazing light, not slope alone
+    final_subject_type = illum.subject_type
+
+    # Quality tier: surface moments are "subtle" (experimental)
+    # They should never rank above dramatic features
+    if final_subject_type == "surface-moment":
+        quality_tier = "subtle"
+    else:
+        quality_tier = "primary"
+
     properties = SubjectProperties(
         elevation_m=detected.mean_elevation,
         slope_deg=detected.mean_slope,
@@ -257,9 +299,34 @@ async def _analyze_single_subject(
         normal=detected.normal,
         confidence=detected.confidence,
         score_breakdown=detected.score_breakdown,
+        distance_from_center_m=detected.distance_from_center_m,
+        classification=detected.classification,
+        subject_type=final_subject_type,
+        quality_tier=quality_tier,
     )
 
-    return Subject(
+    # Build shooting timing from glow window and edge lighting
+    shooting_timing = None
+    if illum.glow_window:
+        edge_lighting = illum.edge_lighting or {}
+        lighting_type = edge_lighting.get("lighting_type", "standard")
+
+        # If rim light is better than standard glow, use rim timing
+        if edge_lighting.get("has_rim_light") and edge_lighting.get("rim_light_score", 0) > illum.glow_window.peak_glow_score:
+            best_minutes = edge_lighting.get("rim_light_peak_minutes", illum.glow_window.peak_minutes)
+        else:
+            best_minutes = illum.glow_window.peak_minutes
+
+        shooting_timing = ShootingTiming(
+            best_time_minutes=best_minutes,
+            window_start_minutes=illum.glow_window.start_minutes,
+            window_end_minutes=illum.glow_window.end_minutes,
+            window_duration_minutes=illum.glow_window.duration_minutes,
+            peak_light_quality=illum.glow_window.peak_glow_score,
+            lighting_type=lighting_type,
+        )
+
+    subject = Subject(
         subject_id=subject_id,
         centroid={"lat": detected.centroid_lat, "lon": detected.centroid_lon},
         polygon=polygon,
@@ -269,6 +336,8 @@ async def _analyze_single_subject(
         shadow_check=shadow,
         validation=validation,
     )
+
+    return subject, shooting_timing
 
 
 def analyze_terrain_sync(request: AnalyzeRequest) -> TerrainAnalysisResult:

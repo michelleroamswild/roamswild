@@ -133,6 +133,7 @@ export interface StandingLocation {
   properties: StandingProperties;
   line_of_sight: LineOfSight;
   candidate_search: CandidateSearch;
+  nav_link?: string; // Google Maps navigation link
 }
 
 // Debug layer definition

@@ -64,6 +64,15 @@ class SubjectProperties:
     # Graduated confidence scoring
     confidence: float = 0.0  # 0-1 overall confidence
     score_breakdown: Optional[Dict] = None  # slope, prominence, curvature, coherence, size
+    # Scale classification
+    distance_from_center_m: float = 0.0
+    classification: str = "monument-scale"  # "foreground", "human-scale", "monument-scale"
+    # Subject type based on lighting (not geometry)
+    # Surface moments: grazing light reveals texture, contrast, rhythm
+    # Dramatic features: direct/angled light emphasizes form and mass
+    subject_type: str = "dramatic-feature"  # "dramatic-feature" or "surface-moment"
+    # Quality tier for ranking (primary features always rank above subtle)
+    quality_tier: str = "primary"  # "primary" or "subtle"
 
 
 @dataclass
@@ -128,6 +137,17 @@ class StandingProperties:
 
 
 @dataclass
+class ShootingTiming:
+    """Best times to shoot from this standing location."""
+    best_time_minutes: float  # Minutes from event (sunrise/sunset)
+    window_start_minutes: float
+    window_end_minutes: float
+    window_duration_minutes: float
+    peak_light_quality: float  # 0-1 glow score at peak
+    lighting_type: str  # "standard", "rim", "crest"
+
+
+@dataclass
 class StandingLocation:
     standing_id: int
     subject_id: int
@@ -135,6 +155,10 @@ class StandingLocation:
     properties: StandingProperties
     line_of_sight: LineOfSight
     candidate_search: CandidateSearch
+    # Timing for best shot
+    shooting_timing: Optional[ShootingTiming] = None
+    # Navigation link (Google Maps)
+    nav_link: Optional[str] = None
 
 
 @dataclass
@@ -159,11 +183,54 @@ class AnalysisMeta:
 
 
 @dataclass
+class LightingZoneMember:
+    """A detected surface within a lighting zone."""
+    subject_id: int
+    centroid: Dict  # {"lat": float, "lon": float}
+    area_m2: float
+    mean_incidence: float
+    distance_to_center_m: float
+
+
+@dataclass
+class LightingZone:
+    """
+    A terrain zone with consistent favorable lighting conditions.
+
+    At 30m DEM resolution, this represents a promising area where
+    micro-features (rock gardens, boulder fields, textured slabs)
+    likely exist and will catch similar light.
+
+    Guides photographers to terrain zones worth exploring on foot.
+    """
+    zone_id: int
+    centroid: Dict  # {"lat": float, "lon": float}
+    members: List[LightingZoneMember]
+    # Zone properties
+    member_count: int
+    total_area_m2: float
+    zone_radius_m: float  # Extent of the zone
+    avg_incidence: float  # Average incidence (lower = better grazing light)
+    avg_slope_deg: float
+    dem_resolution_m: float  # Scale context
+    # Scoring
+    zone_score: float  # Likelihood of good micro-features
+    score_breakdown: Dict  # consistency, coverage, lighting, accessibility
+    # Timing
+    best_time_minutes: Optional[float] = None
+    glow_window_start: Optional[float] = None
+    glow_window_end: Optional[float] = None
+    # Zone character (what type of features likely exist here)
+    zone_character: str = "mixed-terrain"  # "rocky-slopes", "textured-flats", "mixed-terrain"
+
+
+@dataclass
 class TerrainAnalysisResult:
     meta: AnalysisMeta
     sun_track: List[SunPosition]
     subjects: List[Subject]
     standing_locations: List[StandingLocation]
+    lighting_zones: List[LightingZone] = field(default_factory=list)
     debug_layers: Dict = field(default_factory=dict)
 
 

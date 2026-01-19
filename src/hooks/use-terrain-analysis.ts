@@ -201,6 +201,7 @@ function transformApiResponse(data: any): TerrainAnalysisResult {
         })),
         selected_at_distance_m: sl.candidate_search.selected_at_distance_m,
       },
+      nav_link: sl.nav_link,
     })),
     debug_layers: data.debug_layers || {},
   };
