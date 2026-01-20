@@ -216,6 +216,84 @@ def explain_rim_light_score(score: float) -> str:
 
 
 # =============================================================================
+# Afterglow / Twilight (sun below horizon)
+# =============================================================================
+
+def explain_afterglow(sun_altitude_deg: float) -> str:
+    """
+    Translate afterglow conditions into photographer language.
+
+    Afterglow occurs when the sun is below the horizon but the sky
+    still provides indirect light. Good for silhouettes and sky color.
+
+    Args:
+        sun_altitude_deg: Sun elevation (negative = below horizon)
+
+    Returns:
+        Human-readable description of twilight conditions
+    """
+    if sun_altitude_deg >= 0:
+        return "Direct sunlight (not afterglow)"
+    elif sun_altitude_deg >= -4:
+        return "Early twilight - warm afterglow, silhouette potential"
+    elif sun_altitude_deg >= -6:
+        return "Civil twilight - pink/purple sky, strong silhouettes"
+    elif sun_altitude_deg >= -12:
+        return "Nautical twilight - deep blue hour"
+    else:
+        return "Astronomical twilight - near darkness"
+
+
+def explain_afterglow_short(sun_altitude_deg: float) -> str:
+    """Short version for compact displays."""
+    if sun_altitude_deg >= 0:
+        return "direct light"
+    elif sun_altitude_deg >= -6:
+        return "afterglow"
+    elif sun_altitude_deg >= -12:
+        return "blue hour"
+    else:
+        return "twilight"
+
+
+def explain_lighting_type(lighting_type: str, sun_altitude_deg: float = None) -> str:
+    """
+    Translate lighting_type into photographer-friendly description.
+
+    Args:
+        lighting_type: "standard", "rim", "crest", "afterglow", etc.
+        sun_altitude_deg: Optional sun altitude for context
+
+    Returns:
+        Human-readable description of lighting conditions
+    """
+    if lighting_type == "afterglow":
+        if sun_altitude_deg is not None:
+            return explain_afterglow(sun_altitude_deg)
+        return "Afterglow - sun below horizon, silhouette/sky colors"
+    elif lighting_type == "rim":
+        return "Rim light - backlit edges glow dramatically"
+    elif lighting_type == "crest":
+        return "Crest light - ridgeline catches golden light"
+    elif lighting_type == "side":
+        return "Side light - strong texture and dimension"
+    else:
+        return "Direct warm light - classic golden hour"
+
+
+def explain_lighting_type_short(lighting_type: str) -> str:
+    """Short version for compact displays."""
+    short = {
+        "afterglow": "afterglow",
+        "rim": "rim light",
+        "crest": "crest glow",
+        "side": "side light",
+        "standard": "warm light",
+    }
+    return short.get(lighting_type, "direct")
+
+
+# =============================================================================
 # Lighting Zone Type
 # =============================================================================
 

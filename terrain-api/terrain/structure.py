@@ -482,6 +482,212 @@ def is_dramatic_structure(metrics: StructureMetrics) -> bool:
     return metrics.structure_class in ("micro-dramatic", "macro-dramatic")
 
 
+# Structure score thresholds for region growing
+STRUCTURE_THRESHOLD_MICRO = 0.60  # Higher threshold for micro-dramatic
+STRUCTURE_THRESHOLD_MACRO = 0.55  # Slightly lower for macro-dramatic
+STRUCTURE_THRESHOLD_DEFAULT = 0.50  # Fallback
+
+
+def region_grow_from_anchor(
+    anchor_row: int,
+    anchor_col: int,
+    elevations: np.ndarray,
+    slope_deg: np.ndarray,
+    curvature: np.ndarray,
+    cell_size_m: float,
+    structure_class: str = "micro-dramatic",
+    zone_cells: Optional[List[Tuple[int, int]]] = None,
+    max_cells: int = 500,
+) -> List[Tuple[int, int]]:
+    """
+    Region-grow from anchor cell to build subject polygon with high structure.
+
+    Only includes contiguous cells above the structure score threshold.
+    The resulting polygon will contain the anchor and preserve high-structure area.
+
+    Args:
+        anchor_row: Row index of anchor cell (max structure location)
+        anchor_col: Column index of anchor cell
+        elevations: DEM elevation grid
+        slope_deg: Slope grid in degrees
+        curvature: Curvature grid
+        cell_size_m: Cell size in meters
+        structure_class: "micro-dramatic" or "macro-dramatic" (affects threshold)
+        zone_cells: Optional set of cells to constrain growth within
+        max_cells: Maximum cells to include (prevents runaway growth)
+
+    Returns:
+        List of (row, col) cells forming the high-structure subject polygon
+    """
+    rows, cols = elevations.shape
+
+    # Select threshold based on structure class
+    if structure_class == "micro-dramatic":
+        threshold = STRUCTURE_THRESHOLD_MICRO
+    elif structure_class == "macro-dramatic":
+        threshold = STRUCTURE_THRESHOLD_MACRO
+    else:
+        threshold = STRUCTURE_THRESHOLD_DEFAULT
+
+    # Convert zone_cells to set for fast lookup
+    zone_set = set(zone_cells) if zone_cells else None
+
+    # Compute anchor's structure score
+    anchor_score = compute_cell_structure_score(
+        anchor_row, anchor_col, elevations, slope_deg, curvature, cell_size_m
+    )
+
+    # If anchor itself is below threshold, lower threshold to include it
+    # (the anchor was selected as max structure, so we should include it)
+    effective_threshold = min(threshold, anchor_score - 0.05)
+    effective_threshold = max(0.3, effective_threshold)  # Don't go too low
+
+    # BFS region grow
+    visited = set()
+    subject_cells = []
+    queue = [(anchor_row, anchor_col)]
+    visited.add((anchor_row, anchor_col))
+
+    while queue and len(subject_cells) < max_cells:
+        row, col = queue.pop(0)
+
+        # Compute structure score for this cell
+        cell_score = compute_cell_structure_score(
+            row, col, elevations, slope_deg, curvature, cell_size_m
+        )
+
+        # Include if above threshold
+        if cell_score >= effective_threshold:
+            subject_cells.append((row, col))
+
+            # Add unvisited neighbors to queue
+            for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                nr, nc = row + dr, col + dc
+
+                # Check bounds
+                if not (0 <= nr < rows and 0 <= nc < cols):
+                    continue
+
+                # Check if already visited
+                if (nr, nc) in visited:
+                    continue
+
+                # Check if within zone (if zone constraint provided)
+                if zone_set is not None and (nr, nc) not in zone_set:
+                    continue
+
+                visited.add((nr, nc))
+                queue.append((nr, nc))
+
+    # Ensure anchor is included even if score computation varies
+    if (anchor_row, anchor_col) not in subject_cells:
+        subject_cells.insert(0, (anchor_row, anchor_col))
+
+    return subject_cells
+
+
+def rebuild_subject_from_anchor(
+    anchor_lat: float,
+    anchor_lon: float,
+    dem_grid,  # DEMGrid
+    slope_deg: np.ndarray,
+    curvature: np.ndarray,
+    structure_class: str,
+    zone_cells: Optional[List[Tuple[int, int]]] = None,
+) -> Tuple[List[Tuple[int, int]], StructureMetrics]:
+    """
+    Rebuild subject polygon by region-growing from anchor location.
+
+    Args:
+        anchor_lat: Latitude of anchor (max structure location)
+        anchor_lon: Longitude of anchor
+        dem_grid: DEMGrid with elevations and coordinate conversion
+        slope_deg: Slope grid in degrees
+        curvature: Curvature grid
+        structure_class: "micro-dramatic" or "macro-dramatic"
+        zone_cells: Optional cells to constrain growth within
+
+    Returns:
+        Tuple of (new_cells, new_structure_metrics)
+    """
+    # Convert anchor lat/lon to row/col
+    anchor_row, anchor_col = dem_grid.lat_lon_to_indices(anchor_lat, anchor_lon)
+
+    # Region grow from anchor
+    new_cells = region_grow_from_anchor(
+        anchor_row=anchor_row,
+        anchor_col=anchor_col,
+        elevations=dem_grid.elevations,
+        slope_deg=slope_deg,
+        curvature=curvature,
+        cell_size_m=dem_grid.cell_size_m,
+        structure_class=structure_class,
+        zone_cells=zone_cells,
+    )
+
+    # Compute structure metrics for new cells
+    centroid_row = np.mean([r for r, c in new_cells])
+    centroid_col = np.mean([c for r, c in new_cells])
+
+    new_metrics = compute_structure_metrics(
+        elevations=dem_grid.elevations,
+        slope_deg=slope_deg,
+        curvature=curvature,
+        cells=new_cells,
+        cell_size_m=dem_grid.cell_size_m,
+        dem_grid=dem_grid,
+        centroid_row=centroid_row,
+        centroid_col=centroid_col,
+    )
+
+    return new_cells, new_metrics
+
+
+def validate_subject_structure(
+    subject_cells: List[Tuple[int, int]],
+    zone_max_score: float,
+    elevations: np.ndarray,
+    slope_deg: np.ndarray,
+    curvature: np.ndarray,
+    cell_size_m: float,
+    tolerance: float = 0.05,
+) -> Tuple[bool, float, float, float]:
+    """
+    Sanity check: verify subject polygon captures the high-structure area.
+
+    Args:
+        subject_cells: Cells in subject polygon
+        zone_max_score: Max structure score from zone-level analysis
+        elevations: DEM elevation grid
+        slope_deg: Slope grid
+        curvature: Curvature grid
+        cell_size_m: Cell size in meters
+        tolerance: Allowed difference between subject max and zone max
+
+    Returns:
+        Tuple of (is_valid, subject_min, subject_median, subject_max)
+    """
+    if not subject_cells:
+        return False, 0.0, 0.0, 0.0
+
+    # Compute structure scores for all subject cells
+    scores = []
+    for row, col in subject_cells:
+        score = compute_cell_structure_score(
+            row, col, elevations, slope_deg, curvature, cell_size_m
+        )
+        scores.append(score)
+
+    subject_min = float(np.min(scores))
+    subject_median = float(np.median(scores))
+    subject_max = float(np.max(scores))
+
+    # Check if subject captures the high-structure area
+    is_valid = subject_max >= zone_max_score - tolerance
+
+    return is_valid, subject_min, subject_median, subject_max
+
+
 def get_structure_explanation(metrics: StructureMetrics) -> str:
     """Generate human-readable explanation of structure classification."""
     if metrics.structure_class == "micro-dramatic":

@@ -157,13 +157,15 @@ export interface Subject {
     lat: number;
     lon: number;
   };
-  polygon: [number, number][]; // Array of [lat, lon]
+  polygon: [number, number][]; // Region-grown subject polygon (bold layer)
   properties: SubjectProperties;
   incidence_series: IncidencePoint[];
   glow_window: GlowWindow | null;
   shadow_check: ShadowCheck;
   validation: SubjectValidation;
   candidate_search?: CandidateSearch;
+  // ExploreArea polygon - original zone before region-growing (faint layer)
+  explore_polygon?: [number, number][];
 }
 
 // Line of sight sample
@@ -320,7 +322,8 @@ export interface ShootingTiming {
   window_end_minutes: number;
   window_duration_minutes: number;
   peak_light_quality: number;
-  lighting_type: string; // "standard", "rim", "crest"
+  lighting_type: string; // "standard", "rim", "crest", "afterglow"
+  sun_altitude_at_peak?: number; // degrees above/below horizon at peak time
 }
 
 // A complete shooting opportunity: anchor + standing location + lighting

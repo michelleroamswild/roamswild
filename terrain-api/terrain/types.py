@@ -159,13 +159,17 @@ class SubjectValidation:
 class Subject:
     subject_id: int
     centroid: Dict  # {"lat": float, "lon": float}
-    polygon: List[Tuple[float, float]]  # [(lat, lon), ...]
+    polygon: List[Tuple[float, float]]  # [(lat, lon), ...] - region-grown subject polygon
     properties: SubjectProperties
     incidence_series: List[IncidencePoint]
     glow_window: Optional[GlowWindow]
     shadow_check: ShadowCheck
     validation: SubjectValidation
     candidate_search: Optional[Dict] = None  # Standing location search info
+    # ExploreArea polygon - original zone before region-growing (faint layer)
+    explore_polygon: Optional[List[Tuple[float, float]]] = None  # [(lat, lon), ...]
+    # Parent subject ID for facet subjects (links facet to parent planar subject)
+    parent_subject_id: Optional[int] = None
 
 
 @dataclass
@@ -243,7 +247,9 @@ class ShootingTiming:
     window_end_minutes: float
     window_duration_minutes: float
     peak_light_quality: float  # 0-1 glow score at peak
-    lighting_type: str  # "standard", "rim", "crest"
+    lighting_type: str  # "standard", "rim", "crest", "afterglow"
+    # Sun altitude at peak time (for direct vs afterglow classification)
+    sun_altitude_at_peak: Optional[float] = None  # degrees above/below horizon
 
 
 @dataclass

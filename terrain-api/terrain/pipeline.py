@@ -17,7 +17,12 @@ from .types import (
     Subject, SubjectProperties, SubjectValidation, SubjectExplain,
     StandingLocation, ShootingTiming, StructureMetrics, StructureDebug,
 )
-from .structure import get_structure_explanation
+from .structure import (
+    get_structure_explanation,
+    rebuild_subject_from_anchor,
+    validate_subject_structure,
+    compute_cell_structure_score,
+)
 from .explain import (
     explain_lighting_zone_type,
     explain_aspect_offset,
@@ -56,8 +61,17 @@ from .subjects import (
     is_distance_valid,
     filter_by_orientation,
     MAX_ZONE_WIDTH_M,
+    extract_glow_facets,
+    create_subject_from_facet,
+    process_facet_with_mega_handling,
+    GlowFacet,
 )
-from .illumination import analyze_subject_illumination
+from .illumination import (
+    analyze_subject_illumination,
+    get_sun_altitude_at_minutes,
+    classify_lighting_type_with_altitude,
+    validate_planar_lighting_type,
+)
 from .shadows import check_shadow_at_peak
 from .standing import find_standing_location, _summarize_rejections, log_rejection_histogram
 from .accessibility import (
@@ -565,6 +579,11 @@ async def analyze_terrain(
             if sid not in surviving_original_ids:
                 logging.warning(f"  TOP PEAK subject_id={sid}: lost during subdivision")
 
+    # Structure score grid for facet extraction (computed lazily in facet functions)
+    # We use curvature as a proxy for structure score since it's already computed
+    # Higher curvature = more interesting terrain features
+    structure_score_grid = curvature
+
     # Step 5-7: Analyze each subject
     subjects: list[Subject] = []
     standing_locations: list[StandingLocation] = []
@@ -587,6 +606,7 @@ async def analyze_terrain(
             detected=det,
             sun_track=sun_track,
             slope_grid=slope_deg,
+            curvature_grid=curvature,
             subject_id=idx + 1,
             event=request.event,
         )
@@ -597,6 +617,57 @@ async def analyze_terrain(
             continue
 
         subjects.append(subject)
+
+        # =====================================================================
+        # Facet Extraction for Planar Subjects
+        # =====================================================================
+        # For planar subjects, extract glow-valid facets (connected components
+        # of cells with face-sun offset <= 60°). Each facet becomes a child
+        # subject with its own standing location search.
+        facet_subjects: list[tuple] = []  # (facet_det, facet_shooting_timing)
+
+        geometry_type = getattr(det, 'geometry_type', 'planar')
+        if geometry_type == "planar" and len(det.cells) >= 50:  # Only for substantial subjects
+            # Extract glow facets
+            glow_facets = extract_glow_facets(
+                subject=det,
+                dem=dem,
+                Nx=Nx,
+                Ny=Ny,
+                Nz=Nz,
+                slope_deg=slope_deg,
+                elevations=dem.elevations,
+                sun_azimuth_deg=sun_az,
+                structure_scores=structure_score_grid,
+            )
+
+            if glow_facets:
+                logging.info(
+                    f"Subject {subject.subject_id}: Extracted {len(glow_facets)} glow facets "
+                    f"from planar subject ({len(det.cells)} cells)"
+                )
+
+                # Process each facet (with mega-facet handling)
+                for facet in glow_facets:
+                    facet_dets = process_facet_with_mega_handling(
+                        facet=facet,
+                        parent_subject=det,
+                        dem=dem,
+                        Nx=Nx,
+                        Ny=Ny,
+                        Nz=Nz,
+                        slope_deg=slope_deg,
+                        curvature=curvature,
+                        structure_scores=structure_score_grid,
+                    )
+
+                    for facet_det in facet_dets:
+                        # Use parent's shooting timing for facets
+                        facet_subjects.append((facet_det, shooting_timing))
+
+                logging.info(
+                    f"Subject {subject.subject_id}: Created {len(facet_subjects)} facet subjects"
+                )
 
         # Calculate distance constraints based on subject width
         # Distance rings scale with width: min=max(80m, 0.8×width), max=min(4000m, 6×width)
@@ -754,6 +825,136 @@ async def analyze_terrain(
             access_info = f", {accessibility.accessibility_status}" if accessibility.accessibility_status != 'unknown' else ""
             analysis_outcomes[original_id] = f"SUCCESS - standing location at {standing.properties.distance_to_subject_m:.0f}m{access_info}"
 
+        # =====================================================================
+        # Process Facet Standing Locations
+        # =====================================================================
+        # For each facet subject, find its standing location
+        for facet_det, facet_timing in facet_subjects:
+            # Create Subject from facet DetectedSubject
+            facet_polygon = get_subject_polygon(dem, facet_det.cells)
+
+            # Build minimal properties for facet subject
+            facet_effective_width = compute_effective_width(facet_det.area_m2)
+
+            from .types import SubjectProperties, SubjectValidation
+            facet_props = SubjectProperties(
+                elevation_m=facet_det.mean_elevation,
+                slope_deg=facet_det.mean_slope,
+                aspect_deg=facet_det.mean_aspect,
+                face_direction_deg=facet_det.face_direction,
+                area_m2=facet_det.area_m2,
+                normal=facet_det.normal,
+                confidence=facet_det.confidence * 0.9,  # Slightly lower for facets
+                score_breakdown=facet_det.score_breakdown,
+                distance_from_center_m=facet_det.distance_from_center_m,
+                classification=facet_det.classification,
+                lighting_zone_type=subject.properties.lighting_zone_type,
+                aspect_offset_deg=subject.properties.aspect_offset_deg,
+                subject_type=facet_det.subject_type,
+                quality_tier=facet_det.quality_tier,
+                explain=subject.properties.explain,  # Inherit from parent
+                effective_width_m=facet_effective_width,
+                directional_preference=subject.properties.directional_preference,
+                cardinal_direction=subject.properties.cardinal_direction,
+                structure=None,  # Facets don't have separate structure
+                structure_class=facet_det.structure_class,
+                is_dramatic=facet_det.is_dramatic,
+                snapped_to_max_structure=False,
+            )
+
+            facet_validation = SubjectValidation(
+                normal_unit_length=True,
+                aspect_normal_match_deg=0.0,
+                glow_in_range=True,
+                sun_visible_at_peak=True,
+            )
+
+            facet_subject = Subject(
+                subject_id=facet_det.subject_id,
+                centroid={"lat": facet_det.centroid_lat, "lon": facet_det.centroid_lon},
+                polygon=facet_polygon,
+                properties=facet_props,
+                incidence_series=subject.incidence_series,  # Inherit from parent
+                glow_window=subject.glow_window,
+                shadow_check=subject.shadow_check,
+                validation=facet_validation,
+                explore_polygon=subject.explore_polygon,  # Parent's explore polygon
+                parent_subject_id=subject.subject_id,  # Link to parent
+            )
+
+            subjects.append(facet_subject)
+
+            # Find standing location for facet
+            facet_min_dist, facet_max_dist = get_distance_constraints(
+                slope_deg=facet_det.mean_slope,
+                area_m2=facet_det.area_m2,
+                effective_width_m=facet_effective_width,
+            )
+
+            facet_standing, facet_search = find_standing_location(
+                dem=dem,
+                subject_lat=facet_det.centroid_lat,
+                subject_lon=facet_det.centroid_lon,
+                subject_elevation=facet_det.mean_elevation,
+                subject_normal=facet_det.normal,
+                slope_grid=slope_deg,
+                min_distance_m=facet_min_dist,
+                max_distance_m=min(facet_max_dist, 1500.0),
+                sun_azimuth_deg=sun_az,
+                sun_altitude_deg=sun_alt,
+                face_direction_deg=facet_det.face_direction,
+                effective_width_m=facet_effective_width,
+                structure_class=facet_det.structure_class or "unknown",
+            )
+
+            if not facet_standing:
+                logging.debug(
+                    f"Facet {facet_det.subject_id}: No valid standing location found"
+                )
+                continue
+
+            # Set standing location properties
+            facet_standing.standing_id = len(standing_locations) + 1
+            facet_standing.subject_id = facet_subject.subject_id
+            facet_standing.shooting_timing = facet_timing
+            facet_standing.nav_link = (
+                f"https://www.google.com/maps?q={facet_standing.location['lat']},"
+                f"{facet_standing.location['lon']}"
+            )
+            facet_standing.properties.min_valid_distance_m = facet_min_dist
+            facet_standing.properties.max_valid_distance_m = facet_max_dist
+
+            # Check accessibility for facet
+            facet_accessibility = check_accessibility(
+                lat=facet_standing.location["lat"],
+                lon=facet_standing.location["lon"],
+                roads=osm_roads,
+                dem=dem,
+                standing_elevation_m=facet_standing.properties.elevation_m,
+                max_distance_m=MAX_ROAD_DISTANCE_M,
+                profile=DEFAULT_APPROACH_PROFILE,
+                landcover_polygons=osm_landcover,
+            )
+
+            facet_standing.properties.accessibility_status = facet_accessibility.accessibility_status
+            facet_standing.properties.distance_to_road_m = facet_accessibility.distance_to_road_m
+            facet_standing.properties.nearest_road_type = facet_accessibility.nearest_road_type
+            facet_standing.properties.nearest_road_name = facet_accessibility.nearest_road_name
+            facet_standing.properties.approach_difficulty = facet_accessibility.approach_difficulty
+
+            if not facet_accessibility.is_accessible:
+                logging.debug(
+                    f"Facet {facet_det.subject_id} REJECTED (accessibility): "
+                    f"{facet_accessibility.rejection_reason}"
+                )
+                continue
+
+            standing_locations.append(facet_standing)
+            logging.info(
+                f"Facet {facet_det.subject_id}: Standing location found at "
+                f"{facet_standing.properties.distance_to_subject_m:.0f}m"
+            )
+
     # DEBUG: Final summary of top 10 structure peak outcomes
     if top_structure_ids:
         logging.warning("=" * 70)
@@ -861,6 +1062,7 @@ async def _analyze_single_subject(
     detected: DetectedSubject,
     sun_track: list,
     slope_grid,
+    curvature_grid,
     subject_id: int,
     event: str = "sunset",
 ) -> tuple[Subject | None, ShootingTiming | None]:
@@ -869,6 +1071,7 @@ async def _analyze_single_subject(
 
     Args:
         event: "sunrise" or "sunset" (for timing explanations)
+        curvature_grid: Curvature grid for structure-based polygon rebuilding
 
     Returns:
         Tuple of (Subject, ShootingTiming) or (None, None) if subject doesn't qualify
@@ -932,8 +1135,7 @@ async def _analyze_single_subject(
         sun_visible_at_peak=shadow.sun_visible,
     )
 
-    # Get polygon
-    polygon = get_subject_polygon(dem, detected.cells)
+    # Note: polygon is generated later after potential region-grow rebuild
 
     # Use lighting zone type as PRIMARY classification
     # Glow zones and rim zones are both first-class opportunities
@@ -1041,6 +1243,81 @@ async def _analyze_single_subject(
             subject_lon = max_lon
             snapped_to_max = True
 
+    # REBUILD SUBJECT POLYGON from anchor using region-growing
+    # This ensures the subject polygon captures high-structure cells around the anchor,
+    # not just the generic zone slice from slope/aspect thresholds
+
+    # Capture original zone polygon BEFORE rebuild (for ExploreArea layer)
+    explore_polygon = get_subject_polygon(dem, detected.cells)
+
+    rebuilt_cells = None
+    rebuilt_structure = None
+    zone_max_score = detected.structure.max_structure_score_in_zone if detected.structure else 0.0
+
+    if detected.structure and detected.structure.max_structure_location:
+        anchor_lat, anchor_lon = detected.structure.max_structure_location
+        structure_class = detected.structure.structure_class
+
+        # Region-grow from anchor to build high-structure polygon
+        rebuilt_cells, rebuilt_structure = rebuild_subject_from_anchor(
+            anchor_lat=anchor_lat,
+            anchor_lon=anchor_lon,
+            dem_grid=dem,
+            slope_deg=slope_grid,
+            curvature=curvature_grid,
+            structure_class=structure_class,
+            zone_cells=detected.cells,  # Constrain to original zone
+        )
+
+        # Sanity check: verify rebuilt subject captures high-structure area
+        is_valid, subj_min, subj_median, subj_max = validate_subject_structure(
+            subject_cells=rebuilt_cells,
+            zone_max_score=zone_max_score,
+            elevations=dem.elevations,
+            slope_deg=slope_grid,
+            curvature=curvature_grid,
+            cell_size_m=dem.cell_size_m,
+        )
+
+        if is_valid and len(rebuilt_cells) >= 3:
+            import logging
+            logging.info(
+                f"Subject {subject_id}: REBUILT polygon from anchor - "
+                f"{len(rebuilt_cells)} cells (was {len(detected.cells)}), "
+                f"structure min/median/max: {subj_min:.3f}/{subj_median:.3f}/{subj_max:.3f}"
+            )
+            # Update detected cells and structure
+            detected.cells = rebuilt_cells
+            detected.structure = rebuilt_structure
+            detected.area_m2 = len(rebuilt_cells) * dem.cell_size_m ** 2
+
+            # Recompute centroid from new cells
+            rows, cols = zip(*rebuilt_cells)
+            centroid_row = int(round(sum(rows) / len(rows)))
+            centroid_col = int(round(sum(cols) / len(cols)))
+            detected.centroid_lat, detected.centroid_lon = dem.indices_to_lat_lon(centroid_row, centroid_col)
+
+            # Update polygon
+            polygon = get_subject_polygon(dem, rebuilt_cells)
+        else:
+            import logging
+            if not is_valid:
+                logging.warning(
+                    f"Subject {subject_id}: Rebuilt polygon FAILED sanity check - "
+                    f"subject_max={subj_max:.3f} < zone_max={zone_max_score:.3f} - 0.05, "
+                    f"keeping original polygon"
+                )
+            else:
+                logging.warning(
+                    f"Subject {subject_id}: Rebuilt polygon too small ({len(rebuilt_cells)} cells), "
+                    f"keeping original polygon"
+                )
+            # Keep original polygon
+            polygon = get_subject_polygon(dem, detected.cells)
+    else:
+        # No structure info - use original polygon
+        polygon = get_subject_polygon(dem, detected.cells)
+
     # HARD GATE: Reject micro-dramatic subjects with weak structure
     # This eliminates "shooting at nothing" results where the zone centroid
     # has no actual terrain features worth photographing
@@ -1098,36 +1375,112 @@ async def _analyze_single_subject(
         else:
             best_minutes = illum.glow_window.peak_minutes
 
+        # Look up sun altitude at peak time
+        sun_alt_at_peak = get_sun_altitude_at_minutes(sun_track, best_minutes)
+
+        # Reclassify as "afterglow" if sun is below horizon threshold
+        # Direct glow/texture requires sun above horizon; below = twilight/silhouette
+        final_lighting_type = classify_lighting_type_with_altitude(lighting_type, sun_alt_at_peak)
+
+        # PLANAR SUBJECT SANITY GATE: Validate lighting type matches face-sun angle
+        # For planar subjects, face-sun geometry determines lighting type (glow vs rim)
+        # Camera-sun geometry cannot override this for flat surfaces
+        geometry_type = getattr(detected, 'geometry_type', 'planar')
+        face_direction = detected.face_direction
+
+        # Get sun azimuth at peak time
+        sun_azimuth_at_peak = None
+        for sun_pos in sun_track:
+            if abs(sun_pos.minutes_from_start - best_minutes) < 2.0:
+                sun_azimuth_at_peak = sun_pos.azimuth_deg
+                break
+        if sun_azimuth_at_peak is None and sun_track:
+            # Fallback to midpoint
+            sun_azimuth_at_peak = sun_track[len(sun_track) // 2].azimuth_deg
+
+        if sun_azimuth_at_peak is not None:
+            validated_type, was_corrected, correction_reason = validate_planar_lighting_type(
+                proposed_lighting_type=final_lighting_type,
+                geometry_type=geometry_type,
+                face_direction_deg=face_direction,
+                sun_azimuth_deg=sun_azimuth_at_peak,
+            )
+            if was_corrected:
+                import logging
+                logging.info(
+                    f"Subject {subject_id}: Lighting type corrected by planar sanity gate: "
+                    f"{final_lighting_type} -> {validated_type} ({correction_reason})"
+                )
+            final_lighting_type = validated_type
+
         shooting_timing = ShootingTiming(
             best_time_minutes=best_minutes,
             window_start_minutes=illum.glow_window.start_minutes,
             window_end_minutes=illum.glow_window.end_minutes,
             window_duration_minutes=illum.glow_window.duration_minutes,
             peak_light_quality=illum.glow_window.peak_glow_score,
-            lighting_type=lighting_type,
+            lighting_type=final_lighting_type,
+            sun_altitude_at_peak=sun_alt_at_peak,
         )
     elif lighting_zone_type == "rim-zone" and edge_lighting.get("rim_light_peak_minutes"):
         # Rim zones without glow window still get timing based on rim light
         rim_peak = edge_lighting.get("rim_light_peak_minutes", 30.0)
         rim_score = edge_lighting.get("rim_light_score", 0.5)
+
+        # Look up sun altitude at rim peak time
+        sun_alt_at_peak = get_sun_altitude_at_minutes(sun_track, rim_peak)
+
+        # Reclassify as "afterglow" if sun is below horizon threshold
+        final_lighting_type = classify_lighting_type_with_altitude("rim", sun_alt_at_peak)
+
+        # PLANAR SUBJECT SANITY GATE: Validate lighting type matches face-sun angle
+        geometry_type = getattr(detected, 'geometry_type', 'planar')
+        face_direction = detected.face_direction
+
+        # Get sun azimuth at rim peak time
+        sun_azimuth_at_peak = None
+        for sun_pos in sun_track:
+            if abs(sun_pos.minutes_from_start - rim_peak) < 2.0:
+                sun_azimuth_at_peak = sun_pos.azimuth_deg
+                break
+        if sun_azimuth_at_peak is None and sun_track:
+            sun_azimuth_at_peak = sun_track[len(sun_track) // 2].azimuth_deg
+
+        if sun_azimuth_at_peak is not None:
+            validated_type, was_corrected, correction_reason = validate_planar_lighting_type(
+                proposed_lighting_type=final_lighting_type,
+                geometry_type=geometry_type,
+                face_direction_deg=face_direction,
+                sun_azimuth_deg=sun_azimuth_at_peak,
+            )
+            if was_corrected:
+                import logging
+                logging.info(
+                    f"Subject {subject_id}: Lighting type corrected by planar sanity gate: "
+                    f"{final_lighting_type} -> {validated_type} ({correction_reason})"
+                )
+            final_lighting_type = validated_type
+
         shooting_timing = ShootingTiming(
             best_time_minutes=rim_peak,
             window_start_minutes=max(0, rim_peak - 20),
             window_end_minutes=rim_peak + 20,
             window_duration_minutes=40.0,
             peak_light_quality=rim_score,
-            lighting_type="rim",
+            lighting_type=final_lighting_type,
+            sun_altitude_at_peak=sun_alt_at_peak,
         )
 
     subject = Subject(
         subject_id=subject_id,
         centroid={"lat": subject_lat, "lon": subject_lon},  # May be snapped to max_structure_location
-        polygon=polygon,
+        polygon=polygon,  # Region-grown subject polygon (bold layer)
         properties=properties,
         incidence_series=illum.incidence_series,
         glow_window=illum.glow_window,
         shadow_check=shadow,
         validation=validation,
+        explore_polygon=explore_polygon,  # Original zone polygon (faint layer)
     )
 
     return subject, shooting_timing

@@ -174,8 +174,197 @@ def compute_incidence(
     return Nx * Sx + Ny * Sy + Nz * Sz
 
 
+# =============================================================================
+# Sun Altitude Thresholds
+# =============================================================================
+# Glow requires the sun to be ABOVE the horizon. Below-horizon "glow" is nonsense.
+MIN_SUN_ALTITUDE_FOR_GLOW = 0.5  # degrees - sun must be at least this high for glow
+MIN_SUN_ALTITUDE_FOR_RIM = -2.0  # degrees - rim light possible slightly below horizon
+TWILIGHT_ALTITUDE_RANGE = (-6.0, 0.0)  # civil twilight range
+
+
+def get_sun_altitude_at_minutes(
+    sun_track: list[SunPosition],
+    minutes: float,
+) -> float | None:
+    """
+    Look up sun altitude at a given time (minutes from event).
+
+    Uses linear interpolation between sun_track points if exact match not found.
+
+    Args:
+        sun_track: List of SunPosition objects with minutes_from_start
+        minutes: Minutes from event (sunrise/sunset)
+
+    Returns:
+        Sun altitude in degrees, or None if sun_track is empty
+    """
+    if not sun_track:
+        return None
+
+    # Find bracketing points
+    prev_pos = None
+    for pos in sun_track:
+        if pos.minutes_from_start >= minutes:
+            if prev_pos is None:
+                # minutes is before first point, use first point
+                return pos.altitude_deg
+            # Interpolate between prev_pos and pos
+            t = (minutes - prev_pos.minutes_from_start) / (pos.minutes_from_start - prev_pos.minutes_from_start)
+            return prev_pos.altitude_deg + t * (pos.altitude_deg - prev_pos.altitude_deg)
+        prev_pos = pos
+
+    # minutes is after last point, use last point
+    return sun_track[-1].altitude_deg if sun_track else None
+
+
+def classify_lighting_type_with_altitude(
+    base_lighting_type: str,
+    sun_altitude_deg: float | None,
+) -> str:
+    """
+    Reclassify lighting type based on sun altitude.
+
+    If sun is below MIN_SUN_ALTITUDE_FOR_GLOW, the light is "afterglow"
+    (twilight conditions) rather than direct glow/texture.
+
+    Args:
+        base_lighting_type: Original lighting type ("standard", "rim", "crest", etc.)
+        sun_altitude_deg: Sun altitude at peak time
+
+    Returns:
+        Possibly reclassified lighting type ("afterglow" if sun below horizon)
+    """
+    if sun_altitude_deg is None:
+        return base_lighting_type
+
+    # Afterglow: sun below MIN_SUN_ALTITUDE_FOR_GLOW threshold
+    # Direct glow/texture on surfaces requires sun above horizon
+    if sun_altitude_deg < MIN_SUN_ALTITUDE_FOR_GLOW:
+        return "afterglow"
+
+    return base_lighting_type
+
+
+# =============================================================================
+# Planar Subject Lighting Classification (Face-Sun Angle Gate)
+# =============================================================================
+# For planar subjects (walls, slabs), lighting type is determined STRICTLY
+# by the angle between face direction and sun azimuth:
+#   - Glow/texture: face-sun offset <= 60° (faces toward sun)
+#   - Rim/edge:     face-sun offset 60-120° (perpendicular to sun)
+#   - Rejected:     face-sun offset > 120° (faces away from sun)
+#
+# Camera-sun geometry CANNOT override face-sun classification for planar subjects.
+# Volumetric subjects (boulders, knobs) can use camera-sun geometry since
+# they don't have a single dominant face direction.
+
+PLANAR_GLOW_MAX_OFFSET = 60.0   # Max face-sun offset for glow classification
+PLANAR_RIM_MIN_OFFSET = 60.0   # Min face-sun offset for rim classification
+PLANAR_RIM_MAX_OFFSET = 120.0  # Max face-sun offset for rim classification
+
+
+def classify_planar_lighting_by_face_sun(
+    face_direction_deg: float,
+    sun_azimuth_deg: float,
+) -> tuple[str, float]:
+    """
+    Classify lighting type for planar subjects based on face-sun angle.
+
+    For planar subjects (walls, slabs, flat faces), the lighting type is
+    determined strictly by how the surface faces relative to the sun:
+    - Glow: Surface faces toward sun (offset <= 60°) - receives warm direct light
+    - Rim: Surface perpendicular to sun (60° < offset <= 120°) - receives edge light
+    - Rejected: Surface faces away from sun (offset > 120°) - in shadow
+
+    This is a SANITY GATE that cannot be overridden by camera position.
+
+    Args:
+        face_direction_deg: Direction the surface faces (0-360, 0=N)
+        sun_azimuth_deg: Sun direction (0-360, 0=N)
+
+    Returns:
+        (lighting_type, face_sun_offset) where lighting_type is
+        "glow", "rim", or "rejected"
+    """
+    # Compute face-sun angular offset (0-180)
+    diff = abs(face_direction_deg - sun_azimuth_deg) % 360
+    offset = min(diff, 360 - diff)
+
+    # Classify based on face-sun angle
+    if offset <= PLANAR_GLOW_MAX_OFFSET:
+        return "glow", offset
+    elif offset <= PLANAR_RIM_MAX_OFFSET:
+        return "rim", offset
+    else:
+        return "rejected", offset
+
+
+def validate_planar_lighting_type(
+    proposed_lighting_type: str,
+    geometry_type: str,
+    face_direction_deg: float,
+    sun_azimuth_deg: float,
+) -> tuple[str, bool, str]:
+    """
+    Validate and potentially correct lighting type for planar subjects.
+
+    For planar subjects, this enforces that lighting classification matches
+    the face-sun angle. Camera-sun geometry cannot override face-sun.
+
+    For volumetric subjects, the proposed lighting type is returned unchanged
+    since camera-sun geometry is valid for subjects without a single face.
+
+    Args:
+        proposed_lighting_type: Lighting type from edge detection or other source
+        geometry_type: "planar" or "volumetric"
+        face_direction_deg: Surface face direction (degrees)
+        sun_azimuth_deg: Sun azimuth (degrees)
+
+    Returns:
+        (validated_lighting_type, was_corrected, correction_reason)
+    """
+    # Volumetric subjects: allow any lighting type (camera-sun geometry is valid)
+    if geometry_type == "volumetric":
+        return proposed_lighting_type, False, ""
+
+    # Planar subjects: enforce face-sun angle classification
+    face_sun_type, offset = classify_planar_lighting_by_face_sun(
+        face_direction_deg, sun_azimuth_deg
+    )
+
+    # Check if proposed type matches face-sun classification
+    # Map similar types together for comparison
+    glow_types = {"glow", "standard", "side", "crest", "texture"}
+    rim_types = {"rim", "edge", "backlit"}
+
+    proposed_is_glow = proposed_lighting_type in glow_types
+    proposed_is_rim = proposed_lighting_type in rim_types
+
+    if face_sun_type == "glow":
+        # Face-sun says glow: allow glow-family types
+        if proposed_is_glow or proposed_lighting_type == "afterglow":
+            return proposed_lighting_type, False, ""
+        else:
+            # Override to "standard" (default glow type)
+            return "standard", True, f"planar_face_sun_override(offset={offset:.0f}°<=60°,was={proposed_lighting_type})"
+
+    elif face_sun_type == "rim":
+        # Face-sun says rim: allow rim-family types OR glow-family (side light is valid here)
+        if proposed_is_rim or proposed_is_glow or proposed_lighting_type == "afterglow":
+            return proposed_lighting_type, False, ""
+        else:
+            return "rim", True, f"planar_face_sun_override(offset={offset:.0f}°in[60-120],was={proposed_lighting_type})"
+
+    else:
+        # Face-sun says rejected: should not reach here (pre-filtered)
+        # But if it does, mark as rejected
+        return "rejected", True, f"planar_faces_away(offset={offset:.0f}°>120°)"
+
+
 def compute_glow_score(
     incidence: float,
+    sun_altitude_deg: float = None,
     target_incidence: float = 0.2,
     sigma: float = 0.15,
 ) -> float:
@@ -185,14 +374,22 @@ def compute_glow_score(
     Optimal glow occurs at grazing angles (~0.2 incidence) where
     light rakes across the surface creating texture and drama.
 
+    IMPORTANT: Glow is ONLY valid when sun is above horizon.
+    If sun_altitude_deg < MIN_SUN_ALTITUDE_FOR_GLOW, returns 0.
+
     Args:
         incidence: Dot product of normal and sun vector
+        sun_altitude_deg: Sun altitude in degrees (optional but recommended)
         target_incidence: Optimal incidence for glow (default 0.2)
         sigma: Spread of the glow function
 
     Returns:
         Glow score in range [0, 1] where 1 = optimal
     """
+    # CRITICAL: No glow when sun is below horizon
+    if sun_altitude_deg is not None and sun_altitude_deg < MIN_SUN_ALTITUDE_FOR_GLOW:
+        return 0.0
+
     if incidence < 0:
         return 0.0  # Backlit, no glow
 
@@ -210,6 +407,9 @@ def compute_incidence_series(
     """
     Compute incidence and glow score over time for a surface.
 
+    IMPORTANT: Glow score is set to 0 when sun is below MIN_SUN_ALTITUDE_FOR_GLOW.
+    This prevents nonsensical "glow" opportunities before sunrise or after sunset.
+
     Args:
         normal: Surface normal unit vector
         sun_track: List of sun positions over time
@@ -221,7 +421,8 @@ def compute_incidence_series(
 
     for sun_pos in sun_track:
         incidence = compute_incidence(normal, sun_pos.vector)
-        glow = compute_glow_score(incidence)
+        # Pass sun altitude to enforce altitude threshold
+        glow = compute_glow_score(incidence, sun_altitude_deg=sun_pos.altitude_deg)
 
         series.append(IncidencePoint(
             minutes=sun_pos.minutes_from_start,
@@ -234,6 +435,7 @@ def compute_incidence_series(
 
 def detect_glow_window(
     incidence_series: list[IncidencePoint],
+    sun_track: list[SunPosition] = None,
     min_glow_score: float = 0.5,
     min_incidence: float = 0.05,
     max_incidence: float = 0.40,
@@ -241,21 +443,43 @@ def detect_glow_window(
     """
     Detect the window of optimal lighting.
 
+    IMPORTANT: Glow is only valid when sun is above horizon.
+    Points with sun_altitude < MIN_SUN_ALTITUDE_FOR_GLOW are excluded.
+    If the peak glow time has sun below horizon, returns None.
+
     Args:
         incidence_series: Time series of incidence/glow
+        sun_track: List of sun positions (for altitude validation)
         min_glow_score: Minimum glow score to consider "good"
         min_incidence: Minimum incidence for valid glow
         max_incidence: Maximum incidence for valid glow
 
     Returns:
-        GlowWindow if found, None otherwise
+        GlowWindow if found with valid sun altitude, None otherwise
     """
+    # Build lookup of sun altitude by minutes
+    sun_altitude_by_minutes = {}
+    if sun_track:
+        for sun_pos in sun_track:
+            sun_altitude_by_minutes[sun_pos.minutes_from_start] = sun_pos.altitude_deg
+
     # Find points within the glow range
-    glow_points = [
-        p for p in incidence_series
-        if p.glow_score >= min_glow_score
-        and min_incidence <= p.incidence <= max_incidence
-    ]
+    # Note: glow_score is already 0 for sun below horizon (from compute_glow_score)
+    # but we double-check here for safety
+    glow_points = []
+    for p in incidence_series:
+        if p.glow_score < min_glow_score:
+            continue
+        if not (min_incidence <= p.incidence <= max_incidence):
+            continue
+
+        # Validate sun altitude if we have sun track
+        if sun_track:
+            sun_alt = sun_altitude_by_minutes.get(p.minutes, None)
+            if sun_alt is not None and sun_alt < MIN_SUN_ALTITUDE_FOR_GLOW:
+                continue  # Sun below horizon - not valid glow
+
+        glow_points.append(p)
 
     if not glow_points:
         return None
@@ -266,6 +490,17 @@ def detect_glow_window(
 
     # Find peak
     peak_point = max(glow_points, key=lambda p: p.glow_score)
+
+    # Final validation: ensure peak has sun above horizon
+    if sun_track:
+        peak_sun_alt = sun_altitude_by_minutes.get(peak_point.minutes, None)
+        if peak_sun_alt is not None and peak_sun_alt < MIN_SUN_ALTITUDE_FOR_GLOW:
+            import logging
+            logging.debug(
+                f"Glow window rejected: peak at {peak_point.minutes:.0f}min has "
+                f"sun_altitude={peak_sun_alt:.1f}° < {MIN_SUN_ALTITUDE_FOR_GLOW}°"
+            )
+            return None
 
     return GlowWindow(
         start_minutes=start_minutes,
@@ -737,7 +972,8 @@ def analyze_subject_illumination(
         IlluminationAnalysis with series, windows, zone type, and lighting info
     """
     series = compute_incidence_series(normal, sun_track)
-    window = detect_glow_window(series)
+    # Pass sun_track to enforce sun altitude check (no glow when sun below horizon)
+    window = detect_glow_window(series, sun_track=sun_track)
 
     # Find sun position at peak (or midpoint if no glow window)
     peak_sun = None

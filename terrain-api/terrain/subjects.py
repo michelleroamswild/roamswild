@@ -1421,6 +1421,776 @@ def classify_geometry_type(
 
 
 # =============================================================================
+# Glow Facet Extraction for Planar Subjects
+# =============================================================================
+# Planar subjects are multi-facet: different parts face different directions.
+# For sunset/sunrise, only cells facing the sun (Δ(face,sun) <= 60°) receive glow.
+# This extracts connected components of glow-valid cells as "facets".
+#
+# Each facet is treated as a separate subject for standing-location search,
+# while the original polygon is kept as the container/explore area.
+
+# Facet extraction parameters
+FACET_MIN_CELLS = 20              # Minimum cells per facet (~2000 m² at 10m DEM)
+FACET_MIN_AREA_M2 = 1500.0        # Minimum area per facet
+FACET_MAX_PER_SUBJECT = 3         # Maximum facets to keep per original subject
+FACET_GLOW_MAX_OFFSET = 60.0      # Max face-sun offset for glow classification
+
+
+@dataclass
+class GlowFacet:
+    """A connected component of glow-valid cells within a planar subject."""
+    facet_id: int
+    parent_subject_id: int
+    cells: list[tuple[int, int]]  # (row, col) indices
+    # Centroid
+    centroid_row: float
+    centroid_col: float
+    centroid_lat: float
+    centroid_lon: float
+    # Properties
+    area_m2: float
+    num_cells: int
+    mean_face_direction: float
+    face_sun_offset: float  # Mean offset from sun azimuth
+    # Structure score for ranking
+    mean_structure_score: float
+    max_structure_score: float
+    # Inherited from parent
+    mean_slope: float
+    mean_elevation: float
+    normal: tuple[float, float, float]
+
+
+def _compute_connected_components(
+    cells: list[tuple[int, int]],
+    grid_shape: tuple[int, int],
+) -> list[list[tuple[int, int]]]:
+    """
+    Find connected components in a set of cells using 8-connectivity.
+
+    Args:
+        cells: List of (row, col) cell coordinates
+        grid_shape: Shape of the grid (rows, cols)
+
+    Returns:
+        List of cell lists, one per connected component
+    """
+    if not cells:
+        return []
+
+    # Create a set for O(1) lookup
+    cell_set = set(cells)
+    visited = set()
+    components = []
+
+    # 8-connectivity neighbors
+    neighbors = [(-1, -1), (-1, 0), (-1, 1),
+                 (0, -1),          (0, 1),
+                 (1, -1),  (1, 0),  (1, 1)]
+
+    for start_cell in cells:
+        if start_cell in visited:
+            continue
+
+        # BFS to find connected component
+        component = []
+        queue = [start_cell]
+        visited.add(start_cell)
+
+        while queue:
+            row, col = queue.pop(0)
+            component.append((row, col))
+
+            # Check all 8 neighbors
+            for dr, dc in neighbors:
+                nr, nc = row + dr, col + dc
+                neighbor = (nr, nc)
+                if neighbor in cell_set and neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+
+        components.append(component)
+
+    return components
+
+
+def _select_diverse_facets(
+    facets: list[GlowFacet],
+    max_facets: int,
+    min_quality_ratio: float = 0.3,
+) -> list[GlowFacet]:
+    """
+    Select facets with spatial diversity instead of just top-N by score.
+
+    Algorithm:
+    1. Pick the facet with the highest structure score (the "best")
+    2. For each subsequent slot, pick the facet that:
+       - Meets minimum quality threshold (score >= min_quality_ratio * best_score)
+       - Maximizes minimum distance to all already-selected facets
+
+    This ensures spatial coverage across the subject instead of clustering
+    all facets in the highest-structure region.
+
+    Args:
+        facets: List of GlowFacet candidates
+        max_facets: Maximum number of facets to return
+        min_quality_ratio: Minimum score as fraction of best (default 0.3 = 30%)
+
+    Returns:
+        List of spatially diverse facets
+    """
+    import logging
+
+    if not facets:
+        return []
+
+    if len(facets) <= max_facets:
+        return facets
+
+    # Sort by score to find best
+    sorted_by_score = sorted(facets, key=lambda f: f.max_structure_score, reverse=True)
+    best_score = sorted_by_score[0].max_structure_score
+    min_score = best_score * min_quality_ratio
+
+    # Filter to quality threshold
+    candidates = [f for f in facets if f.max_structure_score >= min_score]
+
+    if len(candidates) <= max_facets:
+        return candidates
+
+    # Greedy selection with spatial diversity
+    selected: list[GlowFacet] = []
+
+    # First: pick the best by score
+    selected.append(sorted_by_score[0])
+    remaining = [f for f in candidates if f.facet_id != sorted_by_score[0].facet_id]
+
+    logging.debug(
+        f"Diverse facet selection: best={sorted_by_score[0].facet_id} "
+        f"(score={best_score:.3f}), min_score={min_score:.3f}, "
+        f"candidates={len(candidates)}"
+    )
+
+    # Subsequent: pick facet that maximizes min distance to selected
+    while len(selected) < max_facets and remaining:
+        best_candidate = None
+        best_min_dist = -1
+
+        for candidate in remaining:
+            # Compute minimum distance to all selected facets
+            min_dist = float('inf')
+            for sel in selected:
+                dist = _haversine_distance(
+                    candidate.centroid_lat, candidate.centroid_lon,
+                    sel.centroid_lat, sel.centroid_lon
+                )
+                min_dist = min(min_dist, dist)
+
+            if min_dist > best_min_dist:
+                best_min_dist = min_dist
+                best_candidate = candidate
+
+        if best_candidate:
+            selected.append(best_candidate)
+            remaining = [f for f in remaining if f.facet_id != best_candidate.facet_id]
+            logging.debug(
+                f"  Selected facet {best_candidate.facet_id}: "
+                f"min_dist={best_min_dist:.0f}m, score={best_candidate.max_structure_score:.3f}"
+            )
+
+    return selected
+
+
+def _dilate_component(
+    component: list[tuple[int, int]],
+    glow_valid_mask: set[tuple[int, int]],
+    grid_shape: tuple[int, int],
+    iterations: int = 2,
+) -> list[tuple[int, int]]:
+    """
+    Dilate a small component within the glow-valid mask.
+
+    For small components with high structure scores, we try to grow them
+    by including adjacent glow-valid cells that weren't initially connected.
+
+    Args:
+        component: List of (row, col) cells in the small component
+        glow_valid_mask: Set of all glow-valid cells in the subject
+        grid_shape: Shape of the grid (rows, cols)
+        iterations: Number of dilation iterations (default 2)
+
+    Returns:
+        Expanded component (may be same size if no adjacent glow cells)
+    """
+    current = set(component)
+    rows, cols = grid_shape
+
+    for _ in range(iterations):
+        new_cells = set()
+        for r, c in current:
+            # Check 8-connected neighbors
+            for dr in [-1, 0, 1]:
+                for dc in [-1, 0, 1]:
+                    if dr == 0 and dc == 0:
+                        continue
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < rows and 0 <= nc < cols:
+                        if (nr, nc) in glow_valid_mask and (nr, nc) not in current:
+                            new_cells.add((nr, nc))
+
+        if not new_cells:
+            break  # No more cells to add
+        current.update(new_cells)
+
+    return list(current)
+
+
+def extract_glow_facets(
+    subject: DetectedSubject,
+    dem: 'DEMGrid',
+    Nx: np.ndarray,
+    Ny: np.ndarray,
+    Nz: np.ndarray,
+    slope_deg: np.ndarray,
+    elevations: np.ndarray,
+    sun_azimuth_deg: float,
+    structure_scores: np.ndarray = None,
+    min_cells: int = FACET_MIN_CELLS,
+    min_area_m2: float = FACET_MIN_AREA_M2,
+    max_facets: int = FACET_MAX_PER_SUBJECT,
+    glow_max_offset: float = FACET_GLOW_MAX_OFFSET,
+) -> list[GlowFacet]:
+    """
+    Extract glow-valid facets from a planar subject.
+
+    For planar subjects, different parts of the polygon face different directions.
+    This function:
+    1. Filters cells by face-sun alignment (Δ <= glow_max_offset)
+    2. Finds connected components of glow-valid cells
+    3. Filters by minimum size (cells and area)
+    4. Ranks by structure score and returns top facets
+
+    Args:
+        subject: The planar DetectedSubject
+        dem: DEMGrid for coordinate conversion
+        Nx, Ny, Nz: Surface normal components
+        slope_deg: Slope array
+        elevations: Elevation array
+        sun_azimuth_deg: Sun azimuth at peak time
+        structure_scores: Optional per-cell structure scores for ranking
+        min_cells: Minimum cells per facet
+        min_area_m2: Minimum area per facet
+        max_facets: Maximum facets to return
+        glow_max_offset: Maximum face-sun offset for glow classification
+
+    Returns:
+        List of GlowFacet objects, ranked by structure score
+    """
+    import math
+    import logging
+
+    if not subject.cells:
+        return []
+
+    cell_size_m = dem.cell_size_m
+
+    # Step 1: Filter cells by face-sun alignment
+    glow_cells = []
+    cell_face_dirs = {}  # Store face direction per cell
+
+    for row, col in subject.cells:
+        nx = Nx[row, col]
+        ny = Ny[row, col]
+        horiz_mag = math.sqrt(nx**2 + ny**2)
+
+        if horiz_mag < 0.01:
+            continue  # Skip flat cells
+
+        # Compute face direction
+        face_dir = math.degrees(math.atan2(nx, ny)) % 360
+        cell_face_dirs[(row, col)] = face_dir
+
+        # Check face-sun offset
+        diff = abs(face_dir - sun_azimuth_deg) % 360
+        offset = min(diff, 360 - diff)
+
+        if offset <= glow_max_offset:
+            glow_cells.append((row, col))
+
+    if not glow_cells:
+        logging.debug(
+            f"Subject {subject.subject_id}: No glow-valid cells "
+            f"(sun_az={sun_azimuth_deg:.1f}°, max_offset={glow_max_offset}°)"
+        )
+        return []
+
+    logging.debug(
+        f"Subject {subject.subject_id}: {len(glow_cells)}/{len(subject.cells)} cells are glow-valid "
+        f"({len(glow_cells)/len(subject.cells)*100:.1f}%)"
+    )
+
+    # Step 2: Find connected components
+    components = _compute_connected_components(glow_cells, dem.elevations.shape)
+
+    # Step 3: Filter by minimum size and create facets
+    # For small components with high structure scores, try dilating within glow mask
+    glow_valid_set = set(glow_cells)
+    HIGH_STRUCTURE_THRESHOLD = 0.95  # Structure score threshold for dilation rescue
+
+    facets = []
+    facet_id = 0
+
+    for component in components:
+        num_cells = len(component)
+        area_m2 = num_cells * cell_size_m ** 2
+
+        # Check if component is too small
+        if num_cells < min_cells or area_m2 < min_area_m2:
+            # Before rejecting, check for high-structure small components
+            if structure_scores is not None and num_cells >= 3:
+                max_struct_in_comp = max(structure_scores[r, c] for r, c in component)
+
+                if max_struct_in_comp >= HIGH_STRUCTURE_THRESHOLD:
+                    # Try dilating within glow-valid mask
+                    dilated = _dilate_component(
+                        component=component,
+                        glow_valid_mask=glow_valid_set,
+                        grid_shape=dem.elevations.shape,
+                        iterations=2,
+                    )
+
+                    new_num_cells = len(dilated)
+                    new_area_m2 = new_num_cells * cell_size_m ** 2
+
+                    if new_num_cells >= min_cells and new_area_m2 >= min_area_m2:
+                        logging.debug(
+                            f"Subject {subject.subject_id}: Dilated small high-structure component "
+                            f"from {num_cells} to {new_num_cells} cells (struct={max_struct_in_comp:.3f})"
+                        )
+                        component = dilated
+                        num_cells = new_num_cells
+                        area_m2 = new_area_m2
+                    else:
+                        # Dilation didn't help enough
+                        continue
+                else:
+                    continue
+            else:
+                continue
+
+        # Compute facet properties
+        rows, cols = zip(*component)
+
+        # Centroid
+        centroid_row = sum(rows) / len(rows)
+        centroid_col = sum(cols) / len(cols)
+        centroid_lat, centroid_lon = dem.indices_to_lat_lon(
+            int(round(centroid_row)), int(round(centroid_col))
+        )
+
+        # Mean face direction and offset
+        face_dirs = [cell_face_dirs[(r, c)] for r, c in component if (r, c) in cell_face_dirs]
+        if face_dirs:
+            # Circular mean for angles
+            sin_sum = sum(math.sin(math.radians(d)) for d in face_dirs)
+            cos_sum = sum(math.cos(math.radians(d)) for d in face_dirs)
+            mean_face_dir = math.degrees(math.atan2(sin_sum, cos_sum)) % 360
+
+            # Mean offset from sun
+            diff = abs(mean_face_dir - sun_azimuth_deg) % 360
+            face_sun_offset = min(diff, 360 - diff)
+        else:
+            mean_face_dir = subject.face_direction
+            face_sun_offset = 0.0
+
+        # Mean slope and elevation
+        slopes = [slope_deg[r, c] for r, c in component]
+        elevs = [elevations[r, c] for r, c in component]
+        mean_slope = sum(slopes) / len(slopes)
+        mean_elev = sum(elevs) / len(elevs)
+
+        # Structure scores
+        if structure_scores is not None:
+            struct_scores = [structure_scores[r, c] for r, c in component]
+            mean_struct = sum(struct_scores) / len(struct_scores)
+            max_struct = max(struct_scores)
+        else:
+            mean_struct = 0.5
+            max_struct = 0.5
+
+        # Compute average normal
+        nx_sum = sum(Nx[r, c] for r, c in component)
+        ny_sum = sum(Ny[r, c] for r, c in component)
+        nz_sum = sum(Nz[r, c] for r, c in component)
+        n_len = math.sqrt(nx_sum**2 + ny_sum**2 + nz_sum**2)
+        if n_len > 0.01:
+            normal = (nx_sum / n_len, ny_sum / n_len, nz_sum / n_len)
+        else:
+            normal = subject.normal
+
+        facet = GlowFacet(
+            facet_id=facet_id,
+            parent_subject_id=subject.subject_id,
+            cells=list(component),
+            centroid_row=centroid_row,
+            centroid_col=centroid_col,
+            centroid_lat=centroid_lat,
+            centroid_lon=centroid_lon,
+            area_m2=area_m2,
+            num_cells=num_cells,
+            mean_face_direction=mean_face_dir,
+            face_sun_offset=face_sun_offset,
+            mean_structure_score=mean_struct,
+            max_structure_score=max_struct,
+            mean_slope=mean_slope,
+            mean_elevation=mean_elev,
+            normal=normal,
+        )
+        facets.append(facet)
+        facet_id += 1
+
+    if not facets:
+        logging.debug(
+            f"Subject {subject.subject_id}: No facets passed size filter "
+            f"(min_cells={min_cells}, min_area={min_area_m2}m²)"
+        )
+        return []
+
+    # Step 4: Select facets with spatial diversity
+    # Instead of just taking top N by score (which clusters in one area),
+    # we select facets that maximize spatial coverage while meeting quality threshold
+    selected_facets = _select_diverse_facets(
+        facets=facets,
+        max_facets=max_facets,
+        min_quality_ratio=0.3,  # Must have at least 30% of best facet's score
+    )
+
+    logging.info(
+        f"Subject {subject.subject_id}: Selected {len(selected_facets)} diverse glow facets "
+        f"from {len(facets)} candidates (glow_cells={len(glow_cells)}/{len(subject.cells)})"
+    )
+    for i, f in enumerate(selected_facets):
+        logging.debug(
+            f"  Facet {f.facet_id}: {f.num_cells} cells, {f.area_m2:.0f}m², "
+            f"face_dir={f.mean_face_direction:.1f}°, offset={f.face_sun_offset:.1f}°, "
+            f"struct={f.max_structure_score:.3f}"
+        )
+
+    return selected_facets
+
+
+def create_subject_from_facet(
+    facet: GlowFacet,
+    parent_subject: DetectedSubject,
+    dem: 'DEMGrid',
+    Nx: np.ndarray,
+    Ny: np.ndarray,
+    Nz: np.ndarray,
+) -> DetectedSubject:
+    """
+    Create a DetectedSubject from a GlowFacet for standing location search.
+
+    The facet becomes a new subject with its own centroid and properties,
+    but inherits some properties from the parent subject.
+
+    Args:
+        facet: The GlowFacet to convert
+        parent_subject: The original planar subject
+        dem: DEMGrid for coordinate conversion
+        Nx, Ny, Nz: Surface normal components
+
+    Returns:
+        A new DetectedSubject representing the facet
+    """
+    return DetectedSubject(
+        subject_id=facet.parent_subject_id * 100 + facet.facet_id,  # Composite ID
+        cells=facet.cells,
+        centroid_row=facet.centroid_row,
+        centroid_col=facet.centroid_col,
+        centroid_lat=facet.centroid_lat,
+        centroid_lon=facet.centroid_lon,
+        mean_elevation=facet.mean_elevation,
+        mean_slope=facet.mean_slope,
+        mean_aspect=facet.mean_face_direction,  # Use face direction as aspect
+        face_direction=facet.mean_face_direction,
+        normal=facet.normal,
+        area_m2=facet.area_m2,
+        confidence=parent_subject.confidence,
+        score_breakdown=parent_subject.score_breakdown,
+        distance_from_center_m=parent_subject.distance_from_center_m,
+        classification=parent_subject.classification,
+        subject_type=parent_subject.subject_type,
+        quality_tier=parent_subject.quality_tier,
+        structure=parent_subject.structure,
+        structure_class=parent_subject.structure_class,
+        is_dramatic=parent_subject.is_dramatic,
+        geometry_type="planar",  # Facets are planar by definition
+        face_direction_variance=0.0,  # Facets have coherent direction
+        volumetric_reason=None,
+        parent_polygon_id=facet.parent_subject_id,  # Track parent
+    )
+
+
+# =============================================================================
+# Mega-Facet Handling
+# =============================================================================
+# Mega-facets (>200k m² or >600m width) are too large to photograph as a single
+# subject. Instead, we extract K local-max anchors within the facet and
+# region-grow smaller subject polygons around each.
+
+MEGA_FACET_MAX_AREA_M2 = 200000.0  # 200k m² = 0.2 km²
+MEGA_FACET_MAX_WIDTH_M = 600.0     # 600m effective width
+MEGA_FACET_ANCHORS = 3             # Number of anchors to extract
+MEGA_FACET_ANCHOR_SPACING_M = 100.0  # Minimum spacing between anchors
+
+
+def compute_facet_width_m(facet: GlowFacet, cell_size_m: float) -> float:
+    """
+    Compute the effective width of a facet.
+
+    Uses sqrt(area) as a proxy for width, which works well for roughly
+    square or elongated regions.
+    """
+    return np.sqrt(facet.area_m2)
+
+
+def is_mega_facet(
+    facet: GlowFacet,
+    cell_size_m: float,
+    max_area_m2: float = MEGA_FACET_MAX_AREA_M2,
+    max_width_m: float = MEGA_FACET_MAX_WIDTH_M,
+) -> bool:
+    """
+    Check if a facet is too large to photograph as a single subject.
+
+    Returns True if:
+    - area > max_area_m2 (default 200k m²), OR
+    - width > max_width_m (default 600m)
+    """
+    width_m = compute_facet_width_m(facet, cell_size_m)
+    return facet.area_m2 > max_area_m2 or width_m > max_width_m
+
+
+def extract_mega_facet_anchors(
+    facet: GlowFacet,
+    dem: 'DEMGrid',
+    structure_scores: np.ndarray,
+    num_anchors: int = MEGA_FACET_ANCHORS,
+    min_spacing_m: float = MEGA_FACET_ANCHOR_SPACING_M,
+) -> list[tuple[float, float, float]]:
+    """
+    Extract K local-max anchors from a mega-facet.
+
+    Uses structure_score to find the best points within the facet,
+    ensuring minimum spacing between anchors.
+
+    Args:
+        facet: The mega-facet to extract anchors from
+        dem: DEMGrid for coordinate conversion
+        structure_scores: Per-cell structure scores
+        num_anchors: Number of anchors to extract (default 3)
+        min_spacing_m: Minimum spacing between anchors (default 100m)
+
+    Returns:
+        List of (lat, lon, structure_score) tuples for each anchor
+    """
+    import logging
+
+    if not facet.cells:
+        return []
+
+    cell_size_m = dem.cell_size_m
+
+    # Get structure scores for all facet cells
+    scored_cells = []
+    for row, col in facet.cells:
+        score = structure_scores[row, col] if structure_scores is not None else 0.5
+        lat, lon = dem.indices_to_lat_lon(row, col)
+        scored_cells.append((score, row, col, lat, lon))
+
+    # Sort by score descending
+    scored_cells.sort(key=lambda x: x[0], reverse=True)
+
+    # Greedy selection with spacing constraint
+    anchors = []
+    for score, row, col, lat, lon in scored_cells:
+        if len(anchors) >= num_anchors:
+            break
+
+        # Check spacing against all existing anchors
+        too_close = False
+        for a_lat, a_lon, _ in anchors:
+            dist = _haversine_distance(lat, lon, a_lat, a_lon)
+            if dist < min_spacing_m:
+                too_close = True
+                break
+
+        if not too_close:
+            anchors.append((lat, lon, score))
+
+    logging.info(
+        f"Mega-facet {facet.facet_id}: Extracted {len(anchors)} anchors "
+        f"from {len(facet.cells)} cells (spacing >= {min_spacing_m}m)"
+    )
+    for i, (lat, lon, score) in enumerate(anchors):
+        logging.debug(
+            f"  Anchor {i+1}: ({lat:.6f}, {lon:.6f}), structure_score={score:.3f}"
+        )
+
+    return anchors
+
+
+def process_facet_with_mega_handling(
+    facet: GlowFacet,
+    parent_subject: DetectedSubject,
+    dem: 'DEMGrid',
+    Nx: np.ndarray,
+    Ny: np.ndarray,
+    Nz: np.ndarray,
+    slope_deg: np.ndarray,
+    curvature: np.ndarray,
+    structure_scores: np.ndarray = None,
+) -> list[DetectedSubject]:
+    """
+    Process a facet, handling mega-facets by extracting multiple anchors.
+
+    For normal facets: Returns a single DetectedSubject.
+    For mega-facets: Extracts K anchors and region-grows a subject around each.
+
+    Args:
+        facet: The GlowFacet to process
+        parent_subject: The original planar subject
+        dem: DEMGrid
+        Nx, Ny, Nz: Surface normal components
+        slope_deg: Slope array
+        curvature: Curvature array
+        structure_scores: Per-cell structure scores
+
+    Returns:
+        List of DetectedSubject objects (1 for normal, K for mega-facets)
+    """
+    import logging
+    from .structure import rebuild_subject_from_anchor
+
+    cell_size_m = dem.cell_size_m
+
+    # Check if this is a mega-facet
+    if not is_mega_facet(facet, cell_size_m):
+        # Normal facet - return as single subject
+        subj = create_subject_from_facet(facet, parent_subject, dem, Nx, Ny, Nz)
+        return [subj]
+
+    # Mega-facet - extract anchors and region-grow
+    width_m = compute_facet_width_m(facet, cell_size_m)
+    logging.info(
+        f"Mega-facet detected: {facet.area_m2:.0f}m² ({facet.area_m2/1000:.1f}k), "
+        f"width={width_m:.0f}m - extracting anchors"
+    )
+
+    anchors = extract_mega_facet_anchors(
+        facet=facet,
+        dem=dem,
+        structure_scores=structure_scores,
+    )
+
+    if not anchors:
+        logging.warning(f"Mega-facet {facet.facet_id}: No anchors extracted, falling back to single subject")
+        subj = create_subject_from_facet(facet, parent_subject, dem, Nx, Ny, Nz)
+        return [subj]
+
+    # Region-grow from each anchor
+    subjects = []
+    for anchor_idx, (anchor_lat, anchor_lon, anchor_score) in enumerate(anchors):
+        # Region-grow from anchor, constrained to facet cells
+        rebuilt_cells, rebuilt_structure = rebuild_subject_from_anchor(
+            anchor_lat=anchor_lat,
+            anchor_lon=anchor_lon,
+            dem_grid=dem,
+            slope_deg=slope_deg,
+            curvature=curvature,
+            structure_class=parent_subject.structure_class,
+            zone_cells=facet.cells,  # Constrain to facet
+        )
+
+        if len(rebuilt_cells) < 10:
+            logging.debug(f"Mega-facet anchor {anchor_idx+1}: Too few cells ({len(rebuilt_cells)}), skipping")
+            continue
+
+        # Compute properties for rebuilt subject
+        rows = [c[0] for c in rebuilt_cells]
+        cols = [c[1] for c in rebuilt_cells]
+        centroid_row = int(round(sum(rows) / len(rows)))
+        centroid_col = int(round(sum(cols) / len(cols)))
+        centroid_lat, centroid_lon = dem.indices_to_lat_lon(centroid_row, centroid_col)
+
+        # Mean properties
+        elevations = [dem.elevations[r, c] for r, c in rebuilt_cells]
+        slopes = [slope_deg[r, c] for r, c in rebuilt_cells]
+        mean_elev = float(np.mean(elevations))
+        mean_slope = float(np.mean(slopes))
+
+        # Mean normal
+        mean_Nx = np.mean([Nx[r, c] for r, c in rebuilt_cells])
+        mean_Ny = np.mean([Ny[r, c] for r, c in rebuilt_cells])
+        mean_Nz = np.mean([Nz[r, c] for r, c in rebuilt_cells])
+        norm_mag = np.sqrt(mean_Nx**2 + mean_Ny**2 + mean_Nz**2)
+        if norm_mag > 0:
+            mean_Nx /= norm_mag
+            mean_Ny /= norm_mag
+            mean_Nz /= norm_mag
+
+        # Face direction from normal
+        import math
+        horiz_mag = math.sqrt(mean_Nx**2 + mean_Ny**2)
+        if horiz_mag > 0.01:
+            face_dir = math.degrees(math.atan2(mean_Nx, mean_Ny)) % 360
+        else:
+            face_dir = facet.mean_face_direction
+
+        area_m2 = len(rebuilt_cells) * cell_size_m ** 2
+
+        # Create subject with composite ID
+        subject_id = facet.parent_subject_id * 1000 + facet.facet_id * 10 + anchor_idx
+
+        subj = DetectedSubject(
+            subject_id=subject_id,
+            cells=rebuilt_cells,
+            centroid_row=float(centroid_row),
+            centroid_col=float(centroid_col),
+            centroid_lat=centroid_lat,
+            centroid_lon=centroid_lon,
+            mean_elevation=mean_elev,
+            mean_slope=mean_slope,
+            mean_aspect=face_dir,
+            face_direction=face_dir,
+            normal=(float(mean_Nx), float(mean_Ny), float(mean_Nz)),
+            area_m2=area_m2,
+            confidence=parent_subject.confidence,
+            score_breakdown=parent_subject.score_breakdown,
+            distance_from_center_m=parent_subject.distance_from_center_m,
+            classification=parent_subject.classification,
+            subject_type=parent_subject.subject_type,
+            quality_tier=parent_subject.quality_tier,
+            structure=rebuilt_structure,
+            structure_class=parent_subject.structure_class,
+            is_dramatic=parent_subject.is_dramatic,
+            geometry_type="planar",
+            face_direction_variance=0.0,
+            volumetric_reason=None,
+            parent_polygon_id=facet.parent_subject_id,
+        )
+        subjects.append(subj)
+
+        logging.info(
+            f"Mega-facet anchor {anchor_idx+1}: Created subject {subject_id} "
+            f"({len(rebuilt_cells)} cells, {area_m2:.0f}m²)"
+        )
+
+    return subjects
+
+
+# =============================================================================
 # Multi-Anchor Extraction from Polygons
 # =============================================================================
 # Each polygon (explore area) can yield multiple subject anchors based on

@@ -1002,21 +1002,39 @@ export default function PhotoScout() {
         ? subject.properties.structure.max_structure_location[1]
         : subject.centroid.lon;
 
-      // Draw "Explore Area" polygon (only when showing analysis zones)
+      // Draw polygons (only when showing analysis zones)
       if (showAnalysisZones) {
-        const polygon = new google.maps.Polygon({
+        // 1. ExploreArea polygon - original zone (faint background layer)
+        if (subject.explore_polygon && subject.explore_polygon.length > 0) {
+          const explorePolygon = new google.maps.Polygon({
+            paths: subject.explore_polygon.map(([lat, lng]) => ({ lat, lng })),
+            strokeColor: color,
+            strokeWeight: 1,
+            strokeOpacity: 0.25,
+            fillColor: color,
+            fillOpacity: isSelected ? 0.06 : 0.03,
+            map,
+            clickable: true,
+            zIndex: 1,
+          });
+          explorePolygon.addListener("click", () => setSelectedSubjectId(subject.subject_id));
+          overlaysRef.current.push(explorePolygon);
+        }
+
+        // 2. Subject polygon - region-grown around anchor (bold foreground layer)
+        const subjectPolygon = new google.maps.Polygon({
           paths: subject.polygon.map(([lat, lng]) => ({ lat, lng })),
           strokeColor: color,
-          strokeWeight: isSelected ? 2 : 1,
-          strokeOpacity: 0.5,
+          strokeWeight: isSelected ? 3 : 2,
+          strokeOpacity: 0.9,
           fillColor: color,
-          fillOpacity: isSelected ? 0.15 : 0.08,
+          fillOpacity: isSelected ? 0.25 : 0.15,
           map,
           clickable: true,
+          zIndex: 2,
         });
-
-        polygon.addListener("click", () => setSelectedSubjectId(subject.subject_id));
-        overlaysRef.current.push(polygon);
+        subjectPolygon.addListener("click", () => setSelectedSubjectId(subject.subject_id));
+        overlaysRef.current.push(subjectPolygon);
       }
 
       // Subject Anchor marker - ALWAYS shown for selected, or when showAllPositions
