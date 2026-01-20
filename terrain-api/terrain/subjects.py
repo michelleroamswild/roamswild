@@ -1,16 +1,30 @@
 """
-Subject detection: find terrain features worth photographing.
+Subject detection with explicit separation of three concepts:
 
-Uses graduated confidence scoring instead of hard thresholds.
-Small features can qualify if they have strong visual signals
-(steep slope, good prominence, uniform facing direction).
+1. LIT TERRAIN - Areas receiving favorable light (glow or rim-light)
+2. PHOTOGRAPHIC SUBJECT - Distinct features within lit terrain worth photographing
+3. SHOOTING POSITION - Plausible location to photograph the subject
+
+A zone is only valid if ALL THREE exist.
+
+Zone sizing:
+- Use effective_width = sqrt(area) instead of raw area
+- Zones wider than MAX_ZONE_WIDTH_M (~1000m) are subdivided
+- This ensures zones are human-navigable and compositionally coherent
+
+Detection philosophy:
+- Detect lit terrain first (based on sun angle and face direction)
+- Identify photographic subjects within lit areas
+- Validate shooting positions exist before returning zones
 """
 from __future__ import annotations
 
 import numpy as np
 from dataclasses import dataclass
+from typing import Optional
 from .dem import DEMGrid
 from .analysis import compute_slope_aspect, compute_surface_normals, compute_curvature
+from .structure import StructureMetrics, compute_structure_metrics, is_dramatic_structure, get_structure_explanation
 
 
 # Scale classifications for photographic composition
@@ -54,6 +68,10 @@ class DetectedSubject:
     subject_type: str = "dramatic-feature"  # "dramatic-feature" or "surface-moment"
     # Quality tier: "primary" or "subtle" (surface moments are subtle/experimental)
     quality_tier: str = "primary"
+    # Structure metrics - distinguishes actual features from flat-lit terrain
+    structure: Optional[StructureMetrics] = None
+    structure_class: str = "unknown"  # "micro-dramatic", "macro-dramatic", "flat-lit"
+    is_dramatic: bool = True  # False for flat-lit terrain
 
 
 @dataclass
@@ -203,28 +221,39 @@ def detect_subjects(
     # Compute per-cell confidence scores
     cell_scores = compute_cell_scores(dem, slope_deg, curvature, prominence)
 
-    # Create candidate mask for all terrain features
-    # Surface moment vs dramatic feature is determined by LIGHTING, not geometry
-    # So we detect all features here and classify by lighting later
+    # Create candidate mask for terrain that can receive directional light
+    #
+    # IMPORTANT: Very flat terrain (< 8°) produces near-vertical surface normals
+    # that are insensitive to sun direction. Require minimum slope for meaningful
+    # directional lighting effects.
+    #
+    # PHILOSOPHY: Detect LIGHTING ZONES, not micro-surfaces
+    # - Large continuous slopes are better than small features
+    # - Use dilation to merge adjacent terrain into coherent zones
+    # - Both glow-facing and rim-light terrain are valuable
+    MIN_MEANINGFUL_SLOPE = 8.0  # Lowered to capture more terrain variety
+
     if detect_surface_moments:
-        # Broader detection: any terrain that might catch interesting light
+        # Broad detection: any terrain that might catch interesting light
+        # Very permissive to capture large continuous slopes
         candidates = (
-            (slope_deg >= 5.0) &  # Minimal slope (flat areas rarely interesting)
-            (prominence >= 0.5) &  # Some vertical relief
-            (curvature >= -1.0) &  # Allow varied curvature
-            (cell_scores >= 0.1)  # Baseline quality
+            (slope_deg >= MIN_MEANINGFUL_SLOPE) &  # Required for directional lighting
+            (prominence >= 0.3) &  # Minimal relief requirement
+            (cell_scores >= 0.05)  # Very permissive baseline
         )
     else:
         # Traditional dramatic feature detection (steeper requirements)
         candidates = (
-            (slope_deg >= min_slope_deg) &
+            (slope_deg >= max(min_slope_deg, MIN_MEANINGFUL_SLOPE)) &
             (prominence >= min_prominence_m) &
             (curvature >= min_curvature) &
-            (cell_scores >= 0.2)
+            (cell_scores >= 0.15)
         )
 
-    # Find connected components
-    labeled, num_features = _label_connected(candidates)
+    # Find connected components using 8-connectivity (includes diagonals)
+    # USE DILATION to merge nearby terrain into larger coherent zones
+    # This favors large continuous slopes over micro-features
+    labeled, num_features = _label_connected(candidates, connectivity=8, dilate_iterations=2)
 
     # Compute surface normals
     Nx, Ny, Nz = compute_surface_normals(slope_deg, aspect_deg)
@@ -289,6 +318,20 @@ def detect_subjects(
         # Preliminary subject type classification (will be refined by lighting)
         subject_type = _classify_subject_type_preliminary(mean_slope)
 
+        # Compute STRUCTURE METRICS - distinguishes dramatic features from flat-lit terrain
+        structure_metrics = compute_structure_metrics(
+            elevations=dem.elevations,
+            slope_deg=slope_deg,
+            curvature=curvature,
+            cells=cells,
+            cell_size_m=dem.cell_size_m,
+            dem_grid=dem,
+            centroid_row=centroid_row,
+            centroid_col=centroid_col,
+        )
+        structure_class = structure_metrics.structure_class
+        is_dramatic = is_dramatic_structure(structure_metrics)
+
         # Compute confidence scores (with classification context for relative sizing)
         subject_scores = _compute_subject_scores(
             mean_slope=mean_slope,
@@ -300,6 +343,30 @@ def detect_subjects(
             classification=classification,
             subject_type=subject_type,
         )
+
+        # Boost confidence for dramatic structure, penalize flat-lit
+        if is_dramatic:
+            # Boost based on structure score
+            structure_boost = structure_metrics.structure_score * 0.2
+            subject_scores = SubjectScores(
+                slope_score=subject_scores.slope_score,
+                prominence_score=subject_scores.prominence_score,
+                curvature_score=subject_scores.curvature_score,
+                coherence_score=subject_scores.coherence_score,
+                size_score=subject_scores.size_score,
+                total=min(1.0, subject_scores.total + structure_boost),
+            )
+        else:
+            # Penalize flat-lit terrain
+            structure_penalty = 0.15
+            subject_scores = SubjectScores(
+                slope_score=subject_scores.slope_score,
+                prominence_score=subject_scores.prominence_score,
+                curvature_score=subject_scores.curvature_score,
+                coherence_score=subject_scores.coherence_score,
+                size_score=subject_scores.size_score,
+                total=max(0.0, subject_scores.total - structure_penalty),
+            )
 
         # Apply type-appropriate and scale-appropriate confidence threshold
         # Surface moments have lowest threshold (micro-features)
@@ -318,11 +385,14 @@ def detect_subjects(
         if subject_scores.total < effective_threshold:
             continue
 
-        # Determine quality tier
-        # Surface moments are labeled "subtle" (experimental) unless high confidence
-        # They should never rank above high-confidence dramatic features
-        if subject_type == "surface-moment":
-            quality_tier = "subtle"  # Always subtle - experimental feature
+        # Determine quality tier based on structure and type
+        # flat-lit terrain is always "subtle" (not recommended for dramatic shots)
+        # Surface moments are also "subtle"
+        # Only dramatic structure with good lighting gets "primary"
+        if not is_dramatic:
+            quality_tier = "subtle"  # Flat-lit terrain - not dramatic
+        elif subject_type == "surface-moment":
+            quality_tier = "subtle"  # Surface moments - experimental
         else:
             quality_tier = "primary"
 
@@ -346,11 +416,21 @@ def detect_subjects(
                 "curvature": float(subject_scores.curvature_score),
                 "coherence": float(subject_scores.coherence_score),
                 "size": float(subject_scores.size_score),
+                # Structure metrics for debugging
+                "micro_relief_m": float(structure_metrics.micro_relief_m),
+                "macro_relief_m": float(structure_metrics.macro_relief_m),
+                "max_curvature": float(structure_metrics.max_curvature),
+                "max_slope_break": float(structure_metrics.max_slope_break),
+                "heterogeneity": float(structure_metrics.heterogeneity_score),
+                "structure_score": float(structure_metrics.structure_score),
             },
             distance_from_center_m=float(distance_m),
             classification=classification,
             subject_type=subject_type,
             quality_tier=quality_tier,
+            structure=structure_metrics,
+            structure_class=structure_class,
+            is_dramatic=is_dramatic,
         ))
 
     # Sort by quality tier first (primary before subtle), then by confidence
@@ -419,44 +499,51 @@ def _compute_subject_scores(
     # Critical for surface moments - they need consistent facing to catch light
     coherence_score = _compute_aspect_coherence(aspects)
 
-    # Size score: normalized relative to classification and type
-    if subject_type == "surface-moment":
-        # Surface moments: 5m² = 0.5, 20m² = 0.8, 100m²+ = 1.0 (micro features)
-        size_score = min(1.0, max(0.4, 0.4 + 0.3 * np.log10(max(area_m2, 2)) / 2))
-    elif classification == "foreground":
-        # 10m² = 0.4, 50m² = 0.7, 200m²+ = 1.0 (small features)
-        size_score = min(1.0, max(0.3, 0.3 + 0.35 * np.log10(max(area_m2, 5)) / 2))
-    elif classification == "human-scale":
-        # 50m² = 0.4, 300m² = 0.6, 1000m²+ = 0.9
-        size_score = min(0.9, max(0.3, 0.25 + 0.325 * np.log10(max(area_m2, 20)) / 2.5))
+    # Size score: FAVOR LARGE CONTINUOUS SLOPES
+    # No caps - bigger lighting zones are better for photography
+    # Logarithmic scaling to reward size without extreme bias
+    #
+    # Philosophy: Large continuous slopes catch consistent light
+    # and give photographers more composition options
+    if area_m2 <= 100:
+        # Small features: minimal score
+        size_score = 0.2 + 0.2 * (area_m2 / 100)
+    elif area_m2 <= 1000:
+        # Medium features: moderate score
+        size_score = 0.4 + 0.3 * np.log10(area_m2 / 100)
+    elif area_m2 <= 10000:
+        # Large features: good score
+        size_score = 0.7 + 0.2 * np.log10(area_m2 / 1000)
     else:
-        # 500m² = 0.4, 2000m² = 0.6, 10000m²+ = 0.8 (monument scale)
-        size_score = min(0.8, max(0.2, 0.2 + 0.3 * np.log10(max(area_m2, 100)) / 3))
+        # Very large zones: excellent score (no cap)
+        size_score = 0.9 + 0.1 * min(1.0, np.log10(area_m2 / 10000))
 
     # Mean cell quality (how good are the individual cells?)
     cell_quality = np.mean(cell_scores) if cell_scores else 0.5
 
-    # Weighted combination - different weights for surface moments
+    # Weighted combination - FAVOR LARGE CONTINUOUS SLOPES
+    # Size now has significant weight to reward large lighting zones
     if subject_type == "surface-moment":
-        # Surface moments: coherence and slope matter most
-        # They need uniform facing to catch subtle, consistent light
+        # Surface moments: coherence, size, and slope matter
+        # Large uniform-facing areas catch consistent subtle light
         total = (
-            0.25 * slope_score +       # Gentle slope in sweet spot
-            0.15 * prominence_score +  # Less important for micro-features
-            0.15 * curvature_score +   # Helps catch light
-            0.35 * coherence_score +   # Critical: uniform facing
-            0.05 * size_score +        # Small is fine
+            0.20 * slope_score +       # Slope in sweet spot
+            0.10 * prominence_score +  # Less important
+            0.10 * curvature_score +   # Helps catch light
+            0.30 * coherence_score +   # Critical: uniform facing
+            0.25 * size_score +        # LARGE zones are better
             0.05 * cell_quality
         )
     else:
-        # Dramatic features: slope and coherence matter most
+        # Dramatic features: slope, coherence, and size all matter
+        # Large continuous slopes give photographers options
         total = (
-            0.30 * slope_score +
-            0.20 * prominence_score +
+            0.25 * slope_score +
+            0.15 * prominence_score +
             0.10 * curvature_score +
             0.25 * coherence_score +
-            0.05 * size_score +
-            0.10 * cell_quality
+            0.20 * size_score +        # LARGE zones are better
+            0.05 * cell_quality
         )
 
     return SubjectScores(
@@ -509,33 +596,106 @@ def _compute_simple_prominence(dem: DEMGrid) -> np.ndarray:
     return prominence
 
 
-def _label_connected(mask: np.ndarray) -> tuple[np.ndarray, int]:
+def _label_connected(
+    mask: np.ndarray,
+    connectivity: int = 8,
+    dilate_iterations: int = 1,
+) -> tuple[np.ndarray, int]:
     """
     Label connected components in a boolean mask.
 
-    Simple 4-connectivity flood fill implementation.
+    Uses morphological dilation to merge nearby cells before labeling,
+    which helps group terrain features that span multiple DEM cells.
+
+    Args:
+        mask: Boolean mask of candidate cells
+        connectivity: 4 or 8 (8 includes diagonals)
+        dilate_iterations: Morphological dilation iterations to merge nearby cells
+                          (1 = merge cells 1 step apart, good for 30m DEM)
+
+    Returns:
+        (labeled_array, num_features)
     """
+    working_mask = mask.copy()
+
+    # Apply morphological dilation to merge nearby cells
+    # This helps connect terrain features that span multiple DEM cells
+    if dilate_iterations > 0:
+        for _ in range(dilate_iterations):
+            dilated = working_mask.copy()
+            # Dilate by shifting in all directions and OR'ing
+            if connectivity == 8:
+                # 8-connectivity: include diagonals
+                shifts = [(-1, 0), (1, 0), (0, -1), (0, 1),
+                         (-1, -1), (-1, 1), (1, -1), (1, 1)]
+            else:
+                # 4-connectivity
+                shifts = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+            for dr, dc in shifts:
+                shifted = np.zeros_like(working_mask)
+                if dr > 0:
+                    shifted[dr:, :] = working_mask[:-dr, :]
+                elif dr < 0:
+                    shifted[:dr, :] = working_mask[-dr:, :]
+                else:
+                    shifted[:, :] = working_mask[:, :]
+
+                if dc > 0:
+                    shifted2 = np.zeros_like(shifted)
+                    shifted2[:, dc:] = shifted[:, :-dc]
+                    shifted = shifted2
+                elif dc < 0:
+                    shifted2 = np.zeros_like(shifted)
+                    shifted2[:, :dc] = shifted[:, -dc:]
+                    shifted = shifted2
+
+                dilated = dilated | shifted
+            working_mask = dilated
+
+    # Label connected components using flood fill with specified connectivity
     labeled = np.zeros_like(mask, dtype=int)
     current_label = 0
+
+    if connectivity == 8:
+        neighbors = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+    else:
+        neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 
     def flood_fill(start_r: int, start_c: int, label: int):
         stack = [(start_r, start_c)]
         while stack:
             r, c = stack.pop()
-            if r < 0 or r >= mask.shape[0] or c < 0 or c >= mask.shape[1]:
+            if r < 0 or r >= working_mask.shape[0] or c < 0 or c >= working_mask.shape[1]:
                 continue
-            if not mask[r, c] or labeled[r, c] != 0:
+            if not working_mask[r, c] or labeled[r, c] != 0:
                 continue
             labeled[r, c] = label
-            stack.extend([(r-1, c), (r+1, c), (r, c-1), (r, c+1)])
+            for dr, dc in neighbors:
+                stack.append((r + dr, c + dc))
 
-    for i in range(mask.shape[0]):
-        for j in range(mask.shape[1]):
-            if mask[i, j] and labeled[i, j] == 0:
+    for i in range(working_mask.shape[0]):
+        for j in range(working_mask.shape[1]):
+            if working_mask[i, j] and labeled[i, j] == 0:
                 current_label += 1
                 flood_fill(i, j, current_label)
 
-    return labeled, current_label
+    # Mask back to only original candidate cells
+    # (dilated cells helped connect, but we only report original candidates)
+    labeled = labeled * mask.astype(int)
+
+    # Relabel to ensure contiguous labels after masking
+    unique_labels = np.unique(labeled[labeled > 0])
+    if len(unique_labels) > 0:
+        relabeled = np.zeros_like(labeled)
+        for new_label, old_label in enumerate(unique_labels, start=1):
+            relabeled[labeled == old_label] = new_label
+        labeled = relabeled
+        num_features = len(unique_labels)
+    else:
+        num_features = 0
+
+    return labeled, num_features
 
 
 def _circular_mean(angles_deg: list[float]) -> float:
@@ -848,3 +1008,381 @@ def _classify_zone_character(
         return "textured-flats"  # Gentle, extensive = slabs, pavements
     else:
         return "mixed-terrain"  # Varied = boulder fields, rock gardens
+
+
+# =============================================================================
+# Effective Width & Zone Subdivision
+# =============================================================================
+# Large lighting zones need to be broken into sub-zones that are:
+# - Human-navigable (can walk across in reasonable time)
+# - Compositionally coherent (photographer can frame the scene)
+
+MAX_ZONE_WIDTH_M = 1000.0  # Maximum effective width before subdivision
+MIN_ZONE_WIDTH_M = 100.0   # Minimum meaningful zone width
+
+
+def compute_effective_width(area_m2: float) -> float:
+    """
+    Compute effective width of a zone from its area.
+
+    Uses sqrt(area) as a proxy for the linear extent of the zone.
+    This works well for roughly circular or square zones.
+
+    Args:
+        area_m2: Zone area in square meters
+
+    Returns:
+        Effective width in meters
+    """
+    return np.sqrt(area_m2)
+
+
+def should_subdivide_zone(area_m2: float, max_width_m: float = MAX_ZONE_WIDTH_M) -> bool:
+    """
+    Determine if a zone should be subdivided based on effective width.
+
+    Args:
+        area_m2: Zone area in square meters
+        max_width_m: Maximum allowed effective width
+
+    Returns:
+        True if zone should be subdivided
+    """
+    effective_width = compute_effective_width(area_m2)
+    return effective_width > max_width_m
+
+
+def estimate_subdivision_count(area_m2: float, max_width_m: float = MAX_ZONE_WIDTH_M) -> int:
+    """
+    Estimate how many sub-zones a large zone should be divided into.
+
+    Args:
+        area_m2: Zone area in square meters
+        max_width_m: Maximum allowed effective width per sub-zone
+
+    Returns:
+        Number of sub-zones needed (minimum 1)
+    """
+    effective_width = compute_effective_width(area_m2)
+    if effective_width <= max_width_m:
+        return 1
+
+    # Each sub-zone should be about max_width_m × max_width_m
+    target_subzone_area = max_width_m ** 2
+    return max(1, int(np.ceil(area_m2 / target_subzone_area)))
+
+
+def subdivide_zone_cells(
+    cells: list[tuple[int, int]],
+    dem: DEMGrid,
+    max_width_m: float = MAX_ZONE_WIDTH_M,
+) -> list[list[tuple[int, int]]]:
+    """
+    Subdivide a large zone into smaller, navigable sub-zones.
+
+    Uses k-means style clustering based on spatial proximity.
+
+    Args:
+        cells: List of (row, col) cell indices for the zone
+        dem: DEMGrid for coordinate conversion
+        max_width_m: Maximum effective width per sub-zone
+
+    Returns:
+        List of cell lists, one per sub-zone
+    """
+    if not cells:
+        return []
+
+    # Calculate current area
+    area_m2 = len(cells) * dem.cell_size_m ** 2
+
+    # Check if subdivision needed
+    if not should_subdivide_zone(area_m2, max_width_m):
+        return [cells]
+
+    n_clusters = estimate_subdivision_count(area_m2, max_width_m)
+
+    if n_clusters <= 1:
+        return [cells]
+
+    # Convert cells to coordinates for clustering
+    coords = np.array([(r, c) for r, c in cells], dtype=float)
+
+    # Simple k-means clustering
+    # Initialize cluster centers evenly spaced
+    rows = coords[:, 0]
+    cols = coords[:, 1]
+
+    # Initialize centers using a grid pattern
+    n_sqrt = int(np.ceil(np.sqrt(n_clusters)))
+    row_steps = np.linspace(rows.min(), rows.max(), n_sqrt + 2)[1:-1]
+    col_steps = np.linspace(cols.min(), cols.max(), n_sqrt + 2)[1:-1]
+
+    centers = []
+    for r in row_steps:
+        for c in col_steps:
+            if len(centers) < n_clusters:
+                centers.append([r, c])
+
+    # Ensure we have exactly n_clusters centers
+    while len(centers) < n_clusters:
+        # Add random centers from data points
+        idx = np.random.randint(len(coords))
+        centers.append(coords[idx].tolist())
+
+    centers = np.array(centers[:n_clusters])
+
+    # K-means iterations
+    for _ in range(20):  # Max iterations
+        # Assign cells to nearest center
+        assignments = np.zeros(len(coords), dtype=int)
+        for i, coord in enumerate(coords):
+            distances = np.sqrt(np.sum((centers - coord) ** 2, axis=1))
+            assignments[i] = np.argmin(distances)
+
+        # Update centers
+        new_centers = np.zeros_like(centers)
+        for k in range(n_clusters):
+            mask = assignments == k
+            if np.any(mask):
+                new_centers[k] = coords[mask].mean(axis=0)
+            else:
+                new_centers[k] = centers[k]
+
+        # Check convergence
+        if np.allclose(centers, new_centers, atol=0.5):
+            break
+        centers = new_centers
+
+    # Group cells by cluster assignment
+    subzones = [[] for _ in range(n_clusters)]
+    for i, (r, c) in enumerate(cells):
+        cluster_id = assignments[i]
+        subzones[cluster_id].append((r, c))
+
+    # Filter out empty clusters
+    subzones = [sz for sz in subzones if len(sz) > 0]
+
+    return subzones
+
+
+# =============================================================================
+# Slope-Dependent Alignment Rules
+# =============================================================================
+# Gentle slopes need tighter alignment to produce visible glow.
+# Steeper slopes can catch light from wider angles.
+
+def get_max_glow_alignment(slope_deg: float) -> float:
+    """
+    Get maximum alignment offset for glow based on slope.
+
+    Gentle slopes need tighter alignment to catch meaningful light.
+    Steep slopes can produce glow from wider angles.
+
+    Args:
+        slope_deg: Surface slope in degrees
+
+    Returns:
+        Maximum alignment offset in degrees (one side)
+    """
+    if slope_deg < 10:
+        return 30.0   # ±30° for very gentle slopes
+    elif slope_deg < 15:
+        return 45.0   # ±45° for moderate slopes
+    else:
+        return 60.0   # ±60° for steep slopes
+
+
+def is_glow_alignment_valid(
+    aspect_offset_deg: float,
+    slope_deg: float,
+) -> bool:
+    """
+    Check if a surface's alignment is valid for glow based on its slope.
+
+    Args:
+        aspect_offset_deg: Angular offset from sun direction (0 = facing sun)
+        slope_deg: Surface slope in degrees
+
+    Returns:
+        True if alignment is valid for this slope
+    """
+    max_alignment = get_max_glow_alignment(slope_deg)
+    return abs(aspect_offset_deg) <= max_alignment
+
+
+# =============================================================================
+# Pre-Illumination Orientation Filter
+# =============================================================================
+# Filter out subjects that face away from the sun BEFORE illumination analysis.
+# This improves efficiency and prevents misclassification of opposite-facing terrain.
+
+def filter_by_orientation(
+    subjects: list[DetectedSubject],
+    event: str,
+    sun_azimuth_deg: float = None,
+) -> tuple[list[DetectedSubject], list[dict]]:
+    """
+    Filter subjects by orientation relative to sun direction.
+
+    Rejects surfaces that:
+    1. Face away from the sun (aspect_offset > 120°)
+    2. Have unfavorable directional preference (<0.2 with no rim potential)
+
+    This filter runs BEFORE detailed illumination analysis for efficiency.
+    It prevents east-facing slopes at sunset (or west-facing at sunrise)
+    from being processed further.
+
+    Args:
+        subjects: List of DetectedSubject to filter
+        event: "sunrise" or "sunset"
+        sun_azimuth_deg: Optional sun azimuth (if None, uses default for event)
+
+    Returns:
+        Tuple of (passed_subjects, rejection_log)
+        rejection_log contains debug info for each rejected subject
+    """
+    import logging
+    from .illumination import compute_directional_preference, _get_cardinal_direction
+
+    # Default sun azimuth based on event
+    if sun_azimuth_deg is None:
+        sun_azimuth_deg = 270.0 if event == "sunset" else 90.0
+
+    MAX_ASPECT_OFFSET = 120.0  # Hard limit for any lighting zone
+    MIN_DIRECTIONAL_PREF = 0.2  # Below this, reject unless rim-capable
+
+    passed = []
+    rejections = []
+
+    for subj in subjects:
+        face_dir = subj.face_direction
+        cardinal = _get_cardinal_direction(face_dir)
+        dir_pref = compute_directional_preference(face_dir, event)
+
+        # Compute aspect offset from sun
+        diff = abs(face_dir - sun_azimuth_deg) % 360
+        aspect_offset = min(diff, 360 - diff)
+
+        # Check 1: Hard reject if facing away from sun
+        if aspect_offset > MAX_ASPECT_OFFSET:
+            rejections.append({
+                "subject_id": subj.subject_id,
+                "reason": "facing_away",
+                "face_direction": face_dir,
+                "cardinal": cardinal,
+                "aspect_offset": aspect_offset,
+                "directional_pref": dir_pref,
+            })
+            logging.debug(
+                f"Pre-filter REJECT: subject {subj.subject_id} faces {cardinal} "
+                f"(offset={aspect_offset:.0f}° > {MAX_ASPECT_OFFSET}°, pref={dir_pref:.2f})"
+            )
+            continue
+
+        # Check 2: Reject very unfavorable directions (unless rim-capable angle)
+        is_rim_angle = 60 < aspect_offset <= 120
+        if dir_pref < MIN_DIRECTIONAL_PREF and not is_rim_angle:
+            rejections.append({
+                "subject_id": subj.subject_id,
+                "reason": "unfavorable_direction",
+                "face_direction": face_dir,
+                "cardinal": cardinal,
+                "aspect_offset": aspect_offset,
+                "directional_pref": dir_pref,
+            })
+            logging.debug(
+                f"Pre-filter REJECT: subject {subj.subject_id} unfavorable {cardinal} "
+                f"(pref={dir_pref:.2f} < {MIN_DIRECTIONAL_PREF}, not rim-capable)"
+            )
+            continue
+
+        # Subject passes pre-filter
+        logging.debug(
+            f"Pre-filter PASS: subject {subj.subject_id} {cardinal} "
+            f"(offset={aspect_offset:.0f}°, pref={dir_pref:.2f})"
+        )
+        passed.append(subj)
+
+    logging.info(
+        f"Orientation pre-filter: {len(subjects)} subjects -> "
+        f"{len(passed)} passed, {len(rejections)} rejected"
+    )
+
+    return passed, rejections
+
+
+# =============================================================================
+# Distance Sanity Rules for Standing Locations
+# =============================================================================
+# Standing positions need sensible distances based on subject scale.
+# Distance rings scale with subject width to ensure proper framing.
+
+# Absolute distance bounds (meters)
+MIN_DISTANCE_ABSOLUTE_M = 80.0   # Never stand closer than 80m
+MAX_DISTANCE_ABSOLUTE_M = 4000.0 # Never stand farther than 4km
+
+# Width-based distance multipliers
+MIN_DISTANCE_WIDTH_MULT = 0.8    # min_dist = 0.8 × subject_width
+MAX_DISTANCE_WIDTH_MULT = 6.0    # max_dist = 6.0 × subject_width
+
+
+def get_distance_constraints(
+    slope_deg: float,
+    area_m2: float,
+    effective_width_m: float = None,
+) -> tuple[float, float]:
+    """
+    Get min/max distance constraints for a standing location.
+
+    Distance rings scale with subject width:
+    - min_distance = max(80m, 0.8 × width)
+    - max_distance = min(4000m, 6.0 × width)
+
+    This ensures the subject fits in frame at all candidate distances.
+
+    Args:
+        slope_deg: Subject slope in degrees (legacy, kept for compatibility)
+        area_m2: Subject area in square meters
+        effective_width_m: Subject width in meters (sqrt(area) if not provided)
+
+    Returns:
+        (min_distance_m, max_distance_m)
+    """
+    import math
+
+    # Compute effective width if not provided
+    if effective_width_m is None or effective_width_m <= 0:
+        effective_width_m = math.sqrt(area_m2)
+
+    # Distance constraints scale with subject width
+    min_dist = max(MIN_DISTANCE_ABSOLUTE_M, MIN_DISTANCE_WIDTH_MULT * effective_width_m)
+    max_dist = min(MAX_DISTANCE_ABSOLUTE_M, MAX_DISTANCE_WIDTH_MULT * effective_width_m)
+
+    # Ensure min < max (in case of very small subjects)
+    if min_dist >= max_dist:
+        max_dist = min_dist + 100.0  # At least 100m range
+
+    return min_dist, max_dist
+
+
+def is_distance_valid(
+    distance_m: float,
+    slope_deg: float,
+    area_m2: float,
+    effective_width_m: float = None,
+) -> bool:
+    """
+    Check if a standing location distance is valid.
+
+    Args:
+        distance_m: Distance from subject in meters
+        slope_deg: Subject slope in degrees
+        area_m2: Subject area in square meters
+        effective_width_m: Subject width in meters
+
+    Returns:
+        True if distance is within valid range
+    """
+    min_dist, max_dist = get_distance_constraints(slope_deg, area_m2, effective_width_m)
+    return min_dist <= distance_m <= max_dist

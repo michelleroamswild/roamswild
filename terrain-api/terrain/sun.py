@@ -15,6 +15,7 @@ def compute_sun_position(
     lat: float,
     lon: float,
     dt: datetime,
+    reference_date: datetime = None,
 ) -> tuple[float, float]:
     """
     Compute sun azimuth and altitude for a given location and time.
@@ -25,32 +26,38 @@ def compute_sun_position(
         lat: Latitude in degrees
         lon: Longitude in degrees
         dt: UTC datetime
+        reference_date: Optional reference date for consistent day-of-year
+                       (use when generating tracks that cross midnight UTC)
 
     Returns:
         (azimuth_deg, altitude_deg) where azimuth is clockwise from north
     """
-    # Day of year
-    doy = dt.timetuple().tm_yday
+    # Use reference date for day-of-year if provided (for consistency across midnight)
+    ref = reference_date if reference_date else dt
+    doy = ref.timetuple().tm_yday
 
     # Solar declination (simplified)
     declination = 23.45 * math.sin(math.radians(360 / 365 * (doy - 81)))
     decl_rad = math.radians(declination)
 
-    # Hour angle
-    # Solar noon occurs when the sun is at the meridian
-    # Time offset from solar noon in hours
-    solar_noon_offset = 12.0  # Approximate
-
     # Equation of time correction (simplified)
     b = 2 * math.pi * (doy - 81) / 365
     eot = 9.87 * math.sin(2 * b) - 7.53 * math.cos(b) - 1.5 * math.sin(b)  # minutes
 
-    # Solar time
-    utc_hours = dt.hour + dt.minute / 60 + dt.second / 3600
-    solar_time = utc_hours + lon / 15 + eot / 60
+    # Calculate hours from reference midnight for consistent time handling
+    if reference_date:
+        ref_midnight = datetime(reference_date.year, reference_date.month, reference_date.day, 0, 0, 0)
+        utc_hours = (dt - ref_midnight).total_seconds() / 3600.0
+    else:
+        utc_hours = dt.hour + dt.minute / 60 + dt.second / 3600
 
-    # Hour angle (15 degrees per hour, negative before noon)
-    hour_angle = (solar_time - 12) * 15
+    # Convert to solar time:
+    # - Add longitude correction (15° = 1 hour, east is positive)
+    # - Add equation of time
+    solar_time = utc_hours + lon / 15.0 + eot / 60.0
+
+    # Hour angle: offset from solar noon (12:00)
+    hour_angle = (solar_time - 12.0) * 15.0  # degrees
     ha_rad = math.radians(hour_angle)
 
     lat_rad = math.radians(lat)
@@ -62,16 +69,21 @@ def compute_sun_position(
     )
     altitude = math.degrees(math.asin(max(-1, min(1, sin_alt))))
 
-    # Solar azimuth
-    cos_az = (
-        (math.sin(decl_rad) - math.sin(lat_rad) * sin_alt) /
-        (math.cos(lat_rad) * math.cos(math.radians(altitude)) + 1e-10)
-    )
-    cos_az = max(-1, min(1, cos_az))
+    # Solar azimuth using atan2 for correct quadrant
+    cos_alt = math.cos(math.radians(altitude))
+    if cos_alt < 1e-10:
+        # Sun at zenith, azimuth undefined
+        return 0.0, altitude
 
-    azimuth = math.degrees(math.acos(cos_az))
-    if hour_angle > 0:
-        azimuth = 360 - azimuth
+    # Components for azimuth calculation
+    sin_az = -math.cos(decl_rad) * math.sin(ha_rad) / cos_alt
+    cos_az = (math.sin(decl_rad) - math.sin(lat_rad) * sin_alt) / (math.cos(lat_rad) * cos_alt)
+
+    # atan2 gives angle in correct quadrant
+    azimuth = math.degrees(math.atan2(sin_az, cos_az))
+
+    # Convert to compass bearing (0-360, clockwise from north)
+    azimuth = azimuth % 360
 
     return azimuth, altitude
 
@@ -122,7 +134,7 @@ def find_sunrise_sunset(
     Args:
         lat: Latitude
         lon: Longitude
-        date: Date to check
+        date: Date to check (local date)
         event: "sunrise" or "sunset"
 
     Returns:
@@ -131,23 +143,24 @@ def find_sunrise_sunset(
     # Start from midnight UTC on the given date
     start = datetime(date.year, date.month, date.day, 0, 0, 0)
 
+    # Estimate local solar noon in UTC
+    # Solar noon is approximately when sun is at its highest (hour angle = 0)
+    # For longitude, solar noon is offset from 12:00 UTC by lon/15 hours
+    tz_offset = lon / 15  # hours west of UTC (negative for west longitudes)
+    local_noon_utc = 12.0 - tz_offset  # UTC hour when it's solar noon locally
+
     # Binary search for sun crossing horizon
     if event == "sunrise":
-        # Search morning hours (0-12 UTC adjusted for longitude)
-        search_start = 4
-        search_end = 12
+        # Search from well before dawn to noon
+        search_start = local_noon_utc - 10  # ~10 hours before noon
+        search_end = local_noon_utc
     else:
-        # Search afternoon hours (12-24 UTC adjusted for longitude)
-        search_start = 12
-        search_end = 22
-
-    # Adjust for longitude (rough timezone offset)
-    tz_offset = lon / 15  # hours from UTC
-    search_start = max(0, search_start - tz_offset)
-    search_end = min(24, search_end - tz_offset)
+        # Search from noon to well after dusk
+        search_start = local_noon_utc
+        search_end = local_noon_utc + 10  # ~10 hours after noon
 
     # Binary search for altitude = 0
-    for _ in range(20):  # Converge within ~1 minute
+    for _ in range(25):  # Converge within ~30 seconds
         mid = (search_start + search_end) / 2
         dt = start + timedelta(hours=mid)
         _, altitude = compute_sun_position(lat, lon, dt)
@@ -191,6 +204,10 @@ def generate_sun_track(
     # Find the event time
     event_time = find_sunrise_sunset(lat, lon, date, event)
 
+    # Use the event date as reference for consistent calculations
+    # This prevents jumps when crossing midnight UTC
+    reference_date = date
+
     # Generate positions from before to after the event
     positions = []
     start_offset = -duration_minutes // 2
@@ -198,7 +215,7 @@ def generate_sun_track(
 
     for minutes in range(start_offset, end_offset + 1, interval_minutes):
         dt = event_time + timedelta(minutes=minutes)
-        azimuth, altitude = compute_sun_position(lat, lon, dt)
+        azimuth, altitude = compute_sun_position(lat, lon, dt, reference_date)
         vector = compute_sun_vector(azimuth, altitude)
 
         positions.append(SunPosition(
