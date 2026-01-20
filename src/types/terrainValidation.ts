@@ -48,6 +48,47 @@ export interface ShadowCheck {
   sun_visible: boolean;
 }
 
+// Multi-scale structure metrics
+export interface StructureMetrics {
+  // Local relief (elevation range)
+  micro_relief_m: number;      // Relief within 30-60m radius
+  macro_relief_m: number;      // Relief within 300-800m radius
+  // Curvature metrics
+  mean_curvature: number;
+  max_curvature: number;
+  curvature_variance: number;
+  // Slope break metrics
+  slope_break_score: number;   // Normalized 0-1
+  max_slope_break: number;     // Degrees
+  // Heterogeneity
+  elevation_std: number;
+  slope_std: number;
+  heterogeneity_score: number; // Combined 0-1
+  // Combined scores
+  structure_score: number;     // Overall 0-1
+  structure_class: string;     // "micro-dramatic", "macro-dramatic", "flat-lit"
+  // Per-cell structure analysis (for debugging zone quality)
+  structure_score_at_centroid?: number;  // Structure score at zone centroid
+  max_structure_score_in_zone?: number;  // Highest per-cell structure score
+  max_structure_location?: [number, number] | null;  // [lat, lon] of best cell
+  distance_centroid_to_max_m?: number;  // Distance from centroid to max location
+}
+
+// Photographer-friendly explanations
+export interface SubjectExplain {
+  zone_type: string;       // e.g., "Warm light zone - faces the sun for golden glow"
+  aspect_offset: string;   // e.g., "Facing almost directly into the sun"
+  light_quality: string;   // e.g., "Strong grazing light (dramatic texture)"
+  sun_altitude: string;    // e.g., "Very low sun (dramatic golden light)"
+  best_time: string;       // e.g., "Just after sunrise"
+  window_duration: string; // e.g., "Good window (comfortable shooting time)"
+  face_direction: string;  // e.g., "Faces Southwest"
+  slope: string;           // e.g., "Moderate slope (textured hillside)"
+  area: string;            // e.g., "Large zone (explore for best angle)"
+  summary: string;         // One-sentence summary
+  structure?: string;      // e.g., "Micro-dramatic feature: 8.5m local relief"
+}
+
 // Subject surface properties
 export interface SubjectProperties {
   elevation_m: number;
@@ -56,6 +97,30 @@ export interface SubjectProperties {
   face_direction_deg: number;
   area_m2: number;
   normal: [number, number, number]; // [Nx, Ny, Nz]
+  // Confidence scoring
+  confidence?: number;
+  score_breakdown?: Record<string, number>;
+  // Scale classification
+  distance_from_center_m?: number;
+  classification?: string; // "foreground", "human-scale", "monument-scale"
+  // Lighting zone classification
+  lighting_zone_type?: string; // "glow-zone", "rim-zone", "shadow-zone"
+  aspect_offset_deg?: number;  // Angular offset from sun direction
+  subject_type?: string;       // "dramatic-feature" or "surface-moment"
+  quality_tier?: string;       // "primary" or "subtle"
+  // Photographer-friendly explanations
+  explain?: SubjectExplain;
+  // Zone sizing (for subdivision validation)
+  effective_width_m?: number; // sqrt(area) - approximate linear extent
+  // Directional preference based on event (sunset favors W, sunrise favors E)
+  directional_preference?: number; // 0-1 boost based on facing direction
+  cardinal_direction?: string; // e.g., "W", "NW", "SW", "E", "NE", etc.
+  // Structure metrics - distinguishes dramatic features from flat-lit terrain
+  structure?: StructureMetrics;
+  structure_class?: string; // "micro-dramatic", "macro-dramatic", "flat-lit"
+  is_dramatic?: boolean;    // False for flat-lit terrain (not recommended)
+  // Subject location snapping - indicates if centroid was moved to max structure
+  snapped_to_max_structure?: boolean;
 }
 
 // Validation checks for a subject
@@ -64,6 +129,20 @@ export interface SubjectValidation {
   aspect_normal_match_deg: number;
   glow_in_range: boolean;
   sun_visible_at_peak: boolean;
+}
+
+// Candidate search info for debugging
+export interface CandidateSearch {
+  candidates_checked: number;
+  selected_at_distance_m: number;
+  rejection_summary: Record<string, number>;
+  sample_rejected?: Array<{
+    lat: number;
+    lon: number;
+    distance_m: number;
+    reason: string;
+    slope_deg?: number;
+  }>;
 }
 
 // A detected subject surface
@@ -79,6 +158,7 @@ export interface Subject {
   glow_window: GlowWindow | null;
   shadow_check: ShadowCheck;
   validation: SubjectValidation;
+  candidate_search?: CandidateSearch;
 }
 
 // Line of sight sample
@@ -120,6 +200,9 @@ export interface StandingProperties {
   distance_to_subject_m: number;
   camera_bearing_deg: number;
   elevation_diff_m: number;
+  // Distance constraints (based on subject slope and area)
+  min_valid_distance_m?: number;
+  max_valid_distance_m?: number;
 }
 
 // A computed standing location
@@ -143,6 +226,13 @@ export interface DebugLayer {
   features?: any[];
 }
 
+// Structure debug info
+export interface StructureDebug {
+  enabled: boolean;
+  computed_cells: number;
+  attached_to_subjects: number;
+}
+
 // Analysis metadata
 export interface AnalysisMeta {
   request_id: string;
@@ -157,6 +247,10 @@ export interface AnalysisMeta {
   cell_size_m: number;
   center_lat: number;
   center_lon: number;
+  dem_resolution_m?: number;
+  dem_vertical_accuracy_m?: number;
+  dem_citation?: string;
+  structure_debug?: StructureDebug;
 }
 
 // Full analysis result

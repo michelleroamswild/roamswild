@@ -103,106 +103,21 @@ export function useTerrainAnalysis(): UseTerrainAnalysisResult {
 /**
  * Transform API response to match TypeScript types.
  *
- * The API returns Python-style snake_case, which should
- * already match our types, but we ensure proper typing here.
+ * The API returns Python-style snake_case, which already matches
+ * our TypeScript types. We pass through the data directly to avoid
+ * losing fields when new ones are added to the API.
  */
 function transformApiResponse(data: any): TerrainAnalysisResult {
+  // Pass through most data directly - the API response already matches our types
   return {
-    meta: {
-      request_id: data.meta.request_id,
-      computed_at: data.meta.computed_at,
-      dem_source: data.meta.dem_source,
-      dem_bounds: data.meta.dem_bounds,
-      cell_size_m: data.meta.cell_size_m,
-      center_lat: data.meta.center_lat,
-      center_lon: data.meta.center_lon,
-    },
-    sun_track: data.sun_track.map((s: any) => ({
-      time_iso: s.time_iso,
-      minutes_from_start: s.minutes_from_start,
-      azimuth_deg: s.azimuth_deg,
-      altitude_deg: s.altitude_deg,
-      vector: s.vector,
-    })),
+    meta: data.meta,
+    sun_track: data.sun_track,
     subjects: data.subjects.map((s: any) => ({
-      subject_id: s.subject_id,
-      centroid: s.centroid,
-      polygon: s.polygon,
-      properties: {
-        elevation_m: s.properties.elevation_m,
-        slope_deg: s.properties.slope_deg,
-        aspect_deg: s.properties.aspect_deg,
-        face_direction_deg: s.properties.face_direction_deg,
-        area_m2: s.properties.area_m2,
-        normal: s.properties.normal,
-      },
-      incidence_series: s.incidence_series.map((i: any) => ({
-        minutes: i.minutes,
-        incidence: i.incidence,
-        glow_score: i.glow_score,
-      })),
-      glow_window: s.glow_window ? {
-        start_minutes: s.glow_window.start_minutes,
-        end_minutes: s.glow_window.end_minutes,
-        peak_minutes: s.glow_window.peak_minutes,
-        duration_minutes: s.glow_window.duration_minutes,
-        peak_incidence: s.glow_window.peak_incidence,
-        peak_glow_score: s.glow_window.peak_glow_score,
-      } : null,
-      shadow_check: {
-        checked_at_minutes: s.shadow_check.checked_at_minutes,
-        sun_azimuth_deg: s.shadow_check.sun_azimuth_deg,
-        sun_altitude_deg: s.shadow_check.sun_altitude_deg,
-        samples: s.shadow_check.samples.map((sample: any) => ({
-          distance_m: sample.distance_m,
-          ray_z: sample.ray_z,
-          terrain_z: sample.terrain_z,
-          blocked: sample.blocked,
-        })),
-        sun_visible: s.shadow_check.sun_visible,
-      },
-      validation: {
-        normal_unit_length: s.validation.normal_unit_length,
-        aspect_normal_match_deg: s.validation.aspect_normal_match_deg,
-        glow_in_range: s.validation.glow_in_range,
-        sun_visible_at_peak: s.validation.sun_visible_at_peak,
-      },
+      ...s,
+      // Ensure candidate_search is passed through (may be on subject or standing)
+      candidate_search: s.candidate_search,
     })),
-    standing_locations: data.standing_locations.map((sl: any) => ({
-      standing_id: sl.standing_id,
-      subject_id: sl.subject_id,
-      location: sl.location,
-      properties: {
-        elevation_m: sl.properties.elevation_m,
-        slope_deg: sl.properties.slope_deg,
-        distance_to_subject_m: sl.properties.distance_to_subject_m,
-        camera_bearing_deg: sl.properties.camera_bearing_deg,
-        elevation_diff_m: sl.properties.elevation_diff_m,
-      },
-      line_of_sight: {
-        clear: sl.line_of_sight.clear,
-        eye_height_m: sl.line_of_sight.eye_height_m,
-        target_height_m: sl.line_of_sight.target_height_m,
-        samples: sl.line_of_sight.samples.map((sample: any) => ({
-          t: sample.t,
-          ray_z: sample.ray_z,
-          terrain_z: sample.terrain_z,
-          blocked: sample.blocked,
-        })),
-      },
-      candidate_search: {
-        candidates_checked: sl.candidate_search.candidates_checked,
-        rejected: sl.candidate_search.rejected.map((r: any) => ({
-          distance_m: r.distance_m,
-          lat: r.lat,
-          lon: r.lon,
-          reason: r.reason,
-          slope_deg: r.slope_deg,
-        })),
-        selected_at_distance_m: sl.candidate_search.selected_at_distance_m,
-      },
-      nav_link: sl.nav_link,
-    })),
+    standing_locations: data.standing_locations,
     debug_layers: data.debug_layers || {},
   };
 }
