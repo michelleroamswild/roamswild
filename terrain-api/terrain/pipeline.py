@@ -60,6 +60,16 @@ from .subjects import (
 from .illumination import analyze_subject_illumination
 from .shadows import check_shadow_at_peak
 from .standing import find_standing_location, _summarize_rejections, log_rejection_histogram
+from .accessibility import (
+    fetch_osm_roads,
+    fetch_osm_landcover,
+    check_accessibility,
+    apply_accessibility_penalty,
+    DEFAULT_MAX_DISTANCE_M as DEFAULT_ROAD_DISTANCE_M,
+    OFF_TRAIL_CONFIDENCE_PENALTY,
+    ApproachProfile,
+    LandcoverPolygon,
+)
 
 
 # =============================================================================
@@ -70,6 +80,11 @@ from .standing import find_standing_location, _summarize_rejections, log_rejecti
 SUBJECT_PROXIMITY_M = 200.0      # Subjects within 200m are duplicates
 STAND_PROXIMITY_M = 300.0        # Standing points within 300m...
 BEARING_PROXIMITY_DEG = 15.0     # ...AND bearing within 15° are duplicates
+
+# Accessibility thresholds
+MAX_ROAD_DISTANCE_M = 300.0      # Max distance from road/trail (configurable)
+REJECT_OFF_TRAIL = False         # If True, reject off-trail; if False, mark and downrank
+DEFAULT_APPROACH_PROFILE = ApproachProfile.MODERATE  # User-selectable approach difficulty
 
 
 def _haversine_distance_simple(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -403,6 +418,15 @@ async def analyze_terrain(
         interval_minutes=5,
     )
 
+    # Step 3b: Fetch OSM roads/trails and landcover for accessibility checking
+    import logging
+    osm_roads = await fetch_osm_roads(dem.bounds, buffer_m=500.0)
+    logging.info(f"Fetched {len(osm_roads)} OSM road/trail segments for accessibility checking")
+
+    # Fetch landcover for terrain difficulty multipliers
+    osm_landcover = await fetch_osm_landcover(dem.bounds, buffer_m=500.0)
+    logging.info(f"Fetched {len(osm_landcover)} OSM landcover polygons for terrain difficulty")
+
     # Step 4: Detect subjects with scale classification
     detected = detect_subjects(
         dem=dem,
@@ -647,10 +671,88 @@ async def analyze_terrain(
         standing.properties.min_valid_distance_m = min_dist
         standing.properties.max_valid_distance_m = max_dist
 
+        # Check accessibility (distance to OSM roads/trails + elevation gain)
+        # Uses approach profile to determine hard limits with landcover multipliers
+        accessibility = check_accessibility(
+            lat=lat,
+            lon=lon,
+            roads=osm_roads,
+            dem=dem,
+            standing_elevation_m=standing.properties.elevation_m,
+            max_distance_m=MAX_ROAD_DISTANCE_M,
+            profile=DEFAULT_APPROACH_PROFILE,
+            landcover_polygons=osm_landcover,
+        )
+
+        # Update standing properties with accessibility info
+        standing.properties.accessibility_status = accessibility.accessibility_status
+        standing.properties.distance_to_road_m = accessibility.distance_to_road_m
+        standing.properties.nearest_road_type = accessibility.nearest_road_type
+        standing.properties.nearest_road_name = accessibility.nearest_road_name
+        standing.properties.uphill_gain_from_access_m = accessibility.uphill_gain_m
+        standing.properties.downhill_gain_from_access_m = accessibility.downhill_gain_m
+        # Landcover and adjusted values
+        standing.properties.landcover_type = accessibility.landcover_type
+        standing.properties.landcover_multiplier = accessibility.landcover_multiplier
+        standing.properties.adjusted_distance_m = accessibility.adjusted_distance_m
+        standing.properties.adjusted_uphill_m = accessibility.adjusted_uphill_m
+        standing.properties.adjusted_downhill_m = accessibility.adjusted_downhill_m
+        standing.properties.approach_difficulty = accessibility.approach_difficulty
+        standing.properties.approach_profile = accessibility.approach_profile
+
+        # Debug output for accessibility
+        access_debug = (
+            f"dist={accessibility.distance_to_road_m:.0f}m, "
+            f"road={accessibility.nearest_road_type or 'unknown'}"
+        )
+        if accessibility.uphill_gain_m is not None:
+            access_debug += f", ↑{accessibility.uphill_gain_m:.0f}m"
+        if accessibility.downhill_gain_m is not None and accessibility.downhill_gain_m > 0:
+            access_debug += f", ↓{accessibility.downhill_gain_m:.0f}m"
+        # Include landcover and adjusted values
+        if accessibility.landcover_type != "unknown":
+            access_debug += f", {accessibility.landcover_type}(×{accessibility.landcover_multiplier:.1f})"
+        if accessibility.adjusted_distance_m is not None:
+            access_debug += f", adj={accessibility.adjusted_distance_m:.0f}m"
+        access_debug += f", difficulty={accessibility.approach_difficulty}"
+
+        # Handle accessibility rejection (hard constraints)
+        if not accessibility.is_accessible:
+            logging.warning(
+                f"Subject {subject.subject_id} REJECTED (accessibility): {accessibility.rejection_reason} "
+                f"[{access_debug}]"
+            )
+            if is_top_peak:
+                analysis_outcomes[original_id] = f"REJECTED (accessibility: {accessibility.rejection_reason})"
+            continue
+
+        # Handle off-trail locations (soft constraint - downrank but don't reject)
+        if accessibility.accessibility_status == 'off-trail':
+            if REJECT_OFF_TRAIL:
+                logging.warning(
+                    f"Subject {subject.subject_id} REJECTED (off-trail): {accessibility.distance_to_road_m:.0f}m from nearest road/trail"
+                )
+                if is_top_peak:
+                    analysis_outcomes[original_id] = f"REJECTED (off-trail: {accessibility.distance_to_road_m:.0f}m from road)"
+                continue
+            else:
+                # Mark as off-trail and downrank via confidence penalty
+                subject.properties.confidence = apply_accessibility_penalty(
+                    subject.properties.confidence, accessibility
+                )
+                logging.info(
+                    f"Subject {subject.subject_id} marked off-trail: [{access_debug}] (confidence penalized)"
+                )
+        else:
+            logging.info(
+                f"Subject {subject.subject_id} accessible: {accessibility.accessibility_status} [{access_debug}]"
+            )
+
         standing_locations.append(standing)
 
         if is_top_peak:
-            analysis_outcomes[original_id] = f"SUCCESS - standing location at {standing.properties.distance_to_subject_m:.0f}m"
+            access_info = f", {accessibility.accessibility_status}" if accessibility.accessibility_status != 'unknown' else ""
+            analysis_outcomes[original_id] = f"SUCCESS - standing location at {standing.properties.distance_to_subject_m:.0f}m{access_info}"
 
     # DEBUG: Final summary of top 10 structure peak outcomes
     if top_structure_ids:

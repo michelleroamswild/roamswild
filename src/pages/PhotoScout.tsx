@@ -468,27 +468,52 @@ function ShotCard({
 
           {/* Where to stand */}
           {standing ? (
-            <div className="flex items-center gap-3 p-2 bg-blue-50 rounded">
-              <Camera className="w-5 h-5 text-blue-500 flex-shrink-0" />
-              <div className="flex-1">
-                <span className="text-blue-700">
-                  Stand {Math.round(standing.properties.distance_to_subject_m)}m{" "}
-                  {compassToFull(degreesToCompass((standing.properties.camera_bearing_deg + 180) % 360))}
-                </span>
-                <span className="text-gray-500">, aim </span>
-                <span className="text-blue-700">{degreesToCompass(standing.properties.camera_bearing_deg)}</span>
+            <div className="p-2 bg-blue-50 rounded space-y-1">
+              <div className="flex items-center gap-3">
+                <Camera className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                <div className="flex-1">
+                  <span className="text-blue-700">
+                    Stand {Math.round(standing.properties.distance_to_subject_m)}m{" "}
+                    {compassToFull(degreesToCompass((standing.properties.camera_bearing_deg + 180) % 360))}
+                  </span>
+                  <span className="text-gray-500">, aim </span>
+                  <span className="text-blue-700">{degreesToCompass(standing.properties.camera_bearing_deg)}</span>
+                </div>
+                {standing.nav_link && (
+                  <a
+                    href={standing.nav_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors"
+                  >
+                    <MapPin className="w-4 h-4" />
+                    Navigate
+                  </a>
+                )}
               </div>
-              {standing.nav_link && (
-                <a
-                  href={standing.nav_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors"
-                >
-                  <MapPin className="w-4 h-4" />
-                  Navigate
-                </a>
+              {/* Approach info */}
+              {standing.properties.approach_difficulty && standing.properties.approach_difficulty !== 'unknown' && (
+                <div className="flex items-center gap-2 pl-8 text-xs">
+                  <span className={`px-1.5 py-0.5 rounded font-medium ${
+                    standing.properties.approach_difficulty === 'easy' ? 'bg-green-100 text-green-700' :
+                    standing.properties.approach_difficulty === 'moderate' ? 'bg-amber-100 text-amber-700' :
+                    'bg-red-100 text-red-700'
+                  }`}>
+                    {standing.properties.approach_difficulty}
+                  </span>
+                  <span className="text-gray-500">
+                    {standing.properties.distance_to_road_m != null && (
+                      <>{Math.round(standing.properties.distance_to_road_m)}m from {standing.properties.nearest_road_type || 'road'}</>
+                    )}
+                    {standing.properties.uphill_gain_from_access_m != null && standing.properties.uphill_gain_from_access_m > 0 && (
+                      <>, ↑{Math.round(standing.properties.uphill_gain_from_access_m)}m</>
+                    )}
+                    {standing.properties.downhill_gain_from_access_m != null && standing.properties.downhill_gain_from_access_m > 0 && (
+                      <>, ↓{Math.round(standing.properties.downhill_gain_from_access_m)}m</>
+                    )}
+                  </span>
+                </div>
               )}
             </div>
           ) : (
@@ -753,6 +778,29 @@ function ShotCard({
                 <div className="text-gray-400 text-[11px]">No structure data available</div>
               )}
             </div>
+
+            {/* Geometry Classification */}
+            <div className="pt-2 border-t border-purple-200">
+              <div className="text-purple-600 font-medium mb-1">Geometry</div>
+              <div className="grid grid-cols-2 gap-1 text-[11px]">
+                <div>
+                  <span className="text-gray-500">type:</span>{" "}
+                  <span className={`font-medium ${
+                    subject.properties.geometry_type === 'volumetric' ? 'text-orange-600' : 'text-gray-600'
+                  }`}>{subject.properties.geometry_type || 'planar'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">face_variance:</span>{" "}
+                  <span className="text-purple-800">{subject.properties.face_direction_variance?.toFixed(1) ?? "—"}°</span>
+                </div>
+                {subject.properties.volumetric_reason && (
+                  <div className="col-span-2">
+                    <span className="text-gray-500">reason:</span>{" "}
+                    <span className="text-orange-600 font-medium">{subject.properties.volumetric_reason}</span>
+                  </div>
+                )}
+              </div>
+            </div>
           </CollapsibleContent>
         </Collapsible>
       </CardContent>
@@ -788,6 +836,7 @@ export default function PhotoScout() {
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null);
   const [showAllPositions, setShowAllPositions] = useState(false);
   const [showRejectedCandidates, setShowRejectedCandidates] = useState(false);
+  const [showAnalysisZones, setShowAnalysisZones] = useState(false);
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const overlaysRef = useRef<google.maps.MVCObject[]>([]);
@@ -879,8 +928,8 @@ export default function PhotoScout() {
       });
       overlaysRef.current.push(searchMarker);
 
-      // Draw sun direction indicator
-      if (result.sun_track?.length > 0) {
+      // Draw sun direction indicator (only when showing analysis zones)
+      if (showAnalysisZones && result.sun_track?.length > 0) {
         const midSun = result.sun_track[Math.floor(result.sun_track.length / 2)];
         const sunAzimuth = midSun.azimuth_deg;
 
@@ -937,7 +986,7 @@ export default function PhotoScout() {
       }
     }
 
-    // Draw subject polygons
+    // Draw subjects
     result.subjects.forEach((subject) => {
       const standing = result.standing_locations.find((sl) => sl.subject_id === subject.subject_id);
       const verdict = getShotVerdict(subject, standing || null);
@@ -945,39 +994,56 @@ export default function PhotoScout() {
 
       const color = verdict.verdict === "yes" ? "#16a34a" : verdict.verdict === "maybe" ? "#ca8a04" : "#dc2626";
 
-      const polygon = new google.maps.Polygon({
-        paths: subject.polygon.map(([lat, lng]) => ({ lat, lng })),
-        strokeColor: color,
-        strokeWeight: isSelected ? 3 : 1,
-        fillColor: color,
-        fillOpacity: isSelected ? 0.4 : 0.15,
-        map,
-        clickable: true,
-      });
+      // Get subject anchor location (snapped max structure location or centroid)
+      const anchorLat = subject.properties.snapped_to_max_structure && subject.properties.structure?.max_structure_location
+        ? subject.properties.structure.max_structure_location[0]
+        : subject.centroid.lat;
+      const anchorLng = subject.properties.snapped_to_max_structure && subject.properties.structure?.max_structure_location
+        ? subject.properties.structure.max_structure_location[1]
+        : subject.centroid.lon;
 
-      polygon.addListener("click", () => setSelectedSubjectId(subject.subject_id));
-      overlaysRef.current.push(polygon);
-
-      // Rock face marker - show for selected OR when showing all
-      if (isSelected || showAllPositions) {
-        const marker = new google.maps.Marker({
-          position: { lat: subject.centroid.lat, lng: subject.centroid.lon },
+      // Draw "Explore Area" polygon (only when showing analysis zones)
+      if (showAnalysisZones) {
+        const polygon = new google.maps.Polygon({
+          paths: subject.polygon.map(([lat, lng]) => ({ lat, lng })),
+          strokeColor: color,
+          strokeWeight: isSelected ? 2 : 1,
+          strokeOpacity: 0.5,
+          fillColor: color,
+          fillOpacity: isSelected ? 0.15 : 0.08,
           map,
-          icon: {
-            path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-            scale: isSelected ? 6 : 4,
-            fillColor: color,
-            fillOpacity: isSelected ? 1 : 0.7,
-            strokeColor: "#fff",
-            strokeWeight: isSelected ? 2 : 1,
-          },
-          title: `Zone #${subject.subject_id}`,
+          clickable: true,
         });
-        marker.addListener("click", () => setSelectedSubjectId(subject.subject_id));
-        overlaysRef.current.push(marker);
+
+        polygon.addListener("click", () => setSelectedSubjectId(subject.subject_id));
+        overlaysRef.current.push(polygon);
       }
 
-      // Draw shooting position - show for selected OR when showing all
+      // Subject Anchor marker - ALWAYS shown for selected, or when showAllPositions
+      if (isSelected || showAllPositions) {
+        // Use a pin/target icon for the actual subject anchor
+        const anchorMarker = new google.maps.Marker({
+          position: { lat: anchorLat, lng: anchorLng },
+          map,
+          icon: {
+            url: "data:image/svg+xml," + encodeURIComponent(`
+              <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="14" cy="14" r="12" fill="${color}" stroke="white" stroke-width="2"/>
+                <circle cx="14" cy="14" r="6" fill="white"/>
+                <circle cx="14" cy="14" r="3" fill="${color}"/>
+              </svg>
+            `),
+            scaledSize: new google.maps.Size(isSelected ? 28 : 20, isSelected ? 28 : 20),
+            anchor: new google.maps.Point(isSelected ? 14 : 10, isSelected ? 14 : 10),
+          },
+          title: `Subject #${subject.subject_id} - ${subject.properties.geometry_type || 'planar'}`,
+          zIndex: isSelected ? 100 : 50,
+        });
+        anchorMarker.addListener("click", () => setSelectedSubjectId(subject.subject_id));
+        overlaysRef.current.push(anchorMarker);
+      }
+
+      // Draw shooting position (camera) - show for selected OR when showing all
       if (standing && (isSelected || showAllPositions)) {
         const isCurrentlySelected = isSelected;
         const markerColor = isCurrentlySelected ? "#2563eb" : "#6b7280";
@@ -998,16 +1064,17 @@ export default function PhotoScout() {
             scaledSize: new google.maps.Size(isCurrentlySelected ? 32 : 24, isCurrentlySelected ? 32 : 24),
             anchor: new google.maps.Point(isCurrentlySelected ? 16 : 12, isCurrentlySelected ? 16 : 12),
           },
-          title: `Shooting position for #${subject.subject_id}`,
+          title: `Standing position for #${subject.subject_id}`,
+          zIndex: isSelected ? 90 : 40,
         });
         cameraMarker.addListener("click", () => setSelectedSubjectId(subject.subject_id));
         overlaysRef.current.push(cameraMarker);
 
-        // Sight line
+        // Sight line from standing to subject ANCHOR (not polygon centroid)
         const sightLine = new google.maps.Polyline({
           path: [
             { lat: standing.location.lat, lng: standing.location.lon },
-            { lat: subject.centroid.lat, lng: subject.centroid.lon },
+            { lat: anchorLat, lng: anchorLng },
           ],
           strokeColor: markerColor,
           strokeWeight: isCurrentlySelected ? 2 : 1,
@@ -1024,8 +1091,8 @@ export default function PhotoScout() {
         overlaysRef.current.push(sightLine);
       }
 
-      // Draw rejected candidates for selected subject
-      if (isSelected && showRejectedCandidates && subject.candidate_search?.sample_rejected) {
+      // Draw rejected candidates for selected subject (only when showing analysis zones)
+      if (showAnalysisZones && isSelected && showRejectedCandidates && subject.candidate_search?.sample_rejected) {
         const rejectedColors: Record<string, string> = {
           slope_too_steep: "#f97316",    // orange
           no_line_of_sight: "#ef4444",   // red
@@ -1064,7 +1131,7 @@ export default function PhotoScout() {
       );
       map.fitBounds(bounds);
     }
-  }, [map, result, selectedSubjectId, showAllPositions, showRejectedCandidates, parsedCoords]);
+  }, [map, result, selectedSubjectId, showAllPositions, showRejectedCandidates, showAnalysisZones, parsedCoords]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1245,35 +1312,69 @@ export default function PhotoScout() {
           <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3 text-sm">
             <div className="font-semibold mb-2">Legend</div>
             <div className="space-y-1.5">
+              {/* Always visible markers */}
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded bg-green-600" />
-                <span>Good lighting zone</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded bg-yellow-600" />
-                <span>Worth exploring</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded bg-red-600" />
-                <span>Poor conditions</span>
+                <svg width="16" height="16" viewBox="0 0 28 28">
+                  <circle cx="14" cy="14" r="12" fill="#16a34a" stroke="white" strokeWidth="2"/>
+                  <circle cx="14" cy="14" r="6" fill="white"/>
+                  <circle cx="14" cy="14" r="3" fill="#16a34a"/>
+                </svg>
+                <span>Subject (shoot this)</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full bg-blue-600" />
-                <span>Shooting position</span>
+                <span>Standing position</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full border-2 border-dashed border-purple-600" />
                 <span>Search center</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-0.5 bg-amber-500" />
-                <Sun className="w-3 h-3 text-amber-500" weight="fill" />
-                <span>Sun direction</span>
+              {/* Color key */}
+              <div className="flex items-center gap-2 pt-1 border-t border-gray-100 mt-1">
+                <div className="w-3 h-3 rounded-full bg-green-600" />
+                <span className="text-xs text-gray-600">Good</span>
+                <div className="w-3 h-3 rounded-full bg-yellow-600 ml-1" />
+                <span className="text-xs text-gray-600">Maybe</span>
+                <div className="w-3 h-3 rounded-full bg-red-600 ml-1" />
+                <span className="text-xs text-gray-600">Poor</span>
               </div>
+              {/* Analysis zones (only when toggle on) */}
+              {showAnalysisZones && (
+                <>
+                  <div className="flex items-center gap-2 pt-1 border-t border-gray-100 mt-1">
+                    <div className="w-4 h-4 rounded border-2 border-green-600 bg-green-100 opacity-50" />
+                    <span className="text-gray-500">Explore area</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-0.5 bg-amber-500" />
+                    <Sun className="w-3 h-3 text-amber-500" weight="fill" />
+                    <span className="text-gray-500">Sun direction</span>
+                  </div>
+                </>
+              )}
             </div>
+            {/* Show analysis zones toggle */}
+            {result && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showAnalysisZones}
+                    onChange={(e) => setShowAnalysisZones(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <span>Show analysis zones</span>
+                </label>
+                {showAnalysisZones && (
+                  <div className="mt-2 text-xs space-y-1 pl-6 text-gray-500">
+                    <div>Explore areas, sun direction, structure anchors</div>
+                  </div>
+                )}
+              </div>
+            )}
             {/* Show all toggle */}
             {result && result.standing_locations.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="mt-2">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"

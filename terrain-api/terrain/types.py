@@ -140,6 +140,11 @@ class SubjectProperties:
     is_dramatic: bool = True  # False for flat-lit terrain (not recommended)
     # Subject location snapping - indicates if centroid was moved to max structure
     snapped_to_max_structure: bool = False
+    # Geometry type: planar (walls, slabs) vs volumetric (boulders, knobs)
+    # Volumetric subjects bypass face-direction filters, rely on camera-sun geometry
+    geometry_type: str = "planar"  # "planar" or "volumetric"
+    face_direction_variance: float = 0.0  # Variance of face directions (high = volumetric)
+    volumetric_reason: Optional[str] = None  # e.g., "curvature:1.5" or "face_variance:72.3°"
 
 
 @dataclass
@@ -211,6 +216,23 @@ class StandingProperties:
     # LOS info
     los_min_clearance_m: Optional[float] = None  # Minimum clearance along ray
     target_height_offset_m: Optional[float] = None  # Target height offset used (based on structure class)
+    # Accessibility info (distance to OSM roads/trails)
+    accessibility_status: str = "unknown"  # "on-road", "near-road", "off-trail", "too-far", "too-steep", "unknown"
+    distance_to_road_m: Optional[float] = None  # Distance to nearest road/trail
+    nearest_road_type: Optional[str] = None  # OSM highway type (e.g., "track", "path")
+    nearest_road_name: Optional[str] = None  # Road name if available
+    # Elevation gain from access point
+    uphill_gain_from_access_m: Optional[float] = None  # Uphill gain from road to standing
+    downhill_gain_from_access_m: Optional[float] = None  # Downhill gain from road to standing
+    # Landcover and adjusted approach values
+    landcover_type: str = "unknown"  # desert, shrub, forest, wet, unknown
+    landcover_multiplier: float = 1.0  # Terrain difficulty multiplier
+    adjusted_distance_m: Optional[float] = None  # distance * multiplier
+    adjusted_uphill_m: Optional[float] = None  # uphill * multiplier
+    adjusted_downhill_m: Optional[float] = None  # downhill * multiplier
+    # Approach difficulty classification
+    approach_difficulty: str = "unknown"  # easy, moderate, hard, unknown
+    approach_profile: str = "moderate"  # Profile used for limits (casual, moderate, spicy)
 
 
 @dataclass
@@ -311,12 +333,126 @@ class LightingZone:
     zone_character: str = "mixed-terrain"  # "rocky-slopes", "textured-flats", "mixed-terrain"
 
 
+# =============================================================================
+# Multi-Anchor System Types
+# =============================================================================
+# ExploreArea: A lighting-eligible zone detected from terrain analysis
+# Anchor: A specific photographic subject within an explore area
+# ShotCandidate: A complete shooting opportunity (anchor + standing location)
+
+
+@dataclass
+class AnchorStructure:
+    """Structure metrics at an anchor point."""
+    structure_score: float
+    micro_relief_m: float
+    max_curvature: float
+    max_slope_break: float
+    structure_class: str  # "micro-dramatic", "macro-dramatic", "flat-lit"
+
+
+@dataclass
+class Anchor:
+    """
+    A specific photographic subject within an explore area.
+
+    Anchors are local maxima of structure_score within a zone polygon.
+    Each anchor represents a distinct feature worth photographing.
+    """
+    anchor_id: int
+    location: Dict  # {"lat": float, "lon": float}
+    # Local terrain properties at anchor
+    elevation_m: float
+    slope_deg: float
+    aspect_deg: float
+    face_direction_deg: float
+    # Structure metrics
+    structure: AnchorStructure
+    # Geometry classification
+    geometry_type: str = "planar"  # "planar" or "volumetric"
+    volumetric_reason: Optional[str] = None
+
+
+@dataclass
+class ShotCandidate:
+    """
+    A complete shooting opportunity: anchor + standing location + lighting.
+
+    This is what photographers actually use - a specific subject to shoot
+    from a specific position with known lighting conditions.
+    """
+    shot_id: int
+    anchor_id: int
+    explore_area_id: int
+    # Anchor location (the subject)
+    anchor_location: Dict  # {"lat": float, "lon": float}
+    # Standing location (the camera position)
+    standing_location: Dict  # {"lat": float, "lon": float}
+    standing_properties: StandingProperties
+    line_of_sight: LineOfSight
+    # Lighting and timing
+    shooting_timing: Optional[ShootingTiming] = None
+    lighting_zone_type: str = "glow-zone"  # "glow-zone", "rim-zone"
+    # Quality metrics for ranking
+    confidence: float = 0.0
+    structure_score: float = 0.0
+    # Navigation
+    nav_link: Optional[str] = None
+    # Debug info
+    candidate_search: Optional[Dict] = None
+
+
+@dataclass
+class ExploreAreaMetrics:
+    """Aggregate metrics for an explore area zone."""
+    area_m2: float
+    effective_width_m: float
+    mean_slope_deg: float
+    mean_elevation_m: float
+    structure_class: str
+    geometry_type: str
+    confidence: float
+    # Lighting
+    lighting_zone_type: str
+    aspect_offset_deg: float
+    cardinal_direction: str
+    directional_preference: float
+
+
+@dataclass
+class ExploreArea:
+    """
+    A lighting-eligible terrain zone with multiple photographic anchors.
+
+    The polygon defines where good light exists. Anchors are the specific
+    features within that zone worth photographing. Each anchor may have
+    an associated shot candidate (standing location found).
+    """
+    explore_area_id: int
+    # Zone polygon (the "explore area")
+    centroid: Dict  # {"lat": float, "lon": float}
+    polygon: List[Tuple[float, float]]  # [(lat, lon), ...]
+    # Zone-level metrics
+    metrics: ExploreAreaMetrics
+    # Anchors within this zone (local structure maxima)
+    anchors: List[Anchor] = field(default_factory=list)
+    # Shot candidates (anchors with valid standing locations)
+    shot_candidates: List[ShotCandidate] = field(default_factory=list)
+    # Photographer explanation
+    explain: Optional[SubjectExplain] = None
+
+
 @dataclass
 class TerrainAnalysisResult:
     meta: AnalysisMeta
     sun_track: List[SunPosition]
-    subjects: List[Subject]
-    standing_locations: List[StandingLocation]
+    # Legacy subject/standing format (for backwards compatibility)
+    subjects: List[Subject] = field(default_factory=list)
+    standing_locations: List[StandingLocation] = field(default_factory=list)
+    # New multi-anchor format
+    explore_areas: List[ExploreArea] = field(default_factory=list)
+    shot_candidates: List[ShotCandidate] = field(default_factory=list)
+    # Additional
     lighting_zones: List[LightingZone] = field(default_factory=list)
     debug_layers: Dict = field(default_factory=dict)
 

@@ -121,6 +121,11 @@ export interface SubjectProperties {
   is_dramatic?: boolean;    // False for flat-lit terrain (not recommended)
   // Subject location snapping - indicates if centroid was moved to max structure
   snapped_to_max_structure?: boolean;
+  // Geometry type: planar (walls, slabs) vs volumetric (boulders, knobs)
+  // Volumetric subjects bypass face-direction filters, rely on camera-sun geometry
+  geometry_type?: 'planar' | 'volumetric';
+  face_direction_variance?: number; // Circular variance of face directions (degrees)
+  volumetric_reason?: string; // e.g., "curvature:1.5" or "face_variance:72.3°"
 }
 
 // Validation checks for a subject
@@ -203,6 +208,23 @@ export interface StandingProperties {
   // Distance constraints (based on subject slope and area)
   min_valid_distance_m?: number;
   max_valid_distance_m?: number;
+  // Accessibility info (distance to OSM roads/trails)
+  accessibility_status?: 'on-road' | 'near-road' | 'off-trail' | 'too-far' | 'too-steep' | 'unknown';
+  distance_to_road_m?: number;
+  nearest_road_type?: string; // OSM highway type (e.g., "track", "path")
+  nearest_road_name?: string;
+  // Elevation gain from access point
+  uphill_gain_from_access_m?: number;
+  downhill_gain_from_access_m?: number;
+  // Landcover and adjusted approach values
+  landcover_type?: string; // desert, shrub, forest, wet, unknown
+  landcover_multiplier?: number; // Terrain difficulty multiplier
+  adjusted_distance_m?: number; // distance * multiplier
+  adjusted_uphill_m?: number; // uphill * multiplier
+  adjusted_downhill_m?: number; // downhill * multiplier
+  // Approach difficulty classification
+  approach_difficulty?: 'easy' | 'moderate' | 'hard' | 'unknown';
+  approach_profile?: 'casual' | 'moderate' | 'spicy';
 }
 
 // A computed standing location
@@ -253,12 +275,117 @@ export interface AnalysisMeta {
   structure_debug?: StructureDebug;
 }
 
+// =============================================================================
+// Multi-Anchor System Types
+// =============================================================================
+
+// Structure metrics at an anchor point
+export interface AnchorStructure {
+  structure_score: number;
+  micro_relief_m: number;
+  max_curvature: number;
+  max_slope_break: number;
+  structure_class: string; // "micro-dramatic", "macro-dramatic", "flat-lit"
+}
+
+// A specific photographic subject within an explore area
+export interface Anchor {
+  anchor_id: number;
+  location: { lat: number; lon: number };
+  elevation_m: number;
+  slope_deg: number;
+  aspect_deg: number;
+  face_direction_deg: number;
+  structure: AnchorStructure;
+  geometry_type: string; // "planar" or "volumetric"
+  volumetric_reason?: string;
+}
+
+// Standing location properties (shared with StandingProperties)
+export interface ShotStandingProperties {
+  elevation_m: number;
+  slope_deg: number;
+  distance_to_subject_m: number;
+  camera_bearing_deg: number;
+  elevation_diff_m: number;
+  classification?: string; // "glow" or "rim"
+  min_valid_distance_m?: number;
+  max_valid_distance_m?: number;
+}
+
+// Shooting timing information
+export interface ShootingTiming {
+  best_time_minutes: number;
+  window_start_minutes: number;
+  window_end_minutes: number;
+  window_duration_minutes: number;
+  peak_light_quality: number;
+  lighting_type: string; // "standard", "rim", "crest"
+}
+
+// A complete shooting opportunity: anchor + standing location + lighting
+export interface ShotCandidate {
+  shot_id: number;
+  anchor_id: number;
+  explore_area_id: number;
+  anchor_location: { lat: number; lon: number };
+  standing_location: { lat: number; lon: number };
+  standing_properties: ShotStandingProperties;
+  line_of_sight: LineOfSight;
+  shooting_timing?: ShootingTiming;
+  lighting_zone_type: string; // "glow-zone", "rim-zone"
+  confidence: number;
+  structure_score: number;
+  nav_link?: string;
+  candidate_search?: {
+    candidates_checked: number;
+    selected_at_distance_m: number;
+    rejection_summary: Record<string, number>;
+    sample_rejected: Array<{
+      lat: number;
+      lon: number;
+      distance_m: number;
+      reason: string;
+    }>;
+  };
+}
+
+// Aggregate metrics for an explore area zone
+export interface ExploreAreaMetrics {
+  area_m2: number;
+  effective_width_m: number;
+  mean_slope_deg: number;
+  mean_elevation_m: number;
+  structure_class: string;
+  geometry_type: string;
+  confidence: number;
+  lighting_zone_type: string;
+  aspect_offset_deg: number;
+  cardinal_direction: string;
+  directional_preference: number;
+}
+
+// A lighting-eligible terrain zone with multiple photographic anchors
+export interface ExploreArea {
+  explore_area_id: number;
+  centroid: { lat: number; lon: number };
+  polygon: [number, number][]; // [(lat, lon), ...]
+  metrics: ExploreAreaMetrics;
+  anchors: Anchor[];
+  shot_candidates: ShotCandidate[];
+  explain?: SubjectExplain;
+}
+
 // Full analysis result
 export interface TerrainAnalysisResult {
   meta: AnalysisMeta;
   sun_track: SunPosition[];
+  // Legacy format (for backwards compatibility)
   subjects: Subject[];
   standing_locations: StandingLocation[];
+  // New multi-anchor format
+  explore_areas: ExploreArea[];
+  shot_candidates: ShotCandidate[];
   debug_layers: {
     dem_hillshade?: DebugLayer;
     normal_field?: DebugLayer;

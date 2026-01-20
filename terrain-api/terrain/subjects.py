@@ -72,6 +72,13 @@ class DetectedSubject:
     structure: Optional[StructureMetrics] = None
     structure_class: str = "unknown"  # "micro-dramatic", "macro-dramatic", "flat-lit"
     is_dramatic: bool = True  # False for flat-lit terrain
+    # Geometry type: planar (walls, slabs) vs volumetric (boulders, knobs)
+    # Volumetric subjects don't have a single face direction - bypass face-based filters
+    geometry_type: str = "planar"  # "planar" or "volumetric"
+    face_direction_variance: float = 0.0  # Variance of face directions across cells
+    volumetric_reason: Optional[str] = None  # e.g., "curvature:1.5" or "face_variance:72.3°"
+    # Parent polygon ID (for multi-anchor extraction - tracks which explore area this anchor came from)
+    parent_polygon_id: Optional[int] = None
 
 
 @dataclass
@@ -1254,8 +1261,21 @@ def filter_by_orientation(
 
     passed = []
     rejections = []
+    volumetric_bypassed = 0
 
     for subj in subjects:
+        # BYPASS: Volumetric subjects skip face-direction filtering
+        # They don't have a single face - rely on camera-sun geometry instead
+        if getattr(subj, 'geometry_type', 'planar') == 'volumetric':
+            passed.append(subj)
+            volumetric_bypassed += 1
+            logging.debug(
+                f"Pre-filter BYPASS: subject {subj.subject_id} is volumetric "
+                f"(curvature={subj.structure.max_curvature if subj.structure else 0:.2f}, "
+                f"face_var={getattr(subj, 'face_direction_variance', 0):.1f}°)"
+            )
+            continue
+
         face_dir = subj.face_direction
         cardinal = _get_cardinal_direction(face_dir)
         dir_pref = compute_directional_preference(face_dir, event)
@@ -1264,7 +1284,7 @@ def filter_by_orientation(
         diff = abs(face_dir - sun_azimuth_deg) % 360
         aspect_offset = min(diff, 360 - diff)
 
-        # Check 1: Hard reject if facing away from sun
+        # Check 1: Hard reject if facing away from sun (planar subjects only)
         if aspect_offset > MAX_ASPECT_OFFSET:
             rejections.append({
                 "subject_id": subj.subject_id,
@@ -1306,10 +1326,634 @@ def filter_by_orientation(
 
     logging.info(
         f"Orientation pre-filter: {len(subjects)} subjects -> "
-        f"{len(passed)} passed, {len(rejections)} rejected"
+        f"{len(passed)} passed ({volumetric_bypassed} volumetric bypass), {len(rejections)} rejected"
     )
 
     return passed, rejections
+
+
+# =============================================================================
+# Geometry Classification: Planar vs Volumetric
+# =============================================================================
+# Volumetric subjects (boulders, knobs) don't have a single face direction.
+# They should bypass face-direction-based orientation filters and rely on
+# standing location truth table (camera-sun geometry) for glow/rim classification.
+
+# Thresholds for volumetric classification
+# Volumetric = face_variance >= 60 OR (curvature >= 0.8 AND micro_relief >= 8m)
+VOLUMETRIC_MIN_CURVATURE = 0.8       # Curvature threshold (requires relief too)
+VOLUMETRIC_MIN_MICRO_RELIEF = 8.0    # Micro relief threshold in meters
+VOLUMETRIC_MIN_FACE_VARIANCE = 60.0  # High variance = faces point many directions (degrees)
+
+
+def compute_face_direction_variance(
+    cells: list[tuple[int, int]],
+    aspect_deg: np.ndarray,
+) -> float:
+    """
+    Compute circular variance of face directions across cells.
+
+    Uses circular statistics since angles wrap at 360°.
+    Returns variance in degrees (0 = all same direction, ~100+ = very mixed).
+    """
+    if len(cells) < 2:
+        return 0.0
+
+    # Collect face directions
+    face_dirs = []
+    for row, col in cells:
+        aspect = aspect_deg[row, col]
+        face_dir = (aspect + 180) % 360
+        face_dirs.append(face_dir)
+
+    face_dirs = np.array(face_dirs)
+
+    # Circular mean and variance using complex exponentials
+    angles_rad = np.radians(face_dirs)
+    mean_x = np.mean(np.cos(angles_rad))
+    mean_y = np.mean(np.sin(angles_rad))
+
+    # R is the mean resultant length (0 = uniform distribution, 1 = all same)
+    R = np.sqrt(mean_x**2 + mean_y**2)
+
+    # Circular variance: 1 - R (0 = no variance, 1 = max variance)
+    circular_var = 1 - R
+
+    # Convert to degrees for interpretability (0-180 scale)
+    # sqrt(2 * circular_var) * 180/pi gives approximate angular deviation
+    variance_deg = np.degrees(np.sqrt(2 * circular_var)) if circular_var > 0 else 0.0
+
+    return variance_deg
+
+
+def classify_geometry_type(
+    structure: Optional[StructureMetrics],
+    face_direction_variance: float,
+) -> tuple[str, Optional[str]]:
+    """
+    Classify subject geometry as 'planar' or 'volumetric'.
+
+    Volumetric if:
+    - face_direction_variance >= 60° (cells face many different directions)
+    - OR (max_curvature >= 0.8 AND micro_relief >= 8m)
+
+    Planar subjects (walls, slabs, ridges) have consistent face direction
+    and should use face-based orientation filtering.
+
+    Volumetric subjects (boulders, knobs) don't have a dominant face and
+    should bypass face-based filters, relying on camera-sun geometry instead.
+
+    Returns:
+        (geometry_type, volumetric_reason) - reason is None for planar
+    """
+    # Check face direction variance first (high variance = volumetric)
+    if face_direction_variance >= VOLUMETRIC_MIN_FACE_VARIANCE:
+        return ("volumetric", f"face_variance:{face_direction_variance:.1f}°")
+
+    # Check curvature AND micro relief together (both required)
+    if structure:
+        has_curvature = structure.max_curvature >= VOLUMETRIC_MIN_CURVATURE
+        has_relief = structure.micro_relief_m >= VOLUMETRIC_MIN_MICRO_RELIEF
+        if has_curvature and has_relief:
+            return ("volumetric", f"curvature:{structure.max_curvature:.2f}+relief:{structure.micro_relief_m:.1f}m")
+
+    return ("planar", None)
+
+
+# =============================================================================
+# Multi-Anchor Extraction from Polygons
+# =============================================================================
+# Each polygon (explore area) can yield multiple subject anchors based on
+# local maxima of structure_score. This treats the polygon as a container,
+# not the subject itself.
+
+# Anchor extraction parameters
+ANCHOR_MIN_SEPARATION_M = 60.0    # Minimum distance between anchors
+ANCHOR_MIN_COUNT = 1              # Minimum anchors per polygon
+ANCHOR_MAX_COUNT = 7              # Maximum anchors per polygon
+ANCHOR_MIN_STRUCTURE_SCORE = 0.3  # Minimum structure score for an anchor
+
+
+@dataclass
+class AnchorPoint:
+    """A subject anchor point extracted from a polygon."""
+    row: int
+    col: int
+    lat: float
+    lon: float
+    structure_score: float
+    # Local metrics at anchor location
+    elevation_m: float
+    slope_deg: float
+    aspect_deg: float
+    curvature: float
+
+
+def extract_anchors_from_polygon(
+    polygon: DetectedSubject,
+    dem: 'DEMGrid',
+    slope_deg: np.ndarray,
+    aspect_deg: np.ndarray,
+    curvature: np.ndarray,
+    elevations: np.ndarray,
+    cell_size_m: float,
+    min_separation_m: float = ANCHOR_MIN_SEPARATION_M,
+    min_count: int = ANCHOR_MIN_COUNT,
+    max_count: int = ANCHOR_MAX_COUNT,
+    min_structure_score: float = ANCHOR_MIN_STRUCTURE_SCORE,
+) -> list[AnchorPoint]:
+    """
+    Extract multiple subject anchors from a polygon based on local structure maxima.
+
+    The polygon represents an "explore area" - terrain with favorable lighting.
+    Anchors are the actual subjects to photograph within that area.
+
+    Algorithm:
+    1. Compute structure_score for each cell in polygon
+    2. Find local maxima (cells higher than all 8 neighbors)
+    3. Filter maxima by min_structure_score
+    4. Greedy selection: keep top anchors with >= min_separation_m between them
+    5. Return 1-7 anchors (at least 1, at most max_count)
+
+    Args:
+        polygon: DetectedSubject representing the explore area
+        dem: DEMGrid for coordinate conversion
+        slope_deg, aspect_deg, curvature, elevations: terrain arrays
+        cell_size_m: cell size in meters
+        min_separation_m: minimum distance between anchors
+        min/max_count: anchor count bounds
+        min_structure_score: threshold for anchor quality
+
+    Returns:
+        List of AnchorPoint objects, sorted by structure_score descending
+    """
+    from .structure import compute_cell_structure_score
+
+    cells = polygon.cells
+    if not cells:
+        return []
+
+    # Step 1: Compute structure score for each cell
+    cell_scores = {}  # (row, col) -> score
+    for row, col in cells:
+        score = compute_cell_structure_score(
+            row, col, elevations, slope_deg, curvature, cell_size_m
+        )
+        cell_scores[(row, col)] = score
+
+    # Step 2: Find local maxima (cells with score > all 8 neighbors)
+    cell_set = set(cells)
+    local_maxima = []
+
+    for (row, col), score in cell_scores.items():
+        if score < min_structure_score:
+            continue
+
+        is_maximum = True
+        for dr in [-1, 0, 1]:
+            for dc in [-1, 0, 1]:
+                if dr == 0 and dc == 0:
+                    continue
+                nr, nc = row + dr, col + dc
+                if (nr, nc) in cell_set:
+                    neighbor_score = cell_scores.get((nr, nc), 0)
+                    if neighbor_score >= score:  # >= means not a strict maximum
+                        is_maximum = False
+                        break
+            if not is_maximum:
+                break
+
+        if is_maximum:
+            lat, lon = dem.indices_to_lat_lon(row, col)
+            local_maxima.append(AnchorPoint(
+                row=row,
+                col=col,
+                lat=float(lat),
+                lon=float(lon),
+                structure_score=score,
+                elevation_m=float(elevations[row, col]),
+                slope_deg=float(slope_deg[row, col]),
+                aspect_deg=float(aspect_deg[row, col]),
+                curvature=float(curvature[row, col]),
+            ))
+
+    # If no local maxima found, use the global max
+    if not local_maxima and cells:
+        best_cell = max(cell_scores.items(), key=lambda x: x[1])
+        (row, col), score = best_cell
+        lat, lon = dem.indices_to_lat_lon(row, col)
+        local_maxima.append(AnchorPoint(
+            row=row,
+            col=col,
+            lat=float(lat),
+            lon=float(lon),
+            structure_score=score,
+            elevation_m=float(elevations[row, col]),
+            slope_deg=float(slope_deg[row, col]),
+            aspect_deg=float(aspect_deg[row, col]),
+            curvature=float(curvature[row, col]),
+        ))
+
+    # Step 3: Sort by structure score descending
+    local_maxima.sort(key=lambda a: -a.structure_score)
+
+    # Step 4: Greedy selection with separation constraint
+    selected = []
+    for anchor in local_maxima:
+        if len(selected) >= max_count:
+            break
+
+        # Check distance to all already-selected anchors
+        too_close = False
+        for existing in selected:
+            dist = _haversine_distance(
+                anchor.lat, anchor.lon,
+                existing.lat, existing.lon
+            )
+            if dist < min_separation_m:
+                too_close = True
+                break
+
+        if not too_close:
+            selected.append(anchor)
+
+    # Ensure at least min_count (use top scoring even if close)
+    if len(selected) < min_count and local_maxima:
+        for anchor in local_maxima:
+            if anchor not in selected:
+                selected.append(anchor)
+            if len(selected) >= min_count:
+                break
+
+    return selected
+
+
+def create_subject_from_anchor(
+    anchor: AnchorPoint,
+    parent_polygon: DetectedSubject,
+    dem: 'DEMGrid',
+    slope_deg: np.ndarray,
+    aspect_deg: np.ndarray,
+    curvature: np.ndarray,
+    Nx: np.ndarray,
+    Ny: np.ndarray,
+    Nz: np.ndarray,
+    subject_id: int,
+) -> DetectedSubject:
+    """
+    Create a DetectedSubject from an anchor point within a parent polygon.
+
+    The anchor becomes the subject centroid. Properties are computed from a
+    small neighborhood around the anchor (not the entire polygon).
+
+    Args:
+        anchor: AnchorPoint to create subject from
+        parent_polygon: The explore area polygon containing this anchor
+        dem, slope_deg, etc.: terrain arrays
+        subject_id: unique ID for this subject
+
+    Returns:
+        DetectedSubject centered on the anchor
+    """
+    from .structure import compute_structure_metrics
+
+    row, col = anchor.row, anchor.col
+    rows, cols = slope_deg.shape
+
+    # Use a small neighborhood around anchor for local properties (5-cell radius = ~150m)
+    radius = 5
+    local_cells = []
+    for dr in range(-radius, radius + 1):
+        for dc in range(-radius, radius + 1):
+            nr, nc = row + dr, col + dc
+            if 0 <= nr < rows and 0 <= nc < cols:
+                # Only include cells that are part of the parent polygon
+                if (nr, nc) in set(parent_polygon.cells):
+                    local_cells.append((nr, nc))
+
+    # If no local cells (shouldn't happen), use just the anchor cell
+    if not local_cells:
+        local_cells = [(row, col)]
+
+    # Compute local mean properties
+    local_slopes = [slope_deg[r, c] for r, c in local_cells]
+    local_aspects = [aspect_deg[r, c] for r, c in local_cells]
+    local_elevs = [dem.elevations[r, c] for r, c in local_cells]
+
+    mean_slope = float(np.mean(local_slopes))
+    mean_aspect = float(_circular_mean(local_aspects))
+    mean_elev = float(np.mean(local_elevs))
+    face_dir = float((mean_aspect + 180) % 360)
+
+    # Local surface normal
+    local_Nx = [Nx[r, c] for r, c in local_cells]
+    local_Ny = [Ny[r, c] for r, c in local_cells]
+    local_Nz = [Nz[r, c] for r, c in local_cells]
+    mean_Nx = float(np.mean(local_Nx))
+    mean_Ny = float(np.mean(local_Ny))
+    mean_Nz = float(np.mean(local_Nz))
+    norm = float(np.sqrt(mean_Nx**2 + mean_Ny**2 + mean_Nz**2))
+    if norm > 0:
+        mean_Nx = float(mean_Nx / norm)
+        mean_Ny = float(mean_Ny / norm)
+        mean_Nz = float(mean_Nz / norm)
+
+    # Area: use local neighborhood area
+    area_m2 = float(len(local_cells) * dem.cell_size_m ** 2)
+
+    # Compute structure metrics for local neighborhood
+    structure = compute_structure_metrics(
+        elevations=dem.elevations,
+        slope_deg=slope_deg,
+        curvature=curvature,
+        cells=local_cells,
+        cell_size_m=dem.cell_size_m,
+        dem_grid=dem,
+        centroid_row=row,
+        centroid_col=col,
+    )
+
+    # Classify geometry type
+    face_variance = float(compute_face_direction_variance(local_cells, aspect_deg))
+    geometry_type, volumetric_reason = classify_geometry_type(structure, face_variance)
+
+    return DetectedSubject(
+        subject_id=subject_id,
+        cells=local_cells,  # Use local neighborhood cells
+        centroid_row=float(row),
+        centroid_col=float(col),
+        centroid_lat=float(anchor.lat),
+        centroid_lon=float(anchor.lon),
+        mean_elevation=mean_elev,
+        mean_slope=mean_slope,
+        mean_aspect=mean_aspect,
+        face_direction=face_dir,
+        normal=(mean_Nx, mean_Ny, mean_Nz),
+        area_m2=area_m2,
+        confidence=float(parent_polygon.confidence * (0.8 + 0.2 * anchor.structure_score)),
+        score_breakdown=parent_polygon.score_breakdown,
+        distance_from_center_m=float(parent_polygon.distance_from_center_m),
+        classification=parent_polygon.classification,
+        subject_type=parent_polygon.subject_type,
+        quality_tier=parent_polygon.quality_tier,
+        structure=structure,
+        structure_class=structure.structure_class,
+        is_dramatic=bool(structure.structure_score >= 0.4),
+        geometry_type=geometry_type,
+        face_direction_variance=face_variance,
+        volumetric_reason=volumetric_reason,
+        parent_polygon_id=parent_polygon.subject_id,
+    )
+
+
+# =============================================================================
+# Orientation Purity and Zone Splitting
+# =============================================================================
+# Large zones (>0.2 km²) with mixed orientation (5-70% pass for event) should
+# be split by orientation before the main orientation filter runs.
+# NOTE: This only applies to PLANAR subjects. Volumetric subjects bypass this.
+
+ORIENTATION_MIXED_MIN_AREA_M2 = 200000.0  # 0.2 km²
+ORIENTATION_MIXED_MIN_PASS = 0.05  # 5% cells must pass
+ORIENTATION_MIXED_MAX_PASS = 0.70  # 70% max - above this, zone is coherent
+MAX_ASPECT_OFFSET_FOR_PASS = 60.0  # Cells pass if Δ(face, sun) <= 60°
+
+
+def compute_orientation_pass_fraction(
+    cells: list[tuple[int, int]],
+    aspect_deg: np.ndarray,
+    sun_azimuth_deg: float,
+) -> tuple[float, int, int]:
+    """
+    Compute fraction of cells that pass orientation for given sun azimuth.
+
+    A cell passes if Δ(face_direction, sun_azimuth) <= 60°.
+
+    Returns:
+        (pass_fraction, pass_count, total_count)
+    """
+    if not cells:
+        return 0.0, 0, 0
+
+    pass_count = 0
+    for row, col in cells:
+        aspect = aspect_deg[row, col]
+        face_dir = (aspect + 180) % 360
+
+        diff = abs(face_dir - sun_azimuth_deg) % 360
+        aspect_offset = min(diff, 360 - diff)
+
+        if aspect_offset <= MAX_ASPECT_OFFSET_FOR_PASS:
+            pass_count += 1
+
+    total = len(cells)
+    return pass_count / total if total > 0 else 0.0, pass_count, total
+
+
+def is_orientation_mixed(
+    area_m2: float,
+    pass_fraction: float,
+) -> bool:
+    """
+    Check if a zone is orientation-mixed and should be split.
+
+    Returns True if:
+    - Zone area > 0.2 km²
+    - Pass fraction is between 5% and 70% (heterogeneous)
+    """
+    if area_m2 < ORIENTATION_MIXED_MIN_AREA_M2:
+        return False
+
+    return ORIENTATION_MIXED_MIN_PASS <= pass_fraction <= ORIENTATION_MIXED_MAX_PASS
+
+
+def split_zone_by_orientation(
+    cells: list[tuple[int, int]],
+    aspect_deg: np.ndarray,
+    sun_azimuth_deg: float,
+    dem: DEMGrid,
+) -> tuple[list[list[tuple[int, int]]], list[list[tuple[int, int]]]]:
+    """
+    Split a zone into orientation-passing and orientation-failing cell groups.
+
+    Then further subdivide each group spatially to ensure contiguous sub-zones.
+
+    Returns:
+        (passing_subzones, failing_subzones) - each is a list of cell lists
+    """
+    passing_cells = []
+    failing_cells = []
+
+    for row, col in cells:
+        aspect = aspect_deg[row, col]
+        face_dir = (aspect + 180) % 360
+
+        diff = abs(face_dir - sun_azimuth_deg) % 360
+        aspect_offset = min(diff, 360 - diff)
+
+        if aspect_offset <= MAX_ASPECT_OFFSET_FOR_PASS:
+            passing_cells.append((row, col))
+        else:
+            failing_cells.append((row, col))
+
+    def extract_contiguous_groups(cell_list: list[tuple[int, int]]) -> list[list[tuple[int, int]]]:
+        """Extract spatially contiguous groups from a cell list using flood fill."""
+        if not cell_list:
+            return []
+
+        # Convert to set for fast lookup
+        cell_set = set(cell_list)
+        visited = set()
+        groups = []
+
+        def flood_fill(start: tuple[int, int]) -> list[tuple[int, int]]:
+            """Flood fill to find all connected cells."""
+            group = []
+            stack = [start]
+
+            while stack:
+                cell = stack.pop()
+                if cell in visited or cell not in cell_set:
+                    continue
+
+                visited.add(cell)
+                group.append(cell)
+
+                # Check 8-connected neighbors
+                r, c = cell
+                for dr in [-1, 0, 1]:
+                    for dc in [-1, 0, 1]:
+                        if dr == 0 and dc == 0:
+                            continue
+                        neighbor = (r + dr, c + dc)
+                        if neighbor in cell_set and neighbor not in visited:
+                            stack.append(neighbor)
+
+            return group
+
+        # Find all connected components
+        for cell in cell_list:
+            if cell not in visited:
+                group = flood_fill(cell)
+                if len(group) >= 3:  # Minimum viable sub-zone
+                    groups.append(group)
+
+        return groups
+
+    passing_subzones = extract_contiguous_groups(passing_cells)
+    failing_subzones = extract_contiguous_groups(failing_cells)
+
+    return passing_subzones, failing_subzones
+
+
+# =============================================================================
+# Anchor Clustering
+# =============================================================================
+# After orientation splitting produces many sub-zones, cluster them by anchor
+# points (max structure score location) to reduce noise while preserving coverage.
+
+ANCHOR_CLUSTER_RADIUS_M = 100.0  # Cluster anchors within 100m
+MAX_ANCHORS_PER_CLUSTER = 3      # Keep top 3 anchors per cluster
+
+
+def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate distance in meters between two lat/lon points."""
+    R = 6371000  # Earth radius in meters
+    phi1, phi2 = np.radians(lat1), np.radians(lat2)
+    dphi = np.radians(lat2 - lat1)
+    dlambda = np.radians(lon2 - lon1)
+    a = np.sin(dphi/2)**2 + np.cos(phi1) * np.cos(phi2) * np.sin(dlambda/2)**2
+    return 2 * R * np.arctan2(np.sqrt(a), np.sqrt(1-a))
+
+
+def cluster_subzones_by_anchor(
+    subzones: list,  # list of DetectedSubject
+    cluster_radius_m: float = ANCHOR_CLUSTER_RADIUS_M,
+    max_per_cluster: int = MAX_ANCHORS_PER_CLUSTER,
+) -> list:
+    """
+    Cluster sub-zones by their anchor points and keep top candidates per cluster.
+
+    Anchor point = max_structure_location if available, else centroid.
+
+    This reduces many orientation-split sub-zones to a manageable number
+    while preserving geographic coverage.
+
+    Args:
+        subzones: List of DetectedSubject from orientation splitting
+        cluster_radius_m: Cluster anchors within this distance (default 100m)
+        max_per_cluster: Keep top N anchors per cluster (default 3)
+
+    Returns:
+        Filtered list of DetectedSubject (reduced count)
+    """
+    import logging
+
+    if not subzones or len(subzones) <= max_per_cluster:
+        return subzones
+
+    # Extract anchor points for each sub-zone
+    anchors = []
+    for sz in subzones:
+        # Use max_structure_location if available, else centroid
+        if sz.structure and sz.structure.max_structure_location:
+            lat, lon = sz.structure.max_structure_location
+        else:
+            lat, lon = sz.centroid_lat, sz.centroid_lon
+
+        # Score for ranking (structure_score * confidence)
+        score = sz.confidence
+        if sz.structure:
+            score *= (1 + sz.structure.structure_score)  # Boost by structure
+
+        anchors.append({
+            'subzone': sz,
+            'lat': lat,
+            'lon': lon,
+            'score': score,
+        })
+
+    # Sort by score descending
+    anchors.sort(key=lambda x: -x['score'])
+
+    # Greedy clustering: assign each anchor to nearest cluster or create new
+    clusters = []  # List of lists of anchors
+
+    for anchor in anchors:
+        # Find nearest cluster centroid
+        best_cluster = None
+        best_dist = float('inf')
+
+        for cluster in clusters:
+            # Compute cluster centroid
+            c_lat = np.mean([a['lat'] for a in cluster])
+            c_lon = np.mean([a['lon'] for a in cluster])
+            dist = _haversine_distance(anchor['lat'], anchor['lon'], c_lat, c_lon)
+
+            if dist < best_dist:
+                best_dist = dist
+                best_cluster = cluster
+
+        # Assign to cluster if within radius, else create new
+        if best_cluster is not None and best_dist < cluster_radius_m:
+            best_cluster.append(anchor)
+        else:
+            clusters.append([anchor])
+
+    # Keep top N from each cluster
+    kept = []
+    for cluster in clusters:
+        # Sort cluster by score and keep top N
+        cluster.sort(key=lambda x: -x['score'])
+        for anchor in cluster[:max_per_cluster]:
+            kept.append(anchor['subzone'])
+
+    logging.info(
+        f"Anchor clustering: {len(subzones)} sub-zones -> {len(clusters)} clusters -> "
+        f"{len(kept)} anchors (radius={cluster_radius_m}m, max={max_per_cluster}/cluster)"
+    )
+
+    return kept
 
 
 # =============================================================================
