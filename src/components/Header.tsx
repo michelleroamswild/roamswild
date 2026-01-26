@@ -20,8 +20,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "./ui/sheet";
-
-const showDevFeatures = import.meta.env.VITE_ENABLE_DEV_FEATURES === 'true';
+import { isFeatureEnabled } from "@/config/featureFlags";
 
 const getInitials = (name?: string, email?: string): string => {
   if (name) {
@@ -124,7 +123,7 @@ export const Header = () => {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {showDevFeatures && (
+              {isFeatureEnabled('campsites') && (
                 <DropdownMenuItem asChild>
                   <Link to="/campsites" className="flex items-center">
                     <Tent className="w-4 h-4 mr-2" weight="bold" />
@@ -221,7 +220,7 @@ export const Header = () => {
                   <Heart className="w-5 h-5" weight={isActive('/saved') ? "fill" : "regular"} />
                   Saved
                 </Link>
-                {showDevFeatures && (
+                {isFeatureEnabled('campsites') && (
                   <Link
                     to="/campsites"
                     onClick={closeMobileMenu}

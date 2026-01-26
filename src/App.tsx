@@ -9,6 +9,7 @@ import { TripProvider } from "@/context/TripContext";
 import { CampsitesProvider } from "@/context/CampsitesContext";
 import { GoogleMapsProvider } from "@/components/GoogleMapsProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { FeatureGate } from "@/components/FeatureGate";
 import { SpinnerGap } from "@phosphor-icons/react";
 import Index from "./pages/Index";
 import Landing from "./pages/Landing";
@@ -29,12 +30,9 @@ import Campsites from "./pages/Campsites";
 import CampsiteDetail from "./pages/CampsiteDetail";
 import DispersedExplorer from "./pages/DispersedExplorer";
 import StyleGuide from "./pages/StyleGuide";
-import RidbTest from "./pages/RidbTest";
 import PhotoWeatherTest from "./pages/PhotoWeatherTest";
 import TerrainValidation from "./pages/TerrainValidation";
 import PhotoScout from "./pages/PhotoScout";
-
-const showDevFeatures = import.meta.env.VITE_ENABLE_DEV_FEATURES === 'true';
 
 // Smart home route - shows Landing for guests, Index for authenticated users
 const HomeRoute = () => {
@@ -89,13 +87,29 @@ const App = () => (
                   <Route path="/my-trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
                   <Route path="/join/:token" element={<ProtectedRoute><JoinTrip /></ProtectedRoute>} />
                   <Route path="/dispersed" element={<ProtectedRoute><DispersedExplorer /></ProtectedRoute>} />
-                  <Route path="/campsites" element={<ProtectedRoute><Campsites /></ProtectedRoute>} />
-                  <Route path="/campsites/:id" element={<ProtectedRoute><CampsiteDetail /></ProtectedRoute>} />
-                  <Route path="/style-guide" element={<StyleGuide />} />
-                  <Route path="/ridb-test" element={<RidbTest />} />
-                  <Route path="/photo-weather-test" element={<PhotoWeatherTest />} />
-                  <Route path="/terrain-validation" element={<TerrainValidation />} />
-                  <Route path="/photo-scout" element={<PhotoScout />} />
+                  {/* Feature-gated routes */}
+                  <Route path="/campsites" element={
+                    <FeatureGate feature="campsites">
+                      <ProtectedRoute><Campsites /></ProtectedRoute>
+                    </FeatureGate>
+                  } />
+                  <Route path="/campsites/:id" element={
+                    <FeatureGate feature="campsites">
+                      <ProtectedRoute><CampsiteDetail /></ProtectedRoute>
+                    </FeatureGate>
+                  } />
+                  <Route path="/style-guide" element={
+                    <FeatureGate feature="styleGuide"><StyleGuide /></FeatureGate>
+                  } />
+                  <Route path="/photo-weather-test" element={
+                    <FeatureGate feature="photoWeatherTest"><PhotoWeatherTest /></FeatureGate>
+                  } />
+                  <Route path="/terrain-validation" element={
+                    <FeatureGate feature="terrainValidation"><TerrainValidation /></FeatureGate>
+                  } />
+                  <Route path="/photo-scout" element={
+                    <FeatureGate feature="photoScout"><PhotoScout /></FeatureGate>
+                  } />
 
                   {/* Catch-all */}
                   <Route path="*" element={<NotFound />} />
