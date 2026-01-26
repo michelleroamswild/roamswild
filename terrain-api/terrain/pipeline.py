@@ -682,6 +682,10 @@ async def analyze_terrain(
         # Find standing location using constrained candidate search with truth table
         # Use subject.centroid which may be snapped to max_structure_location
         # Validation now happens inside find_standing_location with hard constraints
+        # Determine if subject is volumetric (3D rocks) vs planar (cliff faces)
+        subject_structure_class = det.structure_class if det.structure_class else "unknown"
+        subject_is_volumetric = subject_structure_class == "micro-dramatic"
+
         standing, candidate_search = find_standing_location(
             dem=dem,
             subject_lat=subject.centroid["lat"],  # May be snapped to max structure
@@ -695,7 +699,8 @@ async def analyze_terrain(
             sun_altitude_deg=sun_alt,  # For low sun, glow constraint is loosened
             face_direction_deg=subject.properties.face_direction_deg,
             effective_width_m=subject.properties.effective_width_m,
-            structure_class=det.structure_class if det.structure_class else "unknown",
+            structure_class=subject_structure_class,
+            is_volumetric=subject_is_volumetric,
         )
 
         # Store candidate search info on subject for debugging
@@ -896,6 +901,9 @@ async def analyze_terrain(
             # For glow facets, enable extended search in the face direction
             # (standing position is in face direction, camera points back toward subject)
             # This helps find standing locations past steep/blocked terrain
+            facet_structure_class = facet_det.structure_class or "unknown"
+            facet_is_volumetric = facet_structure_class == "micro-dramatic"
+
             facet_standing, facet_search = find_standing_location(
                 dem=dem,
                 subject_lat=facet_det.centroid_lat,
@@ -911,7 +919,8 @@ async def analyze_terrain(
                 sun_altitude_deg=sun_alt,
                 face_direction_deg=facet_det.face_direction,
                 effective_width_m=facet_effective_width,
-                structure_class=facet_det.structure_class or "unknown",
+                structure_class=facet_structure_class,
+                is_volumetric=facet_is_volumetric,
             )
 
             if not facet_standing:

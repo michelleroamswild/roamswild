@@ -47,25 +47,26 @@ def classify_standing_geometry(
     face_direction: float,
     camera_bearing: float,
     sun_altitude_deg: float = 15.0,
+    is_volumetric: bool = False,
 ) -> Tuple[Optional[str], Dict[str, float]]:
     """
     Classify a standing position as glow, rim, texture, or invalid.
 
     Truth table (standard):
-    - GLOW: Δ(A_face, A_sun) <= 60° AND Δ(A_cam, A_sun) >= 90° AND Δ(A_cam, A_face) >= 120°
+    - GLOW: Δ(A_face, A_sun) <= 60° AND Δ(A_cam, A_sun) >= 60° AND Δ(A_cam, A_face) >= 120° (planar) or >= 100° (volumetric)
     - RIM: Δ(A_face, A_sun) in [60°, 120°] AND Δ(A_cam, A_sun) <= 45°
     - TEXTURE: Δ(A_face, A_sun) in [25°, 95°] AND Δ(A_cam, A_face) >= 90° AND Δ(A_cam, A_sun) in [45°, 135°]
     - Invalid: None of the above
 
     For low sun (altitude < 8°, e.g. sunrise/sunset golden hour):
-    - GLOW camera constraint loosened: Δ(A_cam, A_sun) >= 60° (allows shooting partially into light)
-    - Δ(A_cam, A_face) loosened to >= 90°
+    - Δ(A_cam, A_face) loosened to >= 90° (planar) or >= 80° (volumetric)
 
     Args:
         sun_azimuth: Sun azimuth in degrees
         face_direction: Subject face direction in degrees
         camera_bearing: Camera bearing from standing point to subject
         sun_altitude_deg: Sun altitude in degrees (default 15°, use lower for sunrise/sunset)
+        is_volumetric: True for 3D subjects (rocks, formations) that can be shot from more angles
 
     Returns:
         (classification, deltas) where classification is "glow", "rim", "texture", or None
@@ -85,16 +86,17 @@ def classify_standing_geometry(
 
     # Check GLOW conditions:
     # - Face must be toward sun (delta <= 60°) - ALWAYS strict
-    # - Camera vs sun: >= 90° normally, >= 60° for low sun (allows shooting into light)
-    # - Camera vs face: >= 120° normally, >= 90° for low sun
+    # - Camera vs sun: >= 60° (loosened from 90° to allow more shooting angles)
+    # - Camera vs face: planar >= 120°, volumetric >= 100° (volumetric subjects visible from more angles)
+    # - Low sun further loosens cam_face constraint
+    min_cam_sun = 60.0  # Always 60° now (was 90° for non-low-sun)
+
     if is_low_sun:
-        # Sunrise/sunset: allow shooting more into the light
-        min_cam_sun = 60.0
-        min_cam_face = 90.0
+        # Sunrise/sunset: more flexibility
+        min_cam_face = 80.0 if is_volumetric else 90.0
     else:
-        # Standard: camera points away from sun
-        min_cam_sun = 90.0
-        min_cam_face = 120.0
+        # Standard
+        min_cam_face = 100.0 if is_volumetric else 120.0
 
     is_glow = (
         delta_face_sun <= 60 and
@@ -174,6 +176,7 @@ def find_standing_location(
     face_direction_deg: float = None,
     effective_width_m: float = None,
     structure_class: str = "unknown",
+    is_volumetric: bool = False,  # True for 3D subjects (rocks) that can be shot from more angles
 ) -> Tuple[Optional[StandingLocation], CandidateSearch]:
     """
     Find a suitable standing location using constrained candidate search.
@@ -288,6 +291,7 @@ def find_standing_location(
                 face_direction=face_direction_deg,
                 camera_bearing=camera_bearing,
                 sun_altitude_deg=sun_altitude_deg,
+                is_volumetric=is_volumetric,
             )
 
             # Determine effective slope threshold
@@ -451,6 +455,7 @@ def find_standing_location(
                         face_direction=face_direction_deg,
                         camera_bearing=camera_bearing,
                         sun_altitude_deg=sun_altitude_deg,
+                        is_volumetric=is_volumetric,
                     )
 
                     # Slope check with glow/texture bonus
