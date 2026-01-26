@@ -1,0 +1,476 @@
+"""
+Type definitions for terrain analysis.
+
+These match the TypeScript types in src/types/terrainValidation.ts
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Literal, Optional, List, Tuple, Dict
+from datetime import datetime
+
+
+@dataclass
+class SunPosition:
+    time_iso: str
+    minutes_from_start: float
+    azimuth_deg: float
+    altitude_deg: float
+    vector: Tuple[float, float, float]  # (Sx, Sy, Sz)
+
+
+@dataclass
+class IncidencePoint:
+    minutes: float
+    incidence: float
+    glow_score: float      # Gaussian(0.7, 0.25) - optimal for front-lit glow
+    texture_score: float   # Gaussian(0.2, 0.15) - optimal for side-lit texture
+
+
+@dataclass
+class GlowWindow:
+    start_minutes: float
+    end_minutes: float
+    peak_minutes: float
+    duration_minutes: float
+    peak_incidence: float
+    peak_glow_score: float
+    peak_texture_score: float = 0.0  # Texture score at peak time
+
+
+@dataclass
+class ShadowSample:
+    distance_m: float
+    ray_z: float
+    terrain_z: float
+    blocked: bool
+
+
+@dataclass
+class ShadowCheck:
+    checked_at_minutes: float
+    sun_azimuth_deg: float
+    sun_altitude_deg: float
+    samples: List[ShadowSample]
+    sun_visible: bool
+
+
+@dataclass
+class StructureMetrics:
+    """Multi-scale structure metrics for terrain classification."""
+    # Local relief (elevation range)
+    micro_relief_m: float      # Relief within 30-60m radius
+    macro_relief_m: float      # Relief within 300-800m radius
+
+    # Curvature metrics
+    mean_curvature: float      # Average curvature (+ = convex, - = concave)
+    max_curvature: float       # Peak curvature (ridges, knobs)
+    curvature_variance: float  # Variability of curvature
+
+    # Slope break metrics
+    slope_break_score: float   # Mean |Δslope| in neighborhood (0-1 normalized)
+    max_slope_break: float     # Maximum slope change (degrees)
+
+    # Heterogeneity
+    elevation_std: float       # Standard deviation of elevation
+    slope_std: float           # Standard deviation of slope
+    heterogeneity_score: float # Combined heterogeneity (0-1)
+
+    # Combined scores
+    structure_score: float     # Overall structure score (0-1)
+    structure_class: str       # "micro-dramatic", "macro-dramatic", "flat-lit"
+
+    # Per-cell structure analysis (for debugging zone quality)
+    structure_score_at_centroid: float = 0.0  # Structure score at zone centroid
+    max_structure_score_in_zone: float = 0.0  # Highest per-cell structure score
+    max_structure_location: Optional[Tuple[float, float]] = None  # (lat, lon) of best cell
+    distance_centroid_to_max_m: float = 0.0  # Distance from centroid to max location
+
+
+@dataclass
+class SubjectExplain:
+    """Photographer-friendly explanations for technical values."""
+    zone_type: str  # e.g., "Warm light zone - faces the sun for golden glow"
+    aspect_offset: str  # e.g., "Facing almost directly into the sun"
+    light_quality: str  # e.g., "Strong grazing light (dramatic texture)"
+    sun_altitude: str  # e.g., "Very low sun (dramatic golden light)"
+    best_time: str  # e.g., "Just after sunrise"
+    window_duration: str  # e.g., "Good window (comfortable shooting time)"
+    face_direction: str  # e.g., "Faces Southwest"
+    slope: str  # e.g., "Moderate slope (textured hillside)"
+    area: str  # e.g., "Large zone (explore for best angle)"
+    summary: str  # One-sentence summary
+    structure: Optional[str] = None  # e.g., "Micro-dramatic feature: 8.5m local relief"
+
+
+@dataclass
+class SubjectProperties:
+    elevation_m: float
+    slope_deg: float
+    aspect_deg: float
+    face_direction_deg: float
+    area_m2: float
+    normal: Tuple[float, float, float]  # (Nx, Ny, Nz)
+    # Graduated confidence scoring
+    confidence: float = 0.0  # 0-1 overall confidence
+    score_breakdown: Optional[Dict] = None  # slope, prominence, curvature, coherence, size
+    # Scale classification
+    distance_from_center_m: float = 0.0
+    classification: str = "monument-scale"  # "foreground", "human-scale", "monument-scale"
+    # LIGHTING ZONE TYPE - primary classification based on sun relationship
+    # "glow-zone": Faces toward sun (±60°), receives warm direct/angled light
+    # "rim-zone": Perpendicular to sun (60-120°), receives backlit/edge light - DRAMATIC
+    # "shadow-zone": Faces away from sun, in shadow
+    lighting_zone_type: str = "glow-zone"
+    aspect_offset_deg: float = 0.0  # Angular offset from sun direction
+    # Subject type based on terrain character (secondary to lighting zone)
+    # Surface moments: grazing light reveals texture, contrast, rhythm
+    # Dramatic features: direct/angled light emphasizes form and mass
+    subject_type: str = "dramatic-feature"  # "dramatic-feature" or "surface-moment"
+    # Quality tier for ranking (primary features always rank above subtle)
+    quality_tier: str = "primary"  # "primary" or "subtle"
+    # Photographer-friendly explanations (generated by explain.py)
+    explain: Optional[SubjectExplain] = None
+    # Zone sizing (for subdivision validation)
+    effective_width_m: Optional[float] = None  # sqrt(area) - approximate linear extent
+    # Directional preference based on event (sunset favors W, sunrise favors E)
+    directional_preference: float = 1.0  # 0-1 boost based on facing direction
+    cardinal_direction: str = "W"  # e.g., "W", "NW", "SW", "E", "NE", etc.
+    # Structure metrics - distinguishes dramatic features from flat-lit terrain
+    structure: Optional[StructureMetrics] = None
+    structure_class: str = "unknown"  # "micro-dramatic", "macro-dramatic", "flat-lit"
+    is_dramatic: bool = True  # False for flat-lit terrain (not recommended)
+    # Subject location snapping - indicates if centroid was moved to max structure
+    snapped_to_max_structure: bool = False
+    # Geometry type: planar (walls, slabs) vs volumetric (boulders, knobs)
+    # Volumetric subjects bypass face-direction filters, rely on camera-sun geometry
+    geometry_type: str = "planar"  # "planar" or "volumetric"
+    face_direction_variance: float = 0.0  # Variance of face directions (high = volumetric)
+    volumetric_reason: Optional[str] = None  # e.g., "curvature:1.5" or "face_variance:72.3°"
+
+
+@dataclass
+class SubjectValidation:
+    normal_unit_length: float
+    aspect_normal_match_deg: float
+    glow_in_range: bool
+    sun_visible_at_peak: bool
+
+
+@dataclass
+class Subject:
+    subject_id: int
+    centroid: Dict  # {"lat": float, "lon": float}
+    polygon: List[Tuple[float, float]]  # [(lat, lon), ...] - region-grown subject polygon
+    properties: SubjectProperties
+    incidence_series: List[IncidencePoint]
+    glow_window: Optional[GlowWindow]
+    shadow_check: ShadowCheck
+    validation: SubjectValidation
+    candidate_search: Optional[Dict] = None  # Standing location search info
+    # ExploreArea polygon - original zone before region-growing (faint layer)
+    explore_polygon: Optional[List[Tuple[float, float]]] = None  # [(lat, lon), ...]
+    # Parent subject ID for facet subjects (links facet to parent planar subject)
+    parent_subject_id: Optional[int] = None
+
+
+@dataclass
+class LOSSample:
+    t: float  # 0-1 along ray
+    ray_z: float
+    terrain_z: float
+    blocked: bool
+
+
+@dataclass
+class LineOfSight:
+    clear: bool
+    eye_height_m: float
+    target_height_m: float
+    samples: List[LOSSample]
+
+
+@dataclass
+class RejectedCandidate:
+    distance_m: float
+    lat: float
+    lon: float
+    reason: Literal["slope_too_steep", "no_line_of_sight", "out_of_bounds"]
+    slope_deg: Optional[float] = None
+
+
+@dataclass
+class CandidateSearch:
+    candidates_checked: int
+    rejected: List[RejectedCandidate]
+    selected_at_distance_m: float
+
+
+@dataclass
+class StandingProperties:
+    elevation_m: float  # Ground elevation at standing point
+    slope_deg: float
+    distance_to_subject_m: float
+    camera_bearing_deg: float
+    elevation_diff_m: float
+    # Distance constraints (based on subject slope and area)
+    min_valid_distance_m: Optional[float] = None
+    max_valid_distance_m: Optional[float] = None
+    # Geometry classification and validation
+    classification: Optional[str] = None  # "glow" or "rim"
+    geometry_deltas: Optional[Dict] = None  # Truth table deltas
+    # LOS info
+    los_min_clearance_m: Optional[float] = None  # Minimum clearance along ray
+    target_height_offset_m: Optional[float] = None  # Target height offset used (based on structure class)
+    # Accessibility info (distance to OSM roads/trails)
+    accessibility_status: str = "unknown"  # "on-road", "near-road", "off-trail", "too-far", "too-steep", "unknown"
+    distance_to_road_m: Optional[float] = None  # Distance to nearest road/trail
+    nearest_road_type: Optional[str] = None  # OSM highway type (e.g., "track", "path")
+    nearest_road_name: Optional[str] = None  # Road name if available
+    # Elevation gain from access point
+    uphill_gain_from_access_m: Optional[float] = None  # Uphill gain from road to standing
+    downhill_gain_from_access_m: Optional[float] = None  # Downhill gain from road to standing
+    # Landcover and adjusted approach values
+    landcover_type: str = "unknown"  # desert, shrub, forest, wet, unknown
+    landcover_multiplier: float = 1.0  # Terrain difficulty multiplier
+    adjusted_distance_m: Optional[float] = None  # distance * multiplier
+    adjusted_uphill_m: Optional[float] = None  # uphill * multiplier
+    adjusted_downhill_m: Optional[float] = None  # downhill * multiplier
+    # Approach difficulty classification
+    approach_difficulty: str = "unknown"  # easy, moderate, hard, unknown
+    approach_profile: str = "moderate"  # Profile used for limits (casual, moderate, spicy)
+
+
+@dataclass
+class ShootingTiming:
+    """Best times to shoot from this standing location."""
+    best_time_minutes: float  # Minutes from event (sunrise/sunset)
+    window_start_minutes: float
+    window_end_minutes: float
+    window_duration_minutes: float
+    peak_light_quality: float  # 0-1 glow score at peak
+    lighting_type: str  # "standard", "rim", "crest", "afterglow"
+    # Sun altitude at peak time (for direct vs afterglow classification)
+    sun_altitude_at_peak: Optional[float] = None  # degrees above/below horizon
+
+
+@dataclass
+class StandingLocation:
+    standing_id: int
+    subject_id: int
+    location: Dict  # {"lat": float, "lon": float}
+    properties: StandingProperties
+    line_of_sight: LineOfSight
+    candidate_search: CandidateSearch
+    # Timing for best shot
+    shooting_timing: Optional[ShootingTiming] = None
+    # Navigation link (Google Maps)
+    nav_link: Optional[str] = None
+
+
+@dataclass
+class DebugLayer:
+    type: Literal["raster", "geojson"]
+    url: Optional[str] = None
+    features: Optional[List] = None
+
+
+@dataclass
+class StructureDebug:
+    """Debug info for structure computation."""
+    enabled: bool  # Whether structure scoring is enabled
+    computed_cells: int  # Total cells where structure was computed
+    attached_to_subjects: int  # Subjects with structure data attached
+
+
+@dataclass
+class AnalysisMeta:
+    request_id: str
+    computed_at: str
+    dem_source: str
+    dem_bounds: Dict  # {"north", "south", "east", "west"}
+    cell_size_m: float
+    center_lat: float
+    center_lon: float
+    dem_resolution_m: Optional[float] = None
+    dem_vertical_accuracy_m: Optional[float] = None
+    dem_citation: Optional[str] = None
+    # Debug info
+    structure_debug: Optional[StructureDebug] = None
+
+
+@dataclass
+class LightingZoneMember:
+    """A detected surface within a lighting zone."""
+    subject_id: int
+    centroid: Dict  # {"lat": float, "lon": float}
+    area_m2: float
+    mean_incidence: float
+    distance_to_center_m: float
+
+
+@dataclass
+class LightingZone:
+    """
+    A terrain zone with consistent favorable lighting conditions.
+
+    At 30m DEM resolution, this represents a promising area where
+    micro-features (rock gardens, boulder fields, textured slabs)
+    likely exist and will catch similar light.
+
+    Guides photographers to terrain zones worth exploring on foot.
+    """
+    zone_id: int
+    centroid: Dict  # {"lat": float, "lon": float}
+    members: List[LightingZoneMember]
+    # Zone properties
+    member_count: int
+    total_area_m2: float
+    zone_radius_m: float  # Extent of the zone
+    avg_incidence: float  # Average incidence (lower = better grazing light)
+    avg_slope_deg: float
+    dem_resolution_m: float  # Scale context
+    # Scoring
+    zone_score: float  # Likelihood of good micro-features
+    score_breakdown: Dict  # consistency, coverage, lighting, accessibility
+    # Timing
+    best_time_minutes: Optional[float] = None
+    glow_window_start: Optional[float] = None
+    glow_window_end: Optional[float] = None
+    # Zone character (what type of features likely exist here)
+    zone_character: str = "mixed-terrain"  # "rocky-slopes", "textured-flats", "mixed-terrain"
+
+
+# =============================================================================
+# Multi-Anchor System Types
+# =============================================================================
+# ExploreArea: A lighting-eligible zone detected from terrain analysis
+# Anchor: A specific photographic subject within an explore area
+# ShotCandidate: A complete shooting opportunity (anchor + standing location)
+
+
+@dataclass
+class AnchorStructure:
+    """Structure metrics at an anchor point."""
+    structure_score: float
+    micro_relief_m: float
+    max_curvature: float
+    max_slope_break: float
+    structure_class: str  # "micro-dramatic", "macro-dramatic", "flat-lit"
+
+
+@dataclass
+class Anchor:
+    """
+    A specific photographic subject within an explore area.
+
+    Anchors are local maxima of structure_score within a zone polygon.
+    Each anchor represents a distinct feature worth photographing.
+    """
+    anchor_id: int
+    location: Dict  # {"lat": float, "lon": float}
+    # Local terrain properties at anchor
+    elevation_m: float
+    slope_deg: float
+    aspect_deg: float
+    face_direction_deg: float
+    # Structure metrics
+    structure: AnchorStructure
+    # Geometry classification
+    geometry_type: str = "planar"  # "planar" or "volumetric"
+    volumetric_reason: Optional[str] = None
+
+
+@dataclass
+class ShotCandidate:
+    """
+    A complete shooting opportunity: anchor + standing location + lighting.
+
+    This is what photographers actually use - a specific subject to shoot
+    from a specific position with known lighting conditions.
+    """
+    shot_id: int
+    anchor_id: int
+    explore_area_id: int
+    # Anchor location (the subject)
+    anchor_location: Dict  # {"lat": float, "lon": float}
+    # Standing location (the camera position)
+    standing_location: Dict  # {"lat": float, "lon": float}
+    standing_properties: StandingProperties
+    line_of_sight: LineOfSight
+    # Lighting and timing
+    shooting_timing: Optional[ShootingTiming] = None
+    lighting_zone_type: str = "glow-zone"  # "glow-zone", "rim-zone"
+    # Quality metrics for ranking
+    confidence: float = 0.0
+    structure_score: float = 0.0
+    # Navigation
+    nav_link: Optional[str] = None
+    # Debug info
+    candidate_search: Optional[Dict] = None
+
+
+@dataclass
+class ExploreAreaMetrics:
+    """Aggregate metrics for an explore area zone."""
+    area_m2: float
+    effective_width_m: float
+    mean_slope_deg: float
+    mean_elevation_m: float
+    structure_class: str
+    geometry_type: str
+    confidence: float
+    # Lighting
+    lighting_zone_type: str
+    aspect_offset_deg: float
+    cardinal_direction: str
+    directional_preference: float
+
+
+@dataclass
+class ExploreArea:
+    """
+    A lighting-eligible terrain zone with multiple photographic anchors.
+
+    The polygon defines where good light exists. Anchors are the specific
+    features within that zone worth photographing. Each anchor may have
+    an associated shot candidate (standing location found).
+    """
+    explore_area_id: int
+    # Zone polygon (the "explore area")
+    centroid: Dict  # {"lat": float, "lon": float}
+    polygon: List[Tuple[float, float]]  # [(lat, lon), ...]
+    # Zone-level metrics
+    metrics: ExploreAreaMetrics
+    # Anchors within this zone (local structure maxima)
+    anchors: List[Anchor] = field(default_factory=list)
+    # Shot candidates (anchors with valid standing locations)
+    shot_candidates: List[ShotCandidate] = field(default_factory=list)
+    # Photographer explanation
+    explain: Optional[SubjectExplain] = None
+
+
+@dataclass
+class TerrainAnalysisResult:
+    meta: AnalysisMeta
+    sun_track: List[SunPosition]
+    # Legacy subject/standing format (for backwards compatibility)
+    subjects: List[Subject] = field(default_factory=list)
+    standing_locations: List[StandingLocation] = field(default_factory=list)
+    # New multi-anchor format
+    explore_areas: List[ExploreArea] = field(default_factory=list)
+    shot_candidates: List[ShotCandidate] = field(default_factory=list)
+    # Additional
+    lighting_zones: List[LightingZone] = field(default_factory=list)
+    debug_layers: Dict = field(default_factory=dict)
+
+
+@dataclass
+class AnalyzeRequest:
+    lat: float
+    lon: float
+    date: str  # ISO date string
+    event: Literal["sunrise", "sunset"]
+    radius_km: float = 2.0
+    dem_source: Literal["auto", "copernicus-glo30", "usgs-3dep", "aws-terrain-tiles"] = "auto"
+    # Note: aws-terrain-tiles is for visualization ONLY, not analysis

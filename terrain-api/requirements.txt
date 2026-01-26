@@ -1,0 +1,9 @@
+fastapi>=0.109.0
+uvicorn>=0.27.0
+numpy>=1.26.0
+httpx>=0.26.0
+pydantic>=2.5.0
+python-dateutil>=2.8.0
+Pillow>=10.0.0
+# Authoritative DEM access (Cloud Optimized GeoTIFFs)
+rasterio>=1.3.0
