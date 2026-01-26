@@ -362,39 +362,77 @@ def validate_planar_lighting_type(
         return "rejected", True, f"planar_faces_away(offset={offset:.0f}°>120°)"
 
 
+def compute_texture_score(
+    incidence: float,
+    sun_altitude_deg: float = None,
+) -> float:
+    """
+    Compute texture score from incidence angle.
+
+    Optimal texture occurs at grazing angles (~0.2 incidence) where
+    light rakes across the surface creating shadows and revealing texture.
+    Best for side-lit photography.
+
+    Gaussian: mu=0.2, sigma=0.15
+
+    IMPORTANT: Only valid when sun is above horizon.
+    If sun_altitude_deg < MIN_SUN_ALTITUDE_FOR_GLOW, returns 0.
+
+    Args:
+        incidence: Dot product of normal and sun vector (0-1)
+        sun_altitude_deg: Sun altitude in degrees (optional but recommended)
+
+    Returns:
+        Texture score in range [0, 1] where 1 = optimal grazing light
+    """
+    if sun_altitude_deg is not None and sun_altitude_deg < MIN_SUN_ALTITUDE_FOR_GLOW:
+        return 0.0
+
+    if incidence < 0:
+        return 0.0  # Backlit, no texture
+
+    # Gaussian centered at 0.2 (grazing angle)
+    mu = 0.2
+    sigma = 0.15
+    diff = incidence - mu
+    score = math.exp(-(diff ** 2) / (2 * sigma ** 2))
+
+    return score
+
+
 def compute_glow_score(
     incidence: float,
     sun_altitude_deg: float = None,
-    target_incidence: float = 0.2,
-    sigma: float = 0.15,
 ) -> float:
     """
     Compute glow score from incidence angle.
 
-    Optimal glow occurs at grazing angles (~0.2 incidence) where
-    light rakes across the surface creating texture and drama.
+    Optimal glow occurs at moderate incidence (~0.7) where
+    the surface is well-lit and glowing warmly in golden hour light.
+    Best for front-lit photography where subject faces the sun.
+
+    Gaussian: mu=0.7, sigma=0.25
 
     IMPORTANT: Glow is ONLY valid when sun is above horizon.
     If sun_altitude_deg < MIN_SUN_ALTITUDE_FOR_GLOW, returns 0.
 
     Args:
-        incidence: Dot product of normal and sun vector
+        incidence: Dot product of normal and sun vector (0-1)
         sun_altitude_deg: Sun altitude in degrees (optional but recommended)
-        target_incidence: Optimal incidence for glow (default 0.2)
-        sigma: Spread of the glow function
 
     Returns:
-        Glow score in range [0, 1] where 1 = optimal
+        Glow score in range [0, 1] where 1 = optimal front-lit glow
     """
-    # CRITICAL: No glow when sun is below horizon
     if sun_altitude_deg is not None and sun_altitude_deg < MIN_SUN_ALTITUDE_FOR_GLOW:
         return 0.0
 
     if incidence < 0:
         return 0.0  # Backlit, no glow
 
-    # Gaussian centered at target incidence
-    diff = incidence - target_incidence
+    # Gaussian centered at 0.7 (moderate incidence for warm glow)
+    mu = 0.7
+    sigma = 0.25
+    diff = incidence - mu
     score = math.exp(-(diff ** 2) / (2 * sigma ** 2))
 
     return score
@@ -405,17 +443,17 @@ def compute_incidence_series(
     sun_track: list[SunPosition],
 ) -> list[IncidencePoint]:
     """
-    Compute incidence and glow score over time for a surface.
+    Compute incidence, glow score, and texture score over time for a surface.
 
-    IMPORTANT: Glow score is set to 0 when sun is below MIN_SUN_ALTITUDE_FOR_GLOW.
-    This prevents nonsensical "glow" opportunities before sunrise or after sunset.
+    IMPORTANT: Scores are set to 0 when sun is below MIN_SUN_ALTITUDE_FOR_GLOW.
+    This prevents nonsensical lighting opportunities before sunrise or after sunset.
 
     Args:
         normal: Surface normal unit vector
         sun_track: List of sun positions over time
 
     Returns:
-        List of IncidencePoint with incidence and glow_score at each time
+        List of IncidencePoint with incidence, glow_score, and texture_score at each time
     """
     series = []
 
@@ -423,11 +461,13 @@ def compute_incidence_series(
         incidence = compute_incidence(normal, sun_pos.vector)
         # Pass sun altitude to enforce altitude threshold
         glow = compute_glow_score(incidence, sun_altitude_deg=sun_pos.altitude_deg)
+        texture = compute_texture_score(incidence, sun_altitude_deg=sun_pos.altitude_deg)
 
         series.append(IncidencePoint(
             minutes=sun_pos.minutes_from_start,
             incidence=incidence,
             glow_score=glow,
+            texture_score=texture,
         ))
 
     return series
@@ -509,7 +549,136 @@ def detect_glow_window(
         duration_minutes=end_minutes - start_minutes,
         peak_incidence=peak_point.incidence,
         peak_glow_score=peak_point.glow_score,
+        peak_texture_score=peak_point.texture_score,
     )
+
+
+def find_optimal_shooting_window(
+    incidence_series: list[IncidencePoint],
+    standing_classification: str,
+    initial_peak_minutes: float,
+    min_score_threshold: float = 0.4,
+    time_offsets: list[float] = None,
+) -> dict:
+    """
+    Find optimal shooting time and window for a standing classification.
+
+    Evaluates lighting quality at t_peak and nearby times, picks the best,
+    then finds the contiguous window above threshold.
+
+    Args:
+        incidence_series: Time series of incidence/scores
+        standing_classification: "glow", "texture", or "rim"
+        initial_peak_minutes: Initial estimate of peak time
+        min_score_threshold: Minimum score to consider in window
+        time_offsets: Time offsets to evaluate (default: [0, ±10, ±20])
+
+    Returns:
+        Dict with optimal_minutes, optimal_score, window_start, window_end, duration
+    """
+    if time_offsets is None:
+        time_offsets = [-20, -10, 0, 10, 20]
+
+    # Build lookup by minutes (with interpolation support)
+    series_by_time = {p.minutes: p for p in incidence_series}
+    all_minutes = sorted(series_by_time.keys())
+
+    def get_score_at_time(minutes: float) -> tuple[float, float]:
+        """Get (glow_score, texture_score) at a given time, with interpolation."""
+        if minutes in series_by_time:
+            p = series_by_time[minutes]
+            return p.glow_score, p.texture_score
+
+        # Find bracketing points for interpolation
+        lower_t = max((t for t in all_minutes if t <= minutes), default=None)
+        upper_t = min((t for t in all_minutes if t >= minutes), default=None)
+
+        if lower_t is None or upper_t is None:
+            return 0.0, 0.0
+        if lower_t == upper_t:
+            p = series_by_time[lower_t]
+            return p.glow_score, p.texture_score
+
+        # Linear interpolation
+        t_frac = (minutes - lower_t) / (upper_t - lower_t)
+        p_low = series_by_time[lower_t]
+        p_high = series_by_time[upper_t]
+
+        glow = p_low.glow_score + t_frac * (p_high.glow_score - p_low.glow_score)
+        texture = p_low.texture_score + t_frac * (p_high.texture_score - p_low.texture_score)
+        return glow, texture
+
+    def get_classification_score(glow: float, texture: float) -> float:
+        """Get the relevant score based on standing classification."""
+        if standing_classification == "texture":
+            return texture
+        elif standing_classification == "glow":
+            return glow
+        else:
+            # For rim or other, use glow score as default
+            return glow
+
+    # Evaluate at each time offset
+    candidates = []
+    for offset in time_offsets:
+        t = initial_peak_minutes + offset
+        if t < 0:
+            continue
+        glow, texture = get_score_at_time(t)
+        score = get_classification_score(glow, texture)
+        candidates.append((t, score, glow, texture))
+
+    if not candidates:
+        return {
+            "optimal_minutes": initial_peak_minutes,
+            "optimal_score": 0.0,
+            "optimal_glow_score": 0.0,
+            "optimal_texture_score": 0.0,
+            "window_start": initial_peak_minutes,
+            "window_end": initial_peak_minutes,
+            "duration_minutes": 0.0,
+        }
+
+    # Pick the best time
+    best = max(candidates, key=lambda x: x[1])
+    optimal_minutes, optimal_score, optimal_glow, optimal_texture = best
+
+    # Find contiguous window above threshold
+    # Search outward from optimal time
+    window_start = optimal_minutes
+    window_end = optimal_minutes
+
+    # Search backward
+    for t in sorted(all_minutes, reverse=True):
+        if t > optimal_minutes:
+            continue
+        glow, texture = get_score_at_time(t)
+        score = get_classification_score(glow, texture)
+        if score >= min_score_threshold:
+            window_start = t
+        else:
+            break
+
+    # Search forward
+    for t in sorted(all_minutes):
+        if t < optimal_minutes:
+            continue
+        glow, texture = get_score_at_time(t)
+        score = get_classification_score(glow, texture)
+        if score >= min_score_threshold:
+            window_end = t
+        else:
+            break
+
+    return {
+        "optimal_minutes": optimal_minutes,
+        "optimal_score": optimal_score,
+        "optimal_glow_score": optimal_glow,
+        "optimal_texture_score": optimal_texture,
+        "window_start": window_start,
+        "window_end": window_end,
+        "duration_minutes": window_end - window_start,
+    }
 
 
 def compute_aspect_alignment_factor(aspect_offset_deg: float) -> float:

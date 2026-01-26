@@ -192,6 +192,48 @@ def explain_glow_score_short(score: float) -> str:
 
 
 # =============================================================================
+# Texture Score (quality of side-lighting for texture)
+# =============================================================================
+
+def explain_texture_score(score: float) -> str:
+    """
+    Translate texture score into photographer language.
+
+    Args:
+        score: Texture quality score (0-1, where 1 = optimal grazing angle)
+
+    Returns:
+        Human-readable assessment of texture lighting quality
+    """
+    if score >= 0.9:
+        return "Exceptional texture lighting"
+    elif score >= 0.75:
+        return "Excellent texture definition"
+    elif score >= 0.6:
+        return "Very good texture and shadows"
+    elif score >= 0.45:
+        return "Good side-light texture"
+    elif score >= 0.3:
+        return "Moderate texture definition"
+    else:
+        return "Basic side lighting"
+
+
+def explain_texture_score_short(score: float) -> str:
+    """Short version for compact displays."""
+    if score >= 0.85:
+        return "exceptional texture"
+    elif score >= 0.65:
+        return "excellent texture"
+    elif score >= 0.45:
+        return "good texture"
+    elif score >= 0.25:
+        return "moderate texture"
+    else:
+        return "basic texture"
+
+
+# =============================================================================
 # Rim Light Score (backlit edge lighting potential)
 # =============================================================================
 

@@ -23,7 +23,8 @@ class SunPosition:
 class IncidencePoint:
     minutes: float
     incidence: float
-    glow_score: float
+    glow_score: float      # Gaussian(0.7, 0.25) - optimal for front-lit glow
+    texture_score: float   # Gaussian(0.2, 0.15) - optimal for side-lit texture
 
 
 @dataclass
@@ -34,6 +35,7 @@ class GlowWindow:
     duration_minutes: float
     peak_incidence: float
     peak_glow_score: float
+    peak_texture_score: float = 0.0  # Texture score at peak time
 
 
 @dataclass
