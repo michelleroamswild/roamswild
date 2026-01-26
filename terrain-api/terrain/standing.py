@@ -49,12 +49,13 @@ def classify_standing_geometry(
     sun_altitude_deg: float = 15.0,
 ) -> Tuple[Optional[str], Dict[str, float]]:
     """
-    Classify a standing position as glow, rim, or invalid.
+    Classify a standing position as glow, rim, texture, or invalid.
 
     Truth table (standard):
     - GLOW: Δ(A_face, A_sun) <= 60° AND Δ(A_cam, A_sun) >= 90° AND Δ(A_cam, A_face) >= 120°
     - RIM: Δ(A_face, A_sun) in [60°, 120°] AND Δ(A_cam, A_sun) <= 45°
-    - Invalid: Neither glow nor rim
+    - TEXTURE: Δ(A_face, A_sun) in [25°, 95°] AND Δ(A_cam, A_face) >= 90° AND Δ(A_cam, A_sun) in [45°, 135°]
+    - Invalid: None of the above
 
     For low sun (altitude < 8°, e.g. sunrise/sunset golden hour):
     - GLOW camera constraint loosened: Δ(A_cam, A_sun) >= 60° (allows shooting partially into light)
@@ -67,7 +68,7 @@ def classify_standing_geometry(
         sun_altitude_deg: Sun altitude in degrees (default 15°, use lower for sunrise/sunset)
 
     Returns:
-        (classification, deltas) where classification is "glow", "rim", or None
+        (classification, deltas) where classification is "glow", "rim", "texture", or None
     """
     delta_face_sun = angle_diff(face_direction, sun_azimuth)
     delta_cam_sun = angle_diff(camera_bearing, sun_azimuth)
@@ -114,6 +115,19 @@ def classify_standing_geometry(
 
     if is_rim:
         return "rim", deltas
+
+    # Check TEXTURE conditions (side-light):
+    # - Face at moderate angle to sun (25° <= delta <= 95°) for side lighting
+    # - Camera roughly perpendicular to face (>= 90°) to see the texture/shadows
+    # - Camera at intermediate angle to sun (45° <= delta <= 135°) - not into sun, not away
+    is_texture = (
+        25 <= delta_face_sun <= 95 and
+        delta_cam_face >= 90 and
+        45 <= delta_cam_sun <= 135
+    )
+
+    if is_texture:
+        return "texture", deltas
 
     return None, deltas
 
@@ -277,9 +291,11 @@ def find_standing_location(
             )
 
             # Determine effective slope threshold
-            # Glow positions allow steeper slopes since stance is less critical for glow shots
+            # Glow and texture positions allow steeper slopes since stance is less critical
             if classification == "glow":
                 effective_max_slope = max_slope_deg + glow_slope_bonus_deg
+            elif classification == "texture":
+                effective_max_slope = max_slope_deg + (glow_slope_bonus_deg / 2)  # Half bonus for texture
             else:
                 effective_max_slope = max_slope_deg
 
@@ -437,8 +453,13 @@ def find_standing_location(
                         sun_altitude_deg=sun_altitude_deg,
                     )
 
-                    # Slope check with glow bonus
-                    effective_max_slope = max_slope_deg + glow_slope_bonus_deg if classification == "glow" else max_slope_deg
+                    # Slope check with glow/texture bonus
+                    if classification == "glow":
+                        effective_max_slope = max_slope_deg + glow_slope_bonus_deg
+                    elif classification == "texture":
+                        effective_max_slope = max_slope_deg + (glow_slope_bonus_deg / 2)
+                    else:
+                        effective_max_slope = max_slope_deg
                     if cand_slope > effective_max_slope:
                         continue
 
@@ -602,19 +623,37 @@ def score_candidate(
     else:
         elev_score = max(0.3, 1.0 - (elev_diff_abs - 100) / 200)
 
-    # Glow gets slight preference over rim (more dramatic lighting)
-    classification_bonus = 0.1 if candidate.classification == "glow" else 0.0
+    # Classification bonus: glow > texture > rim
+    if candidate.classification == "glow":
+        classification_bonus = 0.1
+    elif candidate.classification == "texture":
+        classification_bonus = 0.05  # Side-light is good but not premium
+    else:
+        classification_bonus = 0.0
 
-    # Directional bonus for glow: prefer standing in face direction
-    # For glow, ideal camera bearing is 180° opposite face direction (shoot toward face)
+    # Directional bonus based on classification
     directional_bonus = 0.0
-    if candidate.classification == "glow" and face_direction_deg is not None:
-        ideal_camera_bearing = (face_direction_deg + 180) % 360
-        bearing_diff = angle_diff(candidate.camera_bearing_deg, ideal_camera_bearing)
-        # Max bonus at 0° diff, tapering to 0 at 90° diff
-        # This bonus is significant (0.2) to prefer face-aligned positions
-        if bearing_diff <= 90:
-            directional_bonus = 0.2 * (1 - bearing_diff / 90)
+    if face_direction_deg is not None:
+        if candidate.classification == "glow":
+            # For glow, ideal camera bearing is 180° opposite face direction (shoot toward face)
+            ideal_camera_bearing = (face_direction_deg + 180) % 360
+            bearing_diff = angle_diff(candidate.camera_bearing_deg, ideal_camera_bearing)
+            # Max bonus at 0° diff, tapering to 0 at 90° diff
+            # This bonus is significant (0.2) to prefer face-aligned positions
+            if bearing_diff <= 90:
+                directional_bonus = 0.2 * (1 - bearing_diff / 90)
+        elif candidate.classification == "texture":
+            # For texture, ideal camera bearing is 90° off face direction (perpendicular)
+            # Either +90° or -90° works, so check both
+            ideal_bearing_1 = (face_direction_deg + 90) % 360
+            ideal_bearing_2 = (face_direction_deg - 90) % 360
+            bearing_diff = min(
+                angle_diff(candidate.camera_bearing_deg, ideal_bearing_1),
+                angle_diff(candidate.camera_bearing_deg, ideal_bearing_2)
+            )
+            # Smaller bonus (0.15) for texture alignment
+            if bearing_diff <= 60:
+                directional_bonus = 0.15 * (1 - bearing_diff / 60)
 
     # Weighted combination
     score = (

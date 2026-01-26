@@ -122,7 +122,7 @@ def _classify_result(subject, standing) -> str:
     """
     Classify a standing location result for diversity selection.
 
-    Returns: "rim", "macro-glow", "micro-glow", or "other"
+    Returns: "rim", "macro-glow", "micro-glow", "texture", or "other"
     """
     classification = getattr(standing.properties, 'classification', None)
     structure_class = subject.properties.structure_class
@@ -134,6 +134,8 @@ def _classify_result(subject, standing) -> str:
             return "macro-glow"
         elif structure_class == "micro-dramatic":
             return "micro-glow"
+    elif classification == "texture":
+        return "texture"
     return "other"
 
 
