@@ -1,49 +1,16 @@
-import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { SearchBar } from "@/components/SearchBar";
-import { FilterChips } from "@/components/FilterChips";
 import { SavedLocations } from "@/components/SavedLocations";
-import { Suggestions } from "@/components/Suggestions";
+import { LocalConditionsWidget } from "@/components/LocalConditionsWidget";
+import { RecentSearchesWidget } from "@/components/RecentSearchesWidget";
 import { useTrip } from "@/context/TripContext";
-import { Path, Calendar, Clock, MapPinArea, CaretRight, Boot, ArrowRight, Users, Mountains } from "@phosphor-icons/react";
+import { Path, Calendar, MapPinArea, CaretRight, Boot, ArrowRight, Users, Mountains, Tent, SunHorizon, Shuffle, Compass } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getTripUrl } from "@/utils/slugify";
 
-// Hero photos
-import heroPhoto1 from "@/images/herophotos/DJI_0693.jpg";
-import heroPhoto2 from "@/images/herophotos/DSC09190.jpg";
-import heroPhoto3 from "@/images/herophotos/DJI_0879.jpg";
-import heroPhoto4 from "@/images/herophotos/DSC09645.jpg";
-import heroPhoto5 from "@/images/herophotos/DJI_0671.jpg";
-import heroPhoto6 from "@/images/herophotos/DSC03022.jpg";
-import heroPhoto7 from "@/images/herophotos/DSC05769.jpg";
-
-const allHeroPhotos = [heroPhoto1, heroPhoto2, heroPhoto3, heroPhoto4, heroPhoto5, heroPhoto6, heroPhoto7];
-
-// Shuffle array and pick first 4
-const getRandomPhotos = () => {
-  const shuffled = [...allHeroPhotos].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, 4);
-};
-
-const rotatingWords = [
-  "Adventure",
-  "Road Trip",
-  "Camping Trip",
-  "Photo Adventure",
-  "Offroad Trip",
-  "Guys Trip",
-  "Ladies Weekend",
-  "Overlanding Expedition",
-];
-
 const Index = () => {
-  const [currentWordIndex, setCurrentWordIndex] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [scrollY, setScrollY] = useState(0);
-  const [heroPhotos] = useState(() => getRandomPhotos());
   const { savedTrips, loadSavedTrip, isLoading: tripsLoading } = useTrip();
   const navigate = useNavigate();
 
@@ -52,123 +19,64 @@ const Index = () => {
     navigate(getTripUrl(tripName));
   };
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setIsAnimating(true);
-      setTimeout(() => {
-        setCurrentWordIndex((prev) => (prev + 1) % rotatingWords.length);
-        setIsAnimating(false);
-      }, 200);
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrollY(window.scrollY);
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
   return (
     <div className="min-h-screen bg-background">
-      {/* Hero Section with dark green topo background */}
-      <div className="hero-topo dark:bg-background overflow-x-clip">
-        <Header />
+      {/* Hero + My Trips wrapper for floating widget positioning */}
+      <div className="relative">
+        {/* Hero Section with dark green topo background */}
+        <div className="hero-topo dark:bg-background relative overflow-visible">
+          <Header />
 
-        <div className="container px-4 md:px-6 py-40 relative">
-          {/* Left Photo Collage - Hidden on mobile */}
-          <div className="hidden lg:block absolute left-0 top-8 w-[400px] xl:w-[500px] pointer-events-none">
-            <div
-              className="absolute top-0 -left-48 xl:-left-64 z-10 animate-float-slow"
-              style={{ animationDelay: '0s' }}
-            >
-              <div
-                className="w-96 xl:w-[450px] h-64 xl:h-80 overflow-hidden shadow-2xl rounded-2xl"
-                style={{
-                  transform: `translateX(${scrollY > 200 ? '-70vw' : `${-scrollY * 0.3}px`}) rotate(-6deg)`,
-                  transition: `transform ${scrollY > 200 ? '2s' : '0.8s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
-                }}
-              >
-                <img src={heroPhotos[0]} alt="" className="w-full h-full object-cover" />
+          <div className="container px-4 md:px-6 py-12 md:py-16">
+            {/* Center Content */}
+            <section className="text-center animate-fade-in max-w-4xl mx-auto">
+              <h1 className="font-display font-bold text-primary dark:text-foreground mb-4">
+                <span className="text-gradient-forest block text-5xl md:text-6xl lg:text-7xl" style={{ lineHeight: 1.1 }}>
+                  Where to next?
+                </span>
+              </h1>
+              <p className="text-lg md:text-xl text-primary/70 dark:text-muted-foreground max-w-2xl mx-auto mb-8">
+                Try "Moab, Utah" "Olympic Peninsula" or "Joshua Tree"
+              </p>
+
+              <SearchBar />
+
+              {/* Quick Links */}
+              <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
+                <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/80 transition-colors shadow-sm">
+                  <Tent className="w-4 h-4" weight="fill" />
+                  Find camps near me
+                </button>
+                <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/80 transition-colors shadow-sm">
+                  <Compass className="w-4 h-4" weight="fill" />
+                  Best hikes today
+                </button>
+                <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/80 transition-colors shadow-sm">
+                  <Shuffle className="w-4 h-4" weight="bold" />
+                  Surprise me
+                </button>
+                <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/80 transition-colors shadow-sm">
+                  <SunHorizon className="w-4 h-4" weight="fill" />
+                  Sunset conditions
+                </button>
               </div>
-            </div>
-            <div
-              className="absolute top-64 xl:top-72 -left-40 xl:-left-56 z-20 animate-float-medium"
-              style={{ animationDelay: '0.5s' }}
-            >
-              <div
-                className="w-[420px] xl:w-[500px] h-72 xl:h-80 overflow-hidden shadow-2xl rounded-2xl"
-                style={{
-                  transform: `translateX(${scrollY > 280 ? '-70vw' : `${-scrollY * 0.4}px`}) rotate(4deg)`,
-                  transition: `transform ${scrollY > 280 ? '2.5s' : '1s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
-                }}
-              >
-                <img src={heroPhotos[1]} alt="" className="w-full h-full object-cover" />
+            </section>
+          </div>
+
+          {/* Floating Widgets Zone - absolutely positioned at bottom of hero, overlapping into next section */}
+          <div className="hidden lg:block absolute left-0 right-0 bottom-0 translate-y-1/2 z-20 pointer-events-none">
+            <div className="container px-4 md:px-6">
+              <div className="flex justify-center items-center gap-6 pointer-events-auto">
+                <RecentSearchesWidget />
+                <LocalConditionsWidget />
               </div>
             </div>
           </div>
-
-          {/* Right Photo Collage - Hidden on mobile */}
-          <div className="hidden lg:block absolute right-0 top-8 w-[400px] xl:w-[500px] pointer-events-none">
-            <div
-              className="absolute top-0 -right-48 xl:-right-64 z-10 animate-float-medium"
-              style={{ animationDelay: '0.3s' }}
-            >
-              <div
-                className="w-96 xl:w-[450px] h-64 xl:h-72 overflow-hidden shadow-2xl rounded-2xl"
-                style={{
-                  transform: `translateX(${scrollY > 240 ? '70vw' : `${scrollY * 0.35}px`}) rotate(5deg)`,
-                  transition: `transform ${scrollY > 240 ? '2.2s' : '0.9s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
-                }}
-              >
-                <img src={heroPhotos[2]} alt="" className="w-full h-full object-cover" />
-              </div>
-            </div>
-            <div
-              className="absolute top-60 xl:top-72 -right-36 xl:-right-48 z-20 animate-float-slow"
-              style={{ animationDelay: '0.8s' }}
-            >
-              <div
-                className="w-[420px] xl:w-[500px] h-72 xl:h-80 overflow-hidden shadow-2xl rounded-2xl"
-                style={{
-                  transform: `translateX(${scrollY > 320 ? '70vw' : `${scrollY * 0.45}px`}) rotate(-3deg)`,
-                  transition: `transform ${scrollY > 320 ? '3s' : '1.1s'} cubic-bezier(0.1, 0.4, 0.2, 1)`
-                }}
-              >
-                <img src={heroPhotos[3]} alt="" className="w-full h-full object-cover" />
-              </div>
-            </div>
-          </div>
-
-          {/* Center Content */}
-          <section className="text-center animate-fade-in relative z-10 max-w-3xl mx-auto">
-            <h1 className="font-display font-bold text-primary dark:text-foreground mb-4 overflow-visible">
-              <span className="text-2xl md:text-3xl lg:text-4xl block mb-2">Plan Your Next</span>
-              <span
-                className={`text-gradient-forest block text-5xl md:text-6xl lg:text-7xl transition-all duration-200 whitespace-nowrap ${
-                  isAnimating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
-                }`}
-                style={{ lineHeight: 1.1 }}
-              >
-                {rotatingWords[currentWordIndex]}
-              </span>
-            </h1>
-            <p className="text-lg md:text-xl text-primary/70 dark:text-muted-foreground max-w-2xl mx-auto mb-8">
-              Discover trails, find dispersed campsites, and build the perfect overlanding route from your saved locations.
-            </p>
-
-            <SearchBar />
-          </section>
         </div>
-      </div>
 
-      {/* Saved Trips Section */}
-      {savedTrips.length > 0 && (
-        <section className="bg-background-secondary dark:bg-card py-40 md:py-52 grainy">
+        {/* Saved Trips Section */}
+        {savedTrips.length > 0 && (
+          <section className="bg-background-secondary dark:bg-card pt-24 lg:pt-32 pb-16 md:pb-20 grainy">
           <div className="container px-4 md:px-6">
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -348,21 +256,13 @@ const Index = () => {
             </div>
           </div>
         </section>
-      )}
+        )}
+      </div>
 
       <main className="container px-4 md:px-6 py-8 md:py-12">
-
         {/* Saved Locations */}
         <div className="mb-12">
           <SavedLocations />
-        </div>
-
-        {/* Divider */}
-        <div className="w-full h-px bg-border my-12" />
-
-        {/* Suggestions - Near You */}
-        <div className="mb-12">
-          <Suggestions />
         </div>
       </main>
 
