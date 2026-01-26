@@ -891,6 +891,9 @@ async def analyze_terrain(
                 effective_width_m=facet_effective_width,
             )
 
+            # For glow facets, enable extended search in the face direction
+            # (standing position is in face direction, camera points back toward subject)
+            # This helps find standing locations past steep/blocked terrain
             facet_standing, facet_search = find_standing_location(
                 dem=dem,
                 subject_lat=facet_det.centroid_lat,
@@ -900,6 +903,8 @@ async def analyze_terrain(
                 slope_grid=slope_deg,
                 min_distance_m=facet_min_dist,
                 max_distance_m=min(facet_max_dist, 1500.0),
+                extended_search_bearing_deg=facet_det.face_direction,  # Search further in glow direction
+                extended_search_max_m=2500.0,  # Extend up to 2.5km if needed
                 sun_azimuth_deg=sun_az,
                 sun_altitude_deg=sun_alt,
                 face_direction_deg=facet_det.face_direction,

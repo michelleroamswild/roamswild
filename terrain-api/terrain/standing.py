@@ -148,8 +148,11 @@ def find_standing_location(
     subject_normal: tuple[float, float, float],
     slope_grid: "np.ndarray | None" = None,
     max_slope_deg: float = 20.0,  # Relaxed for rugged terrain (was 15°)
+    glow_slope_bonus_deg: float = 5.0,  # Extra slope tolerance for glow (less critical stance)
     min_distance_m: float = 100.0,  # Allow closer for better composition (was 150m)
     max_distance_m: float = 1500.0,  # Configurable by subject size
+    extended_search_bearing_deg: float = None,  # Direction for extended search if initial fails
+    extended_search_max_m: float = 2500.0,  # Extended range for directional search
     step_m: float = 25.0,  # Sample every 25m
     eye_height_m: float = 1.7,
     sun_azimuth_deg: float = None,
@@ -264,8 +267,24 @@ def find_standing_location(
 
             elevation_diff = subject_elevation - cand_elevation
 
-            # === HARD FILTER 2: Slope check ===
-            if cand_slope > max_slope_deg:
+            # === Pre-check: Truth table classification (needed for slope bonus) ===
+            # Do truth table check early to determine if glow slope bonus applies
+            classification, deltas = classify_standing_geometry(
+                sun_azimuth=sun_azimuth_deg,
+                face_direction=face_direction_deg,
+                camera_bearing=camera_bearing,
+                sun_altitude_deg=sun_altitude_deg,
+            )
+
+            # Determine effective slope threshold
+            # Glow positions allow steeper slopes since stance is less critical for glow shots
+            if classification == "glow":
+                effective_max_slope = max_slope_deg + glow_slope_bonus_deg
+            else:
+                effective_max_slope = max_slope_deg
+
+            # === HARD FILTER 2: Slope check (with glow bonus) ===
+            if cand_slope > effective_max_slope:
                 all_rejected.append(RejectedCandidate(
                     distance_m=distance,
                     lat=cand_lat,
@@ -306,14 +325,7 @@ def find_standing_location(
             )
 
             # === HARD FILTER 4: Truth table (glow/rim classification) ===
-            # For low sun (< 8°), glow constraint is loosened to allow shooting into light
-            classification, deltas = classify_standing_geometry(
-                sun_azimuth=sun_azimuth_deg,
-                face_direction=face_direction_deg,
-                camera_bearing=camera_bearing,
-                sun_altitude_deg=sun_altitude_deg,
-            )
-
+            # Classification already computed above for slope bonus determination
             if classification is None:
                 all_rejected.append(RejectedCandidate(
                     distance_m=distance,
@@ -364,10 +376,127 @@ def find_standing_location(
             )
 
             # Score the candidate (lower slope, moderate distance preferred)
-            candidate.score = score_candidate(candidate, min_distance_m, max_distance_m)
+            candidate.score = score_candidate(candidate, min_distance_m, max_distance_m, face_direction_deg)
             valid_candidates.append(candidate)
 
         distance += step_m
+
+    # === Extended directional search ===
+    # If no candidates found in preferred direction, search further out in that direction
+    if extended_search_bearing_deg is not None:
+        # Check if we have any candidates near the preferred bearing
+        preferred_bearing = extended_search_bearing_deg
+        has_preferred = any(
+            angle_diff(c.camera_bearing_deg, (preferred_bearing + 180) % 360) < 45
+            for c in valid_candidates
+        )
+
+        if not has_preferred and max_distance_m < extended_search_max_m:
+            logging.info(
+                f"Standing search: EXTENDED SEARCH in bearing {preferred_bearing:.0f}° "
+                f"from {max_distance_m:.0f}m to {extended_search_max_m:.0f}m"
+            )
+
+            # Search along the preferred bearing ± 30°
+            extended_angles = [preferred_bearing - 30, preferred_bearing - 15, preferred_bearing,
+                             preferred_bearing + 15, preferred_bearing + 30]
+
+            distance = max_distance_m + step_m
+            while distance <= extended_search_max_m:
+                for ext_angle in extended_angles:
+                    angle_rad = math.radians(ext_angle)
+                    total_candidates_checked += 1
+
+                    offset_m_north = distance * math.cos(angle_rad)
+                    offset_m_east = distance * math.sin(angle_rad)
+
+                    cand_lat = subject_lat + offset_m_north / meters_per_deg_lat
+                    cand_lon = subject_lon + offset_m_east / meters_per_deg_lon
+
+                    camera_bearing = math.degrees(math.atan2(-offset_m_east, -offset_m_north)) % 360
+
+                    # Bounds check
+                    if (cand_lat < dem.bounds["south"] or cand_lat > dem.bounds["north"] or
+                        cand_lon < dem.bounds["west"] or cand_lon > dem.bounds["east"]):
+                        continue
+
+                    try:
+                        cand_elevation = dem.get_elevation_bilinear(cand_lat, cand_lon)
+                        row, col = dem.lat_lon_to_indices(cand_lat, cand_lon)
+                        cand_slope = float(slope_grid[row, col])
+                    except (IndexError, ValueError):
+                        continue
+
+                    elevation_diff = subject_elevation - cand_elevation
+
+                    # Classification
+                    classification, deltas = classify_standing_geometry(
+                        sun_azimuth=sun_azimuth_deg,
+                        face_direction=face_direction_deg,
+                        camera_bearing=camera_bearing,
+                        sun_altitude_deg=sun_altitude_deg,
+                    )
+
+                    # Slope check with glow bonus
+                    effective_max_slope = max_slope_deg + glow_slope_bonus_deg if classification == "glow" else max_slope_deg
+                    if cand_slope > effective_max_slope:
+                        continue
+
+                    # LOS check
+                    target_height_offset = get_target_height_offset(structure_class)
+                    los_result = check_line_of_sight(
+                        dem=dem,
+                        from_lat=cand_lat,
+                        from_lon=cand_lon,
+                        from_elevation=cand_elevation + eye_height_m,
+                        to_lat=subject_lat,
+                        to_lon=subject_lon,
+                        to_elevation=subject_elevation,
+                        target_height_m=target_height_offset,
+                    )
+                    if not los_result.clear:
+                        continue
+
+                    # Truth table
+                    if classification is None:
+                        continue
+
+                    # Wall trap
+                    if elevation_diff > 80 and distance < 300:
+                        continue
+
+                    # Size trap
+                    if effective_width_m is not None:
+                        max_visible_width = 2 * distance * 0.577
+                        if effective_width_m > max_visible_width:
+                            continue
+
+                    # Valid candidate from extended search!
+                    los_min_clearance = min((s.ray_z - s.terrain_z for s in los_result.samples), default=0.0)
+
+                    candidate = StandingCandidate(
+                        lat=cand_lat,
+                        lon=cand_lon,
+                        elevation=cand_elevation,
+                        slope_deg=cand_slope,
+                        distance_m=distance,
+                        camera_bearing_deg=camera_bearing,
+                        elevation_diff_m=elevation_diff,
+                        classification=classification,
+                        deltas=deltas,
+                        los_min_clearance_m=los_min_clearance,
+                        los_target_height_offset_m=target_height_offset,
+                    )
+                    candidate.score = score_candidate(candidate, min_distance_m, extended_search_max_m, face_direction_deg)
+                    # Bonus for being in preferred direction (already included in directional_bonus)
+                    valid_candidates.append(candidate)
+
+                    logging.info(
+                        f"Standing search: FOUND extended candidate at {distance:.0f}m, "
+                        f"bearing {camera_bearing:.0f}°"
+                    )
+
+                distance += step_m
 
     # === Select best candidate ===
     if not valid_candidates:
@@ -440,6 +569,7 @@ def score_candidate(
     candidate: StandingCandidate,
     min_distance: float,
     max_distance: float,
+    face_direction_deg: float = None,
 ) -> float:
     """
     Score a valid candidate for selection.
@@ -448,6 +578,7 @@ def score_candidate(
     - Lower slope is better (0-15° range)
     - Moderate distance is preferred (not too close, not too far)
     - Reasonable elevation difference
+    - For glow: directional bonus for standing in face direction
     """
     # Slope score: 1.0 at 0°, 0.0 at 15°
     slope_score = max(0, 1.0 - candidate.slope_deg / 15.0)
@@ -474,12 +605,24 @@ def score_candidate(
     # Glow gets slight preference over rim (more dramatic lighting)
     classification_bonus = 0.1 if candidate.classification == "glow" else 0.0
 
+    # Directional bonus for glow: prefer standing in face direction
+    # For glow, ideal camera bearing is 180° opposite face direction (shoot toward face)
+    directional_bonus = 0.0
+    if candidate.classification == "glow" and face_direction_deg is not None:
+        ideal_camera_bearing = (face_direction_deg + 180) % 360
+        bearing_diff = angle_diff(candidate.camera_bearing_deg, ideal_camera_bearing)
+        # Max bonus at 0° diff, tapering to 0 at 90° diff
+        # This bonus is significant (0.2) to prefer face-aligned positions
+        if bearing_diff <= 90:
+            directional_bonus = 0.2 * (1 - bearing_diff / 90)
+
     # Weighted combination
     score = (
-        slope_score * 0.35 +
-        distance_score * 0.30 +
-        elev_score * 0.25 +
-        classification_bonus * 0.10 +
+        slope_score * 0.30 +
+        distance_score * 0.25 +
+        elev_score * 0.20 +
+        classification_bonus * 0.05 +
+        directional_bonus +  # Up to 0.2 bonus for face-aligned glow
         0.5  # Base score for passing all filters
     )
 
@@ -640,3 +783,129 @@ def compute_camera_bearing(
 
     bearing = math.degrees(math.atan2(d_lon_scaled, d_lat)) % 360
     return bearing
+
+
+def log_terrain_profile_along_bearing(
+    dem: DEMGrid,
+    subject_lat: float,
+    subject_lon: float,
+    subject_elevation: float,
+    bearing_deg: float,
+    min_distance_m: float = 100.0,
+    max_distance_m: float = 1500.0,
+    step_m: float = 50.0,
+    eye_height_m: float = 1.7,
+) -> Dict[str, any]:
+    """
+    Log terrain profile along a specific bearing from subject.
+
+    Useful for diagnosing why standing locations fail in a direction.
+
+    Args:
+        dem: DEMGrid
+        subject_lat, subject_lon, subject_elevation: Subject location
+        bearing_deg: Direction to profile (0=N, 90=E, 180=S, 270=W)
+        min_distance_m, max_distance_m: Range to profile
+        step_m: Step size
+        eye_height_m: Observer eye height
+
+    Returns:
+        Dict with profile data and rejection analysis
+    """
+    import numpy as np
+    from .analysis import compute_slope_aspect
+
+    slope_grid, _ = compute_slope_aspect(dem)
+
+    meters_per_deg_lat = 111320.0
+    meters_per_deg_lon = 111320.0 * math.cos(math.radians(subject_lat))
+
+    bearing_rad = math.radians(bearing_deg)
+
+    profile = []
+
+    logging.warning("=" * 70)
+    logging.warning(f"TERRAIN PROFILE ALONG BEARING {bearing_deg:.0f}° FROM ({subject_lat:.6f}, {subject_lon:.6f})")
+    logging.warning("=" * 70)
+    logging.warning(f"{'Dist(m)':>8} {'Elev(m)':>8} {'Slope°':>7} {'LOS':>5} {'ElevDiff':>9} Notes")
+    logging.warning("-" * 70)
+
+    distance = min_distance_m
+    while distance <= max_distance_m:
+        # Candidate is at bearing FROM subject, so camera points back
+        offset_m_north = distance * math.cos(bearing_rad)
+        offset_m_east = distance * math.sin(bearing_rad)
+
+        cand_lat = subject_lat + offset_m_north / meters_per_deg_lat
+        cand_lon = subject_lon + offset_m_east / meters_per_deg_lon
+
+        try:
+            cand_elev = dem.get_elevation_bilinear(cand_lat, cand_lon)
+            row, col = dem.lat_lon_to_indices(cand_lat, cand_lon)
+            cand_slope = float(slope_grid[row, col])
+        except (IndexError, ValueError):
+            cand_elev = 0
+            cand_slope = 0
+
+        elev_diff = subject_elevation - cand_elev
+
+        # Check LOS
+        los_result = check_line_of_sight(
+            dem=dem,
+            from_lat=cand_lat,
+            from_lon=cand_lon,
+            from_elevation=cand_elev + eye_height_m,
+            to_lat=subject_lat,
+            to_lon=subject_lon,
+            to_elevation=subject_elevation,
+            target_height_m=5.0,  # Assume micro-dramatic
+        )
+
+        los_status = "OK" if los_result.clear else "BLOCK"
+
+        # Identify issues
+        issues = []
+        if cand_slope > 25:
+            issues.append(f"STEEP({cand_slope:.0f}°)")
+        elif cand_slope > 20:
+            issues.append(f"steep({cand_slope:.0f}°)")
+        if not los_result.clear:
+            issues.append("blocked")
+        if elev_diff > 80 and distance < 300:
+            issues.append("wall-trap")
+
+        notes = ", ".join(issues) if issues else "viable"
+
+        logging.warning(
+            f"{distance:>8.0f} {cand_elev:>8.1f} {cand_slope:>7.1f} {los_status:>5} {elev_diff:>+9.1f} {notes}"
+        )
+
+        profile.append({
+            "distance_m": distance,
+            "lat": cand_lat,
+            "lon": cand_lon,
+            "elevation_m": cand_elev,
+            "slope_deg": cand_slope,
+            "los_clear": los_result.clear,
+            "elev_diff_m": elev_diff,
+        })
+
+        distance += step_m
+
+    logging.warning("=" * 70)
+
+    # Summary
+    viable_count = sum(1 for p in profile if p["los_clear"] and p["slope_deg"] <= 25)
+    steep_count = sum(1 for p in profile if p["slope_deg"] > 20)
+    blocked_count = sum(1 for p in profile if not p["los_clear"])
+
+    logging.warning(f"SUMMARY: {viable_count} viable, {steep_count} steep (>20°), {blocked_count} LOS blocked")
+    logging.warning("=" * 70)
+
+    return {
+        "bearing_deg": bearing_deg,
+        "profile": profile,
+        "viable_count": viable_count,
+        "steep_count": steep_count,
+        "blocked_count": blocked_count,
+    }
