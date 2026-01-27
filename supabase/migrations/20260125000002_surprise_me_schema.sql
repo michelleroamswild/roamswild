@@ -364,7 +364,7 @@ CREATE TABLE road_closures (
 
 CREATE INDEX idx_road_closures_region ON road_closures(region_id);
 CREATE INDEX idx_road_closures_active ON road_closures(start_date, expected_end_date)
-    WHERE expected_end_date IS NULL OR expected_end_date >= CURRENT_DATE;
+    WHERE expected_end_date IS NULL;
 CREATE INDEX idx_road_closures_location ON road_closures USING GIST(closure_location);
 
 -- ============================================
