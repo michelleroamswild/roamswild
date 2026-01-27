@@ -9,7 +9,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSurpriseMe } from '@/hooks/use-surprise-me';
+import { useGoogleMaps } from '@/components/GoogleMapsProvider';
 import { SurpriseMeSuccessResponse, BiomeType, ScenicAnchorHighlight } from '@/types/surpriseMe';
 import {
   Shuffle,
@@ -36,6 +38,18 @@ interface SurpriseMeDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// Clean up duplicated suffixes like "San Juan National Forest National Forest"
+function cleanRegionName(name: string): string {
+  const suffixes = ['National Forest', 'National Park', 'Wilderness', 'State Park', 'Recreation Area'];
+  for (const suffix of suffixes) {
+    const duplicated = `${suffix} ${suffix}`;
+    if (name.includes(duplicated)) {
+      return name.replace(duplicated, suffix);
+    }
+  }
+  return name;
+}
+
 const BIOME_ICONS: Record<BiomeType, React.ReactNode> = {
   desert: <Sun className="w-5 h-5" weight="fill" />,
   alpine: <Mountains className="w-5 h-5" weight="fill" />,
@@ -56,17 +70,57 @@ const BIOME_COLORS: Record<BiomeType, string> = {
 export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) {
   const navigate = useNavigate();
   const { loading, error, result, getSurprise, clearResult, recordClick } = useSurpriseMe();
+  const { isLoaded: googleMapsLoaded } = useGoogleMaps();
 
   const [locationError, setLocationError] = useState<string | null>(null);
   const [gettingLocation, setGettingLocation] = useState(false);
+  const [nearestLocation, setNearestLocation] = useState<string | null>(null);
 
   // Clear state when dialog closes
   useEffect(() => {
     if (!open) {
       clearResult();
       setLocationError(null);
+      setNearestLocation(null);
     }
   }, [open, clearResult]);
+
+  // Reverse geocode to get nearest city/state when result changes
+  useEffect(() => {
+    if (!result || !googleMapsLoaded || !window.google?.maps?.Geocoder) {
+      return;
+    }
+
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode(
+      { location: { lat: result.region.center.lat, lng: result.region.center.lng } },
+      (results, status) => {
+        if (status === 'OK' && results && results.length > 0) {
+          let city: string | null = null;
+          let state: string | null = null;
+
+          // Look through results for locality and state
+          for (const r of results) {
+            for (const component of r.address_components) {
+              if (component.types.includes('locality') && !city) {
+                city = component.long_name;
+              }
+              if (component.types.includes('administrative_area_level_1') && !state) {
+                state = component.short_name;
+              }
+            }
+            if (city && state) break;
+          }
+
+          if (city && state) {
+            setNearestLocation(`Near ${city}, ${state}`);
+          } else if (state) {
+            setNearestLocation(state);
+          }
+        }
+      }
+    );
+  }, [result, googleMapsLoaded]);
 
   // Start getting surprise when dialog opens
   useEffect(() => {
@@ -156,7 +210,7 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Shuffle className="w-5 h-5 text-primary" weight="bold" />
@@ -199,7 +253,7 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
 
           {/* Result State */}
           {result && !loading && !gettingLocation && (
-            <ResultDisplay result={result} />
+            <ResultDisplay result={result} nearestLocation={nearestLocation} />
           )}
         </div>
 
@@ -222,10 +276,11 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
   );
 }
 
-function ResultDisplay({ result }: { result: SurpriseMeSuccessResponse }) {
+function ResultDisplay({ result, nearestLocation }: { result: SurpriseMeSuccessResponse; nearestLocation: string | null }) {
   const biome = result.region.primaryBiome;
   const biomeColor = biome ? BIOME_COLORS[biome] : 'text-foreground/70 bg-secondary';
   const biomeIcon = biome ? BIOME_ICONS[biome] : <MapPin className="w-5 h-5" />;
+  const displayName = cleanRegionName(result.region.name);
 
   return (
     <div className="space-y-4">
@@ -236,17 +291,24 @@ function ResultDisplay({ result }: { result: SurpriseMeSuccessResponse }) {
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="font-display font-semibold text-lg text-foreground truncate">
-            {result.region.name}
+            {displayName}
           </h3>
-          {biome && (
-            <p className="text-sm text-foreground/70 capitalize">{biome} region</p>
-          )}
+          <div className="flex items-center gap-2 text-sm text-foreground/70">
+            {nearestLocation && (
+              <>
+                <MapPin className="w-3.5 h-3.5" />
+                <span>{nearestLocation}</span>
+                {biome && <span className="text-foreground/40">•</span>}
+              </>
+            )}
+            {biome && <span className="capitalize">{biome}</span>}
+          </div>
         </div>
       </div>
 
       {/* Explanation */}
       <p className="text-sm text-foreground/80 leading-relaxed">
-        {result.explanation}
+        {cleanRegionName(result.explanation)}
       </p>
 
       {/* Stats */}
@@ -351,6 +413,7 @@ function HighlightChip({ highlight }: { highlight: ScenicAnchorHighlight }) {
   const icon = HIGHLIGHT_ICONS[highlight.type];
   const colorClass = HIGHLIGHT_COLORS[highlight.type];
   const label = highlight.name || highlight.type.charAt(0).toUpperCase() + highlight.type.slice(1);
+  const isLongName = label.length > 25;
 
   const handleClick = () => {
     window.open(
@@ -359,14 +422,29 @@ function HighlightChip({ highlight }: { highlight: ScenicAnchorHighlight }) {
     );
   };
 
-  return (
+  const chipContent = (
     <button
       onClick={handleClick}
       className={`flex items-center gap-1.5 px-3 py-2 rounded-lg hover:opacity-80 transition-opacity ${colorClass}`}
     >
       {icon}
-      <span className="text-xs font-medium truncate max-w-[80px]">{label}</span>
+      <span className={`text-xs font-medium ${isLongName ? 'truncate max-w-[150px]' : ''}`}>{label}</span>
       <ArrowSquareOut className="w-3 h-3 opacity-70 flex-shrink-0" />
     </button>
   );
+
+  if (isLongName) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {chipContent}
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{label}</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return chipContent;
 }

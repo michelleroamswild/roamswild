@@ -16,6 +16,10 @@ import { GoogleMap } from "@/components/GoogleMap";
 import { Marker } from "@react-google-maps/api";
 import { createMarkerIcon } from "@/utils/mapMarkers";
 
+// ARCHIVED: Hero images - revisit later
+// import heroLeft from "@/images/herophotos/DSC09190.jpg";
+// import heroRight from "@/images/herophotos/DSC09645.jpg";
+
 // Example points of interest for Zion National Park (empty state preview)
 const ZION_EXAMPLE_POIS = {
   center: { lat: 37.24, lng: -112.95 },
@@ -49,12 +53,26 @@ const Index = () => {
       {/* Hero + My Trips wrapper for floating widget positioning */}
       <div className="relative">
         {/* Hero Section with dark green topo background */}
-        <div className="hero-topo dark:bg-background relative overflow-visible">
+        <div className="hero-topo dark:bg-background relative">
           <Header />
 
-          <div className="container px-4 md:px-6 py-12 md:py-16">
+          <div className="container px-4 md:px-6 py-12 md:py-16 relative">
+            {/* ARCHIVED: Hero Images - revisit later
+            <div className="hidden xl:block absolute -left-[140px] top-16 z-0 animate-float-slow pointer-events-none">
+              <div className="w-[320px] h-[440px] rounded-2xl overflow-hidden shadow-2xl transform -rotate-6">
+                <img src={heroLeft} alt="" className="w-full h-full object-cover" />
+              </div>
+            </div>
+
+            <div className="hidden xl:block absolute -right-[140px] top-16 z-0 animate-float-medium pointer-events-none">
+              <div className="w-[320px] h-[440px] rounded-2xl overflow-hidden shadow-2xl transform rotate-6">
+                <img src={heroRight} alt="" className="w-full h-full object-cover" />
+              </div>
+            </div>
+            */}
+
             {/* Center Content */}
-            <section className="text-center animate-fade-in max-w-4xl mx-auto">
+            <section className="text-center animate-fade-in max-w-4xl mx-auto relative z-10">
               <h1 className="font-display font-bold text-primary dark:text-foreground mb-4">
                 <span className="text-gradient-forest block text-5xl md:text-6xl lg:text-7xl" style={{ lineHeight: 1.1 }}>
                   Where to next?
@@ -400,7 +418,7 @@ const Index = () => {
         <div className="container px-4 md:px-6 py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
-              © 2026 TrailBound. Built for adventurers.
+              © 2026 RoamsWild. Built for adventurers.
             </p>
             <div className="flex items-center gap-6">
               <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">

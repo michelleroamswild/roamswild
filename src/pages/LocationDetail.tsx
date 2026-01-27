@@ -71,6 +71,18 @@ function getElevationMessage(elevationFeet: number): string | null {
   return null;
 }
 
+// Clean up duplicated suffixes like "San Juan National Forest National Forest"
+function cleanRegionName(name: string): string {
+  const suffixes = ['National Forest', 'National Park', 'Wilderness', 'State Park', 'Recreation Area'];
+  for (const suffix of suffixes) {
+    const duplicated = `${suffix} ${suffix}`;
+    if (name.includes(duplicated)) {
+      return name.replace(duplicated, suffix);
+    }
+  }
+  return name;
+}
+
 // Photo hotspot icon (camera) - special marker for photo locations
 const PHOTO_HOTSPOT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
@@ -127,7 +139,7 @@ function SurpriseMeBanner({ surpriseMe }: { surpriseMe: NonNullable<LocationStat
 
         {/* Explanation - Better contrast */}
         <p className="text-sm text-foreground/90 leading-relaxed mb-4">
-          {surpriseMe.explanation}
+          {cleanRegionName(surpriseMe.explanation)}
         </p>
 
         {/* Scenic Drive Anchor - More prominent */}
@@ -481,7 +493,7 @@ const LocationDetail = () => {
                   <ArrowLeft className="w-5 h-5" />
                 </Button>
               </Link>
-              <h1 className="text-xl font-display font-bold text-foreground truncate">{location.name}</h1>
+              <h1 className="text-xl font-display font-bold text-foreground truncate">{cleanRegionName(location.name)}</h1>
             </div>
             <div className="flex items-center gap-2">
               {isSaved ? (
@@ -843,7 +855,7 @@ const LocationDetail = () => {
                     <MapPin className="w-6 h-6 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-lg font-display font-bold text-foreground leading-tight">{location.name}</h2>
+                    <h2 className="text-lg font-display font-bold text-foreground leading-tight">{cleanRegionName(location.name)}</h2>
                     <p className="text-sm text-foreground/70 mt-1 line-clamp-2">{location.address}</p>
                   </div>
                 </div>
@@ -1296,6 +1308,7 @@ const LocationDetail = () => {
             <div className="pt-4">
               <Button
                 variant="primary"
+                size="sm"
                 className="w-full"
                 onClick={() => setItineraryModalOpen(true)}
               >
@@ -1316,7 +1329,7 @@ const LocationDetail = () => {
               Create Itinerary
             </DialogTitle>
             <DialogDescription>
-              Plan a trip to {location.name}
+              Plan a trip to {cleanRegionName(location.name)}
             </DialogDescription>
           </DialogHeader>
 

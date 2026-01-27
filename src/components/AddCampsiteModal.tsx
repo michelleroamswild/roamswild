@@ -201,6 +201,7 @@ export function AddCampsiteModal({ isOpen, onClose }: AddCampsiteModalProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="private">Private (just me)</SelectItem>
+                  <SelectItem value="friends">Friends only</SelectItem>
                   <SelectItem value="public">Public (everyone)</SelectItem>
                 </SelectContent>
               </Select>

@@ -14,6 +14,7 @@ import {
   Trash,
   Globe,
   Lock,
+  Users,
   SpinnerGap,
   ArrowSquareOut,
   Check,
@@ -203,6 +204,10 @@ const CampsiteDetail = () => {
                     <span className="flex items-center gap-1">
                       <Globe className="w-3 h-3" /> Public
                     </span>
+                  ) : campsite.visibility === 'friends' ? (
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3 h-3" /> Friends only
+                    </span>
                   ) : (
                     <span className="flex items-center gap-1">
                       <Lock className="w-3 h-3" /> Private
@@ -331,6 +336,7 @@ const CampsiteDetail = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="private">Private</SelectItem>
+                          <SelectItem value="friends">Friends only</SelectItem>
                           <SelectItem value="public">Public</SelectItem>
                         </SelectContent>
                       </Select>
