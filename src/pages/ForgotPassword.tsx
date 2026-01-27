@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Compass, Envelope, SpinnerGap, WarningCircle, CheckCircle, ArrowLeft } from '@phosphor-icons/react';
+import { Jeep, Envelope, SpinnerGap, WarningCircle, CheckCircle, ArrowLeft } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,7 +23,7 @@ const ForgotPassword = () => {
     const { error } = await resetPassword(email);
 
     if (error) {
-      setError(error.message);
+      setError('Unable to send recovery email, please try again.');
       setIsLoading(false);
     } else {
       setSuccess(true);
@@ -64,9 +64,7 @@ const ForgotPassword = () => {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="flex items-center justify-center w-12 h-12 bg-primary rounded-xl">
-            <Compass className="w-6 h-6 text-primary-foreground" />
-          </div>
+          <Jeep className="w-8 h-8 text-primary" weight="fill" />
           <span className="text-2xl font-display font-bold text-foreground">RoamsWild</span>
         </div>
 
