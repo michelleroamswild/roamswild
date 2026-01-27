@@ -1,0 +1,2 @@
+# Disable JWT verification - function handles auth internally via userId in request body
+verify_jwt = false
