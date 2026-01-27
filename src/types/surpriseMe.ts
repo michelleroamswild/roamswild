@@ -161,6 +161,49 @@ export interface SurpriseMeMeta {
   relaxationsApplied?: string[];
 }
 
+// ============================================
+// Scenic Drive Anchor Types
+// ============================================
+
+export interface ScenicAnchorRoad {
+  name: string | null;
+  ref: string | null;
+  surface: 'paved' | 'gravel' | 'dirt' | 'unknown';
+  highway: string;
+}
+
+export interface ScenicAnchorCoord {
+  lat: number;
+  lng: number;
+}
+
+export interface ScenicAnchorHighlight {
+  type: 'viewpoint' | 'trail' | 'water' | 'camp';
+  name: string | null;
+  lat: number;
+  lon: number;
+  distanceMiles: number;
+  isNamed: boolean;
+}
+
+export interface ScenicAnchor {
+  road: ScenicAnchorRoad;
+  start: ScenicAnchorCoord;
+  end: ScenicAnchorCoord;
+  center: ScenicAnchorCoord;
+  lengthMiles: number;
+  score: number;
+}
+
+export interface ScenicAnchorMeta {
+  regionId: string;
+  candidatesEvaluated: number;
+  strategy: string;
+  wasFallback: boolean;
+  cacheHit: boolean;
+  source: 'fresh' | 'cache' | 'stale_cache' | 'fallback';
+}
+
 export interface SurpriseMeSuccessResponse {
   success: true;
   region: SurpriseMeRegion;
@@ -171,6 +214,10 @@ export interface SurpriseMeSuccessResponse {
   cautions: string[];
   explanation: string;
   meta: SurpriseMeMeta;
+  // Scenic drive anchor (populated client-side)
+  anchor?: ScenicAnchor;
+  anchorHighlights?: ScenicAnchorHighlight[];
+  anchorMeta?: ScenicAnchorMeta;
 }
 
 export interface SurpriseMeErrorResponse {

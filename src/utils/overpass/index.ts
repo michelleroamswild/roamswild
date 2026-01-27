@@ -129,7 +129,8 @@ export async function findScenicAnchor(
 
 // Re-export types and utilities
 export * from './types';
-export { ScoredAnchor, ScoringWeights, DEFAULT_WEIGHTS } from './scoring';
+export { DEFAULT_WEIGHTS, scoreAnchor, selectAnchor } from './scoring';
+export type { ScoredAnchor, ScoringWeights } from './scoring';
 export { normalizeResponse, normalizeElement, getElementCoord } from './normalize';
 export { extractRoadWays, extractPois, haversineDistance, polylineLength, filterPoisWithinRadius } from './extract';
 export { clampBbox, splitBboxIntoTiles, executeBboxStrategy } from './bbox';
@@ -137,7 +138,6 @@ export { classifySurface, filterRoad, isCandidateRoad, roadPriorityScore } from 
 export { curvinessRatio, curvinessScore, curvinessScoreCustom, straightLineDistance } from './curviness';
 export { parseMaxspeedMph, calculatePenalties, hasDisqualifyingPenalties } from './penalties';
 export { buildOverpassQuery, executeOverpassQuery } from './query';
-export { scoreAnchor, selectAnchor } from './scoring';
 export {
   extractAnchorGeometry,
   midpointAlongPolyline,

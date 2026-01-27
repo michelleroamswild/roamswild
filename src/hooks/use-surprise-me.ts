@@ -8,8 +8,12 @@ import {
   SurpriseMeErrorResponse,
   BiomeType,
   VehicleType,
+  ScenicAnchor,
+  ScenicAnchorHighlight,
+  ScenicAnchorMeta,
   isSurpriseMeSuccess,
 } from '@/types/surpriseMe';
+import { getScenicDriveAnchor, type RegionInput } from '@/utils/overpass';
 
 interface UseSurpriseMeOptions {
   maxDistanceMiles?: number;
@@ -19,6 +23,86 @@ interface UseSurpriseMeOptions {
   requiresCellService?: boolean;
   maxElevationFt?: number;
   excludeBiomes?: BiomeType[];
+}
+
+/**
+ * Enrich a surprise response with scenic anchor data
+ * Fetches road segments and highlights from Overpass API
+ */
+async function enrichWithAnchor(
+  response: SurpriseMeSuccessResponse
+): Promise<SurpriseMeSuccessResponse> {
+  try {
+    const regionInput: RegionInput = {
+      id: response.region.id,
+      bbox: {
+        north: response.region.bounds.north,
+        south: response.region.bounds.south,
+        east: response.region.bounds.east,
+        west: response.region.bounds.west,
+      },
+      center: {
+        lat: response.region.center.lat,
+        lng: response.region.center.lng,
+      },
+      name: response.region.name,
+    };
+
+    const anchorResult = await getScenicDriveAnchor(regionInput, {
+      skipHighlights: false,
+    });
+
+    if (!anchorResult.success || !anchorResult.anchor) {
+      // Return response without anchor - don't fail the whole request
+      console.warn('Failed to find scenic anchor:', anchorResult.error);
+      return response;
+    }
+
+    // Transform anchor to the response format
+    const anchor: ScenicAnchor = {
+      road: {
+        name: anchorResult.anchor.road.name,
+        ref: anchorResult.anchor.road.ref,
+        surface: anchorResult.anchor.road.surface,
+        highway: anchorResult.anchor.road.highway,
+      },
+      start: anchorResult.anchor.start,
+      end: anchorResult.anchor.end,
+      center: anchorResult.anchor.center,
+      lengthMiles: anchorResult.anchor.lengthMiles,
+      score: anchorResult.anchor.score.total,
+    };
+
+    // Transform highlights
+    const anchorHighlights: ScenicAnchorHighlight[] = (anchorResult.highlights || []).map(h => ({
+      type: h.type,
+      name: h.name,
+      lat: h.lat,
+      lon: h.lon,
+      distanceMiles: h.distanceMiles,
+      isNamed: h.isNamed,
+    }));
+
+    const anchorMeta: ScenicAnchorMeta = {
+      regionId: anchorResult.meta.regionId,
+      candidatesEvaluated: anchorResult.meta.candidatesEvaluated,
+      strategy: anchorResult.meta.strategy,
+      wasFallback: anchorResult.meta.wasFallback,
+      cacheHit: anchorResult.meta.cacheHit,
+      source: anchorResult.source,
+    };
+
+    return {
+      ...response,
+      anchor,
+      anchorHighlights,
+      anchorMeta,
+    };
+  } catch (err) {
+    // Log but don't fail - anchor is enhancement, not critical
+    console.error('Error enriching with anchor:', err);
+    return response;
+  }
 }
 
 interface UseSurpriseMeReturn {
@@ -99,11 +183,14 @@ export function useSurpriseMe(options: UseSurpriseMeOptions = {}): UseSurpriseMe
         const response = data as SurpriseMeResponse;
 
         if (isSurpriseMeSuccess(response)) {
-          setResult(response);
+          // Fetch scenic anchor for the region
+          const enrichedResponse = await enrichWithAnchor(response);
+          setResult(enrichedResponse);
           // Store history ID for tracking clicks
-          if (response.meta && 'historyId' in response.meta) {
-            setHistoryId((response.meta as { historyId?: string }).historyId ?? null);
+          if (enrichedResponse.meta && 'historyId' in enrichedResponse.meta) {
+            setHistoryId((enrichedResponse.meta as { historyId?: string }).historyId ?? null);
           }
+          return enrichedResponse;
         } else {
           setError(response.message);
         }
