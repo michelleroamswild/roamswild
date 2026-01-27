@@ -400,7 +400,7 @@ const Index = () => {
         <div className="container px-4 md:px-6 py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
-              © 2026 TrailBound. Built for adventurers.
+              © 2026 RoamsWild. Built for adventurers.
             </p>
             <div className="flex items-center gap-6">
               <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">

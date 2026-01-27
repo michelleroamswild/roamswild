@@ -23,7 +23,7 @@ async function fetchWeatherForLocation(lat: number, lng: number): Promise<Weathe
       `https://api.weather.gov/points/${lat.toFixed(4)},${lng.toFixed(4)}`,
       {
         headers: {
-          "User-Agent": "TrailBound (contact@trailbound.app)",
+          "User-Agent": "RoamsWild (contact@roamswild.com)",
           Accept: "application/geo+json",
         },
       }
@@ -40,7 +40,7 @@ async function fetchWeatherForLocation(lat: number, lng: number): Promise<Weathe
     // Step 2: Get forecast
     const forecastResponse = await fetch(forecastUrl, {
       headers: {
-        "User-Agent": "TrailBound (contact@trailbound.app)",
+        "User-Agent": "RoamsWild (contact@roamswild.com)",
         Accept: "application/geo+json",
       },
     });
