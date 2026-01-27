@@ -60,8 +60,6 @@ const Signup = () => {
     } else {
       setSuccess(true);
       setIsLoading(false);
-      // Auto-redirect after signup (Supabase may require email confirmation)
-      setTimeout(() => navigate('/'), 1500);
     }
   };
 
@@ -69,15 +67,36 @@ const Signup = () => {
     return (
       <div className="min-h-screen hero-topo flex items-center justify-center p-4">
         <div className="w-full max-w-md">
+          {/* Logo */}
+          <div className="flex items-center justify-center gap-2 mb-8">
+            <Jeep className="w-8 h-8 text-primary" weight="fill" />
+            <span className="text-2xl font-display font-bold text-foreground">RoamsWild</span>
+          </div>
+
           <div className="bg-card rounded-2xl border border-border p-8 shadow-lg">
             <div className="text-center">
               <div className="flex items-center justify-center w-16 h-16 bg-accent/20 rounded-full mx-auto mb-4">
-                <CheckCircle className="w-8 h-8 text-accent" weight="fill" />
+                <Envelope className="w-8 h-8 text-accent" />
               </div>
-              <h1 className="text-2xl font-display font-bold text-foreground">Account Created!</h1>
+              <h1 className="text-2xl font-display font-bold text-foreground">Check your email</h1>
               <p className="text-muted-foreground mt-2">
-                Welcome to RoamsWild. Redirecting you to the app...
+                We've sent a confirmation link to
               </p>
+              <p className="font-medium text-foreground mt-1">{email}</p>
+              <p className="text-muted-foreground mt-4 text-sm">
+                Click the link in the email to verify your account and start planning your adventures.
+              </p>
+              <div className="mt-6 pt-6 border-t border-border">
+                <p className="text-sm text-muted-foreground">
+                  Didn't receive the email?{' '}
+                  <button
+                    onClick={() => setSuccess(false)}
+                    className="text-primary font-semibold hover:underline"
+                  >
+                    Try again
+                  </button>
+                </p>
+              </div>
             </div>
           </div>
         </div>
