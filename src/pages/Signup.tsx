@@ -96,8 +96,8 @@ const Signup = () => {
                     Try again
                   </button>
                 </p>
-                <Link to="/login">
-                  <Button variant="outline" className="w-full">
+                <Link to="/login" className="inline-block mt-2">
+                  <Button variant="secondary">
                     Go to login
                   </Button>
                 </Link>
