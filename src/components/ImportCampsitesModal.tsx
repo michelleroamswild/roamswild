@@ -295,7 +295,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UploadSimple className="w-5 h-5 text-primary" />
@@ -390,6 +390,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="private">Private (just me)</SelectItem>
+                  <SelectItem value="friends">Friends only</SelectItem>
                   <SelectItem value="public">Public (everyone)</SelectItem>
                 </SelectContent>
               </Select>
