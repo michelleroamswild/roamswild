@@ -12,6 +12,26 @@ import { Path, Calendar, MapPinArea, CaretRight, Boot, ArrowRight, Users, Mounta
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getTripUrl } from "@/utils/slugify";
+import { GoogleMap } from "@/components/GoogleMap";
+import { Marker } from "@react-google-maps/api";
+import { createMarkerIcon } from "@/utils/mapMarkers";
+
+// Example points of interest for Zion National Park (empty state preview)
+const ZION_EXAMPLE_POIS = {
+  center: { lat: 37.24, lng: -112.95 },
+  hikes: [
+    { id: 'h1', name: "Angels Landing", lat: 37.2692, lng: -112.9465 },
+    { id: 'h2', name: "The Narrows", lat: 37.3049, lng: -112.9476 },
+    { id: 'h3', name: "Observation Point", lat: 37.2725, lng: -112.9340 },
+  ],
+  camps: [
+    { id: 'c1', name: "Watchman Campground", lat: 37.1997, lng: -112.9874 },
+    { id: 'c2', name: "South Campground", lat: 37.2053, lng: -112.9852 },
+  ],
+  viewpoints: [
+    { id: 'v1', name: "Canyon Overlook", lat: 37.2130, lng: -112.9410 },
+  ],
+};
 
 const Index = () => {
   const { savedTrips, loadSavedTrip, isLoading: tripsLoading } = useTrip();
@@ -86,7 +106,7 @@ const Index = () => {
         </div>
 
         {/* Saved Trips Section */}
-        {savedTrips.length > 0 && (
+        {savedTrips.length > 0 ? (
           <section className="bg-background-secondary dark:bg-card pt-24 lg:pt-32 pb-16 md:pb-20 grainy">
           <div className="container px-4 md:px-6">
             <div className="flex items-center justify-between mb-6">
@@ -267,6 +287,104 @@ const Index = () => {
             </div>
           </div>
         </section>
+        ) : (
+          <section className="bg-background-secondary dark:bg-card pt-24 lg:pt-32 pb-16 md:pb-20 grainy">
+            <div className="container px-4 md:px-6">
+              <div className="mb-14 text-center">
+                <h2 className="font-display font-bold text-white dark:text-foreground">My Trips</h2>
+              </div>
+              <div className="grid md:grid-cols-2 gap-8 items-center max-w-4xl mx-auto">
+                {/* Interactive Map */}
+                <div className="relative h-64 md:h-80 rounded-2xl overflow-hidden shadow-lg">
+                  <GoogleMap
+                    center={ZION_EXAMPLE_POIS.center}
+                    zoom={12}
+                    options={{
+                      disableDefaultUI: true,
+                      zoomControl: true,
+                      fullscreenControl: false,
+                      scrollwheel: true,
+                      draggable: true,
+                      gestureHandling: 'greedy',
+                      mapTypeId: 'satellite',
+                    }}
+                  >
+                    {/* Hike markers */}
+                    {ZION_EXAMPLE_POIS.hikes.map((hike) => (
+                      <Marker
+                        key={hike.id}
+                        position={{ lat: hike.lat, lng: hike.lng }}
+                        title={hike.name}
+                        icon={createMarkerIcon('hike', { size: 32 })}
+                      />
+                    ))}
+                    {/* Camp markers */}
+                    {ZION_EXAMPLE_POIS.camps.map((camp) => (
+                      <Marker
+                        key={camp.id}
+                        position={{ lat: camp.lat, lng: camp.lng }}
+                        title={camp.name}
+                        icon={createMarkerIcon('camp', { size: 32 })}
+                      />
+                    ))}
+                    {/* Viewpoint markers */}
+                    {ZION_EXAMPLE_POIS.viewpoints.map((vp) => (
+                      <Marker
+                        key={vp.id}
+                        position={{ lat: vp.lat, lng: vp.lng }}
+                        title={vp.name}
+                        icon={createMarkerIcon('viewpoint', { size: 32 })}
+                      />
+                    ))}
+                  </GoogleMap>
+                  <div className="absolute bottom-4 left-4">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/90 dark:bg-card/90 backdrop-blur-sm rounded-full text-xs font-medium text-foreground shadow-sm">
+                      <MapPinArea className="w-3.5 h-3.5 text-terracotta" weight="fill" />
+                      Zion National Park
+                    </span>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div>
+                  <h2 className="font-display font-bold text-2xl md:text-3xl text-white dark:text-foreground mb-3">
+                    Plan your next adventure
+                  </h2>
+                  <p className="text-white/70 dark:text-muted-foreground mb-6">
+                    Create custom road trip itineraries with campsites, hikes, and scenic stops all planned for you.
+                  </p>
+
+                  <div className="space-y-3 mb-8">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-white/10 dark:bg-aquateal/10 flex items-center justify-center flex-shrink-0">
+                        <Tent className="w-4 h-4 text-white dark:text-aquateal" weight="fill" />
+                      </div>
+                      <span className="text-sm text-white dark:text-foreground">Find dispersed camping & campgrounds</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-white/10 dark:bg-pinesoft/10 flex items-center justify-center flex-shrink-0">
+                        <Mountains className="w-4 h-4 text-white dark:text-pinesoft" weight="fill" />
+                      </div>
+                      <span className="text-sm text-white dark:text-foreground">Discover hikes along your route</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-white/10 dark:bg-lavenderslate/10 flex items-center justify-center flex-shrink-0">
+                        <Users className="w-4 h-4 text-white dark:text-lavenderslate" weight="fill" />
+                      </div>
+                      <span className="text-sm text-white dark:text-foreground">Collaborate with friends on group trips</span>
+                    </div>
+                  </div>
+
+                  <Link to="/create-trip">
+                    <Button variant="secondary" size="lg">
+                      <Path className="w-5 h-5 mr-2" weight="bold" />
+                      Create your first trip
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </section>
         )}
       </div>
 
