@@ -55,7 +55,13 @@ const Signup = () => {
     const { error } = await signUp(email, password, name);
 
     if (error) {
-      setError('Unable to create account, please try again.');
+      // Check for duplicate email error
+      const errorMessage = error.message?.toLowerCase() || '';
+      if (errorMessage.includes('already') || errorMessage.includes('exists') || errorMessage.includes('registered')) {
+        setEmailError('An account with this email already exists');
+      } else {
+        setError('Unable to create account, please try again.');
+      }
       setIsLoading(false);
     } else {
       setSuccess(true);
@@ -86,7 +92,7 @@ const Signup = () => {
               <p className="text-muted-foreground mt-4 text-sm">
                 Click the link in the email to verify your account and start planning your adventures.
               </p>
-              <div className="mt-6 pt-6 border-t border-border">
+              <div className="mt-6 pt-6 border-t border-border space-y-4">
                 <p className="text-sm text-muted-foreground">
                   Didn't receive the email?{' '}
                   <button
@@ -96,6 +102,11 @@ const Signup = () => {
                     Try again
                   </button>
                 </p>
+                <Link to="/login" className="inline-block mt-2">
+                  <Button variant="secondary">
+                    Go to login
+                  </Button>
+                </Link>
               </div>
             </div>
           </div>
