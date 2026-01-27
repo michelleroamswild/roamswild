@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
   Plus,
   Tent,
   MapPin,
@@ -25,6 +24,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -41,6 +41,7 @@ import { Campsite, CampsiteType, CampsiteVisibility } from '@/types/campsite';
 import { AddCampsiteModal } from '@/components/AddCampsiteModal';
 import { ImportCampsitesModal } from '@/components/ImportCampsitesModal';
 import { createMarkerIcon } from '@/utils/mapMarkers';
+import { Header } from '@/components/Header';
 
 const typeLabels: Record<CampsiteType, string> = {
   dispersed: 'Dispersed',
@@ -258,47 +259,12 @@ const Campsites = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="container px-4 md:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/">
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <ArrowLeft className="w-5 h-5" weight="bold" />
-                </Button>
-              </Link>
-              <div>
-                <h1 className="text-xl font-display font-bold text-foreground">Campsites</h1>
-                <p className="text-sm text-muted-foreground">
-                  {campsites.length} saved
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setImportModalOpen(true)}>
-                <UploadSimple className="w-4 h-4 mr-1" weight="bold" />
-                Import
-              </Button>
-              {campsites.length > 0 && (
-                <Button variant="ghost" size="sm" onClick={handleExport}>
-                  <Export className="w-4 h-4 mr-1" weight="bold" />
-                  Export
-                </Button>
-              )}
-              <Button variant="primary" size="sm" onClick={() => setAddModalOpen(true)}>
-                <Plus className="w-4 h-4 mr-1" weight="bold" />
-                Add Campsite
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header showBorder />
 
       <main className="w-full">
         <div className="grid lg:grid-cols-2">
           {/* Map Section */}
-          <div className="hidden lg:block h-[calc(100vh-73px)] sticky top-[73px]">
+          <div className="hidden lg:block h-[calc(100vh-80px)] sticky top-[80px]">
             <GoogleMap
               center={mapCenter}
               zoom={displayedCampsites.length === 1 ? 12 : 5}
@@ -321,171 +287,211 @@ const Campsites = () => {
           </div>
 
           {/* List Section */}
-          <div className="p-6 lg:h-[calc(100vh-73px)] lg:overflow-y-auto">
-        {/* Tabs */}
-        <div className="flex gap-1 p-1 bg-secondary/50 rounded-lg mb-6 w-fit">
-          <button
-            onClick={() => handleTabChange('mine')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'mine'
-                ? 'bg-white text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            My Spots
-          </button>
-          <button
-            onClick={() => handleTabChange('explorer')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
-              activeTab === 'explorer'
-                ? 'bg-white text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Compass className="w-4 h-4" />
-            Explorer
-            {explorerSpots.length > 0 && (
-              <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
-                {explorerSpots.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => handleTabChange('public')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'public'
-                ? 'bg-white text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Public
-          </button>
-        </div>
+          <div className="p-6 lg:h-[calc(100vh-80px)] lg:overflow-y-auto">
+            {/* Page Header */}
+            <div className="flex items-start justify-between gap-4 mb-6">
+              <div>
+                <h1 className="text-3xl font-display font-bold text-foreground">Campsites</h1>
+                <p className="text-muted-foreground mt-1">
+                  {campsites.length} {campsites.length === 1 ? 'campsite' : 'campsites'} saved
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setImportModalOpen(true)}>
+                  <UploadSimple className="w-4 h-4 mr-1" weight="bold" />
+                  Import
+                </Button>
+                {campsites.length > 0 && (
+                  <Button variant="ghost" size="sm" onClick={handleExport}>
+                    <Export className="w-4 h-4 mr-1" weight="bold" />
+                    Export
+                  </Button>
+                )}
+                <Button variant="primary" size="sm" onClick={() => setAddModalOpen(true)}>
+                  <Plus className="w-4 h-4 mr-1" weight="bold" />
+                  Add
+                </Button>
+              </div>
+            </div>
 
-        {isLoading ? (
-          <div className="text-center py-16">
-            <div className="flex items-center justify-center w-20 h-20 bg-secondary rounded-full mx-auto mb-6">
-              <SpinnerGap className="w-10 h-10 text-primary animate-spin" />
+            {/* Tabs */}
+            <div className="flex gap-1 p-1 bg-secondary/50 rounded-lg mb-6 w-fit">
+              <button
+                onClick={() => handleTabChange('mine')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === 'mine'
+                    ? 'bg-white text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                My Spots
+              </button>
+              <button
+                onClick={() => handleTabChange('explorer')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'explorer'
+                    ? 'bg-white text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Compass className="w-4 h-4" />
+                Explorer
+                {explorerSpots.length > 0 && (
+                  <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
+                    {explorerSpots.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => handleTabChange('public')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === 'public'
+                    ? 'bg-white text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Public
+              </button>
             </div>
-            <h2 className="text-xl font-display font-medium text-muted-foreground">
-              Loading campsites...
-            </h2>
-          </div>
-        ) : activeTab === 'mine' && campsites.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="flex items-center justify-center w-20 h-20 bg-secondary rounded-full mx-auto mb-6">
-              <Tent className="w-10 h-10 text-muted-foreground" />
-            </div>
-            <h2 className="font-display font-bold text-foreground mb-2">
-              No campsites yet
-            </h2>
-            <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-              Add your favorite camping spots to build your personal database.
-              Import from Google Maps or add locations manually.
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <Button variant="secondary" size="lg" onClick={() => setImportModalOpen(true)}>
-                <UploadSimple className="w-5 h-5 mr-2" weight="bold" />
-                Import from Google
-              </Button>
-              <Button variant="primary" size="lg" onClick={() => setAddModalOpen(true)}>
-                <Plus className="w-5 h-5 mr-2" weight="bold" />
-                Add Campsite
-              </Button>
-            </div>
-          </div>
-        ) : (
+
+            {isLoading ? (
+              <div className="text-center py-16">
+                <div className="flex items-center justify-center w-20 h-20 bg-secondary rounded-full mx-auto mb-6">
+                  <SpinnerGap className="w-10 h-10 text-primary animate-spin" />
+                </div>
+                <h2 className="text-xl font-display font-medium text-muted-foreground">
+                  Loading campsites...
+                </h2>
+              </div>
+            ) : activeTab === 'mine' && campsites.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="flex items-center justify-center w-20 h-20 bg-secondary rounded-full mx-auto mb-6">
+                  <Tent className="w-10 h-10 text-muted-foreground" />
+                </div>
+                <h2 className="font-display font-bold text-foreground mb-2">
+                  No campsites yet
+                </h2>
+                <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                  Add your favorite camping spots to build your personal database.
+                  Import from Google Maps or add locations manually.
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <Button variant="secondary" size="lg" onClick={() => setImportModalOpen(true)}>
+                    <UploadSimple className="w-5 h-5 mr-2" weight="bold" />
+                    Import from Google
+                  </Button>
+                  <Button variant="primary" size="lg" onClick={() => setAddModalOpen(true)}>
+                    <Plus className="w-5 h-5 mr-2" weight="bold" />
+                    Add Campsite
+                  </Button>
+                </div>
+              </div>
+            ) : (
           <div className="space-y-4">
             {/* Filters */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[200px]">
+            <div className="space-y-3">
+              {/* Search */}
+              <div className="relative">
                 <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Search campsites..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
+                  className="pl-9 h-9"
                 />
               </div>
 
-              <Select value={filterType} onValueChange={(v) => setFilterType(v as CampsiteType | 'all')}>
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="dispersed">Dispersed</SelectItem>
-                  <SelectItem value="established">Established</SelectItem>
-                  <SelectItem value="blm">BLM</SelectItem>
-                  <SelectItem value="usfs">USFS</SelectItem>
-                  <SelectItem value="private">Private</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Filter Row */}
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Type</Label>
+                  <Select value={filterType} onValueChange={(v) => setFilterType(v as CampsiteType | 'all')}>
+                    <SelectTrigger className="w-[120px] h-8 text-sm">
+                      <SelectValue placeholder="All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="dispersed">Dispersed</SelectItem>
+                      <SelectItem value="established">Established</SelectItem>
+                      <SelectItem value="blm">BLM</SelectItem>
+                      <SelectItem value="usfs">USFS</SelectItem>
+                      <SelectItem value="private">Private</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              {activeTab === 'mine' && (
-                <Select value={filterVisibility} onValueChange={(v) => setFilterVisibility(v as CampsiteVisibility | 'all')}>
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Visibility" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="private">Private</SelectItem>
-                    <SelectItem value="public">Public</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-
-              {availableStates.length > 0 && (
-                <Select value={filterState} onValueChange={setFilterState}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="State" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All States</SelectItem>
-                    {availableStates.map((state) => (
-                      <SelectItem key={state} value={state}>{state}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              <button
-                onClick={() => setFilterHasNotes(!filterHasNotes)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  filterHasNotes
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-foreground hover:bg-secondary/80'
-                }`}
-              >
-                <NoteBlank className="w-4 h-4" />
-                Has Notes
-              </button>
-
-              <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-                <SelectTrigger className="w-[160px]">
-                  <div className="flex items-center gap-2">
-                    <SortAscending className="w-4 h-4 text-muted-foreground" />
-                    <SelectValue />
+                {activeTab === 'mine' && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Visibility</Label>
+                    <Select value={filterVisibility} onValueChange={(v) => setFilterVisibility(v as CampsiteVisibility | 'all')}>
+                      <SelectTrigger className="w-[110px] h-8 text-sm">
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="private">Private</SelectItem>
+                        <SelectItem value="friends">Friends</SelectItem>
+                        <SelectItem value="public">Public</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="newest">Newest First</SelectItem>
-                  <SelectItem value="oldest">Oldest First</SelectItem>
-                  <SelectItem value="name-asc">Name (A-Z)</SelectItem>
-                  <SelectItem value="name-desc">Name (Z-A)</SelectItem>
-                </SelectContent>
-              </Select>
+                )}
+
+                {availableStates.length > 0 && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">State</Label>
+                    <Select value={filterState} onValueChange={setFilterState}>
+                      <SelectTrigger className="w-[100px] h-8 text-sm">
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        {availableStates.map((state) => (
+                          <SelectItem key={state} value={state}>{state}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Sort</Label>
+                  <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+                    <SelectTrigger className="w-[130px] h-8 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="newest">Newest</SelectItem>
+                      <SelectItem value="oldest">Oldest</SelectItem>
+                      <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+                      <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <button
+                  onClick={() => setFilterHasNotes(!filterHasNotes)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors h-8 ${
+                    filterHasNotes
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary text-foreground hover:bg-secondary/80'
+                  }`}
+                >
+                  <NoteBlank className="w-3.5 h-3.5" />
+                  Notes
+                </button>
+              </div>
             </div>
 
             {/* Tag filter pills */}
             {availableTags.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
-                <Tag className="w-4 h-4 text-muted-foreground" />
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground mr-1">Tags:</span>
                 {availableTags.map((tag) => (
                   <button
                     key={tag}
                     onClick={() => toggleTag(tag)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
                       filterTags.includes(tag)
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-secondary text-foreground hover:bg-secondary/80'
@@ -497,7 +503,7 @@ const Campsites = () => {
                 {filterTags.length > 0 && (
                   <button
                     onClick={clearTagFilters}
-                    className="px-2 py-1 rounded-full text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                    className="px-1.5 py-0.5 rounded-full text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-0.5"
                   >
                     <X className="w-3 h-3" />
                     Clear
@@ -507,8 +513,8 @@ const Campsites = () => {
             )}
 
             {/* Results count */}
-            <p className="text-sm text-muted-foreground">
-              {displayedCampsites.length} {displayedCampsites.length === 1 ? 'campsite' : 'campsites'}
+            <p className="text-xs text-muted-foreground">
+              Showing {displayedCampsites.length} {displayedCampsites.length === 1 ? 'result' : 'results'}
             </p>
 
             {/* Campsite list */}
@@ -630,8 +636,8 @@ const Campsites = () => {
                 </Card>
               ))
             )}
-          </div>
-        )}
+              </div>
+            )}
           </div>
         </div>
       </main>

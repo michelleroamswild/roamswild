@@ -837,7 +837,7 @@ const DispersedExplorer = () => {
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <Header />
+      <Header showBorder />
 
       <div className="flex-1 grid lg:grid-cols-2 overflow-hidden">
         {/* Map - Left side on desktop, bottom on mobile */}

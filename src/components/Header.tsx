@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Jeep, List, Path, SignOut, Tent, Compass, Heart, Moon, Sun, MapTrifold } from "@phosphor-icons/react";
+import { Jeep, List, SignOut, Tent, Compass, Heart, Moon, Sun, MapTrifold } from "@phosphor-icons/react";
 import { Button } from "./ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -36,7 +36,11 @@ const getInitials = (name?: string, email?: string): string => {
   return '?';
 };
 
-export const Header = () => {
+interface HeaderProps {
+  showBorder?: boolean;
+}
+
+export const Header = ({ showBorder = false }: HeaderProps) => {
   const { user, signOut } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const location = useLocation();
@@ -56,7 +60,7 @@ export const Header = () => {
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-transparent">
+    <header className={cn("sticky top-0 z-50 w-full border-b", showBorder ? "border-border/50" : "border-transparent")}>
       <div className="container flex items-center justify-between h-20 px-4 md:px-6">
         <Link to="/" className="flex items-center gap-2">
           <Jeep className="w-6 h-6 text-primary" weight="regular" />
@@ -100,13 +104,6 @@ export const Header = () => {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Link to="/create-trip">
-            <Button variant="primary" size="sm" className="hidden md:flex">
-              <Path className="w-4 h-4 mr-1" weight="bold" />
-              Create Trip
-            </Button>
-          </Link>
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="hidden md:flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors">
@@ -237,18 +234,8 @@ export const Header = () => {
                 )}
               </nav>
 
-              {/* Create Trip Button */}
-              <div className="mt-6 pt-4 border-t border-border">
-                <Link to="/create-trip" onClick={closeMobileMenu}>
-                  <Button variant="primary" className="w-full">
-                    <Path className="w-4 h-4 mr-2" weight="bold" />
-                    Create Trip
-                  </Button>
-                </Link>
-              </div>
-
               {/* Dark Mode Toggle */}
-              <div className="mt-4">
+              <div className="mt-6 pt-4 border-t border-border">
                 <Button
                   variant="ghost"
                   className="w-full justify-start"
