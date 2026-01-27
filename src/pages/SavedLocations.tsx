@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { MapPin, Trash, Star } from "@phosphor-icons/react";
+import { MapPin, Trash, Star, Compass } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
@@ -33,11 +33,11 @@ const SavedLocations = () => {
     <div className="min-h-screen bg-background">
       <Header />
 
-      <main className="container px-4 md:px-6 py-6">
+      <main className="container px-4 md:px-6 py-8 max-w-4xl mx-auto">
         {/* Page Title */}
         <div className="mb-6">
-          <h1 className="text-2xl font-display font-bold text-foreground">Saved Locations</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-display font-bold text-foreground">Saved Locations</h1>
+          <p className="text-muted-foreground mt-1">
             {locations.length} saved location{locations.length !== 1 ? 's' : ''}
           </p>
         </div>
@@ -103,7 +103,8 @@ const SavedLocations = () => {
               Search for destinations and save them to quickly access them later
             </p>
             <Link to="/dispersed">
-              <Button variant="primary">
+              <Button variant="primary" size="lg">
+                <Compass className="w-5 h-5 mr-2" weight="bold" />
                 Explore Locations
               </Button>
             </Link>

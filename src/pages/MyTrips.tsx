@@ -419,8 +419,8 @@ const MyTrips = () => {
             </p>
             <Link to="/create-trip">
               <Button variant="primary" size="lg">
-                <Plus className="w-5 h-5 mr-2" weight="bold" />
-                Create Your First Trip
+                <Path className="w-5 h-5 mr-2" weight="bold" />
+                Create your first trip
               </Button>
             </Link>
           </div>
