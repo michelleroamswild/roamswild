@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MapPin, CaretRight, Trash } from "@phosphor-icons/react";
+import { MapPin, CaretRight, Trash, Compass, Heart, MagnifyingGlass } from "@phosphor-icons/react";
 import { Button } from "./ui/button";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
 import { useNavigate, Link } from "react-router-dom";
@@ -32,9 +32,51 @@ export const SavedLocations = () => {
     navigate('/saved');
   };
 
-  // Don't render the section if there are no saved locations
+  // Empty state when no saved locations
   if (locations.length === 0) {
-    return null;
+    return (
+      <section className="w-full max-w-4xl mx-auto">
+        <div className="mb-6 text-center">
+          <h2 className="font-display font-bold text-foreground">Saved Locations</h2>
+        </div>
+
+        <div className="py-8 md:py-12">
+          <div className="max-w-md mx-auto text-center">
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
+              <MapPin className="w-8 h-8 text-primary" weight="fill" />
+            </div>
+
+            <h3 className="font-display font-bold text-xl text-foreground mb-3">
+              Save places you love
+            </h3>
+            <p className="text-muted-foreground mb-8">
+              Search for a destination and save it to quickly access trip ideas, local conditions, and more.
+            </p>
+
+            <div className="space-y-4 inline-block text-left">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
+                  <MagnifyingGlass className="w-5 h-5 text-accent" weight="bold" />
+                </div>
+                <span className="text-sm text-foreground">Search for any destination</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
+                  <Heart className="w-5 h-5 text-accent" weight="fill" />
+                </div>
+                <span className="text-sm text-foreground">Click the heart to save it</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
+                  <Compass className="w-5 h-5 text-accent" weight="fill" />
+                </div>
+                <span className="text-sm text-foreground">Access it anytime from here</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   return (

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { MapPin, MagnifyingGlass, Path, SpinnerGap, TreeEvergreen, Warning, Crosshair, Tent, Drop, MapPinLine, Eye, EyeSlash, Info, Star, NavigationArrow, Car, Jeep, Copy, Check, MapTrifold, CheckCircle, Users, Funnel } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -90,7 +91,9 @@ function isWithinAnyPublicLand(
 
 const DispersedExplorer = () => {
   const { isLoaded } = useGoogleMaps();
+  const [searchParams] = useSearchParams();
   const [searchLocation, setSearchLocation] = useState<SearchLocation | null>(null);
+  const [initialLocationLoaded, setInitialLocationLoaded] = useState(false);
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: 39.5, lng: -105.5 });
   const [mapZoom, setMapZoom] = useState(7);
   const [selectedRoad, setSelectedRoad] = useState<MVUMRoad | OSMTrack | null>(null);
@@ -130,6 +133,32 @@ const DispersedExplorer = () => {
     searchLocation?.lng ?? 0,
     12 // 12 mile radius for public lands (slightly larger than road search to ensure coverage)
   );
+
+  // Handle URL parameters for initial location (e.g., from "Find camps near me")
+  useEffect(() => {
+    if (initialLocationLoaded) return;
+
+    const lat = searchParams.get('lat');
+    const lng = searchParams.get('lng');
+    const name = searchParams.get('name');
+
+    if (lat && lng) {
+      const parsedLat = parseFloat(lat);
+      const parsedLng = parseFloat(lng);
+
+      if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+        const location: SearchLocation = {
+          lat: parsedLat,
+          lng: parsedLng,
+          name: name || 'My Location',
+        };
+        setSearchLocation(location);
+        setMapCenter({ lat: parsedLat, lng: parsedLng });
+        setMapZoom(12);
+      }
+    }
+    setInitialLocationLoaded(true);
+  }, [searchParams, initialLocationLoaded]);
 
   // Fetch confirmed explorer spots from database when search location changes
   useEffect(() => {

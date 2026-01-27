@@ -8,7 +8,7 @@ import { RecentSearchesWidget } from "@/components/RecentSearchesWidget";
 import { SurpriseMeDialog } from "@/components/SurpriseMeDialog";
 import { BestHikesTodayDialog } from "@/components/BestHikesTodayDialog";
 import { useTrip } from "@/context/TripContext";
-import { Path, Calendar, MapPinArea, CaretRight, Boot, ArrowRight, Users, Mountains, Tent, SunHorizon, Shuffle, Compass } from "@phosphor-icons/react";
+import { Path, Calendar, MapPinArea, CaretRight, Boot, ArrowRight, Users, Mountains, Tent, SunHorizon, Shuffle, Compass, SpinnerGap } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getTripUrl } from "@/utils/slugify";
@@ -16,9 +16,16 @@ import { GoogleMap } from "@/components/GoogleMap";
 import { Marker } from "@react-google-maps/api";
 import { createMarkerIcon } from "@/utils/mapMarkers";
 
-// ARCHIVED: Hero images - revisit later
-// import heroLeft from "@/images/herophotos/DSC09190.jpg";
-// import heroRight from "@/images/herophotos/DSC09645.jpg";
+// Hero images for rotating parallax section
+import heroImage1 from "@/images/herophotos/DJI_0693.jpg";
+import heroImage2 from "@/images/herophotos/DJI_0671.jpg";
+import heroImage3 from "@/images/herophotos/DSC09190.jpg";
+import heroImage4 from "@/images/herophotos/DJI_0879.jpg";
+import heroImage5 from "@/images/herophotos/DSC03022.jpg";
+import heroImage6 from "@/images/herophotos/DSC05769.jpg";
+import heroImage7 from "@/images/herophotos/DSC09645.jpg";
+
+const heroImages = [heroImage1, heroImage2, heroImage3, heroImage4, heroImage5, heroImage6, heroImage7];
 
 // Example points of interest for Zion National Park (empty state preview)
 const ZION_EXAMPLE_POIS = {
@@ -42,6 +49,31 @@ const Index = () => {
   const navigate = useNavigate();
   const [surpriseMeOpen, setSurpriseMeOpen] = useState(false);
   const [bestHikesOpen, setBestHikesOpen] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  // Random hero image on page load
+  const [currentHeroIndex] = useState(() => Math.floor(Math.random() * heroImages.length));
+
+  const handleFindCampsNearMe = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setIsGettingLocation(false);
+        navigate(`/dispersed?lat=${latitude}&lng=${longitude}&name=My%20Location`);
+      },
+      (error) => {
+        setIsGettingLocation(false);
+        console.error('Geolocation error:', error);
+        alert('Unable to get your location. Please check your browser permissions.');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  };
 
   const handleTripClick = (tripId: string, tripName: string) => {
     loadSavedTrip(tripId);
@@ -86,9 +118,22 @@ const Index = () => {
 
               {/* Quick Links */}
               <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
-                <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/80 transition-colors shadow-sm">
-                  <Tent className="w-4 h-4" weight="fill" />
-                  Find camps near me
+                <button
+                  onClick={handleFindCampsNearMe}
+                  disabled={isGettingLocation}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/80 transition-colors shadow-sm disabled:opacity-70"
+                >
+                  {isGettingLocation ? (
+                    <>
+                      <SpinnerGap className="w-4 h-4 animate-spin" />
+                      Getting location...
+                    </>
+                  ) : (
+                    <>
+                      <Tent className="w-4 h-4" weight="fill" />
+                      Find camps near me
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={() => setBestHikesOpen(true)}
@@ -404,6 +449,14 @@ const Index = () => {
             </div>
           </section>
         )}
+
+        {/* Full-width hero image section with parallax */}
+        <div className="w-full h-64 md:h-80 lg:h-[28rem] relative overflow-hidden">
+          <div
+            className="absolute inset-0 bg-cover bg-center bg-fixed"
+            style={{ backgroundImage: `url(${heroImages[currentHeroIndex]})` }}
+          />
+        </div>
       </div>
 
       <main className="container px-4 md:px-6 py-8 md:py-12">
