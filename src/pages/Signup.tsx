@@ -86,7 +86,7 @@ const Signup = () => {
               <p className="text-muted-foreground mt-4 text-sm">
                 Click the link in the email to verify your account and start planning your adventures.
               </p>
-              <div className="mt-6 pt-6 border-t border-border">
+              <div className="mt-6 pt-6 border-t border-border space-y-4">
                 <p className="text-sm text-muted-foreground">
                   Didn't receive the email?{' '}
                   <button
@@ -96,6 +96,11 @@ const Signup = () => {
                     Try again
                   </button>
                 </p>
+                <Link to="/login">
+                  <Button variant="outline" className="w-full">
+                    Go to login
+                  </Button>
+                </Link>
               </div>
             </div>
           </div>
