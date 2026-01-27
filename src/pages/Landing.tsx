@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 // Landing page photos
+import mobileScreenshot from "@/images/landingpage/RW-home-mobile.png";
 import photo1 from "@/images/landingpage/DJI_0693.jpg";
 import photo2 from "@/images/landingpage/DSC09190.jpg";
 import photo3 from "@/images/landingpage/DJI_0879.jpg";
@@ -101,29 +102,101 @@ const testimonials = [
   },
 ];
 
-// Phone mockup component
+// Phone mockup component - iPhone 15 Pro style with Dynamic Island
 const PhoneMockup = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
   <div className={`relative ${className}`}>
-    {/* Phone frame - larger size with tilt and float animation */}
-    <div className="relative mx-auto w-[320px] h-[660px] md:w-[360px] md:h-[740px] bg-gray-900 rounded-[3rem] p-3 shadow-2xl transform rotate-[6deg] animate-float-slow">
-      {/* Inner bezel */}
-      <div className="absolute inset-3 bg-gray-800 rounded-[2.5rem]" />
+    {/* Phone frame - iPhone 15 Pro style */}
+    <div className="relative mx-auto w-[320px] h-[660px] md:w-[360px] md:h-[740px] bg-[#1a1a1a] rounded-[3.5rem] p-[10px] shadow-2xl transform rotate-[6deg] animate-float-slow border border-gray-700">
+      {/* Titanium edge highlight */}
+      <div className="absolute inset-0 rounded-[3.5rem] bg-gradient-to-br from-gray-600/20 via-transparent to-gray-800/20 pointer-events-none" />
 
       {/* Screen */}
-      <div className="relative h-full w-full bg-background rounded-[2.25rem] overflow-hidden border-[3px] border-gray-800">
-        {/* Notch */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-7 bg-gray-900 rounded-b-2xl z-10" />
+      <div className="relative h-full w-full bg-black rounded-[2.75rem] overflow-hidden">
+        {/* Dynamic Island */}
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 w-[100px] h-[32px] bg-black rounded-full z-20" />
 
-        {/* Screen content */}
-        <div className="h-full w-full overflow-hidden">
-          {children}
+        {/* Safari Browser Chrome */}
+        <div className="absolute inset-0 flex flex-col">
+          {/* Status bar with time, wifi, battery */}
+          <div className="h-14 bg-[#f5f5f5] dark:bg-[#1c1c1e] flex items-center justify-between px-6 pt-3">
+            {/* Time - left side */}
+            <span className="text-[13px] font-semibold text-black dark:text-white w-12">9:41</span>
+
+            {/* Center space for Dynamic Island */}
+            <div className="flex-1" />
+
+            {/* Right side - signal, wifi, battery */}
+            <div className="flex items-center gap-1.5">
+              {/* Cellular signal */}
+              <svg className="w-4 h-3" viewBox="0 0 18 12" fill="currentColor">
+                <rect x="0" y="8" width="3" height="4" rx="0.5" className="text-black dark:text-white" />
+                <rect x="5" y="5" width="3" height="7" rx="0.5" className="text-black dark:text-white" />
+                <rect x="10" y="2" width="3" height="10" rx="0.5" className="text-black dark:text-white" />
+                <rect x="15" y="0" width="3" height="12" rx="0.5" className="text-black dark:text-white" />
+              </svg>
+              {/* WiFi */}
+              <svg className="w-4 h-3" viewBox="0 0 16 12" fill="currentColor" className="text-black dark:text-white">
+                <path d="M8 9.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM3.5 7.5c1.2-1.2 2.8-1.9 4.5-1.9s3.3.7 4.5 1.9l-1.1 1.1c-.9-.9-2.1-1.4-3.4-1.4s-2.5.5-3.4 1.4L3.5 7.5zM1 5c1.9-1.9 4.4-2.9 7-2.9s5.1 1 7 2.9l-1.1 1.1C12.3 4.5 10.2 3.6 8 3.6S3.7 4.5 2.1 6.1L1 5z" />
+              </svg>
+              {/* Battery */}
+              <div className="flex items-center">
+                <div className="w-6 h-3 border border-black dark:border-white rounded-sm relative">
+                  <div className="absolute inset-[2px] right-[2px] bg-black dark:bg-white rounded-[1px]" />
+                </div>
+                <div className="w-[2px] h-1.5 bg-black dark:bg-white rounded-r-sm ml-[1px]" />
+              </div>
+            </div>
+          </div>
+
+          {/* Safari URL bar */}
+          <div className="bg-[#f5f5f5] dark:bg-[#1c1c1e] px-3 pb-2">
+            <div className="flex items-center gap-2 bg-[#e5e5e5] dark:bg-[#2c2c2e] rounded-xl px-3 py-2">
+              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <span className="text-[11px] text-gray-500 dark:text-gray-400 flex-1 text-center truncate">roamswild.com</span>
+              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Page content - scrollable */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide">
+            {children}
+          </div>
+
+          {/* Safari bottom toolbar */}
+          <div className="h-12 bg-[#f5f5f5] dark:bg-[#1c1c1e] flex items-center justify-around px-4 border-t border-gray-200 dark:border-gray-700">
+            <svg className="w-5 h-5 text-[#007AFF]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <svg className="w-5 h-5 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            <svg className="w-5 h-5 text-[#007AFF]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+            </svg>
+            <svg className="w-5 h-5 text-[#007AFF]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+            </svg>
+            <svg className="w-5 h-5 text-[#007AFF]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
+          </div>
+
+          {/* Home indicator */}
+          <div className="h-8 bg-[#f5f5f5] dark:bg-[#1c1c1e] flex items-center justify-center">
+            <div className="w-32 h-1 bg-black dark:bg-white rounded-full" />
+          </div>
         </div>
       </div>
 
-      {/* Side button */}
-      <div className="absolute right-[-3px] top-28 w-1 h-14 bg-gray-700 rounded-l" />
-      <div className="absolute left-[-3px] top-24 w-1 h-10 bg-gray-700 rounded-r" />
-      <div className="absolute left-[-3px] top-36 w-1 h-14 bg-gray-700 rounded-r" />
+      {/* Side buttons */}
+      <div className="absolute right-[-2px] top-32 w-[3px] h-16 bg-[#2a2a2a] rounded-l" />
+      <div className="absolute left-[-2px] top-28 w-[3px] h-8 bg-[#2a2a2a] rounded-r" />
+      <div className="absolute left-[-2px] top-40 w-[3px] h-12 bg-[#2a2a2a] rounded-r" />
+      <div className="absolute left-[-2px] top-56 w-[3px] h-12 bg-[#2a2a2a] rounded-r" />
     </div>
   </div>
 );
@@ -475,7 +548,11 @@ const Landing = () => {
 
               {/* Phone - IN FRONT (z-10) */}
               <PhoneMockup className="relative z-10">
-                <AppScreenshot />
+                <img
+                  src={mobileScreenshot}
+                  alt="RoamsWild app screenshot"
+                  className="w-full"
+                />
               </PhoneMockup>
             </div>
           </div>
