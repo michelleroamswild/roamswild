@@ -42,7 +42,7 @@ const Signup = () => {
     const { error } = await signUp(email, password, name);
 
     if (error) {
-      setError(error.message);
+      setError('Unable to create account, please try again.');
       setIsLoading(false);
     } else {
       setSuccess(true);
