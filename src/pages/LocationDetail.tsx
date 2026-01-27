@@ -1,11 +1,20 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Mountains, NavigationArrow, Star, ShareNetwork, ArrowSquareOut, Compass, Plus, Trash, Boot, Path, Calendar, Tent, SpinnerGap, Camera, CaretDown, CaretUp, X, Tree, TreeEvergreen, Sun, Cloud, CloudRain, Snowflake, Wind } from "@phosphor-icons/react";
+import { ArrowLeft, MapPin, Mountains, NavigationArrow, Star, ShareNetwork, ArrowSquareOut, Compass, Plus, Trash, Boot, Path, Calendar, Tent, SpinnerGap, Camera, CaretDown, CaretUp, X, Tree, TreeEvergreen, Sun, Cloud, CloudRain, Snowflake, Wind, Shuffle, Binoculars, Drop } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { PacePreference, LodgingType } from "@/types/trip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useSavedLocations } from "@/context/SavedLocationsContext";
 import { GoogleMap } from "@/components/GoogleMap";
 import { Marker, InfoWindow, Polygon } from "@react-google-maps/api";
@@ -31,6 +40,27 @@ interface LocationState {
   address: string;
   lat: number;
   lng: number;
+  // Surprise Me data (optional)
+  surpriseMe?: {
+    regionId: string;
+    explanation: string;
+    distanceMiles: number;
+    driveTimeHours?: number;
+    biome?: string;
+    cautions?: string[];
+    anchor?: {
+      road: { name: string | null; ref: string | null; surface: string; highway: string };
+      center: { lat: number; lng: number };
+      lengthMiles: number;
+    };
+    highlights?: Array<{
+      type: 'viewpoint' | 'trail' | 'water' | 'camp';
+      name: string | null;
+      lat: number;
+      lon: number;
+      distanceMiles: number;
+    }>;
+  };
 }
 
 // Helper to get weather message based on elevation in feet
@@ -60,6 +90,121 @@ const PUBLIC_LAND_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURICompon
 
 const MARKER_SIZE = 38;
 
+// Highlight type icons and colors
+const HIGHLIGHT_ICONS: Record<string, React.ReactNode> = {
+  viewpoint: <Binoculars className="w-3.5 h-3.5" weight="fill" />,
+  trail: <Path className="w-3.5 h-3.5" weight="fill" />,
+  water: <Drop className="w-3.5 h-3.5" weight="fill" />,
+  camp: <Tent className="w-3.5 h-3.5" weight="fill" />,
+};
+
+// Colors with better contrast ratios (darker text, lighter bg for accessibility)
+const HIGHLIGHT_COLORS: Record<string, string> = {
+  viewpoint: 'text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/40',
+  trail: 'text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/40',
+  water: 'text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40',
+  camp: 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40',
+};
+
+// Surprise Me Banner Component
+function SurpriseMeBanner({ surpriseMe }: { surpriseMe: NonNullable<LocationState['surpriseMe']> }) {
+  return (
+    <Card className="bg-gradient-to-br from-terracotta/15 via-primary/10 to-terracotta/5 border-terracotta/40 shadow-md">
+      <CardContent className="p-5">
+        {/* Header - More prominent */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-terracotta/20 flex items-center justify-center">
+            <Shuffle className="w-5 h-5 text-terracotta" weight="bold" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">Surprise Me Discovery</p>
+            <p className="text-sm text-foreground/70">
+              {Math.round(surpriseMe.distanceMiles)} mi away
+              {surpriseMe.driveTimeHours && ` · ~${surpriseMe.driveTimeHours.toFixed(1)} hr drive`}
+            </p>
+          </div>
+        </div>
+
+        {/* Explanation - Better contrast */}
+        <p className="text-sm text-foreground/90 leading-relaxed mb-4">
+          {surpriseMe.explanation}
+        </p>
+
+        {/* Scenic Drive Anchor - More prominent */}
+        {surpriseMe.anchor && (
+          <button
+            onClick={() => {
+              window.open(
+                `https://www.google.com/maps/dir/?api=1&destination=${surpriseMe.anchor!.center.lat},${surpriseMe.anchor!.center.lng}`,
+                '_blank'
+              );
+            }}
+            className="w-full p-4 rounded-xl bg-card border border-border shadow-sm mb-4 hover:shadow-md hover:border-primary/30 transition-all text-left"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <NavigationArrow className="w-5 h-5 text-primary" weight="fill" />
+                <p className="text-sm font-semibold text-foreground">Scenic Drive</p>
+              </div>
+              <ArrowSquareOut className="w-4 h-4 text-foreground/60" />
+            </div>
+            <p className="text-sm text-foreground/80">
+              {surpriseMe.anchor.road.name || surpriseMe.anchor.road.ref || 'Unnamed road'}
+              {surpriseMe.anchor.lengthMiles > 0 && (
+                <span className="text-sm ml-2 text-foreground/60">({surpriseMe.anchor.lengthMiles.toFixed(1)} mi)</span>
+              )}
+            </p>
+            {surpriseMe.anchor.road.surface !== 'unknown' && (
+              <p className="text-xs text-foreground/60 mt-1 capitalize">
+                {surpriseMe.anchor.road.surface} surface
+              </p>
+            )}
+          </button>
+        )}
+
+        {/* Nearby Highlights - Better labeled */}
+        {surpriseMe.highlights && surpriseMe.highlights.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wide mb-2">Nearby Highlights</p>
+            <div className="flex flex-wrap gap-2">
+              {surpriseMe.highlights.slice(0, 4).map((highlight, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    window.open(
+                      `https://www.google.com/maps/search/?api=1&query=${highlight.lat},${highlight.lon}`,
+                      '_blank'
+                    );
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg hover:opacity-80 transition-opacity ${HIGHLIGHT_COLORS[highlight.type] || 'bg-muted text-foreground/70'}`}
+                >
+                  {HIGHLIGHT_ICONS[highlight.type] || <MapPin className="w-3.5 h-3.5" />}
+                  <span className="text-xs font-medium truncate max-w-[100px]">
+                    {highlight.name || highlight.type.charAt(0).toUpperCase() + highlight.type.slice(1)}
+                  </span>
+                  <ArrowSquareOut className="w-3 h-3 opacity-70 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Cautions - Better contrast with amber-700 */}
+        {surpriseMe.cautions && surpriseMe.cautions.length > 0 && (
+          <div className="p-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700/50">
+            <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-1">Heads up</p>
+            <ul className="text-xs text-amber-700 dark:text-amber-300 space-y-0.5">
+              {surpriseMe.cautions.slice(0, 2).map((caution, i) => (
+                <li key={i}>• {caution}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 const LocationDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -76,11 +221,24 @@ const LocationDetail = () => {
 
   // Trip planning state
   const [tripDuration, setTripDuration] = useState<number[]>([3]);
-  const [activitiesPerDay, setActivitiesPerDay] = useState<number[]>([1]);
+  const [activities, setActivities] = useState<string[]>(['hiking']);
+  const [pacePreference, setPacePreference] = useState<PacePreference>('moderate');
+  const [globalLodging, setGlobalLodging] = useState<LodgingType>('dispersed');
   const [sameCampsite, setSameCampsite] = useState(false);
+  const [itineraryModalOpen, setItineraryModalOpen] = useState(false);
 
   // Get location from router state (search) or from saved locations
   const stateLocation = routerLocation.state as LocationState | null;
+
+  // Preserve surprise me data in state so it persists after saving
+  const [surpriseMeData, setSurpriseMeData] = useState<LocationState['surpriseMe'] | null>(null);
+
+  // Capture surprise me data on initial load from router state
+  useEffect(() => {
+    if (stateLocation?.surpriseMe && !surpriseMeData) {
+      setSurpriseMeData(stateLocation.surpriseMe);
+    }
+  }, [stateLocation?.surpriseMe]);
   const savedLocation = locations.find(l => l.placeId === id || l.id === id);
 
   // Combine into a unified location object
@@ -275,7 +433,14 @@ const LocationDetail = () => {
 
   const handleGenerateTrip = async () => {
     if (!location) return;
-    
+
+    // Map pace preference to activities per day
+    const paceToActivities: Record<PacePreference, number> = {
+      relaxed: 1,
+      moderate: 2,
+      packed: 3,
+    };
+
     const tripConfig = {
       name: `Trip to ${location.name}`,
       duration: tripDuration[0],
@@ -288,7 +453,10 @@ const LocationDetail = () => {
         address: location.address,
         coordinates: { lat: location.lat, lng: location.lng },
       },
-      activitiesPerDay: activitiesPerDay[0],
+      activities: activities,
+      pacePreference: pacePreference,
+      activitiesPerDay: paceToActivities[pacePreference],
+      globalLodging: globalLodging,
       sameCampsite: sameCampsite,
     };
 
@@ -313,54 +481,28 @@ const LocationDetail = () => {
                   <ArrowLeft className="w-5 h-5" />
                 </Button>
               </Link>
-              <div>
-                <h1 className="text-xl font-display font-bold text-foreground">{location.name}</h1>
-                <p className="text-sm text-muted-foreground">{location.type}</p>
-              </div>
+              <h1 className="text-xl font-display font-bold text-foreground truncate">{location.name}</h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleCreateTrip}
-                className="hidden sm:flex"
-              >
-                <Path className="w-4 h-4 mr-2" />
-                Create Trip
-              </Button>
-              <Button
-                variant="primary"
-                size="icon"
-                className="rounded-full sm:hidden"
-                onClick={handleCreateTrip}
-                title="Create Trip"
-              >
-                <Path className="w-5 h-5" />
-              </Button>
               {isSaved ? (
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full"
+                  variant="tertiary"
+                  size="sm"
                   onClick={handleRemoveLocation}
-                  title="Remove from favorites"
                 >
-                  <Star className="w-5 h-5 text-terracotta fill-terracotta" />
+                  <Star className="w-4 h-4 mr-2" weight="fill" />
+                  Saved
                 </Button>
               ) : (
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full"
+                  variant="tertiary"
+                  size="sm"
                   onClick={handleSaveLocation}
-                  title="Add to favorites"
                 >
-                  <Star className="w-5 h-5" />
+                  <Star className="w-4 h-4 mr-2" />
+                  Save
                 </Button>
               )}
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <ShareNetwork className="w-5 h-5" />
-              </Button>
             </div>
           </div>
         </div>
@@ -382,7 +524,7 @@ const LocationDetail = () => {
                     position={{ lat: location.lat, lng: location.lng }}
                     icon={createMarkerIcon('viewpoint', { size: 40 })}
                   />
-                  {/* Nearby camp spots markers (tent icon) */}
+                  {/* ARCHIVED: Nearby camp spots markers (tent icon) - will be replaced with explore page content
                   {nearbyPlaces.map((place) => (
                     <Marker
                       key={place.id}
@@ -397,6 +539,7 @@ const LocationDetail = () => {
                       }}
                     />
                   ))}
+                  */}
                   {/* Nearby hikes markers (boot icon) */}
                   {hikes.map((hike) => (
                     <Marker
@@ -431,7 +574,7 @@ const LocationDetail = () => {
                       }}
                     />
                   ))}
-                  {/* Public lands polygon overlays */}
+                  {/* ARCHIVED: Public lands polygon overlays - will be replaced with explore page content
                   {showPublicLands && publicLands.map((land) => (
                     land.polygon ? (
                       <Polygon
@@ -454,6 +597,7 @@ const LocationDetail = () => {
                       />
                     ) : null
                   ))}
+                  */}
                   {/* Info popup for selected photo hotspot */}
                   {selectedPhotoHotspot && (
                     <InfoWindow
@@ -484,7 +628,7 @@ const LocationDetail = () => {
                       </div>
                     </InfoWindow>
                   )}
-                  {/* Info popup for selected public land */}
+                  {/* ARCHIVED: Info popup for selected public land
                   {selectedPublicLand && (
                     <InfoWindow
                       position={{ lat: selectedPublicLand.lat, lng: selectedPublicLand.lng }}
@@ -530,7 +674,8 @@ const LocationDetail = () => {
                       </div>
                     </InfoWindow>
                   )}
-                  {/* Info popup for selected place */}
+                  */}
+                  {/* ARCHIVED: Info popup for selected place
                   {selectedPlace && (
                     <InfoWindow
                       position={{ lat: selectedPlace.lat, lng: selectedPlace.lng }}
@@ -607,6 +752,7 @@ const LocationDetail = () => {
                       </div>
                     </InfoWindow>
                   )}
+                  */}
                   {/* Info popup for selected hike */}
                   {selectedHike && (
                     <InfoWindow
@@ -687,107 +833,96 @@ const LocationDetail = () => {
           </div>
 
           {/* Info Panel */}
-          <div className="order-1 lg:order-2 space-y-4 p-6 lg:h-[calc(100vh-73px)] lg:overflow-y-auto">
-            {/* Location Info */}
-            <Card className="bg-gradient-card">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
-                  <div className="flex items-center justify-center w-14 h-14 bg-primary/10 rounded-xl">
-                    <MapPin className="w-7 h-7 text-primary" />
+          <div className="order-1 lg:order-2 space-y-5 p-6 lg:h-[calc(100vh-73px)] lg:overflow-y-auto">
+            {/* Location Info Card with integrated stats - Always at top */}
+            <Card className="bg-gradient-card overflow-hidden">
+              <CardContent className="p-5">
+                {/* Header */}
+                <div className="flex items-start gap-4 mb-5">
+                  <div className="flex items-center justify-center w-12 h-12 bg-primary/10 rounded-xl flex-shrink-0">
+                    <MapPin className="w-6 h-6 text-primary" />
                   </div>
-                  <div className="flex-1">
-                    <h2 className="text-xl font-display font-bold text-foreground">{location.name}</h2>
-                    <p className="text-muted-foreground mt-1">{location.address}</p>
-                    <span className="inline-block mt-2 px-3 py-1 bg-secondary rounded-full text-sm text-foreground">
-                      {location.type}
-                    </span>
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-lg font-display font-bold text-foreground leading-tight">{location.name}</h2>
+                    <p className="text-sm text-foreground/70 mt-1 line-clamp-2">{location.address}</p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
 
-            {/* Quick Stats */}
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="text-lg font-display font-semibold text-foreground mb-4">Details</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-secondary/50 rounded-xl">
-                    <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                {/* Stats Row */}
+                <div className="grid grid-cols-3 gap-3">
+                  {/* Elevation */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-full bg-lavenderslate/20 flex items-center justify-center flex-shrink-0">
                       <Mountains className="w-4 h-4 text-lavenderslate" />
-                      <span className="text-sm">Elevation</span>
                     </div>
-                    {elevation !== null ? (
-                      <>
-                        <p className="text-xl font-bold text-foreground">
+                    <div className="min-w-0">
+                      <p className="text-xs text-foreground/60">Elevation</p>
+                      {elevation !== null ? (
+                        <p className="text-sm font-bold text-foreground truncate">
                           {Math.round(elevation * 3.28084).toLocaleString()} ft
                         </p>
-                        <p className="text-xs text-muted-foreground">
-                          {Math.round(elevation).toLocaleString()} m
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-xl font-bold text-foreground">--</p>
-                        <p className="text-xs text-muted-foreground">Loading...</p>
-                      </>
-                    )}
+                      ) : (
+                        <p className="text-sm font-bold text-foreground/30">--</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="p-4 bg-secondary/50 rounded-xl">
-                    <div className="flex items-center gap-2 text-muted-foreground mb-1">
+
+                  {/* Weather */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-full bg-skyblue/20 flex items-center justify-center flex-shrink-0">
                       {weatherLoading ? (
-                        <SpinnerGap className="w-4 h-4 animate-spin" />
+                        <SpinnerGap className="w-4 h-4 text-skyblue animate-spin" />
                       ) : weather ? (
                         (() => {
                           const WeatherIcon = getWeatherIcon(weather.shortForecast);
-                          return <WeatherIcon className="w-4 h-4" />;
+                          return <WeatherIcon className="w-4 h-4 text-skyblue" />;
                         })()
                       ) : (
-                        <Sun className="w-4 h-4" />
+                        <Sun className="w-4 h-4 text-skyblue" />
                       )}
-                      <span className="text-sm">Weather</span>
                     </div>
-                    {weatherLoading ? (
-                      <>
-                        <p className="text-xl font-bold text-foreground">--</p>
-                        <p className="text-xs text-muted-foreground">Loading...</p>
-                      </>
-                    ) : weather ? (
-                      <>
-                        <p className="text-xl font-bold text-foreground">
+                    <div className="min-w-0">
+                      <p className="text-xs text-foreground/60">Weather</p>
+                      {weather ? (
+                        <p className="text-sm font-bold text-foreground truncate">
                           {weather.temperature}°{weather.temperatureUnit}
                         </p>
-                        <p className="text-xs text-muted-foreground truncate" title={weather.shortForecast}>
-                          {weather.shortForecast}
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-xl font-bold text-foreground">--</p>
-                        <p className="text-xs text-muted-foreground">Unavailable</p>
-                      </>
-                    )}
-                  </div>
-                  <div className="p-4 bg-secondary/50 rounded-xl col-span-2">
-                    <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                      <MapPin className="w-4 h-4" />
-                      <span className="text-sm">Coordinates</span>
+                      ) : (
+                        <p className="text-sm font-bold text-foreground/30">--</p>
+                      )}
                     </div>
-                    <p className="text-sm font-bold text-foreground">
-                      {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
-                    </p>
+                  </div>
+
+                  {/* Coordinates */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-full bg-softamber/20 flex items-center justify-center flex-shrink-0">
+                      <Compass className="w-4 h-4 text-softamber" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-foreground/60">Coords</p>
+                      <p className="text-sm font-bold text-foreground truncate">
+                        {location.lat.toFixed(2)}°, {location.lng.toFixed(2)}°
+                      </p>
+                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* 5-Day Photo Forecast */}
+            {/* Surprise Me Banner */}
+            {surpriseMeData && (
+              <SurpriseMeBanner surpriseMe={surpriseMeData} />
+            )}
+
+            {/* ARCHIVED: 5-Day Photo Forecast - keeping code for reference
             <FiveDayPhotoForecast
               forecast={photoWeather}
               loading={photoWeatherLoading}
               compact
             />
+            */}
 
-            {/* Photography Weather Conditions */}
+            {/* ARCHIVED: Photography Weather Conditions - keeping code for reference
             <PhotoWeatherCard
               forecast={photoWeather}
               loading={photoWeatherLoading}
@@ -795,108 +930,10 @@ const LocationDetail = () => {
               fetchedAt={photoWeatherFetchedAt}
               onRefresh={refetchPhotoWeather}
             />
+            */}
 
-            {/* Plan a Trip */}
-            <Card className="bg-gradient-to-br from-primary/5 to-terracotta/5 border-primary/20">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-display font-semibold text-foreground mb-4 flex items-center gap-2">
-                  <Compass className="w-5 h-5 text-primary" />
-                  Plan a Trip Here
-                </h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Create an itinerary based around this location with nearby hikes and campsites.
-                </p>
 
-                <div className="space-y-6">
-                  {/* Duration Slider */}
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <label className="text-sm font-medium text-foreground flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-muted-foreground" />
-                        Duration
-                      </label>
-                      <span className="text-2xl font-bold text-foreground">
-                        {tripDuration[0]} {tripDuration[0] === 1 ? 'day' : 'days'}
-                      </span>
-                    </div>
-                    <Slider
-                      value={tripDuration}
-                      onValueChange={setTripDuration}
-                      min={1}
-                      max={14}
-                      step={1}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                      <span>1 day</span>
-                      <span>14 days</span>
-                    </div>
-                  </div>
-
-                  {/* Hikes per day Slider */}
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <label className="text-sm font-medium text-foreground flex items-center gap-2">
-                        <Boot className="w-4 h-4 text-pinesoft" />
-                        Hikes per day
-                      </label>
-                      <span className="text-2xl font-bold text-foreground">
-                        {activitiesPerDay[0]} {activitiesPerDay[0] === 1 ? 'hike' : 'hikes'}
-                      </span>
-                    </div>
-                    <Slider
-                      value={activitiesPerDay}
-                      onValueChange={setActivitiesPerDay}
-                      min={1}
-                      max={5}
-                      step={1}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                      <span>1 hike</span>
-                      <span>5 hikes</span>
-                    </div>
-                  </div>
-
-                  {/* Same campsite toggle */}
-                  <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Tent className="w-4 h-4 text-wildviolet" />
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Base Camp Mode</p>
-                        <p className="text-xs text-muted-foreground">Stay at the same campsite each night</p>
-                      </div>
-                    </div>
-                    <Switch checked={sameCampsite} onCheckedChange={setSameCampsite} />
-                  </div>
-
-                  {tripError && (
-                    <p className="text-sm text-destructive">{tripError}</p>
-                  )}
-
-                  <Button
-                    variant="primary"
-                    className="w-full"
-                    onClick={handleGenerateTrip}
-                    disabled={generating}
-                  >
-                    {generating ? (
-                      <>
-                        <SpinnerGap className="w-4 h-4 mr-2 animate-spin" />
-                        Generating Trip...
-                      </>
-                    ) : (
-                      <>
-                        <Compass className="w-4 h-4 mr-2" />
-                        Generate {tripDuration[0]}-Day Itinerary
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Nearby Camp Spots */}
+            {/* ARCHIVED: Nearby Camp Spots - will be replaced with explore page content
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
@@ -962,157 +999,211 @@ const LocationDetail = () => {
                 )}
               </CardContent>
             </Card>
+            */}
 
-            {/* Nearby Hikes */}
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="text-lg font-display font-semibold text-foreground mb-4">
-                  Nearby Hikes
-                </h3>
-                {hikesLoading ? (
-                  <div className="text-center py-4 text-muted-foreground">
-                    <p>Finding nearby trails...</p>
-                  </div>
-                ) : hikes.length > 0 ? (
-                  <div className="space-y-3">
-                    {hikes.slice(0, 5).map((hike) => (
-                      <div
-                        key={hike.id}
-                        className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors cursor-pointer"
-                        onClick={() => {
-                          window.open(
-                            `https://www.google.com/maps/search/?api=1&query=${hike.lat},${hike.lng}`,
-                            '_blank'
-                          );
-                        }}
-                      >
-                        <div className="flex items-center justify-center w-10 h-10 bg-pinesoft/10 rounded-lg flex-shrink-0">
-                          <Boot className="w-5 h-5 text-pinesoft" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-foreground truncate">
-                            {hike.name}
-                          </p>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            {hike.rating ? (
-                              <span className="flex items-center gap-1">
-                                <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                                {hike.rating.toFixed(1)}
-                                {hike.reviewCount && (
-                                  <span className="text-xs">({hike.reviewCount})</span>
-                                )}
-                              </span>
-                            ) : (
-                              <span>{hike.location}</span>
-                            )}
-                          </div>
-                        </div>
-                        <ArrowSquareOut className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      </div>
-                    ))}
-                    {hikes.length > 5 && (
-                      <p className="text-sm text-muted-foreground text-center pt-2">
-                        +{hikes.length - 5} more hikes nearby
-                      </p>
+            {/* Section Divider - Explore */}
+            <div className="flex items-center gap-3 pt-2">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs font-semibold text-foreground/50 uppercase tracking-wider">Things To Do</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
+            {/* Three Column Layout for Hikes, Camping, Photos */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Nearby Hikes */}
+              <Card id="hikes-section" className="flex flex-col">
+                <CardContent className="p-4 flex-1">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Boot className="w-5 h-5 text-pinesoft" />
+                    <h3 className="text-sm font-display font-semibold text-foreground">
+                      Hikes
+                    </h3>
+                    {hikes.length > 0 && (
+                      <span className="text-xs text-foreground/50 ml-auto">{hikes.length}</span>
                     )}
                   </div>
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground">
-                    <Boot className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p>No hikes found within 30 miles</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Photo Hotspots */}
-            {photoHotspots.length > 0 && (
-              <Card>
-                <CardContent className="p-4">
-                  <button
-                    onClick={() => setPhotoHotspotsExpanded(!photoHotspotsExpanded)}
-                    className="w-full flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Camera className="w-5 h-5 text-blushorchid" />
-                      <h3 className="font-semibold text-foreground">Photo Hotspots</h3>
-                      <span className="text-xs text-muted-foreground">({photoHotspots.length})</span>
+                  {hikesLoading ? (
+                    <div className="text-center py-4 text-foreground/60">
+                      <SpinnerGap className="w-5 h-5 mx-auto mb-2 animate-spin" />
+                      <p className="text-xs">Finding trails...</p>
                     </div>
-                    {photoHotspotsExpanded ? (
-                      <CaretUp className="w-5 h-5 text-muted-foreground" />
-                    ) : (
-                      <CaretDown className="w-5 h-5 text-muted-foreground" />
-                    )}
-                  </button>
-
-                  {photoHotspotsExpanded && (
-                    <div className="mt-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">via Flickr</span>
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor="show-hotspots-loc" className="text-sm text-muted-foreground">
-                            Show on map
-                          </Label>
-                          <Switch
-                            id="show-hotspots-loc"
-                            checked={showPhotoHotspots}
-                            onCheckedChange={setShowPhotoHotspots}
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        {photoHotspots.slice(0, 5).map((hotspot) => (
-                          <div
-                            key={hotspot.id}
-                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-orange-500/10 transition-colors"
-                          >
-                            {hotspot.samplePhotoUrl ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEnlargedPhoto({ url: hotspot.samplePhotoUrl!, name: hotspot.name });
-                                }}
-                                className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-orange-500 transition-all"
-                              >
-                                <img
-                                  src={hotspot.samplePhotoUrl}
-                                  alt={hotspot.name}
-                                  className="w-full h-full object-cover"
-                                />
-                              </button>
-                            ) : (
-                              <div className="w-10 h-10 rounded-lg bg-blushorchid/20 flex items-center justify-center flex-shrink-0">
-                                <Camera className="w-5 h-5 text-blushorchid" />
+                  ) : hikes.length > 0 ? (
+                    <div className="space-y-2">
+                      {hikes.slice(0, 4).map((hike) => (
+                        <div
+                          key={hike.id}
+                          className="flex items-center gap-2 p-2 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors cursor-pointer"
+                          onClick={() => {
+                            window.open(
+                              `https://www.google.com/maps/search/?api=1&query=${hike.lat},${hike.lng}`,
+                              '_blank'
+                            );
+                          }}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-foreground text-xs truncate">
+                              {hike.name}
+                            </p>
+                            {hike.rating && (
+                              <div className="flex items-center gap-1 text-xs text-foreground/60">
+                                <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                                <span>{hike.rating.toFixed(1)}</span>
                               </div>
                             )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedPlace(null);
-                                setSelectedHike(null);
-                                setSelectedPhotoHotspot(hotspot);
-                                setShowPhotoHotspots(true);
-                              }}
-                              className="flex-1 min-w-0 text-left"
-                            >
-                              <p className="font-medium text-foreground text-sm truncate">
-                                {hotspot.name}
-                              </p>
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Camera className="w-3 h-3" />
-                                <span>{hotspot.photoCount.toLocaleString()} photos</span>
-                              </div>
-                            </button>
                           </div>
-                        ))}
-                      </div>
+                          <ArrowSquareOut className="w-3 h-3 text-foreground/40 flex-shrink-0" />
+                        </div>
+                      ))}
+                      {hikes.length > 4 && (
+                        <p className="text-xs text-foreground/50 text-center pt-1">
+                          +{hikes.length - 4} more
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-foreground/50">
+                      <Boot className="w-6 h-6 mx-auto mb-1 opacity-40" />
+                      <p className="text-xs">No hikes found</p>
                     </div>
                   )}
                 </CardContent>
               </Card>
-            )}
 
-            {/* Public Lands for Dispersed Camping */}
+              {/* Camping Section */}
+              <Card id="camp-section" className="flex flex-col">
+                <CardContent className="p-4 flex-1">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Tent className="w-5 h-5 text-wildviolet" />
+                    <h3 className="text-sm font-display font-semibold text-foreground">
+                      Camping
+                    </h3>
+                    {nearbyPlaces.length > 0 && (
+                      <span className="text-xs text-foreground/50 ml-auto">{nearbyPlaces.length}</span>
+                    )}
+                  </div>
+                  {nearbyLoading ? (
+                    <div className="text-center py-4 text-foreground/60">
+                      <SpinnerGap className="w-5 h-5 mx-auto mb-2 animate-spin" />
+                      <p className="text-xs">Finding campsites...</p>
+                    </div>
+                  ) : nearbyPlaces.length > 0 ? (
+                    <div className="space-y-2">
+                      {nearbyPlaces.slice(0, 4).map((place) => (
+                        <div
+                          key={place.id}
+                          className="flex items-center gap-2 p-2 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors cursor-pointer"
+                          onClick={() => {
+                            if (place.source === 'ridb') {
+                              const facilityId = place.id.replace('ridb-', '');
+                              window.open(
+                                `https://www.recreation.gov/camping/campgrounds/${facilityId}`,
+                                '_blank'
+                              );
+                            } else {
+                              window.open(
+                                `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`,
+                                '_blank'
+                              );
+                            }
+                          }}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-foreground text-xs truncate">
+                              {place.name}
+                            </p>
+                            <p className="text-xs text-foreground/60">
+                              {place.distance.toFixed(1)} mi
+                              {place.source === 'ridb' && <span className="text-blue-600 ml-1">• Rec.gov</span>}
+                            </p>
+                          </div>
+                          <ArrowSquareOut className="w-3 h-3 text-foreground/40 flex-shrink-0" />
+                        </div>
+                      ))}
+                      {nearbyPlaces.length > 4 && (
+                        <p className="text-xs text-foreground/50 text-center pt-1">
+                          +{nearbyPlaces.length - 4} more
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-foreground/50">
+                      <Tent className="w-6 h-6 mx-auto mb-1 opacity-40" />
+                      <p className="text-xs">No campsites found</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Photo Hotspots */}
+              <Card id="photo-section" className="flex flex-col">
+                <CardContent className="p-4 flex-1">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Camera className="w-5 h-5 text-blushorchid" />
+                    <h3 className="text-sm font-display font-semibold text-foreground">
+                      Photos
+                    </h3>
+                    {photoHotspots.length > 0 && (
+                      <span className="text-xs text-foreground/50 ml-auto">{photoHotspots.length}</span>
+                    )}
+                  </div>
+                  {photoHotspotsLoading ? (
+                    <div className="text-center py-4 text-foreground/60">
+                      <SpinnerGap className="w-5 h-5 mx-auto mb-2 animate-spin" />
+                      <p className="text-xs">Finding spots...</p>
+                    </div>
+                  ) : photoHotspots.length > 0 ? (
+                    <div className="space-y-2">
+                      {photoHotspots.slice(0, 4).map((hotspot) => (
+                        <div
+                          key={hotspot.id}
+                          className="flex items-center gap-2 p-2 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors cursor-pointer"
+                          onClick={() => {
+                            if (hotspot.samplePhotoUrl) {
+                              setEnlargedPhoto({ url: hotspot.samplePhotoUrl, name: hotspot.name });
+                            } else {
+                              setSelectedPhotoHotspot(hotspot);
+                              setShowPhotoHotspots(true);
+                            }
+                          }}
+                        >
+                          {hotspot.samplePhotoUrl ? (
+                            <img
+                              src={hotspot.samplePhotoUrl}
+                              alt={hotspot.name}
+                              className="w-8 h-8 rounded object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded bg-blushorchid/15 flex items-center justify-center flex-shrink-0">
+                              <Camera className="w-4 h-4 text-blushorchid" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-foreground text-xs truncate">
+                              {hotspot.name}
+                            </p>
+                            <p className="text-xs text-foreground/60">
+                              {hotspot.photoCount.toLocaleString()} photos
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                      {photoHotspots.length > 4 && (
+                        <p className="text-xs text-foreground/50 text-center pt-1">
+                          +{photoHotspots.length - 4} more
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-foreground/50">
+                      <Camera className="w-6 h-6 mx-auto mb-1 opacity-40" />
+                      <p className="text-xs">No photo spots found</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>{/* End three column grid */}
+
+            {/* ARCHIVED: Public Lands for Dispersed Camping - will be replaced with explore page content
             <Card>
                 <CardContent className="p-4">
                   <button
@@ -1123,22 +1214,22 @@ const LocationDetail = () => {
                       <TreeEvergreen className="w-5 h-5 text-pinesoft" />
                       <h3 className="font-semibold text-foreground">Dispersed Camping Areas</h3>
                       {publicLands.length > 0 && (
-                        <span className="text-xs text-muted-foreground">({publicLands.length})</span>
+                        <span className="text-xs text-foreground/60">({publicLands.length})</span>
                       )}
                     </div>
                     {publicLandsExpanded ? (
-                      <CaretUp className="w-5 h-5 text-muted-foreground" />
+                      <CaretUp className="w-5 h-5 text-foreground/60" />
                     ) : (
-                      <CaretDown className="w-5 h-5 text-muted-foreground" />
+                      <CaretDown className="w-5 h-5 text-foreground/60" />
                     )}
                   </button>
 
                   {publicLandsExpanded && (
                     <div className="mt-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">BLM & US Forest Service lands</span>
+                        <span className="text-xs text-foreground/60">BLM & US Forest Service lands</span>
                         <div className="flex items-center gap-2">
-                          <Label htmlFor="show-lands" className="text-sm text-muted-foreground">
+                          <Label htmlFor="show-lands" className="text-sm text-foreground/60">
                             Show on map
                           </Label>
                           <Switch
@@ -1150,7 +1241,7 @@ const LocationDetail = () => {
                       </div>
 
                       {publicLandsLoading ? (
-                        <div className="text-center py-4 text-muted-foreground">
+                        <div className="text-center py-4 text-foreground/60">
                           <p>Finding nearby public lands...</p>
                         </div>
                       ) : publicLands.length > 0 ? (
@@ -1171,7 +1262,7 @@ const LocationDetail = () => {
                                 <p className="font-medium text-foreground text-sm truncate">
                                   {land.name}
                                 </p>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-2 text-xs text-foreground/60">
                                   <span>{land.managingAgency}</span>
                                   <span>•</span>
                                   <span>{land.distance.toFixed(1)} mi</span>
@@ -1180,39 +1271,249 @@ const LocationDetail = () => {
                             </div>
                           ))}
                           {publicLands.length > 5 && (
-                            <p className="text-sm text-muted-foreground text-center pt-2">
+                            <p className="text-sm text-foreground/60 text-center pt-2">
                               +{publicLands.length - 5} more areas nearby
                             </p>
                           )}
                         </div>
                       ) : (
-                        <div className="text-center py-4 text-muted-foreground">
+                        <div className="text-center py-4 text-foreground/60">
                           <TreeEvergreen className="w-8 h-8 mx-auto mb-2 opacity-30" />
                           <p>No BLM or Forest Service lands within 50 miles</p>
                         </div>
                       )}
 
-                      <p className="text-xs text-muted-foreground bg-secondary/50 p-2 rounded">
+                      <p className="text-xs text-foreground/70 bg-secondary/50 p-2 rounded">
                         Dispersed camping is generally allowed on BLM and National Forest lands. Always check local regulations and fire restrictions.
                       </p>
                     </div>
                   )}
                 </CardContent>
             </Card>
+            */}
 
-            {/* Actions */}
-            <div className="flex gap-3">
-              <Button variant="primary" size="lg" className="flex-1" onClick={handleGetDirections}>
-                <NavigationArrow className="w-4 h-4 mr-2" />
-                Get Directions
-              </Button>
-              <Button variant="outline" size="lg" onClick={handleOpenInMaps}>
-                <ArrowSquareOut className="w-4 h-4" />
+            {/* Create Itinerary Button */}
+            <div className="pt-4">
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={() => setItineraryModalOpen(true)}
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                Create Itinerary
               </Button>
             </div>
           </div>
         </div>
       </main>
+
+      {/* Create Itinerary Modal */}
+      <Dialog open={itineraryModalOpen} onOpenChange={setItineraryModalOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              Create Itinerary
+            </DialogTitle>
+            <DialogDescription>
+              Plan a trip to {location.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Duration Slider */}
+            <div className="space-y-3">
+              <Label>Trip Duration</Label>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-foreground/60">Days</span>
+                <span className="text-2xl font-bold text-foreground">{tripDuration[0]}</span>
+              </div>
+              <Slider
+                value={tripDuration}
+                onValueChange={setTripDuration}
+                min={1}
+                max={14}
+                step={1}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-foreground/50">
+                <span>1 day</span>
+                <span>14 days</span>
+              </div>
+            </div>
+
+            {/* Activities Selection */}
+            <div className="space-y-3 pt-2 border-t border-border">
+              <Label>Activities</Label>
+              {[
+                { id: "hiking", label: "Hiking", description: "Find trails and hikes along your route" },
+                { id: "photography", label: "Photography", description: "Find photo hotspots and scenic viewpoints" },
+                { id: "offroading", label: "Offroading", description: "Find trails and off-highway routes" },
+              ].map((activity) => {
+                const isSelected = activities.includes(activity.id);
+                return (
+                  <div
+                    key={activity.id}
+                    className={`rounded-lg border transition-colors ${
+                      isSelected ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                    }`}
+                  >
+                    <label
+                      htmlFor={`activity-${activity.id}`}
+                      className="flex items-start space-x-3 p-3 cursor-pointer"
+                    >
+                      <Checkbox
+                        id={`activity-${activity.id}`}
+                        checked={isSelected}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setActivities([...activities, activity.id]);
+                          } else {
+                            setActivities(activities.filter(id => id !== activity.id));
+                          }
+                        }}
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1 space-y-0.5">
+                        <span className="font-medium text-sm">{activity.label}</span>
+                        <p className="text-xs text-foreground/60">{activity.description}</p>
+                      </div>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Trip Pace */}
+            <div className="space-y-3 pt-2 border-t border-border">
+              <Label>Trip Pace</Label>
+              <p className="text-xs text-foreground/60 -mt-1">How packed do you want each day to be?</p>
+              <div className="grid gap-2">
+                {[
+                  { id: 'relaxed', label: 'Relaxed', description: 'Fewer activities, more downtime' },
+                  { id: 'moderate', label: 'Moderate', description: 'Balanced activity and rest' },
+                  { id: 'packed', label: 'Packed', description: 'Maximum activities each day' },
+                ].map((option) => (
+                  <label
+                    key={option.id}
+                    htmlFor={`pace-${option.id}`}
+                    className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                      pacePreference === option.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      id={`pace-${option.id}`}
+                      name="pace-preference"
+                      value={option.id}
+                      checked={pacePreference === option.id}
+                      onChange={(e) => setPacePreference(e.target.value as PacePreference)}
+                      className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="font-medium text-sm">{option.label}</span>
+                      <p className="text-xs text-foreground/60">{option.description}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Lodging Type */}
+            <div className="space-y-3 pt-2 border-t border-border">
+              <Label>Lodging Type</Label>
+              <div className="grid gap-2">
+                {[
+                  { id: 'dispersed', label: 'Dispersed Camping', description: 'Free camping on public lands' },
+                  { id: 'campground', label: 'Established Camping', description: 'Campgrounds with amenities' },
+                ].map((option) => (
+                  <label
+                    key={option.id}
+                    htmlFor={`lodging-${option.id}`}
+                    className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                      globalLodging === option.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      id={`lodging-${option.id}`}
+                      name="lodging-type"
+                      value={option.id}
+                      checked={globalLodging === option.id}
+                      onChange={(e) => setGlobalLodging(e.target.value as LodgingType)}
+                      className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="font-medium text-sm">{option.label}</span>
+                      <p className="text-xs text-foreground/60">{option.description}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Campsite Selection */}
+            <div className="space-y-3 pt-2 border-t border-border">
+              <Label>Campsite Selection</Label>
+              <div className="grid gap-2">
+                {[
+                  { id: 'best-each-night', label: 'Best campsite each night', description: 'Pick the best option for each night of your trip', baseCamp: false },
+                  { id: 'basecamp', label: 'Setup basecamp', description: 'Stay at the same campsite every night', baseCamp: true },
+                ].map((option) => (
+                  <label
+                    key={option.id}
+                    htmlFor={`campsite-${option.id}`}
+                    className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                      sameCampsite === option.baseCamp ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      id={`campsite-${option.id}`}
+                      name="campsite-selection"
+                      checked={sameCampsite === option.baseCamp}
+                      onChange={() => setSameCampsite(option.baseCamp)}
+                      className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="font-medium text-sm">{option.label}</span>
+                      <p className="text-xs text-foreground/60">{option.description}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setItineraryModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setItineraryModalOpen(false);
+                handleGenerateTrip();
+              }}
+              disabled={generating}
+            >
+              {generating ? (
+                <>
+                  <SpinnerGap className="w-4 h-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  Generate Trip
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Photo Lightbox */}
       {enlargedPhoto && (

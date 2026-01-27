@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { SearchBar } from "@/components/SearchBar";
 import { SavedLocations } from "@/components/SavedLocations";
 import { LocalConditionsWidget } from "@/components/LocalConditionsWidget";
 import { RecentSearchesWidget } from "@/components/RecentSearchesWidget";
+import { SurpriseMeDialog } from "@/components/SurpriseMeDialog";
+import { BestHikesTodayDialog } from "@/components/BestHikesTodayDialog";
 import { useTrip } from "@/context/TripContext";
 import { Path, Calendar, MapPinArea, CaretRight, Boot, ArrowRight, Users, Mountains, Tent, SunHorizon, Shuffle, Compass } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +16,8 @@ import { getTripUrl } from "@/utils/slugify";
 const Index = () => {
   const { savedTrips, loadSavedTrip, isLoading: tripsLoading } = useTrip();
   const navigate = useNavigate();
+  const [surpriseMeOpen, setSurpriseMeOpen] = useState(false);
+  const [bestHikesOpen, setBestHikesOpen] = useState(false);
 
   const handleTripClick = (tripId: string, tripName: string) => {
     loadSavedTrip(tripId);
@@ -47,11 +52,17 @@ const Index = () => {
                   <Tent className="w-4 h-4" weight="fill" />
                   Find camps near me
                 </button>
-                <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/80 transition-colors shadow-sm">
+                <button
+                  onClick={() => setBestHikesOpen(true)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/80 transition-colors shadow-sm"
+                >
                   <Compass className="w-4 h-4" weight="fill" />
                   Best hikes today
                 </button>
-                <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/80 transition-colors shadow-sm">
+                <button
+                  onClick={() => setSurpriseMeOpen(true)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/80 transition-colors shadow-sm"
+                >
                   <Shuffle className="w-4 h-4" weight="bold" />
                   Surprise me
                 </button>
@@ -287,6 +298,12 @@ const Index = () => {
           </div>
         </div>
       </footer>
+
+      {/* Surprise Me Dialog */}
+      <SurpriseMeDialog open={surpriseMeOpen} onOpenChange={setSurpriseMeOpen} />
+
+      {/* Best Hikes Today Dialog */}
+      <BestHikesTodayDialog open={bestHikesOpen} onOpenChange={setBestHikesOpen} />
     </div>
   );
 };
