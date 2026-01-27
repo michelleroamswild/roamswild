@@ -30,7 +30,7 @@ const Login = () => {
     const { error } = await signIn(email, password);
 
     if (error) {
-      setError(error.message);
+      setError('Unable to sign in, please check your email and password.');
       setIsLoading(false);
     } else {
       navigate(from, { replace: true });
