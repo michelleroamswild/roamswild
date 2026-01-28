@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, UserPlus, Clock, PaperPlaneTilt, SpinnerGap } from '@phosphor-icons/react';
+import { Users, UserPlus, Clock, PaperPlaneTilt, SpinnerGap, EnvelopeSimple } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Header } from '@/components/Header';
 import { useFriends } from '@/context/FriendsContext';
@@ -14,11 +14,13 @@ const Friends = () => {
     friends,
     incomingRequests,
     outgoingRequests,
+    pendingInvites,
     isLoading,
     sendFriendRequest,
     acceptRequest,
     rejectRequest,
     cancelRequest,
+    cancelInvite,
     removeFriend,
     blockUser,
   } = useFriends();
@@ -58,6 +60,14 @@ const Friends = () => {
     const success = await cancelRequest(friendshipId);
     if (success) {
       toast.success('Friend request cancelled');
+    }
+    return success;
+  };
+
+  const handleCancelInvite = async (inviteId: string) => {
+    const success = await cancelInvite(inviteId);
+    if (success) {
+      toast.success('Invite cancelled');
     }
     return success;
   };
@@ -206,13 +216,13 @@ const Friends = () => {
           >
             <PaperPlaneTilt className="w-4 h-4" />
             Sent
-            {outgoingRequests.length > 0 && (
+            {(outgoingRequests.length + pendingInvites.length) > 0 && (
               <span
                 className={`px-1.5 py-0.5 rounded-full text-xs ${
                   activeTab === 'sent' ? 'bg-primary-foreground/20' : 'bg-muted-foreground/20'
                 }`}
               >
-                {outgoingRequests.length}
+                {outgoingRequests.length + pendingInvites.length}
               </span>
             )}
           </button>
@@ -277,23 +287,56 @@ const Friends = () => {
             )}
 
             {activeTab === 'sent' && (
-              outgoingRequests.length === 0 ? (
+              outgoingRequests.length === 0 && pendingInvites.length === 0 ? (
                 renderEmptyState()
               ) : (
                 <div className="space-y-3">
-                  {outgoingRequests.map((outgoing, index) => (
-                    <div
-                      key={outgoing.id}
-                      className="animate-fade-in"
-                      style={{ animationDelay: `${index * 50}ms` }}
-                    >
-                      <FriendCard
-                        type="outgoing"
-                        outgoing={outgoing}
-                        onCancel={() => handleCancel(outgoing.id)}
-                      />
-                    </div>
-                  ))}
+                  {/* Pending invites (to non-users) */}
+                  {pendingInvites.length > 0 && (
+                    <>
+                      <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <EnvelopeSimple className="w-4 h-4" />
+                        Pending Invites
+                      </h3>
+                      {pendingInvites.map((invite, index) => (
+                        <div
+                          key={invite.id}
+                          className="animate-fade-in"
+                          style={{ animationDelay: `${index * 50}ms` }}
+                        >
+                          <FriendCard
+                            type="invite"
+                            invite={invite}
+                            onCancelInvite={() => handleCancelInvite(invite.id)}
+                          />
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {/* Outgoing requests (to existing users) */}
+                  {outgoingRequests.length > 0 && (
+                    <>
+                      {pendingInvites.length > 0 && (
+                        <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2 mt-6">
+                          <PaperPlaneTilt className="w-4 h-4" />
+                          Pending Requests
+                        </h3>
+                      )}
+                      {outgoingRequests.map((outgoing, index) => (
+                        <div
+                          key={outgoing.id}
+                          className="animate-fade-in"
+                          style={{ animationDelay: `${(pendingInvites.length + index) * 50}ms` }}
+                        >
+                          <FriendCard
+                            type="outgoing"
+                            outgoing={outgoing}
+                            onCancel={() => handleCancel(outgoing.id)}
+                          />
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               )
             )}
