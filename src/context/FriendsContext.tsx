@@ -17,7 +17,7 @@ interface FriendsContextType {
   isLoading: boolean;
 
   // Actions
-  sendFriendRequest: (email: string) => Promise<{ success: boolean; error?: string }>;
+  sendFriendRequest: (email: string) => Promise<{ success: boolean; error?: string; invited?: boolean }>;
   acceptRequest: (friendshipId: string) => Promise<boolean>;
   rejectRequest: (friendshipId: string) => Promise<boolean>;
   cancelRequest: (friendshipId: string) => Promise<boolean>;
@@ -226,7 +226,7 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
   }, [user, fetchFriends]);
 
   // Send a friend request by email
-  const sendFriendRequest = async (email: string): Promise<{ success: boolean; error?: string }> => {
+  const sendFriendRequest = async (email: string): Promise<{ success: boolean; error?: string; invited?: boolean }> => {
     if (!user) return { success: false, error: 'Not authenticated' };
 
     const normalizedEmail = email.toLowerCase().trim();
@@ -237,31 +237,60 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Debug: check session and fetch ALL profiles
-      const { data: sessionData } = await supabase.auth.getSession();
-      console.log('Current session:', sessionData?.session?.user?.email, 'role:', sessionData?.session?.user?.role);
-
-      const { data: allProfiles, error: allError } = await supabase
-        .from('profiles')
-        .select('id, email');
-      console.log('All accessible profiles:', allProfiles, 'error:', allError);
-
       // Look up user by email (case-insensitive)
-      console.log('Looking up email:', normalizedEmail);
       const { data: profiles, error: lookupError } = await supabase
         .from('profiles')
         .select('id, email')
         .ilike('email', normalizedEmail);
-
-      console.log('Profile lookup result:', { profiles, lookupError, count: profiles?.length });
 
       if (lookupError) {
         console.error('Profile lookup error:', lookupError);
         return { success: false, error: `Error looking up user: ${lookupError.message}` };
       }
 
+      // If user doesn't exist, send an invite email instead
       if (!profiles || profiles.length === 0) {
-        return { success: false, error: 'No user found with that email address' };
+        // Check if we already sent an invite to this email
+        const { data: existingInvite } = await supabase
+          .from('friend_invites')
+          .select('id')
+          .eq('requester_id', user.id)
+          .eq('invited_email', normalizedEmail)
+          .maybeSingle();
+
+        if (existingInvite) {
+          return { success: false, error: 'You already sent an invite to this email' };
+        }
+
+        // Create invite record
+        const { error: inviteError } = await supabase
+          .from('friend_invites')
+          .insert({
+            requester_id: user.id,
+            invited_email: normalizedEmail,
+          });
+
+        if (inviteError) {
+          console.error('Failed to create invite:', inviteError);
+          return { success: false, error: 'Failed to create invite' };
+        }
+
+        // Send invite email via Edge Function
+        const senderName = user.user_metadata?.name || user.email?.split('@')[0] || 'Someone';
+        try {
+          await supabase.functions.invoke('send-friend-invite', {
+            body: {
+              recipientEmail: normalizedEmail,
+              senderName,
+              senderEmail: user.email,
+            },
+          });
+        } catch (emailError) {
+          console.error('Failed to send invite email:', emailError);
+          // Don't fail the whole operation if email fails - invite record is created
+        }
+
+        return { success: true, invited: true };
       }
 
       if (profiles.length > 1) {

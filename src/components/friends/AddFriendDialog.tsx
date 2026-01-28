@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 interface AddFriendDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSendRequest: (email: string) => Promise<{ success: boolean; error?: string }>;
+  onSendRequest: (email: string) => Promise<{ success: boolean; error?: string; invited?: boolean }>;
 }
 
 export function AddFriendDialog({ isOpen, onClose, onSendRequest }: AddFriendDialogProps) {
@@ -23,11 +23,13 @@ export function AddFriendDialog({ isOpen, onClose, onSendRequest }: AddFriendDia
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [wasInvited, setWasInvited] = useState(false);
 
   const handleClose = () => {
     setEmail('');
     setError(null);
     setSuccess(false);
+    setWasInvited(false);
     onClose();
   };
 
@@ -58,11 +60,12 @@ export function AddFriendDialog({ isOpen, onClose, onSendRequest }: AddFriendDia
       const result = await onSendRequest(trimmedEmail);
       if (result.success) {
         setSuccess(true);
+        setWasInvited(result.invited || false);
         setEmail('');
         // Auto-close after showing success
         setTimeout(() => {
           handleClose();
-        }, 1500);
+        }, 2000);
       } else {
         setError(result.error || 'Failed to send friend request');
       }
@@ -113,7 +116,11 @@ export function AddFriendDialog({ isOpen, onClose, onSendRequest }: AddFriendDia
           {success && (
             <div className="flex items-center gap-2 text-sm text-emerald-600">
               <CheckCircle className="w-4 h-4 flex-shrink-0" weight="fill" />
-              <span>Friend request sent!</span>
+              <span>
+                {wasInvited
+                  ? "Invite sent! They'll receive an email to join RoamsWild."
+                  : 'Friend request sent!'}
+              </span>
             </div>
           )}
 
