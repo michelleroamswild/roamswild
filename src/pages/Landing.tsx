@@ -353,7 +353,7 @@ const rotatingWords = [
   "Offroad Trip",
   "Guys Trip",
   "Ladies Weekend",
-  "Overlanding Expedition",
+  "Dirtbag Gathering",
 ];
 
 const Landing = () => {
@@ -366,11 +366,24 @@ const Landing = () => {
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [waitlistSuccess, setWaitlistSuccess] = useState(false);
   const [waitlistError, setWaitlistError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState(false);
+
+  const isValidEmail = (email: string) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
 
   const handleWaitlistSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setWaitlistLoading(true);
     setWaitlistError(null);
+
+    // Validate email
+    if (!waitlistEmail.trim() || !isValidEmail(waitlistEmail)) {
+      setEmailError(true);
+      return;
+    }
+
+    setEmailError(false);
+    setWaitlistLoading(true);
 
     try {
       const response = await supabase.functions.invoke('join-waitlist', {
@@ -426,14 +439,14 @@ const Landing = () => {
             <span className="text-xl font-display font-bold text-foreground">RoamsWild</span>
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/login">
+            <Link to="/signup">
               <Button variant="ghost" size="sm">
-                Sign In
+                Sign up
               </Button>
             </Link>
-            <Link to="/signup">
+            <Link to="/login">
               <Button variant="primary" size="sm">
-                Get Started
+                Sign in
               </Button>
             </Link>
           </div>
@@ -471,9 +484,9 @@ const Landing = () => {
 
               {/* Waitlist Signup */}
               {waitlistSuccess ? (
-                <div className="bg-accent/10 border border-accent/30 rounded-2xl p-6 max-w-md mx-auto lg:mx-0 animate-fade-in">
+                <div className="bg-[hsl(249,50%,55%)]/20 border border-[hsl(249,50%,55%)] rounded-2xl p-6 max-w-md mx-auto lg:mx-0 animate-fade-in">
                   <div className="flex items-center gap-3">
-                    <CheckCircle className="w-8 h-8 text-accent flex-shrink-0" weight="fill" />
+                    <CheckCircle className="w-8 h-8 text-[hsl(249,50%,55%)] flex-shrink-0" weight="fill" />
                     <div>
                       <h3 className="font-display font-semibold text-foreground">You're on the list!</h3>
                       <p className="text-sm text-muted-foreground">We'll send you an invite code soon.</p>
@@ -487,16 +500,18 @@ const Landing = () => {
                       type="email"
                       placeholder="Enter your email"
                       value={waitlistEmail}
-                      onChange={(e) => setWaitlistEmail(e.target.value)}
-                      required
-                      className="flex-1 h-14 px-4 rounded-xl border-2 border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+                      onChange={(e) => {
+                        setWaitlistEmail(e.target.value);
+                        if (emailError) setEmailError(false);
+                      }}
+                      className={`flex-1 h-12 px-4 rounded-lg border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors ${
+                        emailError ? 'border-destructive' : 'border-border'
+                      }`}
                     />
                     <Button
                       type="submit"
-                      variant="primary"
-                      size="lg"
-                      className="h-14 px-6 text-lg whitespace-nowrap"
-                      disabled={waitlistLoading || !waitlistEmail}
+                      className="h-12 px-6 whitespace-nowrap"
+                      disabled={waitlistLoading}
                     >
                       {waitlistLoading ? (
                         <SpinnerGap className="w-5 h-5 animate-spin" />
@@ -508,8 +523,10 @@ const Landing = () => {
                       )}
                     </Button>
                   </div>
-                  {waitlistError && (
-                    <p className="text-sm text-destructive mt-2">{waitlistError}</p>
+                  {(waitlistError || emailError) && (
+                    <p className="text-sm text-destructive mt-2">
+                      {emailError ? 'Please enter a valid email address' : waitlistError}
+                    </p>
                   )}
                   <p className="text-sm text-muted-foreground mt-3">
                     Already have an invite?{" "}
@@ -729,8 +746,8 @@ const Landing = () => {
             </p>
 
             {waitlistSuccess ? (
-              <div className="bg-accent/10 border border-accent/30 rounded-2xl p-6 inline-flex items-center gap-3 animate-fade-in">
-                <CheckCircle className="w-8 h-8 text-accent flex-shrink-0" weight="fill" />
+              <div className="bg-[hsl(249,50%,55%)]/20 border border-[hsl(249,50%,55%)] rounded-2xl p-6 inline-flex items-center gap-3 animate-fade-in">
+                <CheckCircle className="w-8 h-8 text-[hsl(249,50%,55%)] flex-shrink-0" weight="fill" />
                 <div className="text-left">
                   <h3 className="font-display font-semibold text-foreground">You're on the list!</h3>
                   <p className="text-sm text-muted-foreground">We'll send you an invite code soon.</p>
@@ -743,16 +760,18 @@ const Landing = () => {
                     type="email"
                     placeholder="Enter your email"
                     value={waitlistEmail}
-                    onChange={(e) => setWaitlistEmail(e.target.value)}
-                    required
-                    className="flex-1 h-14 px-4 rounded-xl border-2 border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+                    onChange={(e) => {
+                      setWaitlistEmail(e.target.value);
+                      if (emailError) setEmailError(false);
+                    }}
+                    className={`flex-1 h-12 px-4 rounded-lg border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors ${
+                      emailError ? 'border-destructive' : 'border-border'
+                    }`}
                   />
                   <Button
                     type="submit"
-                    variant="primary"
-                    size="lg"
-                    className="h-14 px-6 text-lg whitespace-nowrap"
-                    disabled={waitlistLoading || !waitlistEmail}
+                    className="h-12 px-6 whitespace-nowrap"
+                    disabled={waitlistLoading}
                   >
                     {waitlistLoading ? (
                       <SpinnerGap className="w-5 h-5 animate-spin" />
@@ -764,8 +783,10 @@ const Landing = () => {
                     )}
                   </Button>
                 </div>
-                {waitlistError && (
-                  <p className="text-sm text-destructive mt-2">{waitlistError}</p>
+                {(waitlistError || emailError) && (
+                  <p className="text-sm text-destructive mt-2">
+                    {emailError ? 'Please enter a valid email address' : waitlistError}
+                  </p>
                 )}
               </form>
             )}

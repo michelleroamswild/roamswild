@@ -4,6 +4,7 @@ import { MapPin, MagnifyingGlass, Path, SpinnerGap, TreeEvergreen, Warning, Cros
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent } from '@/components/ui/card';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { GoogleMap } from '@/components/GoogleMap';
 import { Polyline, Marker, Polygon, InfoWindow } from '@react-google-maps/api';
 import { PlaceSearch } from '@/components/PlaceSearch';
@@ -109,7 +110,6 @@ const DispersedExplorer = () => {
   const [copiedCoords, setCopiedCoords] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [existingCampsiteForSpot, setExistingCampsiteForSpot] = useState<Campsite | null>(null);
-  const [legendExpanded, setLegendExpanded] = useState(false);
   const [sortBy, setSortBy] = useState<'distance' | 'rating' | 'recommended'>('recommended');
   const mapRef = useRef<google.maps.Map | null>(null);
 
@@ -294,10 +294,11 @@ const DispersedExplorer = () => {
     // Filter derived spots:
     // - MVUM roads: definitely National Forest - always include
     // - BLM roads: definitely BLM land - always include
-    // - OSM tracks: REQUIRE polygon validation if we have polygon coverage
-    // - EXCLUDE spots within National Parks or State Parks
-    // - EXCLUDE spots near established campgrounds
-    // - EXCLUDE spots outside public land polygons (e.g., Potash fields, private land)
+    // - OSM tracks: REQUIRE actual polygon intersection when polygon data is available
+    //   (bounding box heuristics are too loose - spots within bbox but outside polygon are private land)
+    // - EXCLUDE spots within National Parks or State Parks (no dispersed camping allowed)
+    // - EXCLUDE spots near established campgrounds (use the campground instead)
+    // - EXCLUDE spots outside public land polygons (e.g., Potash fields, private ranches)
     const filteredDerived = derivedSpots.filter((spot) => {
       // First check: exclude spots in National Parks or State Parks (dispersed camping not allowed)
       if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
@@ -311,25 +312,20 @@ const DispersedExplorer = () => {
       // BLM roads are definitely on public land (BLM) - always include
       if (spot.isOnBLMRoad) return true;
 
-      // For OSM-derived spots, check if within a public land polygon
-      // This is the key filter for private land like Potash fields
+      // For OSM-derived spots, require polygon validation when we have polygon data
+      // This is the key filter for private land like Potash fields, private ranches, etc.
       if (publicLands.length > 0) {
         const withinPublicLand = isWithinAnyPublicLand(spot.lat, spot.lng, publicLands);
         if (withinPublicLand) return true;
 
-        // Spot is NOT within any public land polygon, BUT:
-        // - If we have MVUM roads in the area, we're definitely in National Forest
-        //   so trust the OSM track's isOnPublicLand flag (polygon coverage has gaps)
-        // - If no MVUM roads and good polygon coverage, reject as likely private land
-        if (hasMVUMRoads && spot.isOnPublicLand) return true;
-
-        if (publicLands.length >= 3) {
-          return false; // Have good polygon coverage and no MVUM roads - reject spots outside public land
-        }
+        // Spot is NOT within any public land polygon - reject as likely private land
+        // Spots on actual MVUM/BLM roads are already handled above (lines 309-313)
+        // The isOnPublicLand heuristic is based on OSM track characteristics which is unreliable
+        return false;
       }
 
-      // Only fall back to heuristics when we have minimal polygon coverage
-      // The isOnPublicLand flag is based on OSM track characteristics
+      // No polygon coverage at all - fall back to heuristics
+      // The isOnPublicLand flag is based on OSM track characteristics (access tags, surface type)
       if (spot.isOnPublicLand) return true;
 
       // Use MVUM presence as proxy for "in National Forest area"
@@ -931,6 +927,7 @@ const DispersedExplorer = () => {
                     strokeOpacity: 0.7,
                     strokeWeight: 2,
                     clickable: false,
+                    zIndex: 1,
                   }}
                 />
               );
@@ -949,6 +946,7 @@ const DispersedExplorer = () => {
                     strokeOpacity: selectedRoad === road ? 1 : 0.7,
                     strokeWeight: selectedRoad === road ? 4 : 2,
                     clickable: true,
+                    zIndex: selectedRoad === road ? 100 : 10,
                   }}
                   onClick={() => setSelectedRoad(road)}
                 />
@@ -968,6 +966,7 @@ const DispersedExplorer = () => {
                     strokeOpacity: selectedRoad === track ? 1 : 0.7,
                     strokeWeight: selectedRoad === track ? 4 : 2,
                     clickable: true,
+                    zIndex: selectedRoad === track ? 100 : 10,
                   }}
                   onClick={() => setSelectedRoad(track)}
                 />
@@ -1253,6 +1252,130 @@ const DispersedExplorer = () => {
               </InfoWindow>
             )}
           </GoogleMap>
+
+          {/* Floating Legend Button */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                className="absolute bottom-4 left-4 z-10 w-12 h-12 rounded-full bg-background border border-border shadow-lg flex items-center justify-center hover:bg-secondary transition-colors"
+                aria-label="Show legend"
+              >
+                <MapTrifold className="w-5 h-5 text-foreground" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="top"
+              align="start"
+              className="w-72 p-4"
+              sideOffset={8}
+            >
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <MapTrifold className="w-4 h-4" />
+                    Map Legend
+                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => setShowPublicLands(!showPublicLands)}
+                  >
+                    {showPublicLands ? (
+                      <Eye className="w-4 h-4" />
+                    ) : (
+                      <EyeSlash className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+
+                {/* Land Overlays */}
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Land Overlays</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-emerald-500/30 border border-emerald-600 rounded" />
+                      <span>USFS</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-amber-500/30 border border-amber-600 rounded" />
+                      <span>BLM</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-violet-500/30 border border-violet-600 rounded" />
+                      <span>NPS</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-blue-500/30 border border-blue-600 rounded" />
+                      <span>State Park</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-cyan-500/30 border border-cyan-600 rounded" />
+                      <span>State Trust</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-pink-500/30 border border-pink-600 rounded" />
+                      <span>Land Trust</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Spot Markers */}
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Spot Markers</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#3d7a40' }} />
+                      <span>Known Campsite</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#eab308' }} />
+                      <span>High Confidence</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#f97316' }} />
+                      <span>Med Confidence</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#e83a3a' }} />
+                      <span>Low Confidence</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-blue-500 rounded-full" />
+                      <span>Campground</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Tent className="w-3 h-3 text-wildviolet" weight="fill" />
+                      <span>My Campsite</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Road Colors */}
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Road Access</p>
+                  <div className="grid grid-cols-2 gap-1.5 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-4 h-0.5 bg-blue-500 rounded" />
+                      <span>Paved</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-4 h-0.5 bg-green-500 rounded" />
+                      <span>Passenger</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-4 h-0.5 bg-orange-500 rounded" />
+                      <span>High Clearance</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-4 h-0.5 bg-red-500 rounded" />
+                      <span>4WD</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
         {/* Sidebar - Right side on desktop, top on mobile */}
@@ -1664,142 +1787,6 @@ const DispersedExplorer = () => {
                 )}
               </>
             )}
-
-            {/* Legend Card - collapsible */}
-            <Card>
-              <CardContent className="p-4">
-                <button
-                  onClick={() => setLegendExpanded(!legendExpanded)}
-                  className="w-full flex items-center justify-between"
-                >
-                  <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-                    <MapTrifold className="w-4 h-4" />
-                    Legend
-                    {searchLocation && totalRoads > 0 && (
-                      <span className="text-xs text-muted-foreground font-normal">
-                        ({totalRoads} roads found)
-                      </span>
-                    )}
-                  </h3>
-                  <span className={`transition-transform ${legendExpanded ? 'rotate-180' : ''}`}>
-                    <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </span>
-                </button>
-
-                {error ? (
-                  <div className="flex items-center gap-2 text-destructive py-4 mt-4">
-                    <Warning className="w-5 h-5" />
-                    <span className="text-base">{error}</span>
-                  </div>
-                ) : legendExpanded && (
-                  <div className="space-y-4 mt-4 pt-4 border-t border-border">
-                    {/* Land Overlays */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Land Overlays</p>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowPublicLands(!showPublicLands);
-                          }}
-                        >
-                          {showPublicLands ? (
-                            <Eye className="w-4 h-4" />
-                          ) : (
-                            <EyeSlash className="w-4 h-4" />
-                          )}
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3.5 h-3.5 bg-emerald-500/30 border border-emerald-600 rounded" />
-                          <span>USFS</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3.5 h-3.5 bg-amber-500/30 border border-amber-600 rounded" />
-                          <span>BLM</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3.5 h-3.5 bg-violet-500/30 border border-violet-600 rounded" />
-                          <span>NPS</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3.5 h-3.5 bg-blue-500/30 border border-blue-600 rounded" />
-                          <span>State Park</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3.5 h-3.5 bg-cyan-500/30 border border-cyan-600 rounded" />
-                          <span>State Trust</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3.5 h-3.5 bg-pink-500/30 border border-pink-600 rounded" />
-                          <span>Land Trust</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Spot Markers */}
-                    <div className="space-y-2">
-                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Spot Markers</p>
-                      <div className="grid grid-cols-3 gap-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: '#3d7a40' }} />
-                          <span>Known</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: '#eab308' }} />
-                          <span>High</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: '#f97316' }} />
-                          <span>Medium</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: '#e83a3a' }} />
-                          <span>Low</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3.5 h-3.5 bg-blue-500 rounded-full" />
-                          <span>Campground</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Tent className="w-3 h-3 text-wildviolet" weight="fill" />
-                          <span>Mine</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Road Colors */}
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Road Access</p>
-                      <div className="grid grid-cols-2 gap-1.5 text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-4 h-0.5 bg-blue-500 rounded" />
-                          <span>Paved/Solid</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-4 h-0.5 bg-green-500 rounded" />
-                          <span>Passenger OK</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-4 h-0.5 bg-orange-500 rounded" />
-                          <span>High Clearance</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-4 h-0.5 bg-red-500 rounded" />
-                          <span>4WD Required</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
             {/* Selected Campground Details */}
             {selectedCampground && (
