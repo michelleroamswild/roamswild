@@ -484,9 +484,9 @@ const Landing = () => {
 
               {/* Waitlist Signup */}
               {waitlistSuccess ? (
-                <div className="bg-accent/10 border border-accent/30 rounded-2xl p-6 max-w-md mx-auto lg:mx-0 animate-fade-in">
+                <div className="bg-[hsl(249,50%,55%)]/20 border border-[hsl(249,50%,55%)] rounded-2xl p-6 max-w-md mx-auto lg:mx-0 animate-fade-in">
                   <div className="flex items-center gap-3">
-                    <CheckCircle className="w-8 h-8 text-accent flex-shrink-0" weight="fill" />
+                    <CheckCircle className="w-8 h-8 text-[hsl(249,50%,55%)] flex-shrink-0" weight="fill" />
                     <div>
                       <h3 className="font-display font-semibold text-foreground">You're on the list!</h3>
                       <p className="text-sm text-muted-foreground">We'll send you an invite code soon.</p>
@@ -746,8 +746,8 @@ const Landing = () => {
             </p>
 
             {waitlistSuccess ? (
-              <div className="bg-accent/10 border border-accent/30 rounded-2xl p-6 inline-flex items-center gap-3 animate-fade-in">
-                <CheckCircle className="w-8 h-8 text-accent flex-shrink-0" weight="fill" />
+              <div className="bg-[hsl(249,50%,55%)]/20 border border-[hsl(249,50%,55%)] rounded-2xl p-6 inline-flex items-center gap-3 animate-fade-in">
+                <CheckCircle className="w-8 h-8 text-[hsl(249,50%,55%)] flex-shrink-0" weight="fill" />
                 <div className="text-left">
                   <h3 className="font-display font-semibold text-foreground">You're on the list!</h3>
                   <p className="text-sm text-muted-foreground">We'll send you an invite code soon.</p>
