@@ -18,6 +18,8 @@ interface CampsitesContextType {
   campsites: Campsite[];
   // Public campsites from others
   publicCampsites: Campsite[];
+  // Friends' campsites (shared with visibility='friends')
+  friendsCampsites: Campsite[];
   isLoading: boolean;
 
   // CRUD operations
@@ -50,6 +52,7 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [campsites, setCampsites] = useState<Campsite[]>([]);
   const [publicCampsites, setPublicCampsites] = useState<Campsite[]>([]);
+  const [friendsCampsites, setFriendsCampsites] = useState<Campsite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch user's campsites
@@ -107,9 +110,40 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.id]);
 
+  // Fetch friends' campsites (visibility='friends' from other users)
+  // RLS policy automatically filters to only return campsites from actual friends
+  const fetchFriendsCampsites = useCallback(async () => {
+    if (!user) {
+      setFriendsCampsites([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('campsites')
+        .select('*')
+        .eq('visibility', 'friends')
+        .neq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (error) {
+        console.error('Failed to fetch friends campsites:', error);
+        return;
+      }
+
+      const rows = data as CampsiteRow[] | null;
+      const transformed = (rows || []).map(campsiteFromRow);
+      setFriendsCampsites(transformed);
+    } catch (e) {
+      console.error('Error fetching friends campsites:', e);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchCampsites();
-  }, [fetchCampsites]);
+    fetchFriendsCampsites();
+  }, [fetchCampsites, fetchFriendsCampsites]);
 
   // Add a new campsite
   const addCampsite = async (data: CampsiteFormData): Promise<Campsite | null> => {
@@ -549,6 +583,7 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
       value={{
         campsites,
         publicCampsites,
+        friendsCampsites,
         isLoading,
         addCampsite,
         updateCampsite,
