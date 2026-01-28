@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { SavedLocationsProvider } from "@/context/SavedLocationsContext";
 import { TripProvider } from "@/context/TripContext";
 import { CampsitesProvider } from "@/context/CampsitesContext";
+import { FriendsProvider } from "@/context/FriendsContext";
 import { GoogleMapsProvider } from "@/components/GoogleMapsProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { FeatureGate } from "@/components/FeatureGate";
@@ -34,6 +35,7 @@ import PhotoWeatherTest from "./pages/PhotoWeatherTest";
 import TerrainValidation from "./pages/TerrainValidation";
 import PhotoScout from "./pages/PhotoScout";
 import Admin from "./pages/Admin";
+import Friends from "./pages/Friends";
 
 // Smart home route - shows Landing for guests, Index for authenticated users
 const HomeRoute = () => {
@@ -61,6 +63,7 @@ const App = () => (
       <GoogleMapsProvider>
         <SavedLocationsProvider>
           <CampsitesProvider>
+          <FriendsProvider>
           <TripProvider>
             <TooltipProvider>
               <Toaster />
@@ -89,6 +92,7 @@ const App = () => (
                   <Route path="/join/:token" element={<ProtectedRoute><JoinTrip /></ProtectedRoute>} />
                   <Route path="/dispersed" element={<ProtectedRoute><DispersedExplorer /></ProtectedRoute>} />
                   <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+                  <Route path="/friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
                   {/* Feature-gated routes */}
                   <Route path="/campsites" element={
                     <FeatureGate feature="campsites">
@@ -119,6 +123,7 @@ const App = () => (
               </BrowserRouter>
             </TooltipProvider>
           </TripProvider>
+          </FriendsProvider>
           </CampsitesProvider>
         </SavedLocationsProvider>
       </GoogleMapsProvider>

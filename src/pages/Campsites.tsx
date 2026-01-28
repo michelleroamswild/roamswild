@@ -35,6 +35,7 @@ import {
 import { GoogleMap } from '@/components/GoogleMap';
 import { Marker } from '@react-google-maps/api';
 import { useCampsites } from '@/context/CampsitesContext';
+import { useFriends } from '@/context/FriendsContext';
 import { toast } from 'sonner';
 import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
 import { Campsite, CampsiteType, CampsiteVisibility } from '@/types/campsite';
@@ -65,7 +66,8 @@ const sourceTypeLabels: Record<string, string> = {
 
 const Campsites = () => {
   const navigate = useNavigate();
-  const { campsites, publicCampsites, isLoading, deleteCampsite, exportToGeoJSON, fetchPublicCampsites } = useCampsites();
+  const { campsites, publicCampsites, friendsCampsites, isLoading, deleteCampsite, exportToGeoJSON, fetchPublicCampsites } = useCampsites();
+  const { getFriendById } = useFriends();
 
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string; name: string }>({
     isOpen: false,
@@ -74,7 +76,7 @@ const Campsites = () => {
   });
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'mine' | 'explorer' | 'public'>('mine');
+  const [activeTab, setActiveTab] = useState<'mine' | 'friends' | 'explorer' | 'public'>('mine');
   const [sortBy, setSortBy] = useState<'name-asc' | 'name-desc' | 'newest' | 'oldest'>('newest');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<CampsiteType | 'all'>('all');
@@ -85,7 +87,7 @@ const Campsites = () => {
   const [selectedCampsiteId, setSelectedCampsiteId] = useState<string | null>(null);
 
   // Load public campsites when switching tabs
-  const handleTabChange = (tab: 'mine' | 'explorer' | 'public') => {
+  const handleTabChange = (tab: 'mine' | 'friends' | 'explorer' | 'public') => {
     setActiveTab(tab);
     if ((tab === 'explorer' || tab === 'public') && publicCampsites.length === 0) {
       fetchPublicCampsites();
@@ -114,6 +116,8 @@ const Campsites = () => {
     switch (activeTab) {
       case 'mine':
         return campsites;
+      case 'friends':
+        return friendsCampsites;
       case 'explorer':
         return explorerSpots;
       case 'public':
@@ -131,7 +135,7 @@ const Campsites = () => {
       if (c.state) states.add(c.state);
     });
     return Array.from(states).sort();
-  }, [campsites, publicCampsites, explorerSpots, activeTab]);
+  }, [campsites, publicCampsites, friendsCampsites, explorerSpots, activeTab]);
 
   // Get unique tags for filter pills
   const availableTags = useMemo(() => {
@@ -141,7 +145,7 @@ const Campsites = () => {
       c.tags?.forEach(t => tags.add(t));
     });
     return Array.from(tags).sort();
-  }, [campsites, publicCampsites, explorerSpots, activeTab]);
+  }, [campsites, publicCampsites, friendsCampsites, explorerSpots, activeTab]);
 
   // Filter and sort campsites
   const displayedCampsites = useMemo(() => {
@@ -200,7 +204,7 @@ const Campsites = () => {
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       }
     });
-  }, [campsites, publicCampsites, activeTab, searchQuery, filterType, filterVisibility, filterState, filterTags, filterHasNotes, sortBy]);
+  }, [campsites, publicCampsites, friendsCampsites, activeTab, searchQuery, filterType, filterVisibility, filterState, filterTags, filterHasNotes, sortBy]);
 
   // Calculate map center based on displayed campsites
   const mapCenter = useMemo(() => {
@@ -325,6 +329,22 @@ const Campsites = () => {
                 }`}
               >
                 My Spots
+              </button>
+              <button
+                onClick={() => handleTabChange('friends')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'friends'
+                    ? 'bg-white text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                Friends
+                {friendsCampsites.length > 0 && (
+                  <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 text-xs rounded-full">
+                    {friendsCampsites.length}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => handleTabChange('explorer')}
@@ -556,6 +576,12 @@ const Campsites = () => {
                               <span className="inline-block px-2 py-0.5 bg-secondary rounded-full text-xs font-medium text-foreground">
                                 {typeLabels[campsite.type]}
                               </span>
+                              {activeTab === 'friends' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full text-xs font-medium">
+                                  <Users className="w-3 h-3" />
+                                  Shared by {getFriendById(campsite.userId)?.name || getFriendById(campsite.userId)?.email || 'Friend'}
+                                </span>
+                              )}
                               {campsite.sourceType === 'explorer' && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">
                                   <Compass className="w-3 h-3" />

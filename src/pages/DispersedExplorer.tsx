@@ -11,6 +11,8 @@ import { PlaceSearch } from '@/components/PlaceSearch';
 import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
 import { usePublicLands } from '@/hooks/use-public-lands';
 import { useCampsites } from '@/context/CampsitesContext';
+import { useFriends } from '@/context/FriendsContext';
+import { useAuth } from '@/context/AuthContext';
 import { useGoogleMaps } from '@/components/GoogleMapsProvider';
 import { Header } from '@/components/Header';
 import { ConfirmSpotDialog } from '@/components/ConfirmSpotDialog';
@@ -30,7 +32,9 @@ interface UnifiedSpot {
   name: string;
   lat: number;
   lng: number;
-  category: 'derived' | 'campground' | 'mine';
+  category: 'derived' | 'campground' | 'mine' | 'friend';
+  // For friend's campsites
+  sharedBy?: string;
   // For derived spots
   score?: number;
   spotType?: 'dead-end' | 'camp-site' | 'intersection';
@@ -113,9 +117,12 @@ const DispersedExplorer = () => {
   const [sortBy, setSortBy] = useState<'distance' | 'rating' | 'recommended'>('recommended');
   const mapRef = useRef<google.maps.Map | null>(null);
 
-  const { findExistingExplorerSpot, getExplorerSpots, campsites } = useCampsites();
+  const { findExistingExplorerSpot, getExplorerSpots, campsites, friendsCampsites } = useCampsites();
+  const { getFriendById } = useFriends();
+  const { user } = useAuth();
   const [explorerSpots, setExplorerSpots] = useState<Campsite[]>([]);
   const [showMyCampsites, setShowMyCampsites] = useState(true);
+  const [showFriendsCampsites, setShowFriendsCampsites] = useState(true);
   const [selectedCampsite, setSelectedCampsite] = useState<Campsite | null>(null);
 
   const { mvumRoads, osmTracks, potentialSpots, establishedCampgrounds, loading, error } = useDispersedRoads(
@@ -587,14 +594,35 @@ const DispersedExplorer = () => {
       });
     }
 
+    // Add friends' campsites if filter allows AND we have a search location
+    const showFriendsFiltered = spotFilters.size === 0 || spotFilters.has('friend');
+    if (searchLocation && showFriendsCampsites && showFriendsFiltered) {
+      friendsCampsites.forEach(cs => {
+        const distance = getDistanceMiles(cs.lat, cs.lng);
+        const friend = getFriendById(cs.userId);
+        unified.push({
+          id: `friend-${cs.id}`,
+          name: cs.name,
+          lat: cs.lat,
+          lng: cs.lng,
+          category: 'friend',
+          campsiteType: cs.type,
+          distance,
+          recScore: 90, // Friends' campsites get high priority, just below user's own
+          sharedBy: friend?.name || friend?.email || 'Friend',
+          originalCampsite: cs,
+        });
+      });
+    }
+
     // Sort based on selected sort option
     if (sortBy === 'distance') {
       unified.sort((a, b) => (a.distance ?? 999) - (b.distance ?? 999));
     } else if (sortBy === 'rating') {
       // Sort by score (derived spots) or prioritize reservable campgrounds
       unified.sort((a, b) => {
-        const scoreA = a.score ?? (a.category === 'campground' ? 50 : a.category === 'mine' ? 60 : 0);
-        const scoreB = b.score ?? (b.category === 'campground' ? 50 : b.category === 'mine' ? 60 : 0);
+        const scoreA = a.score ?? (a.category === 'campground' ? 50 : a.category === 'mine' ? 60 : a.category === 'friend' ? 55 : 0);
+        const scoreB = b.score ?? (b.category === 'campground' ? 50 : b.category === 'mine' ? 60 : b.category === 'friend' ? 55 : 0);
         return scoreB - scoreA;
       });
     } else {
@@ -613,7 +641,7 @@ const DispersedExplorer = () => {
     }
 
     return unified;
-  }, [filteredPotentialSpots, establishedCampgrounds, campsites, showCampgroundsFiltered, showMyCampsites, showMyCampsitesFiltered, searchLocation, topRecommendations, sortBy]);
+  }, [filteredPotentialSpots, establishedCampgrounds, campsites, friendsCampsites, showCampgroundsFiltered, showMyCampsites, showMyCampsitesFiltered, showFriendsCampsites, getFriendById, searchLocation, topRecommendations, sortBy]);
 
   // Helper to get icon for unified spot based on category and type
   const getUnifiedSpotIcon = (spot: UnifiedSpot) => {
@@ -622,6 +650,9 @@ const DispersedExplorer = () => {
     }
     if (spot.category === 'mine') {
       return <Tent className="w-4 h-4 text-wildviolet flex-shrink-0" weight="fill" />;
+    }
+    if (spot.category === 'friend') {
+      return <Users className="w-4 h-4 text-emerald-500 flex-shrink-0" weight="fill" />;
     }
     // Derived spots - color based on confidence
     if (spot.spotType === 'camp-site') {
@@ -1688,7 +1719,8 @@ const DispersedExplorer = () => {
                     const isSelected =
                       (spot.category === 'derived' && selectedSpot?.id === spot.originalSpot?.id) ||
                       (spot.category === 'campground' && selectedCampground?.id === spot.originalCampground?.id) ||
-                      (spot.category === 'mine' && selectedCampsite?.id === spot.originalCampsite?.id);
+                      (spot.category === 'mine' && selectedCampsite?.id === spot.originalCampsite?.id) ||
+                      (spot.category === 'friend' && selectedCampsite?.id === spot.originalCampsite?.id);
 
                     return (
                       <Card
@@ -1710,6 +1742,10 @@ const DispersedExplorer = () => {
                             setSelectedSpot(null);
                             setSelectedCampsite(null);
                           } else if (spot.category === 'mine' && spot.originalCampsite) {
+                            setSelectedCampsite(spot.originalCampsite);
+                            setSelectedSpot(null);
+                            setSelectedCampground(null);
+                          } else if (spot.category === 'friend' && spot.originalCampsite) {
                             setSelectedCampsite(spot.originalCampsite);
                             setSelectedSpot(null);
                             setSelectedCampground(null);
@@ -1750,6 +1786,11 @@ const DispersedExplorer = () => {
                             )}
                             {spot.category === 'mine' && spot.campsiteType && (
                               <span>{spot.campsiteType}</span>
+                            )}
+                            {spot.category === 'friend' && spot.sharedBy && (
+                              <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded">
+                                Shared by {spot.sharedBy}
+                              </span>
                             )}
                           </div>
                         </CardContent>

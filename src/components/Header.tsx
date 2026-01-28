@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Jeep, List, SignOut, Tent, Compass, Heart, Moon, Sun, MapTrifold } from "@phosphor-icons/react";
+import { Jeep, List, SignOut, Tent, Compass, Heart, Moon, Sun, MapTrifold, Users } from "@phosphor-icons/react";
+import { useFriends } from "@/context/FriendsContext";
 import { Button } from "./ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -43,10 +44,12 @@ interface HeaderProps {
 export const Header = ({ showBorder = false }: HeaderProps) => {
   const { user, signOut } = useAuth();
   const { isDark, toggleTheme } = useTheme();
+  const { incomingRequests } = useFriends();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const userName = user?.user_metadata?.name as string | undefined;
   const initials = getInitials(userName, user?.email);
+  const pendingRequestCount = incomingRequests.length;
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -120,6 +123,17 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to="/friends" className="flex items-center">
+                  <Users className="w-4 h-4 mr-2" weight="bold" />
+                  Friends
+                  {pendingRequestCount > 0 && (
+                    <span className="ml-auto flex items-center justify-center w-5 h-5 bg-amber-500 text-white text-xs font-bold rounded-full">
+                      {pendingRequestCount}
+                    </span>
+                  )}
+                </Link>
+              </DropdownMenuItem>
               {isFeatureEnabled('campsites') && (
                 <DropdownMenuItem asChild>
                   <Link to="/campsites" className="flex items-center">
