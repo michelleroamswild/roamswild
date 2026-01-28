@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Jeep, Envelope, Lock, User, SpinnerGap, WarningCircle, CheckCircle, Mountains, Tent, Path } from '@phosphor-icons/react';
+import { Jeep, Envelope, Lock, User, SpinnerGap, WarningCircle, CheckCircle, Mountains, Tent, Path, Ticket } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 // Import a landing page photo for the side panel
 import heroPhoto from '@/images/landingpage/DJI_0682.jpg';
@@ -17,8 +18,10 @@ const Signup = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -31,6 +34,13 @@ const Signup = () => {
     e.preventDefault();
     setError(null);
     setEmailError(null);
+    setInviteError(null);
+
+    // Validate invite code
+    if (!inviteCode.trim()) {
+      setInviteError('Invite code is required');
+      return;
+    }
 
     // Validate email
     if (!validateEmail(email)) {
@@ -52,7 +62,18 @@ const Signup = () => {
 
     setIsLoading(true);
 
-    const { error } = await signUp(email, password, name);
+    // First, validate the invite code
+    const { data: codeCheck, error: codeError } = await supabase
+      .rpc('check_invite_code', { code: inviteCode.trim().toUpperCase() });
+
+    if (codeError || !codeCheck?.[0]?.valid) {
+      setInviteError('Invalid or already used invite code');
+      setIsLoading(false);
+      return;
+    }
+
+    // Proceed with signup
+    const { error, data } = await signUp(email, password, name);
 
     if (error) {
       // Check for duplicate email error
@@ -64,6 +85,13 @@ const Signup = () => {
       }
       setIsLoading(false);
     } else {
+      // Mark the invite code as used
+      if (data?.user?.id) {
+        await supabase.rpc('use_invite_code', {
+          code: inviteCode.trim().toUpperCase(),
+          user_id: data.user.id,
+        });
+      }
       setSuccess(true);
       setIsLoading(false);
     }
@@ -185,6 +213,34 @@ const Signup = () => {
                   <span>{error}</span>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label htmlFor="invite-code" className="text-foreground font-medium">Invite Code</Label>
+                <div className="relative">
+                  <Ticket className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="invite-code"
+                    type="text"
+                    placeholder="ROAM-XXXXXX"
+                    value={inviteCode}
+                    onChange={(e) => {
+                      setInviteCode(e.target.value.toUpperCase());
+                      if (inviteError) setInviteError(null);
+                    }}
+                    className={`pl-12 uppercase ${inviteError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                    required
+                  />
+                </div>
+                {inviteError && (
+                  <p className="text-sm text-destructive">{inviteError}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Don't have a code?{' '}
+                  <Link to="/" className="text-primary hover:underline">
+                    Join the waitlist
+                  </Link>
+                </p>
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="name" className="text-foreground font-medium">Name</Label>

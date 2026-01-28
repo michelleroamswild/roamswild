@@ -33,6 +33,7 @@ import StyleGuide from "./pages/StyleGuide";
 import PhotoWeatherTest from "./pages/PhotoWeatherTest";
 import TerrainValidation from "./pages/TerrainValidation";
 import PhotoScout from "./pages/PhotoScout";
+import Admin from "./pages/Admin";
 
 // Smart home route - shows Landing for guests, Index for authenticated users
 const HomeRoute = () => {
@@ -87,6 +88,7 @@ const App = () => (
                   <Route path="/my-trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
                   <Route path="/join/:token" element={<ProtectedRoute><JoinTrip /></ProtectedRoute>} />
                   <Route path="/dispersed" element={<ProtectedRoute><DispersedExplorer /></ProtectedRoute>} />
+                  <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
                   {/* Feature-gated routes */}
                   <Route path="/campsites" element={
                     <FeatureGate feature="campsites">
