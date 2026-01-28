@@ -104,22 +104,6 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
           >
             Saved
           </Link>
-          <Link
-            to="/friends"
-            className={cn(
-              "relative text-base font-bold transition-colors px-3 py-1.5 rounded-full",
-              isActive('/friends')
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
-            )}
-          >
-            Friends
-            {pendingRequestCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 bg-amber-500 text-white text-xs font-bold rounded-full">
-                {pendingRequestCount}
-              </span>
-            )}
-          </Link>
         </nav>
 
         <div className="flex items-center gap-2">
@@ -246,24 +230,6 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
                 >
                   <Heart className="w-5 h-5" weight={isActive('/saved') ? "fill" : "regular"} />
                   Saved
-                </Link>
-                <Link
-                  to="/friends"
-                  onClick={closeMobileMenu}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
-                    isActive('/friends')
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground hover:bg-muted"
-                  )}
-                >
-                  <Users className="w-5 h-5" weight={isActive('/friends') ? "fill" : "regular"} />
-                  Friends
-                  {pendingRequestCount > 0 && (
-                    <span className="ml-auto flex items-center justify-center w-5 h-5 bg-amber-500 text-white text-xs font-bold rounded-full">
-                      {pendingRequestCount}
-                    </span>
-                  )}
                 </Link>
                 {isFeatureEnabled('campsites') && (
                   <Link

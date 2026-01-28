@@ -125,7 +125,7 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
         .eq('visibility', 'friends')
         .neq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(1000);
 
       if (error) {
         console.error('Failed to fetch friends campsites:', error);
@@ -289,7 +289,7 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
           .eq('user_id', user.id)
           .eq('lat', location.lat)
           .eq('lng', location.lng)
-          .single();
+          .maybeSingle();
 
         if (existing) {
           // Update existing campsite
