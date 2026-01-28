@@ -42,6 +42,7 @@ import { AlternativeCampsitesModal } from '@/components/AlternativeCampsitesModa
 import { useRoutePhotoSpots, PhotoSpot } from '@/hooks/use-photo-spots';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { DatePicker } from '@/components/ui/date-picker';
 import { createMarkerIcon, getTypeStyles, getPhotoHotspotColor } from '@/utils/mapMarkers';
 import { estimateDayTime } from '@/utils/tripValidation';
 import { getAllTrailsUrl, estimateTrailLength } from '@/utils/hikeUtils';
@@ -178,8 +179,8 @@ const TripDetail = () => {
   const [campsiteModalOpen, setCampsiteModalOpen] = useState(false);
   const [selectedCampsiteForSwap, setSelectedCampsiteForSwap] = useState<TripStop | null>(null);
   const [dateEditModal, setDateEditModal] = useState(false);
-  const [editingStartDate, setEditingStartDate] = useState<string>('');
-  const [editingEndDate, setEditingEndDate] = useState<string>('');
+  const [editingStartDate, setEditingStartDate] = useState<Date | undefined>(undefined);
+  const [editingEndDate, setEditingEndDate] = useState<Date | undefined>(undefined);
   const [showPhotoHotspots, setShowPhotoHotspots] = useState(false);
   const [photoHotspotsExpanded, setPhotoHotspotsExpanded] = useState(false);
   const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoSpot | null>(null);
@@ -497,14 +498,15 @@ const TripDetail = () => {
 
   const handleOpenDateEdit = () => {
     if (generatedTrip && tripConfig.startDate) {
-      const start = new Date(tripConfig.startDate);
+      const [year, month, day] = tripConfig.startDate.split('-').map(Number);
+      const start = new Date(year, month - 1, day);
       const end = new Date(start);
       end.setDate(start.getDate() + generatedTrip.days.length - 1);
-      setEditingStartDate(tripConfig.startDate);
-      setEditingEndDate(end.toISOString().split('T')[0]);
+      setEditingStartDate(start);
+      setEditingEndDate(end);
     } else {
-      setEditingStartDate('');
-      setEditingEndDate('');
+      setEditingStartDate(undefined);
+      setEditingEndDate(undefined);
     }
     setDateEditModal(true);
   };
@@ -512,9 +514,7 @@ const TripDetail = () => {
   // Calculate duration from start and end dates
   const getEditingDuration = () => {
     if (!editingStartDate || !editingEndDate) return 0;
-    const start = new Date(editingStartDate);
-    const end = new Date(editingEndDate);
-    const diffTime = end.getTime() - start.getTime();
+    const diffTime = editingEndDate.getTime() - editingStartDate.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     return Math.max(1, diffDays);
   };
@@ -525,10 +525,13 @@ const TripDetail = () => {
     const newDuration = getEditingDuration();
     const currentDuration = generatedTrip.days.length;
 
+    // Convert Date to string format (YYYY-MM-DD) for config
+    const startDateStr = `${editingStartDate.getFullYear()}-${String(editingStartDate.getMonth() + 1).padStart(2, '0')}-${String(editingStartDate.getDate()).padStart(2, '0')}`;
+
     // Update tripConfig with new start date and duration
     const updatedConfig = {
       ...tripConfig,
-      startDate: editingStartDate,
+      startDate: startDateStr,
       duration: newDuration,
     };
 
@@ -541,12 +544,11 @@ const TripDetail = () => {
         const regeneratedTrip = await generateTrip(updatedConfig);
         if (regeneratedTrip) {
           // Keep existing days with their customizations, only take NEW days from regenerated trip
-          const startDate = new Date(editingStartDate);
 
           // Update existing days with new dates but keep all customizations
           const existingDaysUpdated = generatedTrip.days.map((day, index) => {
-            const dayDate = new Date(startDate);
-            dayDate.setDate(startDate.getDate() + index);
+            const dayDate = new Date(editingStartDate);
+            dayDate.setDate(editingStartDate.getDate() + index);
             return {
               ...day,
               day: index + 1,
@@ -576,8 +578,8 @@ const TripDetail = () => {
           // Get only the NEW days from the regenerated trip (days beyond current duration)
           const newDays = regeneratedTrip.days.slice(currentDuration).map((day, index) => {
             const dayIndex = currentDuration + index;
-            const dayDate = new Date(startDate);
-            dayDate.setDate(startDate.getDate() + dayIndex);
+            const dayDate = new Date(editingStartDate);
+            dayDate.setDate(editingStartDate.getDate() + dayIndex);
             return {
               ...day,
               day: dayIndex + 1,
@@ -608,7 +610,6 @@ const TripDetail = () => {
     }
 
     // For shortening or just changing dates, update without regenerating
-    const startDate = new Date(editingStartDate);
     let updatedDays = [...generatedTrip.days];
 
     if (newDuration < currentDuration) {
@@ -618,8 +619,8 @@ const TripDetail = () => {
 
     // Update all day numbers and dates
     updatedDays = updatedDays.map((day, index) => {
-      const dayDate = new Date(startDate);
-      dayDate.setDate(startDate.getDate() + index);
+      const dayDate = new Date(editingStartDate);
+      dayDate.setDate(editingStartDate.getDate() + index);
       return {
         ...day,
         day: index + 1,
@@ -2374,28 +2375,25 @@ const TripDetail = () => {
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Start Date</label>
-                <input
-                  type="date"
+                <Label>Start Date</Label>
+                <DatePicker
                   value={editingStartDate}
-                  onChange={(e) => {
-                    setEditingStartDate(e.target.value);
+                  onChange={(date) => {
+                    setEditingStartDate(date);
                     // Auto-adjust end date if start is after end
-                    if (editingEndDate && e.target.value > editingEndDate) {
-                      setEditingEndDate(e.target.value);
+                    if (date && editingEndDate && date > editingEndDate) {
+                      setEditingEndDate(date);
                     }
                   }}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  placeholder="Select start date"
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">End Date</label>
-                <input
-                  type="date"
+                <Label>End Date</Label>
+                <DatePicker
                   value={editingEndDate}
-                  min={editingStartDate}
-                  onChange={(e) => setEditingEndDate(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  onChange={setEditingEndDate}
+                  placeholder="Select end date"
                 />
               </div>
             </div>
@@ -2405,7 +2403,7 @@ const TripDetail = () => {
                   <span className="font-medium text-foreground">{getEditingDuration()} days</span>
                   {' '}from{' '}
                   <span className="font-medium text-foreground">
-                    {new Date(editingStartDate).toLocaleDateString('en-US', {
+                    {editingStartDate.toLocaleDateString('en-US', {
                       weekday: 'short',
                       month: 'short',
                       day: 'numeric',
@@ -2413,7 +2411,7 @@ const TripDetail = () => {
                   </span>
                   {' '}to{' '}
                   <span className="font-medium text-foreground">
-                    {new Date(editingEndDate).toLocaleDateString('en-US', {
+                    {editingEndDate.toLocaleDateString('en-US', {
                       weekday: 'short',
                       month: 'short',
                       day: 'numeric',
