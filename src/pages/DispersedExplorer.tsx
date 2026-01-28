@@ -294,10 +294,11 @@ const DispersedExplorer = () => {
     // Filter derived spots:
     // - MVUM roads: definitely National Forest - always include
     // - BLM roads: definitely BLM land - always include
-    // - OSM tracks: REQUIRE polygon validation if we have polygon coverage
-    // - EXCLUDE spots within National Parks or State Parks
-    // - EXCLUDE spots near established campgrounds
-    // - EXCLUDE spots outside public land polygons (e.g., Potash fields, private land)
+    // - OSM tracks: REQUIRE actual polygon intersection when polygon data is available
+    //   (bounding box heuristics are too loose - spots within bbox but outside polygon are private land)
+    // - EXCLUDE spots within National Parks or State Parks (no dispersed camping allowed)
+    // - EXCLUDE spots near established campgrounds (use the campground instead)
+    // - EXCLUDE spots outside public land polygons (e.g., Potash fields, private ranches)
     const filteredDerived = derivedSpots.filter((spot) => {
       // First check: exclude spots in National Parks or State Parks (dispersed camping not allowed)
       if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
@@ -311,25 +312,20 @@ const DispersedExplorer = () => {
       // BLM roads are definitely on public land (BLM) - always include
       if (spot.isOnBLMRoad) return true;
 
-      // For OSM-derived spots, check if within a public land polygon
-      // This is the key filter for private land like Potash fields
+      // For OSM-derived spots, require polygon validation when we have polygon data
+      // This is the key filter for private land like Potash fields, private ranches, etc.
       if (publicLands.length > 0) {
         const withinPublicLand = isWithinAnyPublicLand(spot.lat, spot.lng, publicLands);
         if (withinPublicLand) return true;
 
-        // Spot is NOT within any public land polygon, BUT:
-        // - If we have MVUM roads in the area, we're definitely in National Forest
-        //   so trust the OSM track's isOnPublicLand flag (polygon coverage has gaps)
-        // - If no MVUM roads and good polygon coverage, reject as likely private land
-        if (hasMVUMRoads && spot.isOnPublicLand) return true;
-
-        if (publicLands.length >= 3) {
-          return false; // Have good polygon coverage and no MVUM roads - reject spots outside public land
-        }
+        // Spot is NOT within any public land polygon - reject as likely private land
+        // Spots on actual MVUM/BLM roads are already handled above (lines 309-313)
+        // The isOnPublicLand heuristic is based on OSM track characteristics which is unreliable
+        return false;
       }
 
-      // Only fall back to heuristics when we have minimal polygon coverage
-      // The isOnPublicLand flag is based on OSM track characteristics
+      // No polygon coverage at all - fall back to heuristics
+      // The isOnPublicLand flag is based on OSM track characteristics (access tags, surface type)
       if (spot.isOnPublicLand) return true;
 
       // Use MVUM presence as proxy for "in National Forest area"
@@ -931,6 +927,7 @@ const DispersedExplorer = () => {
                     strokeOpacity: 0.7,
                     strokeWeight: 2,
                     clickable: false,
+                    zIndex: 1,
                   }}
                 />
               );
@@ -949,6 +946,7 @@ const DispersedExplorer = () => {
                     strokeOpacity: selectedRoad === road ? 1 : 0.7,
                     strokeWeight: selectedRoad === road ? 4 : 2,
                     clickable: true,
+                    zIndex: selectedRoad === road ? 100 : 10,
                   }}
                   onClick={() => setSelectedRoad(road)}
                 />
@@ -968,6 +966,7 @@ const DispersedExplorer = () => {
                     strokeOpacity: selectedRoad === track ? 1 : 0.7,
                     strokeWeight: selectedRoad === track ? 4 : 2,
                     clickable: true,
+                    zIndex: selectedRoad === track ? 100 : 10,
                   }}
                   onClick={() => setSelectedRoad(track)}
                 />
