@@ -400,6 +400,39 @@ export type Database = {
           },
         ]
       }
+      waitlist: {
+        Row: {
+          id: string
+          email: string
+          name: string | null
+          created_at: string
+          approved_at: string | null
+          invite_code: string | null
+          used_at: string | null
+          used_by: string | null
+        }
+        Insert: {
+          id?: string
+          email: string
+          name?: string | null
+          created_at?: string
+          approved_at?: string | null
+          invite_code?: string | null
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Update: {
+          id?: string
+          email?: string
+          name?: string | null
+          created_at?: string
+          approved_at?: string | null
+          invite_code?: string | null
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -422,6 +455,22 @@ export type Database = {
       is_trip_collaborator: { Args: { trip_id: string }; Returns: boolean }
       is_trip_owner: { Args: { trip_id: string }; Returns: boolean }
       join_trip_by_share_link: { Args: { share_token: string }; Returns: Json }
+      check_invite_code: {
+        Args: { code: string }
+        Returns: { valid: boolean; email: string | null }[]
+      }
+      use_invite_code: {
+        Args: { code: string; user_id: string }
+        Returns: boolean
+      }
+      approve_waitlist_entry: {
+        Args: { waitlist_email: string }
+        Returns: string
+      }
+      generate_invite_code: {
+        Args: Record<string, never>
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

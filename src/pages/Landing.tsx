@@ -15,8 +15,11 @@ import {
   CaretLeft,
   Clock,
   MapPin,
+  SpinnerGap,
+  CheckCircle,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 
 // Landing page photos
 import mobileScreenshot from "@/images/landingpage/RW-home-mobile.png";
@@ -358,6 +361,39 @@ const Landing = () => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [scrollY, setScrollY] = useState(0);
 
+  // Waitlist form state
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [waitlistLoading, setWaitlistLoading] = useState(false);
+  const [waitlistSuccess, setWaitlistSuccess] = useState(false);
+  const [waitlistError, setWaitlistError] = useState<string | null>(null);
+
+  const handleWaitlistSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWaitlistLoading(true);
+    setWaitlistError(null);
+
+    try {
+      const response = await supabase.functions.invoke('join-waitlist', {
+        body: { email: waitlistEmail.toLowerCase().trim() },
+      });
+
+      if (response.error) {
+        throw response.error;
+      }
+
+      if (response.data?.error) {
+        setWaitlistError(response.data.error);
+      } else {
+        setWaitlistSuccess(true);
+      }
+    } catch (err: any) {
+      console.error('Waitlist error:', err);
+      setWaitlistError(err?.message || "Something went wrong. Please try again.");
+    } finally {
+      setWaitlistLoading(false);
+    }
+  };
+
   // Track scroll position for parallax effect
   useEffect(() => {
     const handleScroll = () => {
@@ -433,20 +469,56 @@ const Landing = () => {
                 Your next adventure starts here.
               </p>
 
-              {/* CTA Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto lg:mx-0">
-                <Link to="/signup" className="flex-1">
-                  <Button variant="primary" size="lg" className="w-full h-14 text-lg">
-                    Create Account
-                    <ArrowRight className="w-5 h-5 ml-2" />
-                  </Button>
-                </Link>
-                <Link to="/login" className="flex-1">
-                  <Button variant="secondary" size="lg" className="w-full h-14 text-lg">
-                    Sign In
-                  </Button>
-                </Link>
-              </div>
+              {/* Waitlist Signup */}
+              {waitlistSuccess ? (
+                <div className="bg-accent/10 border border-accent/30 rounded-2xl p-6 max-w-md mx-auto lg:mx-0 animate-fade-in">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle className="w-8 h-8 text-accent flex-shrink-0" weight="fill" />
+                    <div>
+                      <h3 className="font-display font-semibold text-foreground">You're on the list!</h3>
+                      <p className="text-sm text-muted-foreground">We'll send you an invite code soon.</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleWaitlistSubmit} className="max-w-md mx-auto lg:mx-0">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <input
+                      type="email"
+                      placeholder="Enter your email"
+                      value={waitlistEmail}
+                      onChange={(e) => setWaitlistEmail(e.target.value)}
+                      required
+                      className="flex-1 h-14 px-4 rounded-xl border-2 border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+                    />
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="lg"
+                      className="h-14 px-6 text-lg whitespace-nowrap"
+                      disabled={waitlistLoading || !waitlistEmail}
+                    >
+                      {waitlistLoading ? (
+                        <SpinnerGap className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <>
+                          Join Waitlist
+                          <ArrowRight className="w-5 h-5 ml-2" />
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {waitlistError && (
+                    <p className="text-sm text-destructive mt-2">{waitlistError}</p>
+                  )}
+                  <p className="text-sm text-muted-foreground mt-3">
+                    Already have an invite?{" "}
+                    <Link to="/signup" className="text-primary hover:underline font-medium">Sign up</Link>
+                    {" · "}
+                    <Link to="/login" className="text-primary hover:underline font-medium">Sign in</Link>
+                  </p>
+                </form>
+              )}
             </div>
 
             {/* Right content - Phone mockup */}
@@ -647,28 +719,56 @@ const Landing = () => {
       {/* Final CTA */}
       <section className="py-16 md:py-24 hero-topo">
         <div className="container px-4 md:px-6">
-          <div className="max-w-3xl mx-auto text-center">
-            <h2 className="font-display font-bold text-foreground mb-6">
+          <div className="max-w-xl mx-auto text-center">
+            <h2 className="font-display font-bold text-foreground mb-4">
               Ready to Plan Your Next Adventure?
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Start planning your next adventure today. Create an account to discover
+              Join the waitlist to get early access and be the first to discover
               hidden campsites, plan scenic routes, and explore with friends.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto">
-              <Link to="/signup" className="flex-1">
-                <Button variant="primary" size="lg" className="w-full h-14 text-lg">
-                  Create Account
-                  <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
-              </Link>
-              <Link to="/login" className="flex-1">
-                <Button variant="secondary" size="lg" className="w-full h-14 text-lg">
-                  Sign In
-                </Button>
-              </Link>
-            </div>
+            {waitlistSuccess ? (
+              <div className="bg-accent/10 border border-accent/30 rounded-2xl p-6 inline-flex items-center gap-3 animate-fade-in">
+                <CheckCircle className="w-8 h-8 text-accent flex-shrink-0" weight="fill" />
+                <div className="text-left">
+                  <h3 className="font-display font-semibold text-foreground">You're on the list!</h3>
+                  <p className="text-sm text-muted-foreground">We'll send you an invite code soon.</p>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleWaitlistSubmit} className="max-w-md mx-auto">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="email"
+                    placeholder="Enter your email"
+                    value={waitlistEmail}
+                    onChange={(e) => setWaitlistEmail(e.target.value)}
+                    required
+                    className="flex-1 h-14 px-4 rounded-xl border-2 border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+                  />
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="lg"
+                    className="h-14 px-6 text-lg whitespace-nowrap"
+                    disabled={waitlistLoading || !waitlistEmail}
+                  >
+                    {waitlistLoading ? (
+                      <SpinnerGap className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        Join Waitlist
+                        <ArrowRight className="w-5 h-5 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {waitlistError && (
+                  <p className="text-sm text-destructive mt-2">{waitlistError}</p>
+                )}
+              </form>
+            )}
           </div>
         </div>
       </section>
