@@ -12,16 +12,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Friend, FriendRequest, OutgoingRequest } from '@/types/friends';
+import { Friend, FriendRequest, OutgoingRequest, PendingInvite } from '@/types/friends';
 
 interface FriendCardProps {
-  type: 'friend' | 'incoming' | 'outgoing';
+  type: 'friend' | 'incoming' | 'outgoing' | 'invite';
   friend?: Friend;
   request?: FriendRequest;
   outgoing?: OutgoingRequest;
+  invite?: PendingInvite;
   onAccept?: () => Promise<boolean>;
   onReject?: () => Promise<boolean>;
   onCancel?: () => Promise<boolean>;
+  onCancelInvite?: () => Promise<boolean>;
   onRemove?: () => Promise<boolean>;
   onBlock?: () => Promise<boolean>;
 }
@@ -31,9 +33,11 @@ export function FriendCard({
   friend,
   request,
   outgoing,
+  invite,
   onAccept,
   onReject,
   onCancel,
+  onCancelInvite,
   onRemove,
   onBlock,
 }: FriendCardProps) {
@@ -44,6 +48,7 @@ export function FriendCard({
     if (type === 'friend' && friend) return friend.name || friend.email;
     if (type === 'incoming' && request) return request.from.name || request.from.email;
     if (type === 'outgoing' && outgoing) return outgoing.to.name || outgoing.to.email;
+    if (type === 'invite' && invite) return invite.invitedEmail;
     return 'Unknown';
   };
 
@@ -51,6 +56,7 @@ export function FriendCard({
     if (type === 'friend' && friend) return friend.email;
     if (type === 'incoming' && request) return request.from.email;
     if (type === 'outgoing' && outgoing) return outgoing.to.email;
+    if (type === 'invite' && invite) return invite.invitedEmail;
     return '';
   };
 
@@ -130,6 +136,15 @@ export function FriendCard({
                   })}
                 </p>
               )}
+              {type === 'invite' && invite?.createdAt && (
+                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  Invited {new Date(invite.createdAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </p>
+              )}
             </div>
 
             {/* Actions */}
@@ -163,6 +178,19 @@ export function FriendCard({
                   variant="outline"
                   size="sm"
                   onClick={() => onCancel && handleAction(onCancel)}
+                  disabled={isLoading}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Cancel
+                </Button>
+              )}
+
+              {type === 'invite' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onCancelInvite && handleAction(onCancelInvite)}
                   disabled={isLoading}
                   className="text-muted-foreground hover:text-foreground"
                 >

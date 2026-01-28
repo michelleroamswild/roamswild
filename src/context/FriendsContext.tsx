@@ -5,8 +5,10 @@ import {
   Friend,
   FriendRequest,
   OutgoingRequest,
+  PendingInvite,
   UserFriendRow,
   ProfileRow,
+  FriendInviteRow,
 } from '@/types/friends';
 
 interface FriendsContextType {
@@ -14,6 +16,7 @@ interface FriendsContextType {
   friends: Friend[];
   incomingRequests: FriendRequest[];
   outgoingRequests: OutgoingRequest[];
+  pendingInvites: PendingInvite[];
   isLoading: boolean;
 
   // Actions
@@ -21,6 +24,7 @@ interface FriendsContextType {
   acceptRequest: (friendshipId: string) => Promise<boolean>;
   rejectRequest: (friendshipId: string) => Promise<boolean>;
   cancelRequest: (friendshipId: string) => Promise<boolean>;
+  cancelInvite: (inviteId: string) => Promise<boolean>;
   removeFriend: (friendshipId: string) => Promise<boolean>;
   blockUser: (friendshipId: string) => Promise<boolean>;
 
@@ -38,6 +42,7 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<OutgoingRequest[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [friendIds, setFriendIds] = useState<Set<string>>(new Set());
   const [pendingUserIds, setPendingUserIds] = useState<Set<string>>(new Set());
@@ -184,9 +189,42 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  // Fetch pending invites (invitations sent to non-users)
+  const fetchPendingInvites = useCallback(async () => {
+    if (!user) {
+      setPendingInvites([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('friend_invites')
+        .select('*')
+        .eq('requester_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Failed to fetch pending invites:', error);
+        return;
+      }
+
+      const rows = (data || []) as FriendInviteRow[];
+      const invites: PendingInvite[] = rows.map(row => ({
+        id: row.id,
+        invitedEmail: row.invited_email,
+        createdAt: row.created_at,
+      }));
+      setPendingInvites(invites);
+    } catch (e) {
+      console.error('Error fetching pending invites:', e);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchFriends();
-  }, [fetchFriends]);
+    fetchPendingInvites();
+  }, [fetchFriends, fetchPendingInvites]);
 
   // Set up real-time subscription for friend updates
   useEffect(() => {
@@ -290,6 +328,8 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
           // Don't fail the whole operation if email fails - invite record is created
         }
 
+        // Refresh pending invites list
+        await fetchPendingInvites();
         return { success: true, invited: true };
       }
 
@@ -420,6 +460,30 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Cancel a pending invite (to non-user)
+  const cancelInvite = async (inviteId: string): Promise<boolean> => {
+    if (!user) return false;
+
+    try {
+      const { error } = await supabase
+        .from('friend_invites')
+        .delete()
+        .eq('id', inviteId)
+        .eq('requester_id', user.id);
+
+      if (error) {
+        console.error('Failed to cancel invite:', error);
+        return false;
+      }
+
+      await fetchPendingInvites();
+      return true;
+    } catch (e) {
+      console.error('Error canceling invite:', e);
+      return false;
+    }
+  };
+
   // Remove an existing friend
   const removeFriend = async (friendshipId: string): Promise<boolean> => {
     if (!user) return false;
@@ -486,6 +550,7 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
 
   const refetch = async () => {
     await fetchFriends();
+    await fetchPendingInvites();
   };
 
   return (
@@ -494,11 +559,13 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
         friends,
         incomingRequests,
         outgoingRequests,
+        pendingInvites,
         isLoading,
         sendFriendRequest,
         acceptRequest,
         rejectRequest,
         cancelRequest,
+        cancelInvite,
         removeFriend,
         blockUser,
         isFriend,

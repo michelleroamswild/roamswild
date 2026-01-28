@@ -37,6 +37,12 @@ export interface OutgoingRequest {
   createdAt: string;
 }
 
+export interface PendingInvite {
+  id: string;
+  invitedEmail: string;
+  createdAt: string;
+}
+
 // Database row types (snake_case as returned from Supabase)
 export interface UserFriendRow {
   id: string;
@@ -51,4 +57,12 @@ export interface ProfileRow {
   id: string;
   email: string;
   name: string | null;
+}
+
+export interface FriendInviteRow {
+  id: string;
+  requester_id: string;
+  invited_email: string;
+  status: 'pending' | 'accepted' | 'expired';
+  created_at: string;
 }
