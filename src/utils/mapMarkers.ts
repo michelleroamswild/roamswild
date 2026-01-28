@@ -68,7 +68,13 @@ export function createMarkerIcon(
     label?: string;
     customColor?: string; // Override the default background color
   } = {}
-): google.maps.Icon {
+): google.maps.Icon | null {
+  // Safety check - ensure Google Maps is loaded
+  if (typeof google === 'undefined' || !google.maps || !google.maps.Size) {
+    console.warn('Google Maps not loaded yet, cannot create marker icon');
+    return null;
+  }
+
   const { isActive = false, size = 36, showLabel = false, label, customColor } = options;
   const colors = getColors(type);
   const bgColor = customColor || colors.bg;
@@ -101,7 +107,13 @@ export function createMarkerIcon(
 export function createSimpleMarkerIcon(
   type: string,
   options: { isActive?: boolean; size?: number } = {}
-): google.maps.Symbol {
+): google.maps.Symbol | null {
+  // Safety check - ensure Google Maps is loaded
+  if (typeof google === 'undefined' || !google.maps || !google.maps.SymbolPath) {
+    console.warn('Google Maps not loaded yet, cannot create simple marker icon');
+    return null;
+  }
+
   const { isActive = false, size = 8 } = options;
   const colors = getColors(type);
 
