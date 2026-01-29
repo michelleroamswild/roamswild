@@ -1,9 +1,16 @@
 import { useState } from "react";
-import { DotsSixVertical, Plus, Minus, X, MapPin } from "@phosphor-icons/react";
+import { DotsSixVertical, Plus, Minus, X, MapPin, MapTrifold } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PlaceSearch } from "@/components/PlaceSearch";
+import { MapLocationPicker } from "@/components/MapLocationPicker";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 interface LocationData {
   id: string;
@@ -37,6 +44,7 @@ export function StepDestinations({
   const [manualLat, setManualLat] = useState("");
   const [manualLng, setManualLng] = useState("");
   const [manualName, setManualName] = useState("");
+  const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
 
   // Calculate available days for destinations
   const travelDays = returnToStart ? 1 : 0;
@@ -102,6 +110,18 @@ export function StepDestinations({
     setShowManualCoords(false);
   };
 
+  const handleMapLocationSelect = (location: { lat: number; lng: number; name: string }) => {
+    const newDest: LocationData = {
+      id: `dest-map-${Date.now()}`,
+      name: location.name,
+      lat: location.lat,
+      lng: location.lng,
+      placeId: `map-${Date.now()}`,
+    };
+    setDestinations([...destinations, newDest]);
+    setIsMapPickerOpen(false);
+  };
+
   return (
     <div className="space-y-6">
       <div className="text-center mb-8">
@@ -122,14 +142,23 @@ export function StepDestinations({
           key={destinations.length}
         />
 
-        {/* Manual Coordinates Toggle */}
-        <div className="text-center pt-1">
+        {/* Alternative input methods */}
+        <div className="flex items-center justify-center gap-4 pt-1">
+          <button
+            type="button"
+            onClick={() => setIsMapPickerOpen(true)}
+            className="text-xs text-primary hover:underline flex items-center gap-1"
+          >
+            <MapTrifold className="w-3 h-3" />
+            Pick on map
+          </button>
+          <span className="text-xs text-muted-foreground">or</span>
           <button
             type="button"
             onClick={() => setShowManualCoords(!showManualCoords)}
             className="text-xs text-primary hover:underline"
           >
-            {showManualCoords ? "Hide" : "Or enter"} GPS coordinates
+            {showManualCoords ? "Hide" : "Enter"} GPS coordinates
           </button>
         </div>
 
@@ -265,6 +294,29 @@ export function StepDestinations({
           <p className="text-sm mt-1">Search above to add your first stop!</p>
         </div>
       )}
+
+      {/* Map Location Picker Sheet */}
+      <Sheet open={isMapPickerOpen} onOpenChange={setIsMapPickerOpen}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-xl p-0"
+          onInteractOutside={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
+          <SheetHeader className="p-4 border-b border-border">
+            <SheetTitle className="flex items-center gap-2">
+              <MapTrifold className="w-5 h-5" />
+              Pick Location on Map
+            </SheetTitle>
+          </SheetHeader>
+          <div className="h-[calc(100vh-80px)]">
+            <MapLocationPicker
+              onSelectLocation={handleMapLocationSelect}
+              onCancel={() => setIsMapPickerOpen(false)}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

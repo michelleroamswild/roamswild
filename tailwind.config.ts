@@ -58,6 +58,7 @@ export default {
   				DEFAULT: 'hsl(var(--background))',
   				secondary: 'hsl(var(--background-secondary))'
   			},
+  			surface: 'hsl(var(--surface))',
   			foreground: 'hsl(var(--foreground))',
   			primary: {
   				DEFAULT: 'hsl(var(--primary))',

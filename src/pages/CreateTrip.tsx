@@ -1,22 +1,46 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft } from "@phosphor-icons/react";
+import { X, CloudCheck, SpinnerGap } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { EntryPointSelector, checkIfDrivable } from "@/components/EntryPointSelector";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
 import { useTrip } from "@/context/TripContext";
 import { useWizard, WizardStep } from "@/hooks/use-wizard";
+import { useTripDraft, TripWizardState } from "@/hooks/use-trip-draft";
 import { TripConfig, TripDestination, LodgingType, PacePreference } from "@/types/trip";
 import { getTripUrl } from "@/utils/slugify";
 import {
-  WizardProgress,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   WizardNavigation,
   StepTripBasics,
+  StepBuildMethod,
   StepDestinations,
   StepLodging,
   StepActivities,
+  StepDayBuilder,
 } from "@/components/wizard";
+import { BuildMethod } from "@/components/wizard/steps/StepBuildMethod";
+import { TripStop } from "@/types/trip";
+
+// State for a single day in manual trip building
+interface ManualDayState {
+  area: {
+    name: string;
+    lat: number;
+    lng: number;
+    placeId: string;
+  } | null;
+  campsite: TripStop | null;
+  stops: TripStop[];
+}
 
 interface LocationState {
   startLocation?: {
@@ -36,12 +60,27 @@ interface LocationData {
   days?: number;
 }
 
-const WIZARD_STEPS: WizardStep[] = [
+// Base steps before build method choice
+const BASE_STEPS: WizardStep[] = [
   { id: 'basics', title: 'Trip Details' },
+  { id: 'build-method', title: 'Build Method' },
+];
+
+// AI flow steps (after choosing "Plan My Route")
+const AI_FLOW_STEPS: WizardStep[] = [
   { id: 'destinations', title: 'Destinations' },
   { id: 'lodging', title: 'Lodging' },
   { id: 'activities', title: 'Activities', isOptional: true },
 ];
+
+// Manual flow steps will be dynamic based on duration
+const getManualFlowSteps = (duration: number): WizardStep[] => {
+  const daySteps: WizardStep[] = [];
+  for (let i = 1; i <= duration; i++) {
+    daySteps.push({ id: `day-${i}`, title: `Day ${i}` });
+  }
+  return daySteps;
+};
 
 const CreateTrip = () => {
   const navigate = useNavigate();
@@ -50,8 +89,11 @@ const CreateTrip = () => {
   const { generateTrip, generating, error: generatorError } = useTripGenerator();
   const { setGeneratedTrip, tripNameExists } = useTrip();
 
-  // Wizard state
-  const wizard = useWizard({ steps: WIZARD_STEPS });
+  // Draft auto-save
+  const { draft, loading: draftLoading, saving: draftSaving, lastSaved, debouncedSave, deleteDraft, hasDraft } = useTripDraft();
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+  const [draftChecked, setDraftChecked] = useState(false);
+  const [pendingRestoreStep, setPendingRestoreStep] = useState<number | null>(null);
 
   // Form state
   const [tripName, setTripName] = useState("");
@@ -77,8 +119,115 @@ const CreateTrip = () => {
   const [offroadVehicle, setOffroadVehicle] = useState<'4wd-high' | 'awd-medium'>('4wd-high');
   const [pacePreference, setPacePreference] = useState<PacePreference>('moderate');
 
+  // Build method state
+  const [buildMethod, setBuildMethod] = useState<BuildMethod | null>(null);
+
+  // Manual trip building state - one entry per day
+  const [manualDays, setManualDays] = useState<ManualDayState[]>([]);
+
+  // Initialize manual days when duration changes
+  useEffect(() => {
+    if (buildMethod === 'manual') {
+      // Ensure we have the right number of days
+      setManualDays(prev => {
+        const newDays: ManualDayState[] = [];
+        for (let i = 0; i < duration[0]; i++) {
+          newDays.push(prev[i] || { area: null, campsite: null, stops: [] });
+        }
+        return newDays;
+      });
+    }
+  }, [duration, buildMethod]);
+
   // Drag state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  // Compute wizard steps based on build method
+  const wizardSteps = useMemo(() => {
+    if (buildMethod === 'ai') {
+      return [...BASE_STEPS, ...AI_FLOW_STEPS];
+    } else if (buildMethod === 'manual') {
+      return [...BASE_STEPS, ...getManualFlowSteps(duration[0])];
+    }
+    // Before build method is chosen, just show base steps
+    return BASE_STEPS;
+  }, [buildMethod, duration]);
+
+  // Wizard state
+  const wizard = useWizard({ steps: wizardSteps });
+
+  // Get current wizard state for saving
+  const getWizardState = useCallback((): TripWizardState => ({
+    tripName,
+    startLocation,
+    endLocation,
+    returnToStart,
+    duration,
+    startDate: startDate?.toISOString() || null,
+    buildMethod,
+    destinations,
+    globalLodging,
+    baseCampMode,
+    activities,
+    offroadVehicle,
+    pacePreference,
+    manualDays,
+  }), [tripName, startLocation, endLocation, returnToStart, duration, startDate, buildMethod, destinations, globalLodging, baseCampMode, activities, offroadVehicle, pacePreference, manualDays]);
+
+  // Restore state from draft
+  const restoreFromDraft = useCallback((draftData: typeof draft) => {
+    if (!draftData?.wizard_state) return;
+    const state = draftData.wizard_state;
+
+    setTripName(state.tripName || '');
+    setStartLocation(state.startLocation);
+    setEndLocation(state.endLocation);
+    setReturnToStart(state.returnToStart ?? true);
+    setDuration(state.duration || [3]);
+    setStartDate(state.startDate ? new Date(state.startDate) : undefined);
+    setBuildMethod(state.buildMethod);
+    setDestinations(state.destinations || []);
+    setGlobalLodging(state.globalLodging || 'dispersed');
+    setBaseCampMode(state.baseCampMode ?? false);
+    setActivities(state.activities || ['hiking']);
+    setOffroadVehicle(state.offroadVehicle || '4wd-high');
+    setPacePreference(state.pacePreference || 'moderate');
+    setManualDays(state.manualDays || []);
+
+    // Set pending step to navigate after wizard steps update
+    if (draftData.current_step > 0) {
+      setPendingRestoreStep(draftData.current_step);
+    }
+  }, []);
+
+  // Check for existing draft on mount
+  useEffect(() => {
+    if (!draftLoading && !draftChecked) {
+      setDraftChecked(true);
+      if (hasDraft && draft) {
+        setShowRestoreDialog(true);
+      }
+    }
+  }, [draftLoading, draftChecked, hasDraft, draft]);
+
+  // Navigate to restored step after wizard steps update
+  useEffect(() => {
+    if (pendingRestoreStep !== null && pendingRestoreStep < wizardSteps.length) {
+      wizard.goToStep(pendingRestoreStep);
+      setPendingRestoreStep(null);
+    }
+  }, [pendingRestoreStep, wizardSteps.length, wizard]);
+
+  // Auto-save on state changes (after initial load)
+  useEffect(() => {
+    if (draftChecked && !showRestoreDialog) {
+      const state = getWizardState();
+      // Only save if there's meaningful data
+      if (state.tripName || state.startLocation || state.destinations.length > 0 || state.buildMethod || state.manualDays.some(d => d.area || d.campsite || d.stops.length > 0)) {
+        debouncedSave(state, wizard.currentStep);
+      }
+    }
+  }, [draftChecked, showRestoreDialog, getWizardState, wizard.currentStep, debouncedSave]);
 
   // Entry point selector state
   const [entryPointModal, setEntryPointModal] = useState<{
@@ -102,19 +251,28 @@ const CreateTrip = () => {
 
   // Step validation
   const canProceed = (): boolean => {
-    switch (wizard.currentStep) {
-      case 0: // Trip Details (Name, Locations, Dates)
+    const currentStepId = wizardSteps[wizard.currentStep]?.id;
+
+    switch (currentStepId) {
+      case 'basics': // Trip Details (Name, Locations, Dates)
         if (tripNameError) return false;
         if (duration[0] < 1) return false;
-        // Start/end locations are optional
         return true;
-      case 1: // Destinations
+      case 'build-method': // Build Method Choice
+        return buildMethod !== null;
+      case 'destinations': // Destinations (AI flow)
         return destinations.length > 0;
-      case 2: // Lodging
+      case 'lodging': // Lodging (AI flow)
         return true;
-      case 3: // Activities
+      case 'activities': // Activities (AI flow)
         return true;
       default:
+        // Day builder steps (manual flow)
+        if (currentStepId?.startsWith('day-')) {
+          // For now, always allow proceeding on day steps
+          // TODO: Validate that campsite is selected for each day
+          return true;
+        }
         return true;
     }
   };
@@ -369,6 +527,8 @@ const CreateTrip = () => {
 
       if (trip) {
         setGeneratedTrip(trip);
+        // Delete the draft since trip was created successfully
+        deleteDraft();
         toast.success("Trip created!", {
           id: "generating",
           description: generatedName,
@@ -390,8 +550,10 @@ const CreateTrip = () => {
 
   // Render current step
   const renderStep = () => {
-    switch (wizard.currentStep) {
-      case 0:
+    const currentStepId = wizardSteps[wizard.currentStep]?.id;
+
+    switch (currentStepId) {
+      case 'basics':
         return (
           <StepTripBasics
             tripName={tripName}
@@ -411,7 +573,14 @@ const CreateTrip = () => {
             setDuration={setDuration}
           />
         );
-      case 1:
+      case 'build-method':
+        return (
+          <StepBuildMethod
+            buildMethod={buildMethod}
+            setBuildMethod={setBuildMethod}
+          />
+        );
+      case 'destinations':
         return (
           <StepDestinations
             destinations={destinations}
@@ -423,7 +592,7 @@ const CreateTrip = () => {
             setDraggedIndex={setDraggedIndex}
           />
         );
-      case 2:
+      case 'lodging':
         return (
           <StepLodging
             globalLodging={globalLodging}
@@ -432,7 +601,7 @@ const CreateTrip = () => {
             setBaseCampMode={setBaseCampMode}
           />
         );
-      case 3:
+      case 'activities':
         return (
           <StepActivities
             activities={activities}
@@ -444,49 +613,151 @@ const CreateTrip = () => {
           />
         );
       default:
+        // Day builder steps (manual flow)
+        if (currentStepId?.startsWith('day-')) {
+          const dayNumber = parseInt(currentStepId.replace('day-', ''), 10);
+          const dayIndex = dayNumber - 1;
+          const dayState = manualDays[dayIndex] || { area: null, campsite: null, stops: [] };
+
+          return (
+            <StepDayBuilder
+              dayNumber={dayNumber}
+              totalDays={duration[0]}
+              area={dayState.area}
+              setArea={(area) => {
+                setManualDays(prev => {
+                  const newDays = [...prev];
+                  newDays[dayIndex] = { ...newDays[dayIndex], area };
+                  return newDays;
+                });
+              }}
+              campsite={dayState.campsite}
+              setCampsite={(campsite) => {
+                setManualDays(prev => {
+                  const newDays = [...prev];
+                  newDays[dayIndex] = { ...newDays[dayIndex], campsite };
+                  return newDays;
+                });
+              }}
+              stops={dayState.stops}
+              setStops={(stops) => {
+                setManualDays(prev => {
+                  const newDays = [...prev];
+                  newDays[dayIndex] = { ...newDays[dayIndex], stops };
+                  return newDays;
+                });
+              }}
+            />
+          );
+        }
         return null;
     }
   };
 
+  const currentStepId = wizardSteps[wizard.currentStep]?.id;
+  const isDayBuilderStep = currentStepId?.startsWith('day-');
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className={isDayBuilderStep ? "h-screen bg-background flex flex-col overflow-hidden" : "min-h-screen bg-background"}>
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
+      <header className={`${isDayBuilderStep ? '' : 'sticky top-0'} z-50 bg-surface border-b border-border`}>
         <div className="container px-4 md:px-6 py-4">
-          <div className="flex items-center gap-4">
-            <Link to="/">
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <ArrowLeft className="w-5 h-5" weight="bold" />
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-xl font-display font-bold text-foreground">Create Trip</h1>
-              <p className="text-sm text-muted-foreground">Step {wizard.currentStep + 1} of {WIZARD_STEPS.length}</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link to="/">
+                <Button variant="ghost" size="icon" className="rounded-full">
+                  <X className="w-5 h-5" weight="bold" />
+                </Button>
+              </Link>
+              <div>
+                <h1 className="text-xl font-display font-bold text-foreground">Create Trip</h1>
+                <p className="text-sm text-muted-foreground">Step {wizard.currentStep + 1} of {wizardSteps.length}</p>
+              </div>
             </div>
+            {/* Draft save indicator */}
+            {draftSaving ? (
+              <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                <SpinnerGap className="w-4 h-4 animate-spin" />
+                <span className="hidden sm:inline">Saving...</span>
+              </div>
+            ) : lastSaved ? (
+              <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                <CloudCheck className="w-4 h-4 text-green-600" />
+                <span className="hidden sm:inline">Draft saved</span>
+              </div>
+            ) : null}
           </div>
         </div>
       </header>
 
-      <main className="container px-4 md:px-6 py-6 max-w-2xl">
-        {/* Progress */}
-        <WizardProgress steps={WIZARD_STEPS} currentStep={wizard.currentStep} />
-
-        {/* Current Step Content */}
-        <div className="min-h-[400px]">
+      {isDayBuilderStep ? (
+        /* Day builder uses full-height flex layout like DispersedExplorer */
+        <div className="flex-1 overflow-hidden">
           {renderStep()}
         </div>
+      ) : (
+        <main className="container px-4 md:px-6 py-6 pb-24">
+          {/* Current Step Content */}
+          <div className={`min-h-[400px] ${
+            currentStepId === 'basics' || currentStepId === 'build-method'
+              ? 'max-w-xl mx-auto'
+              : ''
+          }`}>
+            {renderStep()}
+          </div>
+        </main>
+      )}
 
-        {/* Navigation */}
-        <WizardNavigation
-          onBack={wizard.goBack}
-          onNext={wizard.goNext}
-          onSubmit={handleCreateTrip}
-          isFirstStep={wizard.isFirstStep}
-          isLastStep={wizard.isLastStep}
-          canProceed={canProceed()}
-          isSubmitting={generating}
-        />
-      </main>
+      {/* Navigation */}
+      <WizardNavigation
+        onBack={wizard.goBack}
+        onNext={wizard.goNext}
+        onSubmit={handleCreateTrip}
+        isFirstStep={wizard.isFirstStep}
+        isLastStep={wizard.isLastStep}
+        canProceed={canProceed()}
+        isSubmitting={generating}
+      />
+
+      {/* Restore Draft Dialog */}
+      <Dialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Continue where you left off?</DialogTitle>
+            <DialogDescription>
+              You have a saved draft from{' '}
+              {draft?.updated_at
+                ? new Date(draft.updated_at).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })
+                : 'earlier'}
+              . Would you like to continue editing it?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                deleteDraft();
+                setShowRestoreDialog(false);
+              }}
+            >
+              Start Fresh
+            </Button>
+            <Button
+              onClick={() => {
+                restoreFromDraft(draft);
+                setShowRestoreDialog(false);
+              }}
+            >
+              Continue Draft
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Entry Point Selector Modal */}
       {entryPointModal.place && (
