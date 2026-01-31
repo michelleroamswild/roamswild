@@ -10,6 +10,7 @@ import { Polyline, Marker, Polygon, InfoWindow } from '@react-google-maps/api';
 import { PlaceSearch } from '@/components/PlaceSearch';
 import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
 import { usePublicLands } from '@/hooks/use-public-lands';
+import { useDispersedDatabase } from '@/hooks/use-dispersed-database';
 import { useCampsites } from '@/context/CampsitesContext';
 import { useFriends } from '@/context/FriendsContext';
 import { useAuth } from '@/context/AuthContext';
@@ -94,6 +95,50 @@ function isWithinAnyPublicLand(
   );
 }
 
+/**
+ * Check if a dead-end spot is actually near the interior of another road (false dead-end).
+ * This happens when OSM tracks are split into segments that don't share exact coordinates.
+ * Matches the logic in use-dispersed-roads.ts findDeadEnds() filter.
+ */
+function isFalseDeadEnd(
+  spot: { lat: number; lng: number; type: string },
+  roads: { geometry?: { type: string; coordinates: [number, number][] } }[]
+): boolean {
+  if (spot.type !== 'dead-end') return false;
+
+  // Use the same threshold as client-side: ~12 meters
+  const INTERSECTION_THRESHOLD = 0.00012;
+
+  for (const road of roads) {
+    if (!road.geometry?.coordinates?.length) continue;
+    const coords = road.geometry.coordinates;
+
+    // Skip roads with fewer than 5 points (too short to reliably detect "interior")
+    if (coords.length < 5) continue;
+
+    // Check if spot is near road's endpoints (which would be a legitimate junction)
+    const startPt = { lng: coords[0][0], lat: coords[0][1] };
+    const endPt = { lng: coords[coords.length - 1][0], lat: coords[coords.length - 1][1] };
+
+    const distToStart = Math.abs(spot.lat - startPt.lat) + Math.abs(spot.lng - startPt.lng);
+    if (distToStart < INTERSECTION_THRESHOLD * 2) continue; // Near start endpoint - legitimate
+
+    const distToEnd = Math.abs(spot.lat - endPt.lat) + Math.abs(spot.lng - endPt.lng);
+    if (distToEnd < INTERSECTION_THRESHOLD * 2) continue; // Near end endpoint - legitimate
+
+    // Check interior points only (skip first 2 and last 2 points to avoid endpoint proximity)
+    for (let i = 2; i < coords.length - 2; i++) {
+      const pt = { lng: coords[i][0], lat: coords[i][1] };
+      const latDiff = Math.abs(spot.lat - pt.lat);
+      const lngDiff = Math.abs(spot.lng - pt.lng);
+      if (latDiff < INTERSECTION_THRESHOLD && lngDiff < INTERSECTION_THRESHOLD) {
+        return true; // This dead-end is near the interior of another road - it's a false dead-end
+      }
+    }
+  }
+  return false;
+}
+
 const DispersedExplorer = () => {
   const { isLoaded } = useGoogleMaps();
   const [searchParams] = useSearchParams();
@@ -125,21 +170,88 @@ const DispersedExplorer = () => {
   const [showFriendsCampsites, setShowFriendsCampsites] = useState(true);
   const [selectedCampsite, setSelectedCampsite] = useState<Campsite | null>(null);
 
-  const { mvumRoads, osmTracks, potentialSpots, establishedCampgrounds, loading, error } = useDispersedRoads(
+  // Toggle between database (fast) and client-side (comprehensive with roads) data sources
+  const [useDatabase, setUseDatabase] = useState(true);
+
+  // Database hooks - fast pre-computed spots, campgrounds, and roads
+  const {
+    potentialSpots: dbSpots,
+    establishedCampgrounds: dbCampgrounds,
+    mvumRoads: dbMvumRoads,
+    osmTracks: dbOsmTracks,
+    loading: dbLoading,
+    error: dbError,
+  } = useDispersedDatabase(
     searchLocation?.lat ?? null,
     searchLocation?.lng ?? null,
-    10 // 10 mile radius
+    10
   );
+
+  // Always use client-side for public lands (database has fragmented polygons)
+  const { publicLands: clientPublicLands, loading: clientPublicLandsLoading } = usePublicLands(
+    searchLocation?.lat ?? 0,
+    searchLocation?.lng ?? 0,
+    12
+  );
+
+  // Debug logging for public lands
+  useEffect(() => {
+    if (clientPublicLands.length > 0) {
+      const byAgency: Record<string, { total: number; renderable: number; withPolygon: number }> = {};
+      clientPublicLands.forEach(l => {
+        if (!byAgency[l.managingAgency]) {
+          byAgency[l.managingAgency] = { total: 0, renderable: 0, withPolygon: 0 };
+        }
+        byAgency[l.managingAgency].total++;
+        if (l.polygon && l.polygon.length > 0) byAgency[l.managingAgency].withPolygon++;
+        if (l.renderOnMap) byAgency[l.managingAgency].renderable++;
+      });
+      console.log('[DispersedExplorer] Public lands loaded:', clientPublicLands.length);
+      console.log('[DispersedExplorer] By agency:', byAgency);
+
+      // Specific BLM debugging
+      const blmLands = clientPublicLands.filter(l => l.managingAgency === 'BLM');
+      if (blmLands.length > 0) {
+        console.log('[DispersedExplorer] BLM lands:', blmLands.map(l => ({
+          id: l.id,
+          name: l.name,
+          hasPolygon: !!l.polygon,
+          vertexCount: l.polygon?.length || 0,
+          renderOnMap: l.renderOnMap,
+        })));
+      } else {
+        console.log('[DispersedExplorer] WARNING: No BLM lands in clientPublicLands array!');
+      }
+    }
+  }, [clientPublicLands]);
+
+  // Client-side hooks for roads/spots - only fetch when not using database
+  const {
+    mvumRoads: clientMvumRoads,
+    osmTracks: clientOsmTracks,
+    potentialSpots: clientSpots,
+    establishedCampgrounds: clientCampgrounds,
+    loading: clientLoading,
+    error: clientError,
+  } = useDispersedRoads(
+    !useDatabase ? (searchLocation?.lat ?? null) : null,
+    !useDatabase ? (searchLocation?.lng ?? null) : null,
+    10
+  );
+
+  // Hybrid approach: database for spots/campgrounds/roads, client-side for public lands
+  const mvumRoads = useDatabase ? dbMvumRoads : clientMvumRoads;
+  const osmTracks = useDatabase ? dbOsmTracks : clientOsmTracks;
+  const potentialSpots = useDatabase ? dbSpots : clientSpots;
+  const establishedCampgrounds = useDatabase ? dbCampgrounds : clientCampgrounds;
+  const loading = useDatabase ? dbLoading : clientLoading;
+  const error = useDatabase ? dbError : clientError;
+  // Always use client public lands (complete boundaries from direct API)
+  const publicLands = clientPublicLands;
+  const publicLandsLoading = clientPublicLandsLoading;
 
   // Selected established campground
   const [selectedCampground, setSelectedCampground] = useState<EstablishedCampground | null>(null);
-
-  // Fetch public lands (BLM, USFS, NPS, FWS) for overlay
-  const { publicLands, loading: publicLandsLoading } = usePublicLands(
-    searchLocation?.lat ?? 0,
-    searchLocation?.lng ?? 0,
-    12 // 12 mile radius for public lands (slightly larger than road search to ensure coverage)
-  );
 
   // Handle URL parameters for initial location (e.g., from "Find camps near me")
   useEffect(() => {
@@ -298,7 +410,11 @@ const DispersedExplorer = () => {
     // Check if we have MVUM roads - if so, we're in National Forest territory
     const hasMVUMRoads = mvumRoads.length > 0;
 
+    // Combine all roads for false dead-end filtering
+    const allRoads = [...mvumRoads, ...osmTracks];
+
     // Filter derived spots:
+    // - EXCLUDE false dead-ends (spots near the interior of other roads - they're really intersections)
     // - MVUM roads: definitely National Forest - always include
     // - BLM roads: definitely BLM land - always include
     // - OSM tracks: REQUIRE actual polygon intersection when polygon data is available
@@ -307,7 +423,11 @@ const DispersedExplorer = () => {
     // - EXCLUDE spots near established campgrounds (use the campground instead)
     // - EXCLUDE spots outside public land polygons (e.g., Potash fields, private ranches)
     const filteredDerived = derivedSpots.filter((spot) => {
-      // First check: exclude spots in National Parks or State Parks (dispersed camping not allowed)
+      // First check: filter out false dead-ends (actually intersections)
+      // This matches the logic in use-dispersed-roads.ts for Full mode
+      if (isFalseDeadEnd(spot, allRoads)) return false;
+
+      // Exclude spots in National Parks or State Parks (dispersed camping not allowed)
       if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
 
       // Exclude spots near established campgrounds (use the campground instead)
@@ -319,23 +439,21 @@ const DispersedExplorer = () => {
       // BLM roads are definitely on public land (BLM) - always include
       if (spot.isOnBLMRoad) return true;
 
-      // For OSM-derived spots, require polygon validation when we have polygon data
-      // This is the key filter for private land like Potash fields, private ranches, etc.
+      // Database spots have isOnPublicLand validated during derivation - trust them
+      // For client-computed spots, this is a heuristic based on OSM track characteristics
+      if (spot.isOnPublicLand) return true;
+
+      // For remaining OSM-derived spots, validate against polygon data if available
+      // This catches spots that were computed client-side without proper validation
       if (publicLands.length > 0) {
         const withinPublicLand = isWithinAnyPublicLand(spot.lat, spot.lng, publicLands);
         if (withinPublicLand) return true;
 
         // Spot is NOT within any public land polygon - reject as likely private land
-        // Spots on actual MVUM/BLM roads are already handled above (lines 309-313)
-        // The isOnPublicLand heuristic is based on OSM track characteristics which is unreliable
         return false;
       }
 
-      // No polygon coverage at all - fall back to heuristics
-      // The isOnPublicLand flag is based on OSM track characteristics (access tags, surface type)
-      if (spot.isOnPublicLand) return true;
-
-      // Use MVUM presence as proxy for "in National Forest area"
+      // No polygon coverage at all - use MVUM presence as proxy for "in National Forest area"
       return hasMVUMRoads;
     });
 
@@ -346,6 +464,13 @@ const DispersedExplorer = () => {
     const stateTrustPolygons = publicLands.filter(l => ['SDOL', 'SFW', 'SPR', 'SDNR'].includes(l.managingAgency)).length;
     const landTrustPolygons = publicLands.filter(l => l.managingAgency === 'NGO').length;
     console.log(`Polygons: ${blmPolygons} BLM, ${usfsPolygons} USFS, ${npsPolygons} NPS, ${statePolygons} State Park, ${stateTrustPolygons} State Trust, ${landTrustPolygons} Land Trust, ${publicLands.length} total`);
+
+    // Log false dead-end filtering (matching Full mode behavior)
+    const falseDeadEndCount = derivedSpots.filter(s => isFalseDeadEnd(s, allRoads)).length;
+    if (falseDeadEndCount > 0) {
+      console.log(`Filtered out ${falseDeadEndCount} false dead-ends (actually intersections)`);
+    }
+    console.log(`Derived spots: ${derivedSpots.length} total, ${filteredDerived.length} after filtering`);
 
     const allSpots = [...campSites, ...filteredDerived];
 
@@ -1403,6 +1528,34 @@ const DispersedExplorer = () => {
                       <span>4WD</span>
                     </div>
                   </div>
+                </div>
+
+                {/* Data Source Toggle */}
+                <div className="space-y-2 pt-2 border-t border-border">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Data Source</p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={useDatabase ? "default" : "outline"}
+                      size="sm"
+                      className="flex-1 h-7 text-xs"
+                      onClick={() => setUseDatabase(true)}
+                    >
+                      Fast Mode
+                    </Button>
+                    <Button
+                      variant={!useDatabase ? "default" : "outline"}
+                      size="sm"
+                      className="flex-1 h-7 text-xs"
+                      onClick={() => setUseDatabase(false)}
+                    >
+                      Full Mode
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {useDatabase
+                      ? "Using pre-computed spots (faster)"
+                      : "Computing from road network (shows roads)"}
+                  </p>
                 </div>
               </div>
             </PopoverContent>

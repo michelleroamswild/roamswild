@@ -1,0 +1,2 @@
+# Disable JWT verification for admin import function
+verify_jwt = false
