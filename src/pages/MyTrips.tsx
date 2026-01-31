@@ -15,6 +15,8 @@ import {
   ClockCounterClockwise,
   CalendarCheck,
   CheckCircle,
+  PencilSimpleLine,
+  ArrowRight,
 } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -33,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useTrip } from '@/context/TripContext';
+import { useTripDraft } from '@/hooks/use-trip-draft';
 import { toast } from 'sonner';
 import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
 import { GeneratedTrip } from '@/types/trip';
@@ -50,6 +53,7 @@ const MyTrips = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { savedTrips, sharedTrips, loadSavedTrip, deleteSavedTrip, markTripComplete, isLoading } = useTrip();
+  const { draft, loading: draftLoading, deleteDraft, hasDraft } = useTripDraft();
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; tripId: string; tripName: string }>({
     isOpen: false,
     tripId: '',
@@ -224,6 +228,75 @@ const MyTrips = () => {
             {allTripsRaw.length} {allTripsRaw.length === 1 ? 'trip' : 'trips'} saved
           </p>
         </div>
+
+        {/* Draft In Progress Banner */}
+        {!draftLoading && hasDraft && draft && (
+          <div className="mb-8">
+            <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+              <PencilSimpleLine className="w-4 h-4" />
+              Draft In Progress
+            </h2>
+            <Card className="group border-2 border-dashed border-amber-500/50 bg-amber-500/5 hover:border-amber-500 hover:shadow-card transition-all duration-300 overflow-hidden">
+              <CardContent className="p-0">
+                <div className="flex items-stretch">
+                  <div className="w-1.5 bg-amber-500" />
+                  <div className="flex-1 p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-display font-semibold text-foreground group-hover:text-amber-600 transition-colors">
+                            {draft.wizard_state.tripName || 'Untitled Trip'}
+                          </h3>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/20 text-amber-600 rounded-full text-xs font-medium flex-shrink-0">
+                            Draft
+                          </span>
+                        </div>
+
+                        <p className="text-sm text-muted-foreground mt-2">
+                          {draft.wizard_state.buildMethod === 'manual'
+                            ? `Building day by day - ${draft.wizard_state.duration?.[0] || 3} day trip`
+                            : draft.wizard_state.buildMethod === 'ai'
+                              ? `AI-assisted planning - ${draft.wizard_state.destinations?.length || 0} destinations`
+                              : `${draft.wizard_state.duration?.[0] || 3} day trip`}
+                        </p>
+
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Last edited {new Date(draft.updated_at).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteDraft();
+                            toast.success('Draft discarded');
+                          }}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash className="w-4 h-4" />
+                        </Button>
+                        <Link to="/create-trip">
+                          <Button variant="primary" size="sm" className="gap-2">
+                            Continue
+                            <ArrowRight className="w-4 h-4" />
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Current Trip Banner */}
         {!isLoading && currentTrips.length > 0 && (

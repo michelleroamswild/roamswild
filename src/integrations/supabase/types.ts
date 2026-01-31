@@ -261,6 +261,41 @@ export type Database = {
           },
         ]
       }
+      trip_drafts: {
+        Row: {
+          id: string
+          user_id: string
+          wizard_state: Json
+          current_step: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          wizard_state: Json
+          current_step?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          wizard_state?: Json
+          current_step?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_drafts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_activity: {
         Row: {
           action: string
