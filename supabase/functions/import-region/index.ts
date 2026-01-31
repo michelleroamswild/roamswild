@@ -380,11 +380,14 @@ async function importOSMRoads(
   let count = 0;
 
   // Build Overpass query for tracks and unpaved roads
+  // Match the same road types as Full mode (use-dispersed-roads.ts fetchAllOSMData)
   const query = `
     [out:json][timeout:60];
     (
       way["highway"="track"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
-      way["highway"="unclassified"]["surface"~"unpaved|gravel|dirt|ground|sand"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
+      way["highway"="unclassified"]["surface"~"unpaved|gravel|dirt|ground|sand|mud"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
+      way["highway"="tertiary"]["surface"~"unpaved|gravel|dirt|ground|sand|mud"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
+      way["highway"="secondary"]["surface"~"unpaved|gravel|dirt|ground|sand|mud"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
       way["4wd_only"="yes"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
     );
     out geom;
@@ -452,6 +455,7 @@ async function importOSMRoads(
       }
 
       const externalId = `osm_${element.id}`;
+      const highway = element.tags?.highway || null;
 
       // Check if already exists
       const { data: existing } = await supabase
@@ -460,20 +464,37 @@ async function importOSMRoads(
         .eq("external_id", externalId)
         .single();
 
+      let error;
       if (existing) {
-        continue;
+        // Update existing road with OSM tags
+        const { error: updateError } = await supabase
+          .from("road_segments")
+          .update({
+            highway: highway,
+            tracktype: tracktype || null,
+            access: access || null,
+            four_wd_only: fourWd === "yes",
+            surface_type: surface || null,
+          })
+          .eq("id", existing.id);
+        error = updateError;
+      } else {
+        // Insert new road segment with OSM tags
+        const { error: insertError } = await supabase.rpc("insert_road_segment_simple", {
+          p_external_id: externalId,
+          p_source_type: "osm",
+          p_geometry_wkt: wktLine,
+          p_name: element.tags?.name || null,
+          p_surface_type: surface || null,
+          p_vehicle_access: vehicleAccess,
+          p_seasonal_closure: null,
+          p_highway: highway,
+          p_tracktype: tracktype || null,
+          p_access: access || null,
+          p_four_wd_only: fourWd === "yes",
+        });
+        error = insertError;
       }
-
-      // Insert road segment
-      const { error } = await supabase.rpc("insert_road_segment_simple", {
-        p_external_id: externalId,
-        p_source_type: "osm",
-        p_geometry_wkt: wktLine,
-        p_name: element.tags?.name || null,
-        p_surface_type: surface || null,
-        p_vehicle_access: vehicleAccess,
-        p_seasonal_closure: null,
-      });
 
       if (error) {
         // Don't log every error, just count them
@@ -498,8 +519,9 @@ async function importOSMCampSites(
 ): Promise<{ count: number; errors: string[] }> {
   const errors: string[] = [];
   let count = 0;
+  let establishedCount = 0;
 
-  // Build Overpass query for camp sites
+  // Build Overpass query for camp sites - request all tags
   const query = `
     [out:json][timeout:60];
     (
@@ -510,7 +532,7 @@ async function importOSMCampSites(
       node["leisure"="firepit"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
       way["tourism"="camp_site"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
     );
-    out center;
+    out center tags;
   `;
 
   // Try each Overpass endpoint
@@ -548,56 +570,79 @@ async function importOSMCampSites(
       if (!lat || !lon) continue;
 
       const tags = element.tags || {};
-      const name = tags.name || "Camp Site";
+      const name = tags.name || null;
       const osmId = element.id;
+      const isWayOrArea = element.type === "way" || element.type === "relation";
 
-      // Check if already exists (by osm_camp_site_id)
-      const { data: existing } = await supabase
-        .from("potential_spots")
-        .select("id")
-        .eq("osm_camp_site_id", osmId)
-        .single();
+      // Store relevant OSM tags as JSONB
+      // Include all tags that might be useful for classification or future features
+      const osmTags: Record<string, any> = {};
 
-      if (existing) continue;
+      // Classification tags
+      if (tags.tourism) osmTags.tourism = tags.tourism;
+      if (tags.camp_site) osmTags.camp_site = tags.camp_site;
+      if (tags.camp_type) osmTags.camp_type = tags.camp_type;
+      if (tags.backcountry) osmTags.backcountry = tags.backcountry;
+      if (tags.leisure) osmTags.leisure = tags.leisure;
 
-      // Determine confidence score
-      let score = 40; // Base for known camp site
-      const reasons: string[] = ["Known camp site from OSM"];
+      // Fee and amenity tags (for established campground detection)
+      if (tags.fee) osmTags.fee = tags.fee;
+      if (tags.toilets) osmTags.toilets = tags.toilets;
+      if (tags.drinking_water) osmTags.drinking_water = tags.drinking_water;
+      if (tags.shower) osmTags.shower = tags.shower;
+      if (tags.power_supply) osmTags.power_supply = tags.power_supply;
+      if (tags.internet_access) osmTags.internet_access = tags.internet_access;
+      if (tags.capacity) osmTags.capacity = tags.capacity;
 
-      if (tags.fee === "no" || tags.backcountry === "yes") {
-        score += 5;
-        reasons.push("Free/backcountry camping");
-      }
-      if (tags.name) {
-        score += 5;
-        reasons.push("Named location");
-      }
+      // Access tags
+      if (tags.access) osmTags.access = tags.access;
+      if (tags["4wd_only"]) osmTags["4wd_only"] = tags["4wd_only"];
 
-      // Insert using RPC function (handles PostGIS geometry)
-      const vehicleAccess = tags["4wd_only"] === "yes" ? "4wd" : "high_clearance";
-      const { error } = await supabase.rpc("insert_osm_camp_site", {
+      // Other useful tags
+      if (tags.operator) osmTags.operator = tags.operator;
+      if (tags.website) osmTags.website = tags.website;
+      if (tags.phone) osmTags.phone = tags.phone;
+      if (tags.description) osmTags.description = tags.description;
+      if (tags.opening_hours) osmTags.opening_hours = tags.opening_hours;
+      if (tags.reservation) osmTags.reservation = tags.reservation;
+      if (tags.tents) osmTags.tents = tags.tents;
+      if (tags.caravans) osmTags.caravans = tags.caravans;
+      if (tags.fire) osmTags.fire = tags.fire;
+      if (tags.bbq) osmTags.bbq = tags.bbq;
+
+      // Use new import function that computes is_established_campground
+      const { data: spotId, error } = await supabase.rpc("import_osm_camp_site", {
+        p_osm_id: osmId,
         p_lat: lat,
         p_lng: lon,
         p_name: name,
-        p_osm_id: osmId,
-        p_score: score,
-        p_reasons: reasons,
-        p_vehicle_access: vehicleAccess,
+        p_osm_tags: osmTags,
+        p_is_way_or_area: isWayOrArea,
       });
 
       if (error) {
         if (!error.message.includes("duplicate")) {
           console.error(`Error inserting camp site: ${error.message}`);
+          errors.push(`Camp site ${osmId}: ${error.message}`);
         }
       } else {
         count++;
+
+        // Check if it was classified as established (for logging)
+        // This is a rough check based on the same logic as the function
+        const nameIndicatesCampground = name && /campground|camp\s|camping|rv\s*park|yurt/i.test(name);
+        const hasFee = tags.fee === "yes";
+        const hasAmenities = tags.toilets || tags.drinking_water || tags.shower;
+        if (nameIndicatesCampground || hasFee || hasAmenities) {
+          establishedCount++;
+        }
       }
     } catch (e: any) {
       // Skip individual errors
     }
   }
 
-  console.log(`Inserted ${count} OSM camp sites`);
+  console.log(`Inserted ${count} OSM camp sites (${establishedCount} likely established campgrounds)`);
   return { count, errors };
 }
 

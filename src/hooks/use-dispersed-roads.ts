@@ -63,6 +63,10 @@ export interface PotentialSpot {
   // Route accessibility - can you REACH this spot via passenger/high-clearance roads?
   passengerReachable?: boolean; // True if reachable via only passenger-accessible roads
   highClearanceReachable?: boolean; // True if reachable via passenger + high-clearance roads (no 4WD required)
+  // Classification flag for established campground vs dispersed site (from database)
+  isEstablishedCampground?: boolean;
+  // Road accessibility flag - is this camp site near a road? (for filtering backcountry/hike-in sites)
+  isRoadAccessible?: boolean;
 }
 
 // BLM Road from GTLF (Ground Transportation Linear Feature)
@@ -904,14 +908,10 @@ function findDeadEnds(
     const accessibility = getAccessibility(entry.lat, entry.lng);
 
     if (entry.count === 1) {
-      // Dead end - road terminus
-      let score = 25; // Base score for dead end
+      // Dead end - road terminus on public land = high confidence
+      // Vehicle access (high clearance/4wd) is a filter, not a scoring factor
+      const score = 35;
       const reasons: string[] = ['Road terminus (dead-end)', 'On public land'];
-
-      if (entry.isHighClearance) {
-        score += 10;
-        reasons.push('High clearance road');
-      }
 
       spots.push({
         id: `deadend-${key}`,
@@ -1022,7 +1022,6 @@ function findDeadEnds(
     const nearbyOSM = isNearRoadInterior(osmTracks);
 
     if (nearbyMVUM || nearbyBLM || nearbyOSM) {
-      const nearbyRoad = nearbyMVUM || nearbyBLM || nearbyOSM;
       return false; // Filter out - it's actually an intersection
     }
 
@@ -1529,16 +1528,20 @@ async function fetchAllOSMData(
       const isIndividualSite = /^Site\s*\d/i.test(name) || tags.tourism === 'camp_pitch';
 
       // Score how likely this is an established campground (not dispersed)
+      // Requires strong evidence - polygon alone is not enough
       let establishedScore = 0;
-      if (isWayOrArea) establishedScore += 3;  // Polygons are usually campgrounds
-      if (hasFee) establishedScore += 2;
-      if (hasAmenities) establishedScore += 2;
+      if (isWayOrArea) establishedScore += 1;  // Polygon gives slight boost, but not enough alone
+      if (hasFee) establishedScore += 2;       // Fee is strong indicator
+      if (hasAmenities) establishedScore += 2; // Amenities are strong indicator
       if (hasCapacity) establishedScore += 1;
-      if (nameIndicatesCampground) establishedScore += 2;
+      if (nameIndicatesCampground) establishedScore += 2;  // Name is strong indicator
       if (isBackcountry) establishedScore -= 3;  // Definitely not established
       if (isIndividualSite) establishedScore -= 1;  // Individual sites within campgrounds
 
-      const isEstablishedCampground = establishedScore >= 3 && !isBackcountry;
+      // Require score >= 3 AND either: name indicates campground, OR has fee/amenities
+      // This prevents random polygons from being classified as established
+      const hasStrongIndicator = nameIndicatesCampground || hasFee || hasAmenities;
+      const isEstablishedCampground = establishedScore >= 3 && !isBackcountry && hasStrongIndicator;
 
       let displayName = name || 'Camp Site';
       if (isFirepit && !name) displayName = 'Fire Ring';
@@ -1622,7 +1625,7 @@ async function fetchAllOSMData(
 export function useDispersedRoads(
   lat: number | null,
   lng: number | null,
-  radiusMiles: number = 15
+  radiusMiles: number = 10
 ): DispersedRoadsResult {
   const [mvumRoads, setMvumRoads] = useState<MVUMRoad[]>([]);
   const [blmRoads, setBlmRoads] = useState<BLMRoad[]>([]);
@@ -1709,13 +1712,12 @@ export function useDispersedRoads(
         const osmCampgrounds = camps.filter((camp: any) => camp.isEstablishedCampground);
 
         osmCampgrounds.forEach(osmCg => {
-          // Only add if not already in list (check by name similarity AND proximity)
+          // Only add if not already in list - require VERY close proximity for dedup
+          // Don't use name matching since campgrounds can have multiple loops (e.g., SFRA Loop A, Loop G)
           const alreadyExists = allCampgrounds.some(cg => {
             const dist = getDistanceMiles(osmCg.lat, osmCg.lng, cg.lat, cg.lng);
-            // Consider duplicate only if very close (<0.1 miles) OR same name and close (<0.5 miles)
-            const sameNameish = cg.name.toLowerCase().includes(osmCg.name.toLowerCase().split(' ')[0]) ||
-                               osmCg.name.toLowerCase().includes(cg.name.toLowerCase().split(' ')[0]);
-            return (dist < 0.1) || (sameNameish && dist < 0.5);
+            // Only consider duplicate if at essentially the same location (<0.05 miles / ~80 meters)
+            return dist < 0.05;
           });
           if (!alreadyExists) {
             allCampgrounds.push({
@@ -1773,11 +1775,9 @@ export function useDispersedRoads(
             return false;
           }
 
-          // Check OSM camp sites
-          const tooCloseToOSMCamp = camps.some(camp =>
-            getDistanceMiles(spot.lat, spot.lng, camp.lat, camp.lng) < 0.5
-          );
-          if (tooCloseToOSMCamp) return false;
+          // NOTE: We no longer filter dead-ends near OSM camp sites
+          // OSM camp sites and dead-ends serve different purposes - both are valid spots
+          // This matches Fast mode behavior where derived spots are shown alongside camp sites
 
           // Check established campgrounds (merged RIDB + USFS)
           const tooCloseToEstablished = allCampgrounds.some(cg =>
@@ -1796,6 +1796,18 @@ export function useDispersedRoads(
         const roadAccessibleCamps = camps
           .filter(camp => {
             const nearRoad = isNearRoad(camp.lat, camp.lng, mvum, osm, 0.25);
+            // Debug: check specific camp site
+            const isDebugCamp = Math.abs(camp.lat - 38.457196) < 0.001 && Math.abs(camp.lng - (-109.476386)) < 0.001;
+            if (isDebugCamp) {
+              console.log('[DEBUG] Camp site at 38.457, -109.476:', {
+                name: camp.name,
+                lat: camp.lat,
+                lng: camp.lng,
+                nearRoad,
+                mvumRoadsCount: mvum.length,
+                osmTracksCount: osm.length,
+              });
+            }
             if (!nearRoad) {
               console.log(`Filtering out backcountry camp: ${camp.name} (not near any road)`);
             }
@@ -1846,11 +1858,21 @@ export function useDispersedRoads(
             return false;
           }
 
-          // Also exclude any camp within 0.25 miles of an established campground
-          const tooCloseToEstablished = allCampgrounds.some(cg =>
-            getDistanceMiles(camp.lat, camp.lng, cg.lat, cg.lng) < 0.25
-          );
-          return !tooCloseToEstablished;
+          // NOTE: We do NOT filter OSM camp sites by campground proximity
+          // OSM camp sites are explicitly tagged camping locations and should be shown
+          // The 0.25-mile campground proximity filter only applies to derived spots (dead-ends)
+          return true;
+        })
+        // Deduplicate camps that are very close to each other (within ~50 meters)
+        // This removes duplicate RV park spots, individual pitches mapped separately, etc.
+        .filter((camp, index, array) => {
+          const DEDUP_THRESHOLD = 0.0005; // ~50 meters in degrees
+          // Keep this camp only if no earlier camp is within threshold
+          return !array.slice(0, index).some(earlier => {
+            const latDiff = Math.abs(camp.lat - earlier.lat);
+            const lngDiff = Math.abs(camp.lng - earlier.lng);
+            return latDiff < DEDUP_THRESHOLD && lngDiff < DEDUP_THRESHOLD;
+          });
         });
 
         console.log('Dispersed data:', {
@@ -1872,10 +1894,15 @@ export function useDispersedRoads(
         // Combine all potential spots: truly dispersed OSM camp sites + filtered derived spots
         const allSpots = [...trulyDispersedCamps, ...filteredDerivedSpots];
 
-        // Sort by score (highest first)
-        allSpots.sort((a, b) => b.score - a.score);
+        // Filter to circular radius (bounding box may include corners beyond radiusMiles)
+        const spotsWithinRadius = allSpots.filter(spot =>
+          getDistanceMiles(lat, lng, spot.lat, spot.lng) <= radiusMiles
+        );
 
-        setPotentialSpots(allSpots);
+        // Sort by score (highest first)
+        spotsWithinRadius.sort((a, b) => b.score - a.score);
+
+        setPotentialSpots(spotsWithinRadius);
       } catch (err) {
         console.error('Dispersed roads fetch error:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch roads');

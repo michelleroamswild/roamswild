@@ -191,7 +191,7 @@ const DispersedExplorer = () => {
   const { publicLands: clientPublicLands, loading: clientPublicLandsLoading } = usePublicLands(
     searchLocation?.lat ?? 0,
     searchLocation?.lng ?? 0,
-    12
+    10
   );
 
   // Debug logging for public lands
@@ -282,7 +282,7 @@ const DispersedExplorer = () => {
   // Fetch confirmed explorer spots from database when search location changes
   useEffect(() => {
     if (searchLocation) {
-      getExplorerSpots(searchLocation.lat, searchLocation.lng, 15).then(setExplorerSpots);
+      getExplorerSpots(searchLocation.lat, searchLocation.lng, 10).then(setExplorerSpots);
     } else {
       setExplorerSpots([]);
     }
@@ -385,6 +385,67 @@ const DispersedExplorer = () => {
     [publicLands]
   );
 
+  // Helper to detect if a camp site is actually an established campground
+  // Uses the isEstablishedCampground flag computed by database using same logic as Full mode
+  const isLikelyEstablishedCampground = useCallback((spot: PotentialSpot): boolean => {
+    // Primary: use the database-computed flag (matches Full mode's OSM tag scoring)
+    if (spot.isEstablishedCampground !== undefined) {
+      return spot.isEstablishedCampground;
+    }
+
+    // Fallback for older data: check reasons array
+    if (spot.reasons?.includes('Established campground')) {
+      return true;
+    }
+
+    // Final fallback: check name pattern for sites without database classification
+    const name = spot.name || '';
+    const nameIndicatesCampground = /campground|camping area|camp\s|rv\s*park|yurt|group camp/i.test(name);
+    const isDispersedPattern = /dispersed|primitive|backcountry|wild|fire\s*ring|dead.?end/i.test(name);
+    return nameIndicatesCampground && !isDispersedPattern;
+  }, []);
+
+  // For Fast mode: extract established campgrounds from misclassified database camp sites
+  // These should show as blue dots (campgrounds) not green dots (known sites)
+  const additionalCampgrounds = useMemo((): EstablishedCampground[] => {
+    if (!useDatabase) return []; // Only needed for Fast mode
+
+    const campSites = potentialSpots.filter((spot) => spot.type === 'camp-site');
+    return campSites
+      .filter(isLikelyEstablishedCampground)
+      .map((spot) => ({
+        id: spot.id,
+        name: spot.name || 'Campground',
+        lat: spot.lat,
+        lng: spot.lng,
+        facilityType: 'Campground',
+        agencyName: undefined,
+        reservable: false,
+        url: undefined,
+      }));
+  }, [useDatabase, potentialSpots, isLikelyEstablishedCampground]);
+
+  // Combined campgrounds: original from API + additional from misclassified camp sites
+  const allEstablishedCampgrounds = useMemo((): EstablishedCampground[] => {
+    if (!useDatabase) return establishedCampgrounds;
+
+    // Deduplicate by checking if already in original list (by location proximity)
+    const combined = [...establishedCampgrounds];
+    const DEDUP_THRESHOLD = 0.001; // ~100 meters
+
+    for (const additional of additionalCampgrounds) {
+      const isDuplicate = combined.some(existing => {
+        const latDiff = Math.abs(existing.lat - additional.lat);
+        const lngDiff = Math.abs(existing.lng - additional.lng);
+        return latDiff < DEDUP_THRESHOLD && lngDiff < DEDUP_THRESHOLD;
+      });
+      if (!isDuplicate) {
+        combined.push(additional);
+      }
+    }
+    return combined;
+  }, [useDatabase, establishedCampgrounds, additionalCampgrounds]);
+
   // Filter potential spots with smart rules:
   // - OSM camp sites: Always show (they're verified camping locations)
   // - MVUM-derived spots: Always show (MVUM roads are definitely on National Forest)
@@ -392,17 +453,84 @@ const DispersedExplorer = () => {
   // - EXCLUDE spots within National Parks or State Parks (dispersed camping not allowed)
   // - EXCLUDE spots near established campgrounds (use the campground instead)
   const filteredPotentialSpots = useMemo(() => {
-    // Always show OSM camp sites - they're explicitly tagged as camping locations
-    // Exclude those in National Parks and State Parks, but ALLOW those on tribal lands
-    // (tribal campgrounds exist and are tagged in OSM)
-    const campSites = potentialSpots
-      .filter((spot) => spot.type === 'camp-site')
-      .filter((spot) => {
-        // Allow OSM camp sites on tribal lands (they're likely tribal campgrounds)
-        if (isWithinTribalLand(spot.lat, spot.lng)) return true;
-        // Otherwise apply normal restricted area filtering
-        return !isWithinRestrictedArea(spot.lat, spot.lng);
-      });
+    // Helper to check if a point is near any road (for filtering backcountry camps)
+    const isNearAnyRoad = (lat: number, lng: number, thresholdMiles: number = 0.25): boolean => {
+      const thresholdDeg = thresholdMiles / 69; // Approximate conversion
+      const allRoads = [...mvumRoads, ...osmTracks];
+
+      for (const road of allRoads) {
+        if (!road.geometry?.coordinates?.length) continue;
+        for (const coord of road.geometry.coordinates) {
+          const roadLng = coord[0];
+          const roadLat = coord[1];
+          const latDiff = Math.abs(lat - roadLat);
+          const lngDiff = Math.abs(lng - roadLng);
+          if (latDiff < thresholdDeg && lngDiff < thresholdDeg) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    // For Full mode (client-side), spots are already filtered in use-dispersed-roads.ts
+    // Only apply extra filtering for Fast mode (database) spots
+    let campSites = potentialSpots.filter((spot) => spot.type === 'camp-site');
+
+    if (useDatabase) {
+      // Filter database camp sites to match Full mode behavior:
+      // - Exclude established campgrounds (they go to campgrounds list)
+      // - Exclude backcountry/hike-in camps not near any road
+      // - Exclude individual pitch sites ("Site 1", "Site 2") near campgrounds
+      // - Exclude "Host" sites (camp host sites at established campgrounds)
+      // - Exclude camps too close to established campgrounds
+      // - Exclude camps too close to each other (deduplication)
+      campSites = campSites
+        .filter((spot) => {
+          const name = spot.name || '';
+
+          // Filter out established campgrounds (they're added to campgrounds list above)
+          if (isLikelyEstablishedCampground(spot)) return false;
+
+          // Filter out backcountry/hike-in camps that aren't near any road
+          // Use real-time check against loaded roads to match Full mode behavior
+          // (database flag may not be backfilled, so we check against actual road data)
+          if (!isNearAnyRoad(spot.lat, spot.lng, 0.25)) return false;
+
+          // Filter out "Host" sites (camp hosts at established campgrounds)
+          if (/^Host$/i.test(name) || /CAMP HOST/i.test(name)) return false;
+
+          // Filter out individual pitch sites near established campgrounds
+          const isIndividualSite = /^Site\s*\d/i.test(name);
+          if (isIndividualSite && isNearEstablishedCampground(spot.lat, spot.lng, 0.5)) {
+            return false;
+          }
+
+          // NOTE: We do NOT filter camp sites by campground proximity here
+          // OSM camp sites are explicitly tagged camping locations and should be shown
+          // The 0.25-mile campground proximity filter only applies to derived spots (dead-ends)
+
+          return true;
+        })
+        // Deduplicate camps that are very close to each other (within ~50 meters)
+        .filter((spot, index, array) => {
+          const DEDUP_THRESHOLD = 0.0005; // ~50 meters
+          // Keep this spot only if no earlier spot is within threshold
+          return !array.slice(0, index).some(earlier => {
+            const latDiff = Math.abs(spot.lat - earlier.lat);
+            const lngDiff = Math.abs(spot.lng - earlier.lng);
+            return latDiff < DEDUP_THRESHOLD && lngDiff < DEDUP_THRESHOLD;
+          });
+        });
+    }
+
+    // Apply restricted area filtering to all camp sites (both modes)
+    campSites = campSites.filter((spot) => {
+      // Allow OSM camp sites on tribal lands (they're likely tribal campgrounds)
+      if (isWithinTribalLand(spot.lat, spot.lng)) return true;
+      // Otherwise apply normal restricted area filtering
+      return !isWithinRestrictedArea(spot.lat, spot.lng);
+    });
 
     // Get derived spots (dead-ends, intersections)
     const derivedSpots = potentialSpots.filter((spot) => spot.type !== 'camp-site');
@@ -430,8 +558,9 @@ const DispersedExplorer = () => {
       // Exclude spots in National Parks or State Parks (dispersed camping not allowed)
       if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
 
-      // Exclude spots near established campgrounds (use the campground instead)
-      if (isNearEstablishedCampground(spot.lat, spot.lng)) return false;
+      // Exclude derived spots near established campgrounds (use the campground instead)
+      // Uses 0.5 miles to match Full mode behavior
+      if (isNearEstablishedCampground(spot.lat, spot.lng, 0.5)) return false;
 
       // MVUM roads are definitely on public land (National Forest) - always include
       if (spot.isOnMVUMRoad) return true;
@@ -439,21 +568,19 @@ const DispersedExplorer = () => {
       // BLM roads are definitely on public land (BLM) - always include
       if (spot.isOnBLMRoad) return true;
 
-      // Database spots have isOnPublicLand validated during derivation - trust them
-      // For client-computed spots, this is a heuristic based on OSM track characteristics
-      if (spot.isOnPublicLand) return true;
-
-      // For remaining OSM-derived spots, validate against polygon data if available
-      // This catches spots that were computed client-side without proper validation
+      // For ALL other spots (including those claiming isOnPublicLand from OSM heuristics),
+      // validate against polygon data if available - this is the authoritative check
       if (publicLands.length > 0) {
         const withinPublicLand = isWithinAnyPublicLand(spot.lat, spot.lng, publicLands);
         if (withinPublicLand) return true;
 
         // Spot is NOT within any public land polygon - reject as likely private land
+        // This overrides the isOnPublicLand heuristic from OSM road characteristics
         return false;
       }
 
-      // No polygon coverage at all - use MVUM presence as proxy for "in National Forest area"
+      // No polygon coverage - fall back to isOnPublicLand heuristic or MVUM presence
+      if (spot.isOnPublicLand) return true;
       return hasMVUMRoads;
     });
 
@@ -508,7 +635,7 @@ const DispersedExplorer = () => {
 
       return true;
     });
-  }, [potentialSpots, publicLands, mvumRoads, osmTracks, isWithinRestrictedArea, isWithinTribalLand, isNearEstablishedCampground, roadFilter, spotFilters]);
+  }, [potentialSpots, publicLands, mvumRoads, osmTracks, isWithinRestrictedArea, isWithinTribalLand, isNearEstablishedCampground, isLikelyEstablishedCampground, useDatabase, roadFilter, spotFilters]);
 
   // Calculate top recommendations based on multiple factors
   const topRecommendations = useMemo(() => {
@@ -681,7 +808,7 @@ const DispersedExplorer = () => {
 
     // Add campgrounds if filter allows
     if (showCampgroundsFiltered) {
-      establishedCampgrounds.forEach(cg => {
+      allEstablishedCampgrounds.forEach(cg => {
         const distance = getDistanceMiles(cg.lat, cg.lng);
         unified.push({
           id: `campground-${cg.id}`,
@@ -766,7 +893,7 @@ const DispersedExplorer = () => {
     }
 
     return unified;
-  }, [filteredPotentialSpots, establishedCampgrounds, campsites, friendsCampsites, showCampgroundsFiltered, showMyCampsites, showMyCampsitesFiltered, showFriendsCampsites, getFriendById, searchLocation, topRecommendations, sortBy]);
+  }, [filteredPotentialSpots, allEstablishedCampgrounds, campsites, friendsCampsites, showCampgroundsFiltered, showMyCampsites, showMyCampsitesFiltered, showFriendsCampsites, getFriendById, searchLocation, topRecommendations, sortBy]);
 
   // Helper to get icon for unified spot based on category and type
   const getUnifiedSpotIcon = (spot: UnifiedSpot) => {
@@ -1040,7 +1167,7 @@ const DispersedExplorer = () => {
               mapTypeId: 'hybrid',
               mapTypeControl: true,
               mapTypeControlOptions: {
-                position: google.maps.ControlPosition?.TOP_RIGHT,
+                position: typeof google !== 'undefined' ? google.maps.ControlPosition?.TOP_RIGHT : undefined,
               },
             }}
           >
@@ -1304,7 +1431,7 @@ const DispersedExplorer = () => {
             )}
 
             {/* Established Campgrounds */}
-            {showCampgroundsFiltered && establishedCampgrounds
+            {showCampgroundsFiltered && allEstablishedCampgrounds
               .filter((cg) => isFinite(cg.lat) && isFinite(cg.lng))
               .map((cg) => (
               <Marker
@@ -1683,7 +1810,7 @@ const DispersedExplorer = () => {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-center cursor-pointer">
-                        <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{establishedCampgrounds.length}</p>
+                        <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{allEstablishedCampgrounds.length}</p>
                         <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Camps</p>
                       </div>
                     </TooltipTrigger>
@@ -2247,7 +2374,7 @@ const DispersedExplorer = () => {
             findExistingExplorerSpot(selectedSpot.lat, selectedSpot.lng).then(setExistingCampsiteForSpot);
             // Refresh explorer spots list
             if (searchLocation) {
-              getExplorerSpots(searchLocation.lat, searchLocation.lng, 15).then(setExplorerSpots);
+              getExplorerSpots(searchLocation.lat, searchLocation.lng, 10).then(setExplorerSpots);
             }
           }}
         />
