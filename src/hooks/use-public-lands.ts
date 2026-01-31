@@ -151,10 +151,10 @@ export function usePublicLands(
           outFields: 'OBJECTID,unit_name,Agency',
           returnGeometry: 'true',
           resultRecordCount: '200',
-          // Simplify geometry on server side - 0.001 degrees ≈ 100m tolerance
-          // This reduces polygon complexity while maintaining general shape
-          maxAllowableOffset: '0.001',
-          geometryPrecision: '5',
+          // Simplify geometry on server side - 0.0003 degrees ≈ 33m tolerance
+          // Less aggressive simplification to preserve BLM parcel shapes
+          maxAllowableOffset: '0.0003',
+          geometryPrecision: '6',
           f: 'json',
         });
 
@@ -512,6 +512,21 @@ export function usePublicLands(
 
         console.log(`Fetched ${features.length} total public land features`);
 
+        // Debug: Count features by agency and geometry status
+        const featuresByAgency: Record<string, { total: number; withGeom: number; rings: number }> = {};
+        features.forEach((f: any) => {
+          const agency = f.attributes.ADMIN_AGENCY_CODE || 'UNK';
+          if (!featuresByAgency[agency]) {
+            featuresByAgency[agency] = { total: 0, withGeom: 0, rings: 0 };
+          }
+          featuresByAgency[agency].total++;
+          if (f.geometry?.rings?.length) {
+            featuresByAgency[agency].withGeom++;
+            featuresByAgency[agency].rings += f.geometry.rings.length;
+          }
+        });
+        console.log('Features by agency (before processing):', featuresByAgency);
+
         // If no features from either source, that's okay - just show empty
         if (features.length === 0) {
           console.log('No public land features found in this area');
@@ -617,6 +632,18 @@ export function usePublicLands(
         const renderableCount = limitedLands.filter(l => l.renderOnMap).length;
         const filterOnlyCount = limitedLands.filter(l => !l.renderOnMap).length;
         console.log(`Found ${limitedLands.length} public land polygons (${renderableCount} renderable, ${filterOnlyCount} filter-only) from ${features.length} features`);
+
+        // Detailed breakdown by agency for debugging
+        const byAgency: Record<string, { total: number; renderable: number }> = {};
+        limitedLands.forEach(l => {
+          if (!byAgency[l.managingAgency]) {
+            byAgency[l.managingAgency] = { total: 0, renderable: 0 };
+          }
+          byAgency[l.managingAgency].total++;
+          if (l.renderOnMap) byAgency[l.managingAgency].renderable++;
+        });
+        console.log('Public lands breakdown by agency:', byAgency);
+
         setPublicLands(limitedLands);
       } catch (err) {
         console.error('Error fetching public lands:', err);

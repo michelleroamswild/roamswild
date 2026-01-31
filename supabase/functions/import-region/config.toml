@@ -1,0 +1,3 @@
+# Disable JWT verification for import function
+# TODO: Add proper admin auth check in the function itself
+verify_jwt = false
