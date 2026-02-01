@@ -736,6 +736,8 @@ def check_line_of_sight(
     """
     Check if there's clear line of sight between two points.
 
+    Uses local tangent-plane coordinates for consistent ray sampling.
+
     Args:
         dem: DEMGrid
         from_lat, from_lon, from_elevation: Observer position
@@ -749,15 +751,18 @@ def check_line_of_sight(
     Returns:
         LineOfSight with clear flag and samples
     """
-    samples = []
-    clear = True
+    # Ensure local coordinates are initialized
+    if not dem.has_local_coords:
+        dem.init_local_coords()
 
-    # Calculate total distance for endpoint exclusion
-    meters_per_deg_lat = 111320.0
-    meters_per_deg_lon = 111320.0 * math.cos(math.radians(from_lat))
-    d_lat = to_lat - from_lat
-    d_lon = to_lon - from_lon
-    total_distance_m = math.sqrt((d_lat * meters_per_deg_lat)**2 + (d_lon * meters_per_deg_lon)**2)
+    # Convert endpoints to local meters
+    from_x, from_y = dem.latlon_to_xy(from_lat, from_lon)
+    to_x, to_y = dem.latlon_to_xy(to_lat, to_lon)
+
+    # Calculate total distance in local coordinates
+    dx = to_x - from_x
+    dy = to_y - from_y
+    total_distance_m = math.sqrt(dx * dx + dy * dy)
 
     # Default endpoint exclusion: max(25m, 2×cell_size)
     if endpoint_exclusion_m is None:
@@ -769,18 +774,22 @@ def check_line_of_sight(
     else:
         exclusion_t = 1.0
 
+    samples = []
+    clear = True
+
     for i in range(1, num_samples):
         t = i / num_samples
 
-        # Interpolate position
-        lat = from_lat + t * (to_lat - from_lat)
-        lon = from_lon + t * (to_lon - from_lon)
+        # Interpolate position in local coordinates
+        x_m = from_x + t * dx
+        y_m = from_y + t * dy
         ray_z = from_elevation + t * (to_elevation + target_height_m - from_elevation)
 
-        # Get terrain elevation
-        try:
-            terrain_z = dem.get_elevation_bilinear(lat, lon)
-        except (IndexError, ValueError):
+        # Sample terrain elevation using local coordinates
+        terrain_z = dem.sample_dem_z_xy(x_m, y_m)
+
+        # If out of bounds, use 0 elevation (or could skip)
+        if math.isnan(terrain_z):
             terrain_z = 0.0
 
         # Check if blocked, but ignore blockers in endpoint exclusion zone

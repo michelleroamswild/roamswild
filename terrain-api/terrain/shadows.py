@@ -1,13 +1,23 @@
 """
 Shadow checking: verify sun visibility from a point.
 
-Uses ray marching to check if terrain blocks the sun.
+Uses ray marching in local tangent-plane coordinates for precision.
+Employs terrain angle analysis for numerically stable blocker detection.
 """
 from __future__ import annotations
 
 import math
+import numpy as np
 from .dem import DEMGrid
-from .types import ShadowSample, ShadowCheck, SunPosition
+from .types import ShadowSample, ShadowCheck, SunPosition, BlockingPoint
+
+
+# Default tolerance for blocker detection (0.1 degrees)
+DEFAULT_BLOCKER_EPS_RAD = math.radians(0.1)
+# Early exit threshold (if blocked by more than this, stop searching)
+EARLY_EXIT_MARGIN_RAD = math.radians(0.5)
+# Default number of samples
+DEFAULT_NUM_SAMPLES = 20
 
 
 def check_shadow(
@@ -16,11 +26,17 @@ def check_shadow(
     point_lon: float,
     point_elevation: float,
     sun_position: SunPosition,
-    max_distance_m: float = 5000.0,
-    sample_interval_m: float = 50.0,
+    num_samples: int = DEFAULT_NUM_SAMPLES,
+    blocker_eps_deg: float = 0.1,
 ) -> ShadowCheck:
     """
-    Check if the sun is visible from a point by ray marching.
+    Check if the sun is visible from a point using terrain angle analysis.
+
+    Uses log-spaced sampling distances to efficiently cover near and far terrain.
+    Determines blocking via terrain angle comparison (numerically stable).
+
+    The terrain angle at distance d is: atan((terrain_z - start_z) / d)
+    Sun is visible iff max(terrain_angle) <= sun_altitude + eps
 
     Args:
         dem: DEMGrid with elevation data
@@ -28,71 +44,112 @@ def check_shadow(
         point_lon: Longitude of the point
         point_elevation: Elevation of the point (meters)
         sun_position: Current sun position
-        max_distance_m: Maximum distance to check
-        sample_interval_m: Distance between ray samples
+        num_samples: Number of sample points along ray (default 20)
+        blocker_eps_deg: Tolerance for blocker detection in degrees (default 0.1°)
 
     Returns:
-        ShadowCheck with visibility result and samples
+        ShadowCheck with visibility result, samples, and terrain angle analysis
     """
-    # Sun direction (toward sun)
+    # Ensure local coordinates are initialized
+    if not dem.has_local_coords:
+        dem.init_local_coords()
+
+    # Convert start point to local meters
+    x0, y0 = dem.latlon_to_xy(point_lat, point_lon)
+    start_z = point_elevation
+
+    # Sun parameters
     azimuth_rad = math.radians(sun_position.azimuth_deg)
     altitude_rad = math.radians(sun_position.altitude_deg)
+    blocker_eps_rad = math.radians(blocker_eps_deg)
 
-    # Horizontal step direction (meters)
-    dx_m = math.sin(azimuth_rad) * sample_interval_m  # East
-    dy_m = math.cos(azimuth_rad) * sample_interval_m  # North
+    # Unit direction toward sun in horizontal plane
+    # Azimuth: 0° = North, 90° = East
+    dir_x = math.sin(azimuth_rad)  # East component
+    dir_y = math.cos(azimuth_rad)  # North component
 
-    # Vertical step (meters per horizontal step)
-    dz_m = math.tan(altitude_rad) * sample_interval_m
+    # Compute log-spaced distances
+    d_min = max(dem.cell_size_m, 10.0)
+    d_max = min(dem.grid_diagonal_m, 25000.0)
 
-    # Convert horizontal steps to lat/lon
-    # Approximate: 1 degree lat ≈ 111320 m, 1 degree lon ≈ 111320 * cos(lat) m
-    meters_per_deg_lat = 111320.0
-    meters_per_deg_lon = 111320.0 * math.cos(math.radians(point_lat))
+    # Generate log-spaced distances
+    if d_max > d_min:
+        distances = np.logspace(
+            np.log10(d_min),
+            np.log10(d_max),
+            num_samples
+        )
+    else:
+        distances = np.array([d_min])
 
-    d_lat = dy_m / meters_per_deg_lat
-    d_lon = dx_m / meters_per_deg_lon
-
+    # Ray marching with terrain angle analysis
     samples = []
-    current_lat = point_lat
-    current_lon = point_lon
-    ray_z = point_elevation
-    distance = 0.0
+    max_terrain_angle_rad = float('-inf')
+    max_terrain_angle_distance = 0.0
+    first_blocked_distance = None
+    blocking_point = None
     sun_visible = True
 
-    num_steps = int(max_distance_m / sample_interval_m)
+    for d in distances:
+        # Position at distance d toward sun
+        x_m = x0 + dir_x * d
+        y_m = y0 + dir_y * d
 
-    for _ in range(num_steps):
-        # Move along ray
-        current_lat += d_lat
-        current_lon += d_lon
-        ray_z += dz_m
-        distance += sample_interval_m
+        # Sample terrain elevation
+        terrain_z = dem.sample_dem_z_xy(x_m, y_m)
 
-        # Check if we're outside the DEM bounds
-        if (current_lat < dem.bounds["south"] or current_lat > dem.bounds["north"] or
-            current_lon < dem.bounds["west"] or current_lon > dem.bounds["east"]):
-            # Outside bounds, assume clear
+        # Check if outside bounds
+        if math.isnan(terrain_z):
+            # Outside bounds, stop sampling
             break
 
-        # Get terrain elevation at this point
-        try:
-            terrain_z = dem.get_elevation_bilinear(current_lat, current_lon)
-        except (IndexError, ValueError):
-            break
+        # Compute terrain angle: angle from start point to terrain at this distance
+        # Positive angle = terrain above start, negative = terrain below
+        dz = terrain_z - start_z
+        terrain_angle_rad = math.atan(dz / d) if d > 0 else 0.0
+        terrain_angle_deg = math.degrees(terrain_angle_rad)
 
-        blocked = ray_z < terrain_z
+        # Compute expected ray height at this distance (for sample output)
+        ray_z = start_z + d * math.tan(altitude_rad)
+
+        # Check if this terrain blocks the sun
+        blocked = terrain_angle_rad > (altitude_rad + blocker_eps_rad)
+
+        # Track maximum terrain angle
+        if terrain_angle_rad > max_terrain_angle_rad:
+            max_terrain_angle_rad = terrain_angle_rad
+            max_terrain_angle_distance = d
+
+        # Record first blocking point
+        if blocked and first_blocked_distance is None:
+            first_blocked_distance = d
+            sun_visible = False
+
+            # Convert blocking location back to lat/lon
+            block_lat, block_lon = dem.xy_to_latlon(x_m, y_m)
+            blocking_point = BlockingPoint(
+                lat=block_lat,
+                lon=block_lon,
+                elevation_m=float(terrain_z),
+                distance_m=float(d),
+                terrain_angle_deg=terrain_angle_deg,
+            )
 
         samples.append(ShadowSample(
-            distance_m=distance,
-            ray_z=ray_z,
-            terrain_z=terrain_z,
+            distance_m=float(d),
+            ray_z=float(ray_z),
+            terrain_z=float(terrain_z),
             blocked=blocked,
+            terrain_angle_deg=terrain_angle_deg,
         ))
 
-        if blocked:
-            sun_visible = False
-            break  # Stop at first blockage
+        # Early exit: if already blocked by significant margin, stop
+        if blocked and (terrain_angle_rad - altitude_rad) > EARLY_EXIT_MARGIN_RAD:
+            break
+
+    # Compute final metrics
+    max_terrain_angle_deg = math.degrees(max_terrain_angle_rad) if max_terrain_angle_rad > float('-inf') else 0.0
+    blocking_margin_deg = sun_position.altitude_deg - max_terrain_angle_deg
 
     return ShadowCheck(
         checked_at_minutes=sun_position.minutes_from_start,
@@ -100,6 +157,11 @@ def check_shadow(
         sun_altitude_deg=sun_position.altitude_deg,
         samples=samples,
         sun_visible=sun_visible,
+        # New analysis fields
+        max_terrain_angle_deg=max_terrain_angle_deg,
+        blocking_margin_deg=blocking_margin_deg,
+        first_blocked_distance_m=first_blocked_distance,
+        blocking_point=blocking_point,
     )
 
 

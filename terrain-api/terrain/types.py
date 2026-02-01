@@ -44,6 +44,18 @@ class ShadowSample:
     ray_z: float
     terrain_z: float
     blocked: bool
+    # New fields for terrain angle analysis
+    terrain_angle_deg: Optional[float] = None  # Angle from start to terrain at this distance
+
+
+@dataclass
+class BlockingPoint:
+    """Location where sun ray is first blocked by terrain."""
+    lat: float
+    lon: float
+    elevation_m: float
+    distance_m: float
+    terrain_angle_deg: float
 
 
 @dataclass
@@ -53,6 +65,11 @@ class ShadowCheck:
     sun_altitude_deg: float
     samples: List[ShadowSample]
     sun_visible: bool
+    # New fields for improved shadow analysis
+    max_terrain_angle_deg: Optional[float] = None  # Maximum terrain angle encountered
+    blocking_margin_deg: Optional[float] = None  # sun_altitude - max_terrain_angle (negative = blocked)
+    first_blocked_distance_m: Optional[float] = None  # Distance to first blocker
+    blocking_point: Optional[BlockingPoint] = None  # Location of first blocker
 
 
 @dataclass
@@ -255,6 +272,58 @@ class ShootingTiming:
 
 
 @dataclass
+class HorizonSample:
+    """Single azimuth sample in a horizon profile."""
+    azimuth_deg: float
+    horizon_alt_deg: float  # Elevation angle to horizon (positive = terrain above eye level)
+    distance_to_horizon_m: float  # Distance where horizon occurs
+
+
+@dataclass
+class SunAlignment:
+    """Sun position relative to local horizon."""
+    sun_azimuth_deg: float
+    sun_altitude_deg: float
+    horizon_alt_at_sun_az_deg: float  # Horizon altitude in sun's direction
+    blocking_margin_deg: float  # sun_altitude - horizon_alt (negative = sun behind ridge)
+    behind_ridge: bool  # True if sun is below local horizon
+
+
+@dataclass
+class ViewExplanations:
+    """Human-readable explanations for view quality."""
+    short: str  # <= 80 chars summary
+    long: str   # 1-2 sentences with details
+
+
+@dataclass
+class OverlookView:
+    """View analysis for overlook/viewpoint locations."""
+    # View metrics
+    open_sky_fraction: float  # Fraction of azimuths with horizon < 1°
+    depth_p50_m: float  # Median distance to horizon
+    depth_p90_m: float  # 90th percentile distance to horizon
+    horizon_complexity: int  # Number of peaks in horizon profile
+    overlook_score: float  # Combined overlook quality score (0-1)
+
+    # Best viewing direction
+    best_bearing_deg: float  # Azimuth with best openness*depth
+    fov_deg: float = 60.0  # Field of view for best bearing
+
+    # View cone polygon for map rendering [[lat,lon], ...] - apex, left, right, apex (closed)
+    view_cone: Optional[List[List[float]]] = None
+
+    # Human-readable explanations
+    explanations: Optional[ViewExplanations] = None
+
+    # Sun alignment (optional - computed if sun_track available)
+    sun_alignment: Optional[SunAlignment] = None
+
+    # Debug: full horizon profile (only if debug enabled)
+    horizon_profile: Optional[List[HorizonSample]] = None
+
+
+@dataclass
 class StandingLocation:
     standing_id: int
     subject_id: int
@@ -266,6 +335,8 @@ class StandingLocation:
     shooting_timing: Optional[ShootingTiming] = None
     # Navigation link (Google Maps)
     nav_link: Optional[str] = None
+    # Overlook view analysis (optional - for rim/viewpoint locations)
+    view: Optional[OverlookView] = None
 
 
 @dataclass

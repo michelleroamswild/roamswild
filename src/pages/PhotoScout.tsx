@@ -14,6 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Camera,
@@ -31,6 +32,8 @@ import {
 } from "@phosphor-icons/react";
 import { useGoogleMaps } from "@/components/GoogleMapsProvider";
 import { useTerrainAnalysis } from "@/hooks/use-terrain-analysis";
+import { Header } from "@/components/Header";
+import { PlaceSearch } from "@/components/PlaceSearch";
 import type { TerrainAnalysisResult, Subject, StandingLocation, SunPosition } from "@/types/terrainValidation";
 
 // Convert degrees to compass direction
@@ -515,6 +518,30 @@ function ShotCard({
                   </span>
                 </div>
               )}
+              {/* View analysis for overlook/rim locations */}
+              {standing.view && standing.view.overlook_score > 0 && (
+                <div className="mt-2 pl-8 text-xs">
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-cyan-500" />
+                    <span className={`px-1.5 py-0.5 rounded font-medium ${
+                      standing.view.overlook_score >= 0.7 ? 'bg-cyan-100 text-cyan-700' :
+                      standing.view.overlook_score >= 0.4 ? 'bg-cyan-50 text-cyan-600' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {standing.view.overlook_score >= 0.7 ? 'Great view' :
+                       standing.view.overlook_score >= 0.4 ? 'Good view' : 'Limited view'}
+                    </span>
+                    <span className="text-gray-500">
+                      Face {degreesToCompass(standing.view.best_bearing_deg)}
+                    </span>
+                  </div>
+                  {standing.view.explanations && (
+                    <p className="mt-1 text-gray-500 leading-relaxed">
+                      {standing.view.explanations.short}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-3 p-2 bg-gray-50 rounded text-gray-500">
@@ -891,6 +918,50 @@ export default function PhotoScout() {
     );
   }, [result]);
 
+  // Draw dropped pin when coordinates are set but no result yet
+  const droppedPinRef = useRef<google.maps.Marker | null>(null);
+
+  useEffect(() => {
+    if (!map) return;
+
+    // Remove existing dropped pin
+    if (droppedPinRef.current) {
+      droppedPinRef.current.setMap(null);
+      droppedPinRef.current = null;
+    }
+
+    // Only show dropped pin when we have coordinates but no result (or result is for different location)
+    if (parsedCoords && !result) {
+      droppedPinRef.current = new google.maps.Marker({
+        position: { lat: parsedCoords.lat, lng: parsedCoords.lon },
+        map,
+        icon: {
+          url: "data:image/svg+xml," + encodeURIComponent(`
+            <svg width="32" height="48" viewBox="0 0 32 48" xmlns="http://www.w3.org/2000/svg">
+              <path d="M16 0C7.163 0 0 7.163 0 16c0 12 16 32 16 32s16-20 16-32C32 7.163 24.837 0 16 0z" fill="#7c3aed"/>
+              <circle cx="16" cy="16" r="8" fill="white"/>
+              <circle cx="16" cy="16" r="4" fill="#7c3aed"/>
+            </svg>
+          `),
+          scaledSize: new google.maps.Size(32, 48),
+          anchor: new google.maps.Point(16, 48),
+        },
+        title: `Selected: ${parsedCoords.lat.toFixed(4)}, ${parsedCoords.lon.toFixed(4)}`,
+        zIndex: 1000,
+        animation: google.maps.Animation.DROP,
+      });
+
+      // Pan to the new location
+      map.panTo({ lat: parsedCoords.lat, lng: parsedCoords.lon });
+    }
+
+    return () => {
+      if (droppedPinRef.current) {
+        droppedPinRef.current.setMap(null);
+      }
+    };
+  }, [map, parsedCoords, result]);
+
   // Draw map overlays
   useEffect(() => {
     if (!map || !result) return;
@@ -1107,6 +1178,21 @@ export default function PhotoScout() {
           map,
         });
         overlaysRef.current.push(sightLine);
+
+        // View cone polygon (for overlook/rim locations)
+        if (isCurrentlySelected && standing.view?.view_cone && standing.view.view_cone.length >= 3) {
+          const viewConePolygon = new google.maps.Polygon({
+            paths: standing.view.view_cone.map(([lat, lng]) => ({ lat, lng })),
+            strokeColor: "#06b6d4", // cyan
+            strokeWeight: 2,
+            strokeOpacity: 0.8,
+            fillColor: "#06b6d4",
+            fillOpacity: 0.15,
+            map,
+            zIndex: 80,
+          });
+          overlaysRef.current.push(viewConePolygon);
+        }
       }
 
       // Draw rejected candidates for selected subject (only when showing analysis zones)
@@ -1162,6 +1248,24 @@ export default function PhotoScout() {
     };
   }, []);
 
+  // Handle place selection from PlaceSearch
+  const handlePlaceSelect = useCallback((place: google.maps.places.PlaceResult) => {
+    if (place.geometry?.location) {
+      const lat = place.geometry.location.lat();
+      const lng = place.geometry.location.lng();
+      setCoordinates(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+    }
+  }, []);
+
+  // Handle map click to set location
+  const handleMapClick = useCallback((e: google.maps.MapMouseEvent) => {
+    if (e.latLng) {
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      setCoordinates(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+    }
+  }, []);
+
   if (!isLoaded) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -1171,152 +1275,19 @@ export default function PhotoScout() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100">
-      {/* Header */}
-      <div className="bg-white border-b px-4 py-3 shadow-sm">
-        <div className="flex items-center justify-between max-w-screen-2xl mx-auto">
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <Camera className="w-6 h-6 text-blue-600" weight="fill" />
-            Photo Scout
-          </h1>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-gray-600">Location</Label>
-              <Input
-                value={coordinates}
-                onChange={(e) => setCoordinates(e.target.value)}
-                className={`w-48 h-8 text-sm ${!parsedCoords && coordinates ? "border-red-300" : ""}`}
-                placeholder="lat, lon"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-gray-600">Date</Label>
-              <Input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-36 h-8 text-sm"
-              />
-            </div>
-            <select
-              value={event}
-              onChange={(e) => setEvent(e.target.value as "sunrise" | "sunset")}
-              className="h-8 px-3 border rounded text-sm"
-            >
-              <option value="sunrise">Sunrise</option>
-              <option value="sunset">Sunset</option>
-            </select>
-            <Button onClick={handleAnalyze} disabled={isLoading || !parsedCoords} size="sm">
-              {isLoading ? "Scanning..." : "Scout Location"}
-            </Button>
-          </div>
-        </div>
-      </div>
+    <div className="h-screen flex flex-col bg-background">
+      <Header showBorder />
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Shot Opportunities */}
-        <div className="w-[420px] border-r bg-white flex flex-col">
-          {/* Summary Header */}
-          {result && (
-            <div className="p-4 border-b">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-semibold text-lg">Lighting Zones</span>
-                <span className="text-sm text-gray-500">
-                  {result.subjects.length} zone{result.subjects.length !== 1 ? "s" : ""} found
-                </span>
-              </div>
-              <div className="flex gap-4">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-full">
-                  <CheckCircle className="w-4 h-4 text-green-600" weight="fill" />
-                  <span className="text-sm font-medium text-green-700">{verdictCounts.yes} good</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-50 rounded-full">
-                  <Warning className="w-4 h-4 text-yellow-600" weight="fill" />
-                  <span className="text-sm font-medium text-yellow-700">{verdictCounts.maybe} maybe</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 rounded-full">
-                  <XCircle className="w-4 h-4 text-red-500" weight="fill" />
-                  <span className="text-sm font-medium text-red-600">{verdictCounts.no} skip</span>
-                </div>
-              </div>
-              {result.meta.dem_source && (
-                <div className="mt-3 text-xs text-gray-400">
-                  DEM: {result.meta.dem_source}
-                  {result.meta.dem_resolution_m && ` • ${result.meta.dem_resolution_m}m resolution`}
-                </div>
-              )}
-              {result.meta.structure_debug && (
-                <div className="mt-1 text-xs text-purple-400 font-mono">
-                  Structure: {result.meta.structure_debug.enabled ? "enabled" : "disabled"}
-                  {" • "}{result.meta.structure_debug.computed_cells} cells computed
-                  {" • "}{result.meta.structure_debug.attached_to_subjects} subjects with structure
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Shot Cards */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {error && (
-              <div className="p-4 bg-red-50 text-red-700 rounded-lg">
-                {error}
-              </div>
-            )}
-
-            {!result && !isLoading && !error && (
-              <div className="text-center text-gray-500 py-12">
-                <Mountains className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                <p>Enter a location and click</p>
-                <p className="font-medium">"Scout Location"</p>
-                <p className="mt-2 text-sm">to find photo opportunities</p>
-              </div>
-            )}
-
-            {isLoading && (
-              <div className="text-center text-gray-500 py-12">
-                <Crosshair className="w-12 h-12 mx-auto mb-4 text-gray-300 animate-pulse" />
-                <p>Scanning terrain...</p>
-                <p className="text-sm mt-1">Finding lighting zones</p>
-              </div>
-            )}
-
-            {result?.subjects.map((subject, index) => {
-              const standing = result.standing_locations.find((sl) => sl.subject_id === subject.subject_id) || null;
-              const isSelected = selectedSubjectId === subject.subject_id;
-              return (
-                <ShotCard
-                  key={subject.subject_id}
-                  subject={subject}
-                  standing={standing}
-                  sunTrack={result.sun_track}
-                  isSelected={isSelected}
-                  onSelect={() => setSelectedSubjectId(subject.subject_id)}
-                  index={index}
-                  event={event}
-                  showRejectedCandidates={isSelected && showRejectedCandidates}
-                  onToggleRejected={() => setShowRejectedCandidates(!showRejectedCandidates)}
-                />
-              );
-            })}
-
-            {result && result.subjects.length === 0 && (
-              <div className="text-center text-gray-500 py-12">
-                <Mountains className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                <p>No lighting zones found</p>
-                <p className="text-sm mt-2">Try a location with more varied terrain</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Panel - Map */}
-        <div className="flex-1 relative">
+      <div className="flex-1 overflow-hidden grid lg:grid-cols-2">
+        {/* Left Panel - Map */}
+        <div className="relative h-full">
           <GoogleMap
             mapContainerStyle={mapContainerStyle}
             center={{ lat: parsedCoords?.lat || 39.0708, lng: parsedCoords?.lon || -106.989 }}
             zoom={14}
             onLoad={setMap}
+            onClick={handleMapClick}
             options={{
               mapTypeId: "terrain",
               mapTypeControl: true,
@@ -1346,6 +1317,10 @@ export default function PhotoScout() {
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full border-2 border-dashed border-purple-600" />
                 <span>Search center</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-3 rounded border-2 border-cyan-500 bg-cyan-100 opacity-70" />
+                <span>View cone</span>
               </div>
               {/* Color key */}
               <div className="flex items-center gap-2 pt-1 border-t border-gray-100 mt-1">
@@ -1447,6 +1422,159 @@ export default function PhotoScout() {
                     Sun: {Math.round(result.sun_track[Math.floor(result.sun_track.length / 2)].azimuth_deg)}° ({degreesToCompass(result.sun_track[Math.floor(result.sun_track.length / 2)].azimuth_deg)})
                   </span>
                 </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Panel - Controls and Shot Opportunities */}
+        <div className="border-l bg-card flex flex-col overflow-hidden">
+          {/* Search Controls */}
+          <div className="p-4 border-b bg-muted/30 space-y-4">
+            <div className="flex items-center gap-2">
+              <Camera className="w-5 h-5 text-primary" weight="fill" />
+              <h2 className="text-lg font-semibold">Photo Scout</h2>
+            </div>
+
+            {/* Place Search */}
+            <div>
+              <Label className="text-sm text-muted-foreground mb-1.5 block">Search Location</Label>
+              <PlaceSearch
+                onPlaceSelect={handlePlaceSelect}
+                placeholder="Search for a place..."
+                className="w-full"
+              />
+            </div>
+
+            {/* Coordinate Input (fallback) */}
+            <div>
+              <Label className="text-sm text-muted-foreground mb-1.5 block">Or enter coordinates</Label>
+              <Input
+                value={coordinates}
+                onChange={(e) => setCoordinates(e.target.value)}
+                className={`w-full ${!parsedCoords && coordinates ? "border-red-300" : ""}`}
+                placeholder="lat, lon (e.g., 39.0708, -106.9890)"
+              />
+            </div>
+
+            {/* Date and Event Selection */}
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <Label className="text-sm text-muted-foreground mb-1.5 block">Date</Label>
+                <Input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              <div className="flex-1">
+                <Label className="text-sm text-muted-foreground mb-1.5 block">Event</Label>
+                <Select value={event} onValueChange={(value: "sunrise" | "sunset") => setEvent(value)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sunrise">Sunrise</SelectItem>
+                    <SelectItem value="sunset">Sunset</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <Button onClick={handleAnalyze} disabled={isLoading || !parsedCoords} className="w-full">
+              {isLoading ? "Scanning terrain..." : "Scout Location"}
+            </Button>
+          </div>
+
+          {/* Summary Header */}
+          {result && (
+            <div className="p-4 border-b">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-semibold text-lg">Lighting Zones</span>
+                <span className="text-sm text-muted-foreground">
+                  {result.subjects.length} zone{result.subjects.length !== 1 ? "s" : ""} found
+                </span>
+              </div>
+              <div className="flex gap-4">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 dark:bg-green-950 rounded-full">
+                  <CheckCircle className="w-4 h-4 text-green-600" weight="fill" />
+                  <span className="text-sm font-medium text-green-700 dark:text-green-400">{verdictCounts.yes} good</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-50 dark:bg-yellow-950 rounded-full">
+                  <Warning className="w-4 h-4 text-yellow-600" weight="fill" />
+                  <span className="text-sm font-medium text-yellow-700 dark:text-yellow-400">{verdictCounts.maybe} maybe</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 dark:bg-red-950 rounded-full">
+                  <XCircle className="w-4 h-4 text-red-500" weight="fill" />
+                  <span className="text-sm font-medium text-red-600 dark:text-red-400">{verdictCounts.no} skip</span>
+                </div>
+              </div>
+              {result.meta.dem_source && (
+                <div className="mt-3 text-xs text-muted-foreground">
+                  DEM: {result.meta.dem_source}
+                  {result.meta.dem_resolution_m && ` • ${result.meta.dem_resolution_m}m resolution`}
+                </div>
+              )}
+              {result.meta.structure_debug && (
+                <div className="mt-1 text-xs text-purple-400 font-mono">
+                  Structure: {result.meta.structure_debug.enabled ? "enabled" : "disabled"}
+                  {" • "}{result.meta.structure_debug.computed_cells} cells computed
+                  {" • "}{result.meta.structure_debug.attached_to_subjects} subjects with structure
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Shot Cards */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {error && (
+              <div className="p-4 bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400 rounded-lg">
+                {error}
+              </div>
+            )}
+
+            {!result && !isLoading && !error && (
+              <div className="text-center text-muted-foreground py-12">
+                <Mountains className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                <p>Search, enter coordinates, or</p>
+                <p className="font-medium">click on the map</p>
+                <p className="mt-2 text-sm">then click "Scout Location" to find photo opportunities</p>
+              </div>
+            )}
+
+            {isLoading && (
+              <div className="text-center text-muted-foreground py-12">
+                <Crosshair className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50 animate-pulse" />
+                <p>Scanning terrain...</p>
+                <p className="text-sm mt-1">Finding lighting zones</p>
+              </div>
+            )}
+
+            {result?.subjects.map((subject, index) => {
+              const standing = result.standing_locations.find((sl) => sl.subject_id === subject.subject_id) || null;
+              const isSelected = selectedSubjectId === subject.subject_id;
+              return (
+                <ShotCard
+                  key={subject.subject_id}
+                  subject={subject}
+                  standing={standing}
+                  sunTrack={result.sun_track}
+                  isSelected={isSelected}
+                  onSelect={() => setSelectedSubjectId(subject.subject_id)}
+                  index={index}
+                  event={event}
+                  showRejectedCandidates={isSelected && showRejectedCandidates}
+                  onToggleRejected={() => setShowRejectedCandidates(!showRejectedCandidates)}
+                />
+              );
+            })}
+
+            {result && result.subjects.length === 0 && (
+              <div className="text-center text-muted-foreground py-12">
+                <Mountains className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                <p>No lighting zones found</p>
+                <p className="text-sm mt-2">Try a location with more varied terrain</p>
               </div>
             )}
           </div>

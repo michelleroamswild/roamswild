@@ -200,6 +200,41 @@ export interface CandidateSearch {
   selected_at_distance_m: number;
 }
 
+// View explanation strings
+export interface ViewExplanations {
+  short: string;  // <= 80 chars summary
+  long: string;   // 1-2 sentences with details
+}
+
+// Sun alignment analysis
+export interface SunAlignment {
+  alignment_type: 'backlit' | 'sidelit' | 'frontlit' | 'neutral';
+  angle_to_best_deg: number;
+  score: number;  // 0-1
+}
+
+// Horizon sample at a specific azimuth
+export interface HorizonSample {
+  azimuth_deg: number;
+  elevation_angle_deg: number;
+  depth_m: number;
+}
+
+// Overlook view analysis for standing locations
+export interface OverlookView {
+  open_sky_fraction: number;
+  depth_p50_m: number;
+  depth_p90_m: number;
+  horizon_complexity: number;
+  overlook_score: number;
+  best_bearing_deg: number;
+  fov_deg: number;
+  view_cone?: [number, number][];  // Lat/lon polygon for map rendering
+  explanations?: ViewExplanations;
+  sun_alignment?: SunAlignment;
+  horizon_profile?: HorizonSample[];
+}
+
 // Standing location properties
 export interface StandingProperties {
   elevation_m: number;
@@ -241,6 +276,7 @@ export interface StandingLocation {
   line_of_sight: LineOfSight;
   candidate_search: CandidateSearch;
   nav_link?: string; // Google Maps navigation link
+  view?: OverlookView; // Overlook/viewpoint analysis for rim candidates
 }
 
 // Debug layer definition

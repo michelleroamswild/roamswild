@@ -58,12 +58,274 @@ class StructureMetrics:
     max_structure_location: Optional[Tuple[float, float]] = None  # (lat, lon) of best cell
     distance_centroid_to_max_m: float = 0.0  # Distance from centroid to max location
 
+    # TPI (Topographic Position Index) metrics
+    # Positive TPI = ridges/overlooks (cell higher than surroundings)
+    # Negative TPI = basins/valleys (cell lower than surroundings)
+    tpi_small_m: float = 0.0   # TPI at ~400m radius (local position)
+    tpi_large_m: float = 0.0   # TPI at ~2000m radius (landscape position)
+    rim_strength: float = 0.0  # 0-1 score for rim/overlook candidacy (positive TPI)
+    basin_strength: float = 0.0  # 0-1 score for basin/valley candidacy (negative TPI)
+    is_rim_candidate: bool = False   # True if high TPI + reasonable slope
+    is_basin_candidate: bool = False  # True if low (negative) TPI
+
 
 # Thresholds for structure classification
 MICRO_RELIEF_THRESHOLD = 5.0    # meters - minimum for micro-dramatic
 MACRO_RELIEF_THRESHOLD = 30.0   # meters - minimum for macro-dramatic
 CURVATURE_THRESHOLD = 0.02      # curvature units for "interesting" terrain
 SLOPE_BREAK_THRESHOLD = 8.0     # degrees - significant slope change
+
+# TPI (Topographic Position Index) parameters
+TPI_SMALL_RADIUS_M = 400.0      # ~400m radius for local position
+TPI_LARGE_RADIUS_M = 2000.0     # ~2000m radius for landscape position
+TPI_THRESHOLD_M = 20.0          # meters - threshold for rim/basin classification
+TPI_SLOPE_MAX_DEG = 20.0        # max slope for rim candidate (overlooks are walkable)
+TPI_NORMALIZATION_M = 50.0      # meters - for normalizing strength to 0-1
+
+
+# =============================================================================
+# TPI (Topographic Position Index) using Integral Image
+# =============================================================================
+
+def summed_area_table(Z: np.ndarray) -> np.ndarray:
+    """
+    Compute summed-area table (integral image) for elevation grid.
+
+    SAT[i,j] = sum of all Z values from (0,0) to (i,j) inclusive.
+    This enables O(1) computation of any rectangular window sum.
+
+    Args:
+        Z: 2D elevation array
+
+    Returns:
+        SAT array with same shape as Z
+    """
+    # Use cumsum for efficiency
+    sat = np.cumsum(np.cumsum(Z, axis=0), axis=1)
+    return sat
+
+
+def window_sum_from_sat(
+    sat: np.ndarray,
+    row: int,
+    col: int,
+    half_window: int,
+) -> Tuple[float, int]:
+    """
+    Compute sum of values in a square window using the SAT.
+
+    Window is centered at (row, col) with size (2*half_window+1) x (2*half_window+1).
+    Handles edge clamping automatically.
+
+    Args:
+        sat: Summed-area table
+        row: Center row index
+        col: Center column index
+        half_window: Half-width of window in cells
+
+    Returns:
+        (window_sum, window_count) - sum of values and number of cells in window
+    """
+    rows, cols = sat.shape
+
+    # Clamp window bounds to grid
+    r_min = max(0, row - half_window)
+    r_max = min(rows - 1, row + half_window)
+    c_min = max(0, col - half_window)
+    c_max = min(cols - 1, col + half_window)
+
+    # SAT formula: sum(r_min:r_max, c_min:c_max) =
+    #   SAT[r_max, c_max]
+    # - SAT[r_min-1, c_max] (if r_min > 0)
+    # - SAT[r_max, c_min-1] (if c_min > 0)
+    # + SAT[r_min-1, c_min-1] (if both > 0)
+
+    total = sat[r_max, c_max]
+
+    if r_min > 0:
+        total -= sat[r_min - 1, c_max]
+
+    if c_min > 0:
+        total -= sat[r_max, c_min - 1]
+
+    if r_min > 0 and c_min > 0:
+        total += sat[r_min - 1, c_min - 1]
+
+    count = (r_max - r_min + 1) * (c_max - c_min + 1)
+
+    return float(total), count
+
+
+def compute_window_mean_grid(
+    Z: np.ndarray,
+    half_window_cells: int,
+) -> np.ndarray:
+    """
+    Compute mean elevation in square window around each cell using SAT.
+
+    Args:
+        Z: 2D elevation array
+        half_window_cells: Half-width of window in cells
+
+    Returns:
+        2D array of same shape with window means
+    """
+    sat = summed_area_table(Z)
+    rows, cols = Z.shape
+
+    mean_grid = np.zeros_like(Z, dtype=np.float64)
+
+    for r in range(rows):
+        for c in range(cols):
+            window_sum, count = window_sum_from_sat(sat, r, c, half_window_cells)
+            mean_grid[r, c] = window_sum / count if count > 0 else Z[r, c]
+
+    return mean_grid
+
+
+def compute_tpi_grids(
+    elevations: np.ndarray,
+    cell_size_m: float,
+    small_radius_m: float = TPI_SMALL_RADIUS_M,
+    large_radius_m: float = TPI_LARGE_RADIUS_M,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Compute TPI (Topographic Position Index) grids at two scales.
+
+    TPI = elevation - mean(neighborhood)
+    Positive = higher than surroundings (ridges, overlooks)
+    Negative = lower than surroundings (valleys, basins)
+
+    Args:
+        elevations: 2D elevation array
+        cell_size_m: Cell size in meters
+        small_radius_m: Target radius for small-scale TPI (~400m)
+        large_radius_m: Target radius for large-scale TPI (~2000m)
+
+    Returns:
+        (tpi_small, tpi_large) - two TPI arrays
+    """
+    rows, cols = elevations.shape
+
+    # Convert radius to half-window cells
+    half_small = max(1, round(small_radius_m / cell_size_m))
+    half_large = max(1, round(large_radius_m / cell_size_m))
+
+    # Clamp to reasonable size (max half = min dimension // 2 - 1)
+    max_half = min(rows, cols) // 2 - 1
+    max_half = max(1, max_half)
+
+    half_small = min(half_small, max_half)
+    half_large = min(half_large, max_half)
+
+    # Compute window means
+    mean_small = compute_window_mean_grid(elevations, half_small)
+    mean_large = compute_window_mean_grid(elevations, half_large)
+
+    # TPI = elevation - mean
+    tpi_small = elevations - mean_small
+    tpi_large = elevations - mean_large
+
+    return tpi_small, tpi_large
+
+
+def compute_tpi_derived_fields(
+    tpi_large: np.ndarray,
+    slope_deg: np.ndarray,
+    cells: List[Tuple[int, int]],
+    tpi_threshold_m: float = TPI_THRESHOLD_M,
+    slope_max_deg: float = TPI_SLOPE_MAX_DEG,
+    normalization_m: float = TPI_NORMALIZATION_M,
+) -> Tuple[float, float, float, float, bool, bool]:
+    """
+    Compute TPI-derived fields for a set of cells.
+
+    Args:
+        tpi_large: Large-scale TPI grid
+        slope_deg: Slope grid in degrees
+        cells: List of (row, col) cell indices
+        tpi_threshold_m: Threshold for rim/basin classification
+        slope_max_deg: Maximum slope for rim candidate
+        normalization_m: Scale for normalizing strength to 0-1
+
+    Returns:
+        (mean_tpi_small, mean_tpi_large, rim_strength, basin_strength,
+         is_rim_candidate, is_basin_candidate)
+    """
+    if not cells:
+        return 0.0, 0.0, 0.0, 0.0, False, False
+
+    # Get TPI values for cells
+    tpi_values = np.array([tpi_large[r, c] for r, c in cells])
+    slope_values = np.array([slope_deg[r, c] for r, c in cells])
+
+    mean_tpi_large = float(np.mean(tpi_values))
+
+    # Compute rim strength: how much the area is elevated above surroundings
+    # Normalize positive TPI to 0-1 range
+    if mean_tpi_large > 0:
+        rim_strength = min(1.0, mean_tpi_large / normalization_m)
+    else:
+        rim_strength = 0.0
+
+    # Compute basin strength: how much the area is depressed below surroundings
+    # Normalize negative TPI to 0-1 range
+    if mean_tpi_large < 0:
+        basin_strength = min(1.0, abs(mean_tpi_large) / normalization_m)
+    else:
+        basin_strength = 0.0
+
+    # Check rim candidate: high positive TPI + reasonable slope
+    mean_slope = float(np.mean(slope_values))
+    is_rim_candidate = (mean_tpi_large > tpi_threshold_m) and (mean_slope < slope_max_deg)
+
+    # Check basin candidate: significantly negative TPI
+    is_basin_candidate = mean_tpi_large < -tpi_threshold_m
+
+    return mean_tpi_large, rim_strength, basin_strength, is_rim_candidate, is_basin_candidate
+
+
+def compute_tpi_for_cell(
+    row: int,
+    col: int,
+    tpi_small: np.ndarray,
+    tpi_large: np.ndarray,
+    slope_deg: np.ndarray,
+    tpi_threshold_m: float = TPI_THRESHOLD_M,
+    slope_max_deg: float = TPI_SLOPE_MAX_DEG,
+    normalization_m: float = TPI_NORMALIZATION_M,
+) -> Tuple[float, float, float, float, bool, bool]:
+    """
+    Compute TPI metrics for a single cell.
+
+    Args:
+        row, col: Cell indices
+        tpi_small: Small-scale TPI grid
+        tpi_large: Large-scale TPI grid
+        slope_deg: Slope grid
+        tpi_threshold_m: Threshold for rim/basin classification
+        slope_max_deg: Maximum slope for rim candidate
+        normalization_m: Scale for normalizing strength
+
+    Returns:
+        (tpi_small_m, tpi_large_m, rim_strength, basin_strength,
+         is_rim_candidate, is_basin_candidate)
+    """
+    tpi_s = float(tpi_small[row, col])
+    tpi_l = float(tpi_large[row, col])
+    slope = float(slope_deg[row, col])
+
+    # Rim strength
+    rim_strength = min(1.0, max(0.0, tpi_l / normalization_m)) if tpi_l > 0 else 0.0
+
+    # Basin strength
+    basin_strength = min(1.0, max(0.0, abs(tpi_l) / normalization_m)) if tpi_l < 0 else 0.0
+
+    # Candidates
+    is_rim_candidate = (tpi_l > tpi_threshold_m) and (slope < slope_max_deg)
+    is_basin_candidate = tpi_l < -tpi_threshold_m
+
+    return tpi_s, tpi_l, rim_strength, basin_strength, is_rim_candidate, is_basin_candidate
 
 
 def compute_local_relief(
@@ -269,6 +531,8 @@ def compute_structure_metrics(
     dem_grid=None,  # Optional DEMGrid for lat/lon conversion
     centroid_row: float = None,
     centroid_col: float = None,
+    tpi_small: np.ndarray = None,  # Optional precomputed TPI grids
+    tpi_large: np.ndarray = None,
 ) -> StructureMetrics:
     """
     Compute comprehensive structure metrics for a terrain region.
@@ -282,6 +546,8 @@ def compute_structure_metrics(
         dem_grid: Optional DEMGrid for lat/lon conversion (for max location)
         centroid_row: Optional centroid row for per-cell analysis
         centroid_col: Optional centroid col for per-cell analysis
+        tpi_small: Optional precomputed small-scale TPI grid
+        tpi_large: Optional precomputed large-scale TPI grid
 
     Returns:
         StructureMetrics with all computed values
@@ -306,6 +572,12 @@ def compute_structure_metrics(
             max_structure_score_in_zone=0.0,
             max_structure_location=None,
             distance_centroid_to_max_m=0.0,
+            tpi_small_m=0.0,
+            tpi_large_m=0.0,
+            rim_strength=0.0,
+            basin_strength=0.0,
+            is_rim_candidate=False,
+            is_basin_candidate=False,
         )
 
     # 1. Local relief at two scales
@@ -402,6 +674,25 @@ def compute_structure_metrics(
         max_lat, max_lon = dem_grid.indices_to_lat_lon(max_r, max_c)
         max_structure_location = (float(max_lat), float(max_lon))
 
+    # 8. TPI (Topographic Position Index) metrics
+    # Compute TPI grids if not provided
+    if tpi_small is None or tpi_large is None:
+        tpi_small_grid, tpi_large_grid = compute_tpi_grids(elevations, cell_size_m)
+    else:
+        tpi_small_grid, tpi_large_grid = tpi_small, tpi_large
+
+    # Compute TPI-derived fields for the cells
+    (mean_tpi_large, rim_strength, basin_strength,
+     is_rim_candidate, is_basin_candidate) = compute_tpi_derived_fields(
+        tpi_large=tpi_large_grid,
+        slope_deg=slope_deg,
+        cells=cells,
+    )
+
+    # Get mean small TPI as well
+    tpi_small_values = [tpi_small_grid[r, c] for r, c in cells]
+    mean_tpi_small = float(np.mean(tpi_small_values)) if tpi_small_values else 0.0
+
     return StructureMetrics(
         micro_relief_m=micro_relief,
         macro_relief_m=macro_relief,
@@ -421,6 +712,13 @@ def compute_structure_metrics(
         max_structure_score_in_zone=max_structure_score_in_zone,
         max_structure_location=max_structure_location,
         distance_centroid_to_max_m=distance_centroid_to_max_m,
+        # TPI fields
+        tpi_small_m=mean_tpi_small,
+        tpi_large_m=mean_tpi_large,
+        rim_strength=rim_strength,
+        basin_strength=basin_strength,
+        is_rim_candidate=is_rim_candidate,
+        is_basin_candidate=is_basin_candidate,
     )
 
 
