@@ -986,6 +986,172 @@ def validate_subject_structure(
     return is_valid, subject_min, subject_median, subject_max
 
 
+# =============================================================================
+# Per-Cell Rim Candidate Detection
+# =============================================================================
+
+@dataclass
+class RimCandidate:
+    """A single rim/overlook candidate cell."""
+    row: int
+    col: int
+    lat: float
+    lon: float
+    elevation_m: float
+    slope_deg: float
+    tpi_large_m: float
+    rim_strength: float
+
+
+# Per-cell rim candidate thresholds (more permissive than zone-level)
+RIM_CELL_TPI_THRESHOLD_M = 12.0     # Lower than zone-level (20m) to catch more candidates
+RIM_CELL_SLOPE_MAX_DEG = 25.0       # Slightly steeper allowed for viewpoints
+RIM_NMS_NEIGHBORHOOD = 5            # Non-max suppression neighborhood (cells)
+RIM_MAX_RAW_CANDIDATES = 500        # Cap on raw candidates before NMS
+
+
+def compute_rim_candidate_mask(
+    tpi_large: np.ndarray,
+    slope_deg: np.ndarray,
+    tpi_threshold_m: float = RIM_CELL_TPI_THRESHOLD_M,
+    slope_max_deg: float = RIM_CELL_SLOPE_MAX_DEG,
+) -> np.ndarray:
+    """
+    Build per-cell rim candidate mask.
+
+    A cell is a rim candidate if:
+    - tpi_large > tpi_threshold_m (cell is higher than surroundings)
+    - slope < slope_max_deg (cell is walkable)
+
+    Args:
+        tpi_large: Large-scale TPI grid (elevation - neighborhood mean)
+        slope_deg: Slope grid in degrees
+        tpi_threshold_m: Minimum TPI for rim candidacy (default 12m)
+        slope_max_deg: Maximum slope for rim candidacy (default 25°)
+
+    Returns:
+        Boolean mask where True = rim candidate cell
+    """
+    rim_mask = (tpi_large > tpi_threshold_m) & (slope_deg < slope_max_deg)
+    return rim_mask
+
+
+def compute_rim_strength_grid(
+    tpi_large: np.ndarray,
+    normalization_m: float = TPI_NORMALIZATION_M,
+) -> np.ndarray:
+    """
+    Compute per-cell rim strength (0-1) from TPI.
+
+    Args:
+        tpi_large: Large-scale TPI grid
+        normalization_m: TPI value that maps to strength 1.0
+
+    Returns:
+        Rim strength grid (0-1), 0 for negative TPI
+    """
+    rim_strength = np.clip(tpi_large / normalization_m, 0.0, 1.0)
+    # Zero out negative TPI (basins)
+    rim_strength = np.where(tpi_large > 0, rim_strength, 0.0)
+    return rim_strength
+
+
+def extract_rim_candidates_nms(
+    rim_mask: np.ndarray,
+    rim_strength: np.ndarray,
+    tpi_large: np.ndarray,
+    slope_deg: np.ndarray,
+    elevations: np.ndarray,
+    dem_grid,  # DEMGrid for lat/lon conversion
+    neighborhood_size: int = RIM_NMS_NEIGHBORHOOD,
+    max_candidates: int = RIM_MAX_RAW_CANDIDATES,
+) -> List[RimCandidate]:
+    """
+    Extract distinct rim candidate points using non-maximum suppression.
+
+    For each local maximum of rim_strength within the rim_mask,
+    keeps only the strongest point in each neighborhood.
+
+    Args:
+        rim_mask: Boolean mask of rim candidate cells
+        rim_strength: Per-cell rim strength grid (0-1)
+        tpi_large: Large-scale TPI grid
+        slope_deg: Slope grid
+        elevations: Elevation grid
+        dem_grid: DEMGrid for coordinate conversion
+        neighborhood_size: Size of NMS neighborhood (cells, must be odd)
+        max_candidates: Maximum candidates to return
+
+    Returns:
+        List of RimCandidate objects (sorted by rim_strength descending)
+    """
+    rows, cols = rim_mask.shape
+
+    # Ensure odd neighborhood
+    if neighborhood_size % 2 == 0:
+        neighborhood_size += 1
+    half_n = neighborhood_size // 2
+
+    # Apply mask to rim_strength (set non-candidates to 0)
+    masked_strength = np.where(rim_mask, rim_strength, 0.0)
+
+    # Find all candidate cells (where mask is True)
+    candidate_indices = np.argwhere(rim_mask)
+
+    if len(candidate_indices) == 0:
+        return []
+
+    # Sort by rim_strength descending
+    strengths = [masked_strength[r, c] for r, c in candidate_indices]
+    sorted_indices = np.argsort(strengths)[::-1]
+
+    # Non-maximum suppression
+    suppressed = np.zeros_like(rim_mask, dtype=bool)
+    candidates = []
+
+    for idx in sorted_indices:
+        r, c = candidate_indices[idx]
+
+        # Skip if already suppressed
+        if suppressed[r, c]:
+            continue
+
+        # Check if this is a local maximum in the neighborhood
+        r_min = max(0, r - half_n)
+        r_max = min(rows, r + half_n + 1)
+        c_min = max(0, c - half_n)
+        c_max = min(cols, c + half_n + 1)
+
+        neighborhood = masked_strength[r_min:r_max, c_min:c_max]
+        local_max = np.max(neighborhood)
+
+        # Only keep if this cell is the local maximum (or tied)
+        if masked_strength[r, c] < local_max - 1e-6:
+            continue
+
+        # This is a local maximum - keep it
+        lat, lon = dem_grid.indices_to_lat_lon(r, c)
+
+        candidates.append(RimCandidate(
+            row=int(r),
+            col=int(c),
+            lat=float(lat),
+            lon=float(lon),
+            elevation_m=float(elevations[r, c]),
+            slope_deg=float(slope_deg[r, c]),
+            tpi_large_m=float(tpi_large[r, c]),
+            rim_strength=float(rim_strength[r, c]),
+        ))
+
+        # Suppress neighborhood
+        suppressed[r_min:r_max, c_min:c_max] = True
+
+        if len(candidates) >= max_candidates:
+            break
+
+    return candidates
+
+
 def get_structure_explanation(metrics: StructureMetrics) -> str:
     """Generate human-readable explanation of structure classification."""
     if metrics.structure_class == "micro-dramatic":

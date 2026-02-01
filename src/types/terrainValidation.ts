@@ -242,6 +242,9 @@ export interface StandingProperties {
   distance_to_subject_m: number;
   camera_bearing_deg: number;
   elevation_diff_m: number;
+  // Rim/overlook metrics (for cell-based overlook candidates)
+  rim_strength?: number;  // 0-1 score from TPI
+  tpi_large_m?: number;   // Large-scale TPI value
   // Distance constraints (based on subject slope and area)
   min_valid_distance_m?: number;
   max_valid_distance_m?: number;
@@ -267,7 +270,7 @@ export interface StandingProperties {
 // A computed standing location
 export interface StandingLocation {
   standing_id: number;
-  subject_id: number;
+  subject_id: number | null;  // null for rim_overlook standing locations
   location: {
     lat: number;
     lon: number;
@@ -277,6 +280,7 @@ export interface StandingLocation {
   candidate_search: CandidateSearch;
   nav_link?: string; // Google Maps navigation link
   view?: OverlookView; // Overlook/viewpoint analysis for rim candidates
+  source?: 'subject' | 'rim_overlook'; // Source type for the standing location
 }
 
 // Debug layer definition
