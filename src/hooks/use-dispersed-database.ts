@@ -24,6 +24,12 @@ interface DatabaseSpot {
   status: string;
   managingAgency: string;
   distanceMiles: number;
+  // Classification flag for established vs dispersed campground
+  isEstablishedCampground?: boolean;
+  // Road accessibility flag (for filtering backcountry/hike-in camps)
+  isRoadAccessible?: boolean;
+  // Raw OSM tags for future use
+  osmTags?: Record<string, any>;
 }
 
 interface DatabaseCampground {
@@ -62,6 +68,12 @@ interface DatabaseRoad {
   coordinates: { lat: number; lng: number }[];
   managingAgency?: string;
   distanceMiles: number;
+  // OSM-specific tags
+  highway?: string;
+  surface?: string;
+  tracktype?: string;
+  access?: string;
+  fourWdOnly?: boolean;
 }
 
 export interface DispersedDatabaseResult {
@@ -170,6 +182,10 @@ export function useDispersedDatabase(
           isOnPublicLand: s.isOnPublicLand,
           passengerReachable: s.passengerReachable,
           highClearanceReachable: s.highClearanceReachable,
+          // Classification flag from database (computed using same logic as Full mode)
+          isEstablishedCampground: s.isEstablishedCampground,
+          // Road accessibility flag (for filtering backcountry/hike-in camps)
+          isRoadAccessible: s.isRoadAccessible,
         }));
 
         const campgrounds: EstablishedCampground[] = (campgroundsData.campgrounds || []).map(
@@ -210,11 +226,11 @@ export function useDispersedDatabase(
           .map((r: DatabaseRoad) => ({
             id: parseInt(r.id) || Math.random(),
             name: r.name,
-            highway: 'track',
-            surface: undefined,
-            tracktype: undefined,
-            access: undefined,
-            fourWdOnly: r.vehicleAccess === '4wd',
+            highway: r.highway || 'track',
+            surface: r.surface,
+            tracktype: r.tracktype,
+            access: r.access,
+            fourWdOnly: r.fourWdOnly || r.vehicleAccess === '4wd',
             geometry: {
               type: 'LineString' as const,
               coordinates: (r.coordinates || []).map(c => [c.lng, c.lat] as [number, number]),
@@ -262,7 +278,7 @@ export function useDispersedDatabase(
 export function usePublicLandsDatabase(
   centerLat: number,
   centerLng: number,
-  radiusMiles: number = 15
+  radiusMiles: number = 10
 ): PublicLandsDatabaseResult {
   const [publicLands, setPublicLands] = useState<PublicLand[]>([]);
   const [loading, setLoading] = useState(false);

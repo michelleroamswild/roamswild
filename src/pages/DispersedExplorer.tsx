@@ -96,6 +96,24 @@ function isWithinAnyPublicLand(
 }
 
 /**
+ * Find which public land a point is within and return its name
+ */
+function findContainingLand(
+  lat: number,
+  lng: number,
+  publicLands: { name?: string; unitName?: string; managingAgency?: string; polygon?: { lat: number; lng: number }[] }[]
+): { name: string; agency: string } | null {
+  for (const land of publicLands) {
+    if (land.polygon && isPointInPolygon({ lat, lng }, land.polygon)) {
+      // Prefer unitName (e.g., "Manti-La Sal National Forest") over generic name
+      const name = land.unitName || land.name || '';
+      return { name, agency: land.managingAgency || '' };
+    }
+  }
+  return null;
+}
+
+/**
  * Check if a dead-end spot is actually near the interior of another road (false dead-end).
  * This happens when OSM tracks are split into segments that don't share exact coordinates.
  * Matches the logic in use-dispersed-roads.ts findDeadEnds() filter.
@@ -171,7 +189,9 @@ const DispersedExplorer = () => {
   const [selectedCampsite, setSelectedCampsite] = useState<Campsite | null>(null);
 
   // Toggle between database (fast) and client-side (comprehensive with roads) data sources
-  const [useDatabase, setUseDatabase] = useState(true);
+  // Currently defaulting to Full mode (client-side) while database ingestion is paused
+  const [useDatabase, setUseDatabase] = useState(false);
+
 
   // Database hooks - fast pre-computed spots, campgrounds, and roads
   const {
@@ -191,7 +211,7 @@ const DispersedExplorer = () => {
   const { publicLands: clientPublicLands, loading: clientPublicLandsLoading } = usePublicLands(
     searchLocation?.lat ?? 0,
     searchLocation?.lng ?? 0,
-    12
+    10
   );
 
   // Debug logging for public lands
@@ -224,6 +244,7 @@ const DispersedExplorer = () => {
       }
     }
   }, [clientPublicLands]);
+
 
   // Client-side hooks for roads/spots - only fetch when not using database
   const {
@@ -282,7 +303,7 @@ const DispersedExplorer = () => {
   // Fetch confirmed explorer spots from database when search location changes
   useEffect(() => {
     if (searchLocation) {
-      getExplorerSpots(searchLocation.lat, searchLocation.lng, 15).then(setExplorerSpots);
+      getExplorerSpots(searchLocation.lat, searchLocation.lng, 10).then(setExplorerSpots);
     } else {
       setExplorerSpots([]);
     }
@@ -385,6 +406,67 @@ const DispersedExplorer = () => {
     [publicLands]
   );
 
+  // Helper to detect if a camp site is actually an established campground
+  // Uses the isEstablishedCampground flag computed by database using same logic as Full mode
+  const isLikelyEstablishedCampground = useCallback((spot: PotentialSpot): boolean => {
+    // Primary: use the database-computed flag (matches Full mode's OSM tag scoring)
+    if (spot.isEstablishedCampground !== undefined) {
+      return spot.isEstablishedCampground;
+    }
+
+    // Fallback for older data: check reasons array
+    if (spot.reasons?.includes('Established campground')) {
+      return true;
+    }
+
+    // Final fallback: check name pattern for sites without database classification
+    const name = spot.name || '';
+    const nameIndicatesCampground = /campground|camping area|camp\s|rv\s*park|yurt|group camp/i.test(name);
+    const isDispersedPattern = /dispersed|primitive|backcountry|wild|fire\s*ring|dead.?end/i.test(name);
+    return nameIndicatesCampground && !isDispersedPattern;
+  }, []);
+
+  // For Fast mode: extract established campgrounds from misclassified database camp sites
+  // These should show as blue dots (campgrounds) not green dots (known sites)
+  const additionalCampgrounds = useMemo((): EstablishedCampground[] => {
+    if (!useDatabase) return []; // Only needed for Fast mode
+
+    const campSites = potentialSpots.filter((spot) => spot.type === 'camp-site');
+    return campSites
+      .filter(isLikelyEstablishedCampground)
+      .map((spot) => ({
+        id: spot.id,
+        name: spot.name || 'Campground',
+        lat: spot.lat,
+        lng: spot.lng,
+        facilityType: 'Campground',
+        agencyName: undefined,
+        reservable: false,
+        url: undefined,
+      }));
+  }, [useDatabase, potentialSpots, isLikelyEstablishedCampground]);
+
+  // Combined campgrounds: original from API + additional from misclassified camp sites
+  const allEstablishedCampgrounds = useMemo((): EstablishedCampground[] => {
+    if (!useDatabase) return establishedCampgrounds;
+
+    // Deduplicate by checking if already in original list (by location proximity)
+    const combined = [...establishedCampgrounds];
+    const DEDUP_THRESHOLD = 0.001; // ~100 meters
+
+    for (const additional of additionalCampgrounds) {
+      const isDuplicate = combined.some(existing => {
+        const latDiff = Math.abs(existing.lat - additional.lat);
+        const lngDiff = Math.abs(existing.lng - additional.lng);
+        return latDiff < DEDUP_THRESHOLD && lngDiff < DEDUP_THRESHOLD;
+      });
+      if (!isDuplicate) {
+        combined.push(additional);
+      }
+    }
+    return combined;
+  }, [useDatabase, establishedCampgrounds, additionalCampgrounds]);
+
   // Filter potential spots with smart rules:
   // - OSM camp sites: Always show (they're verified camping locations)
   // - MVUM-derived spots: Always show (MVUM roads are definitely on National Forest)
@@ -392,17 +474,86 @@ const DispersedExplorer = () => {
   // - EXCLUDE spots within National Parks or State Parks (dispersed camping not allowed)
   // - EXCLUDE spots near established campgrounds (use the campground instead)
   const filteredPotentialSpots = useMemo(() => {
-    // Always show OSM camp sites - they're explicitly tagged as camping locations
-    // Exclude those in National Parks and State Parks, but ALLOW those on tribal lands
-    // (tribal campgrounds exist and are tagged in OSM)
-    const campSites = potentialSpots
-      .filter((spot) => spot.type === 'camp-site')
-      .filter((spot) => {
-        // Allow OSM camp sites on tribal lands (they're likely tribal campgrounds)
-        if (isWithinTribalLand(spot.lat, spot.lng)) return true;
-        // Otherwise apply normal restricted area filtering
-        return !isWithinRestrictedArea(spot.lat, spot.lng);
-      });
+    // Helper to check if a point is near any road (for filtering backcountry camps)
+    const isNearAnyRoad = (lat: number, lng: number, thresholdMiles: number = 0.25): boolean => {
+      const thresholdDeg = thresholdMiles / 69; // Approximate conversion
+      const allRoads = [...mvumRoads, ...osmTracks];
+
+      for (const road of allRoads) {
+        if (!road.geometry?.coordinates?.length) continue;
+        for (const coord of road.geometry.coordinates) {
+          const roadLng = coord[0];
+          const roadLat = coord[1];
+          const latDiff = Math.abs(lat - roadLat);
+          const lngDiff = Math.abs(lng - roadLng);
+          if (latDiff < thresholdDeg && lngDiff < thresholdDeg) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    // For Full mode (client-side), spots are already filtered in use-dispersed-roads.ts
+    // For Fast mode, private road filtering is handled at database import time
+    // Only apply extra filtering for Fast mode (database) spots
+    let campSites = potentialSpots.filter((spot) => spot.type === 'camp-site');
+
+    if (useDatabase) {
+      // Filter database camp sites to match Full mode behavior:
+      // - Exclude established campgrounds (they go to campgrounds list)
+      // - Exclude backcountry/hike-in camps not near any road
+      // - Exclude individual pitch sites ("Site 1", "Site 2") near campgrounds
+      // - Exclude "Host" sites (camp host sites at established campgrounds)
+      // - Exclude camps too close to established campgrounds
+      // - Exclude camps too close to each other (deduplication)
+      campSites = campSites
+        .filter((spot) => {
+          const name = spot.name || '';
+
+          // Filter out established campgrounds (they're added to campgrounds list above)
+          if (isLikelyEstablishedCampground(spot)) return false;
+
+          // Filter out backcountry/hike-in camps that aren't near any road
+          // Use real-time check against loaded roads to match Full mode behavior
+          // (database flag may not be backfilled, so we check against actual road data)
+          if (!isNearAnyRoad(spot.lat, spot.lng, 0.25)) return false;
+
+          // NOTE: Private road filtering is handled at database import time
+          // Spots near private roads should not be in the database
+
+          // Filter out "Host" sites (camp hosts at established campgrounds)
+          if (/^Host$/i.test(name) || /CAMP HOST/i.test(name)) return false;
+
+          // NOTE: We do NOT filter individual OSM camp sites (Site 1, Site 2, etc.)
+          // These are explicitly tagged camping locations and should be shown
+          // The individual site filter only applies to derived spots (dead-ends)
+
+          // NOTE: We do NOT filter camp sites by campground proximity here
+          // OSM camp sites are explicitly tagged camping locations and should be shown
+          // The 0.25-mile campground proximity filter only applies to derived spots (dead-ends)
+
+          return true;
+        })
+        // Deduplicate camps that are very close to each other (within ~50 meters)
+        .filter((spot, index, array) => {
+          const DEDUP_THRESHOLD = 0.0005; // ~50 meters
+          // Keep this spot only if no earlier spot is within threshold
+          return !array.slice(0, index).some(earlier => {
+            const latDiff = Math.abs(spot.lat - earlier.lat);
+            const lngDiff = Math.abs(spot.lng - earlier.lng);
+            return latDiff < DEDUP_THRESHOLD && lngDiff < DEDUP_THRESHOLD;
+          });
+        });
+    }
+
+    // Apply restricted area filtering to all camp sites (both modes)
+    campSites = campSites.filter((spot) => {
+      // Allow OSM camp sites on tribal lands (they're likely tribal campgrounds)
+      if (isWithinTribalLand(spot.lat, spot.lng)) return true;
+      // Otherwise apply normal restricted area filtering
+      return !isWithinRestrictedArea(spot.lat, spot.lng);
+    });
 
     // Get derived spots (dead-ends, intersections)
     const derivedSpots = potentialSpots.filter((spot) => spot.type !== 'camp-site');
@@ -427,11 +578,15 @@ const DispersedExplorer = () => {
       // This matches the logic in use-dispersed-roads.ts for Full mode
       if (isFalseDeadEnd(spot, allRoads)) return false;
 
+      // NOTE: Private road filtering is handled at database import time
+      // Derived spots near private roads should not be in the database
+
       // Exclude spots in National Parks or State Parks (dispersed camping not allowed)
       if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
 
-      // Exclude spots near established campgrounds (use the campground instead)
-      if (isNearEstablishedCampground(spot.lat, spot.lng)) return false;
+      // Exclude derived spots near established campgrounds (use the campground instead)
+      // Uses 0.5 miles to match Full mode behavior
+      if (isNearEstablishedCampground(spot.lat, spot.lng, 0.5)) return false;
 
       // MVUM roads are definitely on public land (National Forest) - always include
       if (spot.isOnMVUMRoad) return true;
@@ -439,21 +594,19 @@ const DispersedExplorer = () => {
       // BLM roads are definitely on public land (BLM) - always include
       if (spot.isOnBLMRoad) return true;
 
-      // Database spots have isOnPublicLand validated during derivation - trust them
-      // For client-computed spots, this is a heuristic based on OSM track characteristics
-      if (spot.isOnPublicLand) return true;
-
-      // For remaining OSM-derived spots, validate against polygon data if available
-      // This catches spots that were computed client-side without proper validation
+      // For ALL other spots (including those claiming isOnPublicLand from OSM heuristics),
+      // validate against polygon data if available - this is the authoritative check
       if (publicLands.length > 0) {
         const withinPublicLand = isWithinAnyPublicLand(spot.lat, spot.lng, publicLands);
         if (withinPublicLand) return true;
 
         // Spot is NOT within any public land polygon - reject as likely private land
+        // This overrides the isOnPublicLand heuristic from OSM road characteristics
         return false;
       }
 
-      // No polygon coverage at all - use MVUM presence as proxy for "in National Forest area"
+      // No polygon coverage - fall back to isOnPublicLand heuristic or MVUM presence
+      if (spot.isOnPublicLand) return true;
       return hasMVUMRoads;
     });
 
@@ -470,9 +623,66 @@ const DispersedExplorer = () => {
     if (falseDeadEndCount > 0) {
       console.log(`Filtered out ${falseDeadEndCount} false dead-ends (actually intersections)`);
     }
-    console.log(`Derived spots: ${derivedSpots.length} total, ${filteredDerived.length} after filtering`);
 
-    const allSpots = [...campSites, ...filteredDerived];
+    // Remove derived spots that are very close to camp sites
+    // OSM camp sites are explicitly tagged and should take precedence
+    // Use 0.06 miles (~100 meters) to match Full mode
+    const CAMP_DEDUP_MILES = 0.06;
+    const dedupedDerived = filteredDerived.filter(derived => {
+      const nearCampSite = campSites.some(camp => {
+        const latDiff = Math.abs(derived.lat - camp.lat);
+        const lngDiff = Math.abs(derived.lng - camp.lng);
+        // Approximate: 1 degree ≈ 69 miles
+        const distMiles = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) * 69;
+        return distMiles < CAMP_DEDUP_MILES;
+      });
+      return !nearCampSite;
+    });
+
+    // Also deduplicate derived spots that are very close to each other
+    const DERIVED_DEDUP_THRESHOLD = 0.0005; // ~50 meters
+    const finalDerived = dedupedDerived.filter((spot, index, array) => {
+      // Keep this spot only if no earlier spot is within threshold
+      return !array.slice(0, index).some(earlier => {
+        const latDiff = Math.abs(spot.lat - earlier.lat);
+        const lngDiff = Math.abs(spot.lng - earlier.lng);
+        return latDiff < DERIVED_DEDUP_THRESHOLD && lngDiff < DERIVED_DEDUP_THRESHOLD;
+      });
+    });
+
+    console.log(`Derived spots: ${derivedSpots.length} total, ${filteredDerived.length} after filtering, ${finalDerived.length} after dedup`);
+
+    // Filter out spots with score < 25 (we don't show the Unverified category)
+    const qualifiedDerived = finalDerived.filter(s => s.score >= 25);
+
+    // Enrich unnamed spots with public land names
+    // Track counts per land area for numbering
+    const landCounts = new Map<string, number>();
+    const enrichedDerived = qualifiedDerived.map(spot => {
+      // Only enrich spots with coordinate-based names (starting with "Dispersed")
+      if (!spot.name.startsWith('Dispersed ')) return spot;
+
+      const containingLand = findContainingLand(spot.lat, spot.lng, publicLands);
+      if (containingLand && containingLand.name) {
+        // Shorten long land names
+        let landName = containingLand.name
+          .replace(/National Recreation Area$/i, 'NRA')
+          .replace(/National Monument$/i, 'NM')
+          .replace(/National Forest$/i, 'NF')
+          .replace(/Wilderness Study Area$/i, 'WSA')
+          .replace(/Special Recreation Management Area$/i, 'SRMA');
+
+        // Get count for this land area
+        const count = (landCounts.get(landName) || 0) + 1;
+        landCounts.set(landName, count);
+
+        return { ...spot, name: `${landName} #${count}` };
+      }
+
+      return spot;
+    });
+
+    const allSpots = [...campSites, ...enrichedDerived];
 
     // Apply filters
     return allSpots.filter((spot) => {
@@ -482,14 +692,12 @@ const DispersedExplorer = () => {
         const isKnown = spot.type === 'camp-site';
         const isHigh = !isKnown && spot.score >= 35;
         const isMedium = !isKnown && spot.score >= 25 && spot.score < 35;
-        const isLow = !isKnown && spot.score < 25;
 
         // Check if spot matches any selected filter
         const matches =
           (spotFilters.has('known') && isKnown) ||
           (spotFilters.has('high') && isHigh) ||
-          (spotFilters.has('medium') && isMedium) ||
-          (spotFilters.has('low') && isLow);
+          (spotFilters.has('medium') && isMedium);
 
         if (!matches) return false;
       }
@@ -508,7 +716,7 @@ const DispersedExplorer = () => {
 
       return true;
     });
-  }, [potentialSpots, publicLands, mvumRoads, osmTracks, isWithinRestrictedArea, isWithinTribalLand, isNearEstablishedCampground, roadFilter, spotFilters]);
+  }, [potentialSpots, publicLands, mvumRoads, osmTracks, isWithinRestrictedArea, isWithinTribalLand, isNearEstablishedCampground, isLikelyEstablishedCampground, useDatabase, roadFilter, spotFilters]);
 
   // Calculate top recommendations based on multiple factors
   const topRecommendations = useMemo(() => {
@@ -681,7 +889,7 @@ const DispersedExplorer = () => {
 
     // Add campgrounds if filter allows
     if (showCampgroundsFiltered) {
-      establishedCampgrounds.forEach(cg => {
+      allEstablishedCampgrounds.forEach(cg => {
         const distance = getDistanceMiles(cg.lat, cg.lng);
         unified.push({
           id: `campground-${cg.id}`,
@@ -766,7 +974,7 @@ const DispersedExplorer = () => {
     }
 
     return unified;
-  }, [filteredPotentialSpots, establishedCampgrounds, campsites, friendsCampsites, showCampgroundsFiltered, showMyCampsites, showMyCampsitesFiltered, showFriendsCampsites, getFriendById, searchLocation, topRecommendations, sortBy]);
+  }, [filteredPotentialSpots, allEstablishedCampgrounds, campsites, friendsCampsites, showCampgroundsFiltered, showMyCampsites, showMyCampsitesFiltered, showFriendsCampsites, getFriendById, searchLocation, topRecommendations, sortBy]);
 
   // Helper to get icon for unified spot based on category and type
   const getUnifiedSpotIcon = (spot: UnifiedSpot) => {
@@ -919,8 +1127,11 @@ const DispersedExplorer = () => {
   }, [mvumRoads, roadFilter]);
 
   const filteredOsmTracks = useMemo(() => {
-    if (roadFilter === 'all') return osmTracks;
-    return osmTracks.filter(track => {
+    // Filter out paved/residential roads - they're only in the data for junction detection
+    const displayableTracks = osmTracks.filter(track => !track.isPaved);
+
+    if (roadFilter === 'all') return displayableTracks;
+    return displayableTracks.filter(track => {
       if (roadFilter === 'passenger') {
         // Only show grade1 (paved) tracks for passenger vehicles
         // OSM data quality varies too much to trust grade2+ as passenger-accessible
@@ -1040,7 +1251,7 @@ const DispersedExplorer = () => {
               mapTypeId: 'hybrid',
               mapTypeControl: true,
               mapTypeControlOptions: {
-                position: google.maps.ControlPosition?.TOP_RIGHT,
+                position: typeof google !== 'undefined' ? google.maps.ControlPosition?.TOP_RIGHT : undefined,
               },
             }}
           >
@@ -1110,12 +1321,12 @@ const DispersedExplorer = () => {
             })}
 
             {/* OSM Tracks */}
-            {filteredOsmTracks.map((track) => {
+            {filteredOsmTracks.map((track, index) => {
               const path = toLatLngPath(track.geometry?.coordinates);
               if (path.length < 2) return null;
               return (
                 <Polyline
-                  key={`osm-${track.id}`}
+                  key={`osm-${track.id}-${index}`}
                   path={path}
                   options={{
                     strokeColor: getOSMColor(track),
@@ -1304,7 +1515,7 @@ const DispersedExplorer = () => {
             )}
 
             {/* Established Campgrounds */}
-            {showCampgroundsFiltered && establishedCampgrounds
+            {showCampgroundsFiltered && allEstablishedCampgrounds
               .filter((cg) => isFinite(cg.lat) && isFinite(cg.lng))
               .map((cg) => (
               <Marker
@@ -1426,28 +1637,28 @@ const DispersedExplorer = () => {
               sideOffset={8}
             >
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <MapTrifold className="w-4 h-4" />
-                    Map Legend
-                  </h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2"
-                    onClick={() => setShowPublicLands(!showPublicLands)}
-                  >
-                    {showPublicLands ? (
-                      <Eye className="w-4 h-4" />
-                    ) : (
-                      <EyeSlash className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <MapTrifold className="w-4 h-4" />
+                  Map Legend
+                </h3>
 
                 {/* Land Overlays */}
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Land Overlays</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Land Overlays</p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 w-5 p-0"
+                      onClick={() => setShowPublicLands(!showPublicLands)}
+                    >
+                      {showPublicLands ? (
+                        <Eye className="w-3.5 h-3.5" />
+                      ) : (
+                        <EyeSlash className="w-3.5 h-3.5" />
+                      )}
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-emerald-500/30 border border-emerald-600 rounded" />
@@ -1490,11 +1701,7 @@ const DispersedExplorer = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#f97316' }} />
-                      <span>Med Confidence</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#e83a3a' }} />
-                      <span>Low Confidence</span>
+                      <span>Moderate</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-blue-500 rounded-full" />
@@ -1530,7 +1737,7 @@ const DispersedExplorer = () => {
                   </div>
                 </div>
 
-                {/* Data Source Toggle */}
+                {/* Data Source Toggle - Hidden while database ingestion is paused
                 <div className="space-y-2 pt-2 border-t border-border">
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Data Source</p>
                   <div className="flex gap-2">
@@ -1557,6 +1764,7 @@ const DispersedExplorer = () => {
                       : "Computing from road network (shows roads)"}
                   </p>
                 </div>
+                */}
               </div>
             </PopoverContent>
           </Popover>
@@ -1630,8 +1838,8 @@ const DispersedExplorer = () => {
             {/* Results: Stats, Filters, Campsites */}
             {searchLocation && !loading && (
               <>
-                {/* Stats row - 6 across */}
-                <div className="grid grid-cols-6 gap-2 mb-5">
+                {/* Stats row - 5 across */}
+                <div className="grid grid-cols-5 gap-2 mb-5">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="p-2 bg-mossgreen/10 dark:bg-mossgreen/20 rounded-lg border border-mossgreen/30 text-center cursor-pointer">
@@ -1653,38 +1861,26 @@ const DispersedExplorer = () => {
                     </TooltipTrigger>
                     <TooltipContent>
                       <p className="font-medium">High Confidence (35+)</p>
-                      <p className="text-xs text-muted-foreground">Dead-ends on MVUM/BLM roads</p>
+                      <p className="text-xs text-muted-foreground">Official roads (MVUM/BLM), named roads, or good access</p>
                     </TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800 text-center cursor-pointer">
                         <p className="text-xl font-bold text-orange-600 dark:text-orange-400">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 25 && s.score < 35).length}</p>
-                        <p className="text-xs font-medium text-orange-600 dark:text-orange-400">Medium</p>
+                        <p className="text-xs font-medium text-orange-600 dark:text-orange-400">Moderate</p>
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p className="font-medium">Medium Confidence (25-34)</p>
-                      <p className="text-xs text-muted-foreground">Dead-ends on public land tracks</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 text-center cursor-pointer">
-                        <p className="text-xl font-bold text-red-600 dark:text-red-400">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score < 25).length}</p>
-                        <p className="text-xs font-medium text-red-600 dark:text-red-400">Low</p>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="font-medium">Low Confidence (&lt;25)</p>
-                      <p className="text-xs text-muted-foreground">Spots needing more verification</p>
+                      <p className="font-medium">Moderate Confidence (25-34)</p>
+                      <p className="text-xs text-muted-foreground">Unnamed tracks on public land</p>
                     </TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-center cursor-pointer">
-                        <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{establishedCampgrounds.length}</p>
-                        <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Camps</p>
+                        <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{allEstablishedCampgrounds.length}</p>
+                        <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Campgrounds</p>
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -1696,7 +1892,7 @@ const DispersedExplorer = () => {
                     <TooltipTrigger asChild>
                       <div className="p-2 bg-violet-50 dark:bg-violet-900/20 rounded-lg border border-violet-200 dark:border-violet-800 text-center cursor-pointer">
                         <p className="text-xl font-bold text-violet-600 dark:text-violet-400">{campsites.length}</p>
-                        <p className="text-xs font-medium text-violet-600 dark:text-violet-400">Mine</p>
+                        <p className="text-xs font-medium text-violet-600 dark:text-violet-400">My Sites</p>
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -1768,19 +1964,7 @@ const DispersedExplorer = () => {
                       style={spotFilters.has('medium') ? { backgroundColor: '#f97316' } : {}}
                     >
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#f97316' }} />
-                      Medium
-                    </button>
-                    <button
-                      onClick={() => toggleFilter('low')}
-                      className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
-                        spotFilters.has('low')
-                          ? 'text-white border-coralred'
-                          : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                      }`}
-                      style={spotFilters.has('low') ? { backgroundColor: '#e83a3a' } : {}}
-                    >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#e83a3a' }} />
-                      Low
+                      Moderate
                     </button>
                     {spotFilters.size > 0 && (
                       <button
@@ -2047,7 +2231,7 @@ const DispersedExplorer = () => {
                         }`} />
                         <span className="text-sm font-medium">
                           {selectedSpot.type === 'camp-site' ? 'Known Campsite' :
-                           selectedSpot.score >= 35 ? 'High' : selectedSpot.score >= 25 ? 'Medium' : 'Lower'}
+                           selectedSpot.score >= 35 ? 'High' : 'Moderate'}
                         </span>
                         {selectedSpot.type !== 'camp-site' && (
                           <span className="text-xs text-muted-foreground">({selectedSpot.score} pts)</span>
@@ -2247,7 +2431,7 @@ const DispersedExplorer = () => {
             findExistingExplorerSpot(selectedSpot.lat, selectedSpot.lng).then(setExistingCampsiteForSpot);
             // Refresh explorer spots list
             if (searchLocation) {
-              getExplorerSpots(searchLocation.lat, searchLocation.lng, 15).then(setExplorerSpots);
+              getExplorerSpots(searchLocation.lat, searchLocation.lng, 10).then(setExplorerSpots);
             }
           }}
         />

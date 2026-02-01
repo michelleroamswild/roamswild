@@ -67,7 +67,8 @@ serve(async (req) => {
         id: row.id,
         lat: parseFloat(row.lat),
         lng: parseFloat(row.lng),
-        name: row.road_name || "Dispersed Spot",
+        // Use name from database (for OSM camp sites), fallback to road_name, then default
+        name: row.name || row.road_name || "Dispersed Spot",
         type: mapSpotType(row.spot_type),
         score: parseFloat(row.confidence_score) || 0,
         reasons: row.derivation_reasons || [],
@@ -83,6 +84,14 @@ serve(async (req) => {
         status: row.status,
         managingAgency: row.managing_agency,
         distanceMiles: parseFloat(row.distance_miles),
+        // Classification flag for established vs dispersed campground
+        isEstablishedCampground: row.is_established_campground || false,
+        // Road accessibility flag (for filtering backcountry/hike-in camps)
+        isRoadAccessible: row.is_road_accessible !== false, // default true for backwards compat
+        // Public land flag (for filtering spots not on public land)
+        isOnPublicLand: row.is_on_public_land !== false, // default true for backwards compat
+        // Raw OSM tags for future use
+        osmTags: row.osm_tags || null,
       };
     });
 

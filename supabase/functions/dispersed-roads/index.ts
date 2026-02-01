@@ -65,6 +65,12 @@ serve(async (req) => {
       coordinates: row.coordinates || [], // Array of {lat, lng} points
       managingAgency: row.managing_agency,
       distanceMiles: parseFloat(row.distance_miles),
+      // OSM-specific tags for road info display
+      highway: row.highway || null,
+      surface: row.surface_type || null,
+      tracktype: row.tracktype || null,
+      access: row.access || null,
+      fourWdOnly: row.four_wd_only || false,
     }));
 
     return new Response(
