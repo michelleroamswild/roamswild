@@ -256,6 +256,12 @@ class StandingProperties:
     # Approach difficulty classification
     approach_difficulty: str = "unknown"  # easy, moderate, hard, unknown
     approach_profile: str = "moderate"  # Profile used for limits (casual, moderate, spicy)
+    # Rim/overlook metrics (for cell-based overlook candidates)
+    rim_strength: Optional[float] = None  # 0-1 score from TPI (higher = more elevated)
+    tpi_large_m: Optional[float] = None  # Large-scale TPI value
+    # Access type classification for rim-overlook results
+    # "road" = nearest access is a road/track, "trail" = path/footway, "none" = no access data
+    access_type: str = "none"
 
 
 @dataclass
@@ -299,8 +305,8 @@ class ViewExplanations:
 @dataclass
 class OverlookView:
     """View analysis for overlook/viewpoint locations."""
-    # View metrics
-    open_sky_fraction: float  # Fraction of azimuths with horizon < 1°
+    # View metrics (full 360°)
+    open_sky_fraction: float  # Fraction of azimuths with horizon < 1° (full 360°)
     depth_p50_m: float  # Median distance to horizon
     depth_p90_m: float  # 90th percentile distance to horizon
     horizon_complexity: int  # Number of peaks in horizon profile
@@ -309,6 +315,17 @@ class OverlookView:
     # Best viewing direction
     best_bearing_deg: float  # Azimuth with best openness*depth
     fov_deg: float = 60.0  # Field of view for best bearing
+
+    # Sector-based openness (in shooting direction)
+    # More useful than full 360° for scoring - a canyon rim enclosed behind
+    # but open forward should score well
+    open_sky_sector_fraction: float = 0.0  # Fraction open in ±45° sector around best_bearing
+
+    # View category classification
+    # - EPIC_OVERLOOK: Big horizon, deep layers, wide-open views
+    # - DRAMATIC_ENCLOSED: Enclosed canyon/valley with complex skyline, good for silhouettes
+    # - QUICK_SCENIC: Easy viewpoint, good quick stop
+    view_category: str = "QUICK_SCENIC"
 
     # View cone polygon for map rendering [[lat,lon], ...] - apex, left, right, apex (closed)
     view_cone: Optional[List[List[float]]] = None
@@ -326,7 +343,7 @@ class OverlookView:
 @dataclass
 class StandingLocation:
     standing_id: int
-    subject_id: int
+    subject_id: Optional[int]  # None for rim_overlook standing locations
     location: Dict  # {"lat": float, "lon": float}
     properties: StandingProperties
     line_of_sight: LineOfSight
@@ -337,6 +354,8 @@ class StandingLocation:
     nav_link: Optional[str] = None
     # Overlook view analysis (optional - for rim/viewpoint locations)
     view: Optional[OverlookView] = None
+    # Source type: "subject" (default) or "rim_overlook" (cell-based overlook detection)
+    source: str = "subject"
 
 
 @dataclass
@@ -355,6 +374,53 @@ class StructureDebug:
 
 
 @dataclass
+class RimOverlookDebugStats:
+    """Debug stats for rim overlook detection pipeline."""
+    # Stage counts
+    grid_cells_total: int = 0
+    rim_mask_cells: int = 0
+    rim_local_maxima_cells: int = 0
+    rim_candidates_selected: int = 0
+    view_analysis_run: int = 0
+    results_after_dedup: int = 0
+
+    # TPI distribution stats (within AOI)
+    tpi_large_m_p50: float = 0.0
+    tpi_large_m_p90: float = 0.0
+    tpi_large_m_p95: float = 0.0
+
+    # Slope distribution stats
+    slope_deg_pct_under_20: float = 0.0
+    slope_deg_pct_under_25: float = 0.0
+    slope_deg_pct_under_30: float = 0.0
+
+    # View analysis stats (for candidates analyzed)
+    depth_p90_m_p50: Optional[float] = None
+    depth_p90_m_p90: Optional[float] = None
+    avg_open_sky_fraction: Optional[float] = None
+    avg_overlook_score: Optional[float] = None
+
+    # Drop reason breakdown
+    rejected_slope: int = 0
+    rejected_tpi: int = 0
+    rejected_nms: int = 0
+    rejected_topk: int = 0
+    rejected_dedup: int = 0
+
+    # Auto-threshold: chosen thresholds (after adjustment)
+    chosen_tpi_threshold_m: Optional[float] = None
+    chosen_slope_max_deg: Optional[float] = None
+    chosen_view_candidates_k: Optional[int] = None
+    auto_threshold_applied: bool = False
+
+    # Access proximity stats (when access_bias is enabled)
+    access_bias_applied: str = "NONE"  # Which bias mode was used
+    pct_results_within_access_distance: Optional[float] = None  # % of final results within access_max_distance_m
+    distance_to_access_p50_m: Optional[float] = None  # Median distance to nearest road/trail
+    distance_to_access_p90_m: Optional[float] = None  # 90th percentile distance
+
+
+@dataclass
 class AnalysisMeta:
     request_id: str
     computed_at: str
@@ -368,6 +434,7 @@ class AnalysisMeta:
     dem_citation: Optional[str] = None
     # Debug info
     structure_debug: Optional[StructureDebug] = None
+    rim_overlook_debug: Optional[RimOverlookDebugStats] = None
 
 
 @dataclass
@@ -545,3 +612,14 @@ class AnalyzeRequest:
     radius_km: float = 2.0
     dem_source: Literal["auto", "copernicus-glo30", "usgs-3dep", "aws-terrain-tiles"] = "auto"
     # Note: aws-terrain-tiles is for visualization ONLY, not analysis
+    debug: bool = False  # Enable debug stats in response
+    # Auto-threshold mode: adjusts TPI and slope thresholds per-request
+    # to target a healthy number of rim candidates (5-15% of grid cells)
+    auto_thresholds: bool = True
+    # Access bias: bias rim-overlook results toward accessible locations near roads/trails
+    # - "NONE": No access bias (default)
+    # - "NEAR_ROADS": Bias toward locations near roads/tracks
+    # - "NEAR_TRAILS": Bias toward locations near trails/paths
+    # - "NEAR_ROADS_OR_TRAILS": Bias toward locations near any road or trail
+    access_bias: Literal["NONE", "NEAR_ROADS", "NEAR_TRAILS", "NEAR_ROADS_OR_TRAILS"] = "NONE"
+    access_max_distance_m: float = 800.0  # Max distance for full access bonus

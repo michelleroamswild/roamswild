@@ -41,6 +41,21 @@ class AnalyzeRequestModel(BaseModel):
         description="DEM source: auto (recommended), copernicus-glo30, usgs-3dep, or aws-terrain-tiles (visualization only)"
     )
     use_synthetic: bool = Field(False, description="Use synthetic DEM for testing")
+    debug: bool = Field(False, description="Enable debug stats in response (rim_overlook_debug)")
+    auto_thresholds: bool = Field(
+        True,
+        description="Auto-adjust TPI/slope thresholds per-request to target healthy rim candidate yield"
+    )
+    access_bias: Literal["NONE", "NEAR_ROADS", "NEAR_TRAILS", "NEAR_ROADS_OR_TRAILS"] = Field(
+        "NONE",
+        description="Bias rim-overlook results toward accessible locations: NONE, NEAR_ROADS, NEAR_TRAILS, or NEAR_ROADS_OR_TRAILS"
+    )
+    access_max_distance_m: float = Field(
+        800.0,
+        description="Max distance in meters for full access bonus (locations beyond 2x this get no bonus)",
+        ge=100,
+        le=5000
+    )
 
 
 def dataclass_to_dict(obj):
@@ -79,6 +94,10 @@ async def analyze(request: AnalyzeRequestModel):
             event=request.event,
             radius_km=request.radius_km,
             dem_source=request.dem_source,
+            debug=request.debug,
+            auto_thresholds=request.auto_thresholds,
+            access_bias=request.access_bias,
+            access_max_distance_m=request.access_max_distance_m,
         )
 
         result = await analyze_terrain(internal_request, use_synthetic=request.use_synthetic)
