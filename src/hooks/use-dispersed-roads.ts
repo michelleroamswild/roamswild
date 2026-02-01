@@ -1558,6 +1558,8 @@ async function fetchAllOSMData(
       } else if (isEstablishedCampground) {
         reasons.push('Established campground');
       } else if (tags.tourism === 'camp_site') {
+        // OSM camp_site tag indicates a known camping location - score 40 to match database
+        score = 40;
         reasons.push('Known camp site');
       } else if (tags.camp_site || tags.camp_type) {
         score = 35;
@@ -1762,15 +1764,20 @@ export function useDispersedRoads(
         // 3. Within private/industrial land areas (Potash fields, mines, etc.)
         // 4. Near roads marked as private (0.3 mile buffer)
         const filteredDerivedSpots = derivedSpots.filter(spot => {
+          // Debug: check specific spot near ranger station
+          const isDebugSpot = Math.abs(spot.lat - 38.5748) < 0.005 && Math.abs(spot.lng - (-109.5494)) < 0.005;
+
           // Check if within private/industrial land
           const privateCheck = isWithinPrivateLand(spot.lat, spot.lng, privateLands);
           if (privateCheck.isPrivate) {
+            if (isDebugSpot) console.log(`[DEBUG] Ranger station spot filtered: private land (${privateCheck.landType}: ${privateCheck.landName})`);
             console.log(`Filtering out spot on private land: ${spot.name} (${privateCheck.landType}: ${privateCheck.landName || 'unnamed'})`);
             return false;
           }
 
           // Check if near a road marked as private
           if (isNearPrivateRoad(spot.lat, spot.lng)) {
+            if (isDebugSpot) console.log(`[DEBUG] Ranger station spot filtered: near private road`);
             console.log(`Filtering out spot near private road: ${spot.name}`);
             return false;
           }
@@ -1784,9 +1791,11 @@ export function useDispersedRoads(
             getDistanceMiles(spot.lat, spot.lng, cg.lat, cg.lng) < 0.5
           );
           if (tooCloseToEstablished) {
+            if (isDebugSpot) console.log(`[DEBUG] Ranger station spot filtered: too close to established campground`);
             return false;
           }
 
+          if (isDebugSpot) console.log(`[DEBUG] Ranger station spot PASSED all filters at ${spot.lat}, ${spot.lng}`);
           return true;
         });
 
@@ -1796,9 +1805,20 @@ export function useDispersedRoads(
         const roadAccessibleCamps = camps
           .filter(camp => {
             const nearRoad = isNearRoad(camp.lat, camp.lng, mvum, osm, 0.25);
-            // Debug: check specific camp site
-            const isDebugCamp = Math.abs(camp.lat - 38.457196) < 0.001 && Math.abs(camp.lng - (-109.476386)) < 0.001;
-            if (isDebugCamp) {
+            // Debug: check specific camp sites
+            const isDebugCamp1 = Math.abs(camp.lat - 38.457196) < 0.001 && Math.abs(camp.lng - (-109.476386)) < 0.001;
+            const isDebugCamp2 = Math.abs(camp.lat - 38.466396) < 0.001 && Math.abs(camp.lng - (-109.60488)) < 0.001;
+            if (isDebugCamp2) {
+              console.log('[DEBUG] Camp site at 38.466, -109.605:', {
+                name: camp.name,
+                lat: camp.lat,
+                lng: camp.lng,
+                nearRoad,
+                isEstablished: camp.isEstablishedCampground,
+                isIndividualSite: camp.isIndividualSite,
+              });
+            }
+            if (isDebugCamp1) {
               console.log('[DEBUG] Camp site at 38.457, -109.476:', {
                 name: camp.name,
                 lat: camp.lat,
@@ -1829,38 +1849,44 @@ export function useDispersedRoads(
         // 3. Any camp too close to an established campground
         // 4. Within private/industrial land areas
         const trulyDispersedCamps = roadAccessibleCamps.filter((camp: any) => {
+          // Debug: check specific camp site
+          const isDebugCamp = Math.abs(camp.lat - 38.466396) < 0.001 && Math.abs(camp.lng - (-109.60488)) < 0.001;
+
           // Skip if this is an established campground (already in establishedCampgrounds)
-          if (camp.isEstablishedCampground) return false;
+          if (camp.isEstablishedCampground) {
+            if (isDebugCamp) console.log(`[DEBUG] Camp at 38.466, -109.605 filtered: isEstablishedCampground`);
+            return false;
+          }
 
           // Skip if within private/industrial land
           const privateCheck = isWithinPrivateLand(camp.lat, camp.lng, privateLands);
           if (privateCheck.isPrivate) {
+            if (isDebugCamp) console.log(`[DEBUG] Camp at 38.466, -109.605 filtered: private land (${privateCheck.landType})`);
             console.log(`Filtering out camp on private land: ${camp.name} (${privateCheck.landType}: ${privateCheck.landName || 'unnamed'})`);
             return false;
           }
 
           // Skip if near a road marked as private
           if (isNearPrivateRoad(camp.lat, camp.lng)) {
+            if (isDebugCamp) console.log(`[DEBUG] Camp at 38.466, -109.605 filtered: near private road`);
             console.log(`Filtering out camp near private road: ${camp.name}`);
             return false;
           }
 
-          // Skip individual sites within established campgrounds
-          if (camp.isIndividualSite) {
-            const nearEstablished = allCampgrounds.some(cg =>
-              getDistanceMiles(camp.lat, camp.lng, cg.lat, cg.lng) < 0.5
-            );
-            if (nearEstablished) return false;
-          }
+          // NOTE: We do NOT filter individual OSM camp sites (Site 1, Site 2, etc.)
+          // These are explicitly tagged camping locations and should be shown
+          // The individual site filter only applies to derived spots (dead-ends)
 
           // Skip "Host" sites (camp hosts at established campgrounds)
           if (/^Host$/i.test(camp.name || '') || /CAMP HOST/i.test(camp.name || '')) {
+            if (isDebugCamp) console.log(`[DEBUG] Camp at 38.466, -109.605 filtered: Host site`);
             return false;
           }
 
           // NOTE: We do NOT filter OSM camp sites by campground proximity
           // OSM camp sites are explicitly tagged camping locations and should be shown
           // The 0.25-mile campground proximity filter only applies to derived spots (dead-ends)
+          if (isDebugCamp) console.log(`[DEBUG] Camp at 38.466, -109.605 PASSED all filters`);
           return true;
         })
         // Deduplicate camps that are very close to each other (within ~50 meters)
@@ -1875,24 +1901,43 @@ export function useDispersedRoads(
           });
         });
 
+        // Remove derived spots (dead-ends) that are very close to OSM camp sites
+        // OSM camp sites are explicitly tagged and should take precedence
+        const DEDUP_THRESHOLD_MILES = 0.06; // ~100 meters
+        const dedupedFromCamps = filteredDerivedSpots.filter(derivedSpot => {
+          const nearCampSite = trulyDispersedCamps.some(camp =>
+            getDistanceMiles(derivedSpot.lat, derivedSpot.lng, camp.lat, camp.lng) < DEDUP_THRESHOLD_MILES
+          );
+          return !nearCampSite;
+        });
+
+        // Also deduplicate derived spots that are very close to each other (~50 meters)
+        const DERIVED_DEDUP_THRESHOLD = 0.0005; // ~50 meters in degrees
+        const dedupedDerivedSpots = dedupedFromCamps.filter((spot, index, array) => {
+          // Keep this spot only if no earlier spot is within threshold
+          return !array.slice(0, index).some(earlier => {
+            const latDiff = Math.abs(spot.lat - earlier.lat);
+            const lngDiff = Math.abs(spot.lng - earlier.lng);
+            return latDiff < DERIVED_DEDUP_THRESHOLD && lngDiff < DERIVED_DEDUP_THRESHOLD;
+          });
+        });
+
         console.log('Dispersed data:', {
           mvumRoads: mvum.length,
           blmRoads: blm.length,
           osmTracks: osm.length,
           establishedCampgrounds: allCampgrounds.length,
-          ridbCampgrounds: ridbCampgrounds.length,
-          usfsCampgrounds: usfsCampgrounds.length,
           osmCampsTotal: camps.length,
           osmCampsNearRoads: roadAccessibleCamps.length,
           trulyDispersedCamps: trulyDispersedCamps.length,
           derivedSpots: derivedSpots.length,
           filteredDerivedSpots: filteredDerivedSpots.length,
+          dedupedDerivedSpots: dedupedDerivedSpots.length,
           privateLandAreas: privateLands.length,
-          privateRoadPoints: privateRoadPoints.length,
         });
 
-        // Combine all potential spots: truly dispersed OSM camp sites + filtered derived spots
-        const allSpots = [...trulyDispersedCamps, ...filteredDerivedSpots];
+        // Combine all potential spots: truly dispersed OSM camp sites + deduped derived spots
+        const allSpots = [...trulyDispersedCamps, ...dedupedDerivedSpots];
 
         // Filter to circular radius (bounding box may include corners beyond radiusMiles)
         const spotsWithinRadius = allSpots.filter(spot =>

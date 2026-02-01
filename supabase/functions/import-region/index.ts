@@ -25,6 +25,7 @@ interface ImportResult {
   roadsImported: number;
   osmRoadsImported: number;
   osmCampSitesImported: number;
+  privateRoadsImported: number;
   spotsDerive: number;
   blmSpotsDerive: number;
   errors: string[];
@@ -513,6 +514,99 @@ async function importOSMRoads(
   return { count, errors };
 }
 
+async function importPrivateRoads(
+  supabase: any,
+  bounds: RegionBounds
+): Promise<{ count: number; errors: string[] }> {
+  const errors: string[] = [];
+  let count = 0;
+
+  // Build Overpass query for private/restricted access roads
+  const query = `
+    [out:json][timeout:60];
+    (
+      way["highway"]["access"="private"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
+      way["highway"]["access"="no"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
+      way["highway"]["access"="customers"](${bounds.south},${bounds.west},${bounds.north},${bounds.east});
+    );
+    out geom;
+  `;
+
+  // Try each Overpass endpoint
+  let osmData: any = null;
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      console.log(`Fetching private roads from ${endpoint}...`);
+      const response = await fetch(endpoint, {
+        method: "POST",
+        body: `data=${encodeURIComponent(query)}`,
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
+
+      if (response.ok) {
+        osmData = await response.json();
+        console.log(`Got ${osmData.elements?.length || 0} private road features`);
+        break;
+      }
+    } catch (e: any) {
+      console.warn(`Overpass ${endpoint} failed: ${e.message}`);
+    }
+  }
+
+  if (!osmData || !osmData.elements) {
+    errors.push("Failed to fetch private roads from Overpass");
+    return { count, errors };
+  }
+
+  // Collect all private road points
+  const points: Array<{ lat: number; lng: number; osm_id: number; access: string }> = [];
+
+  for (const element of osmData.elements) {
+    if (element.type !== "way" || !element.geometry) continue;
+
+    const access = element.tags?.access || "private";
+    const osmId = element.id;
+
+    // Add all points along the road
+    for (const node of element.geometry) {
+      points.push({
+        lat: node.lat,
+        lng: node.lon,
+        osm_id: osmId,
+        access: access,
+      });
+    }
+  }
+
+  if (points.length === 0) {
+    console.log("No private road points found");
+    return { count: 0, errors };
+  }
+
+  // Insert in batches of 1000 points
+  const batchSize = 1000;
+  for (let i = 0; i < points.length; i += batchSize) {
+    const batch = points.slice(i, i + batchSize);
+    const { data, error } = await supabase.rpc("import_private_road_points", {
+      p_north: bounds.north,
+      p_south: bounds.south,
+      p_east: bounds.east,
+      p_west: bounds.west,
+      p_points: batch,
+    });
+
+    if (error) {
+      console.error(`Error importing private road points batch: ${error.message}`);
+      errors.push(`Private road points batch error: ${error.message}`);
+    } else {
+      count += batch.length;
+    }
+  }
+
+  console.log(`Imported ${count} private road points for filtering`);
+  return { count, errors };
+}
+
 async function importOSMCampSites(
   supabase: any,
   bounds: RegionBounds
@@ -705,6 +799,7 @@ serve(async (req) => {
       roadsImported: 0,
       osmRoadsImported: 0,
       osmCampSitesImported: 0,
+      privateRoadsImported: 0,
       spotsDerive: 0,
       blmSpotsDerive: 0,
       errors: []
@@ -738,6 +833,14 @@ serve(async (req) => {
       const campSitesResult = await importOSMCampSites(supabase, bounds);
       result.osmCampSitesImported = campSitesResult.count;
       result.errors.push(...campSitesResult.errors);
+    }
+
+    // Import private roads for filtering (before deriving spots)
+    if (doDerive) {
+      console.log("Importing private roads for filtering...");
+      const privateRoadsResult = await importPrivateRoads(supabase, bounds);
+      result.privateRoadsImported = privateRoadsResult.count;
+      result.errors.push(...privateRoadsResult.errors);
     }
 
     // Always backfill public_land_id for roads when deriving spots
@@ -794,7 +897,7 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Import complete: ${result.publicLandsImported} lands, ${result.roadsImported} MVUM roads, ${result.osmRoadsImported} OSM roads, ${result.osmCampSitesImported} camp sites, ${result.spotsDerive} derived spots`);
+    console.log(`Import complete: ${result.publicLandsImported} lands, ${result.roadsImported} MVUM roads, ${result.osmRoadsImported} OSM roads, ${result.privateRoadsImported} private road points, ${result.osmCampSitesImported} camp sites, ${result.spotsDerive} derived spots`);
 
     return new Response(
       JSON.stringify({

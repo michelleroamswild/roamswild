@@ -173,6 +173,7 @@ const DispersedExplorer = () => {
   // Toggle between database (fast) and client-side (comprehensive with roads) data sources
   const [useDatabase, setUseDatabase] = useState(true);
 
+
   // Database hooks - fast pre-computed spots, campgrounds, and roads
   const {
     potentialSpots: dbSpots,
@@ -224,6 +225,7 @@ const DispersedExplorer = () => {
       }
     }
   }, [clientPublicLands]);
+
 
   // Client-side hooks for roads/spots - only fetch when not using database
   const {
@@ -474,6 +476,7 @@ const DispersedExplorer = () => {
     };
 
     // For Full mode (client-side), spots are already filtered in use-dispersed-roads.ts
+    // For Fast mode, private road filtering is handled at database import time
     // Only apply extra filtering for Fast mode (database) spots
     let campSites = potentialSpots.filter((spot) => spot.type === 'camp-site');
 
@@ -497,14 +500,15 @@ const DispersedExplorer = () => {
           // (database flag may not be backfilled, so we check against actual road data)
           if (!isNearAnyRoad(spot.lat, spot.lng, 0.25)) return false;
 
+          // NOTE: Private road filtering is handled at database import time
+          // Spots near private roads should not be in the database
+
           // Filter out "Host" sites (camp hosts at established campgrounds)
           if (/^Host$/i.test(name) || /CAMP HOST/i.test(name)) return false;
 
-          // Filter out individual pitch sites near established campgrounds
-          const isIndividualSite = /^Site\s*\d/i.test(name);
-          if (isIndividualSite && isNearEstablishedCampground(spot.lat, spot.lng, 0.5)) {
-            return false;
-          }
+          // NOTE: We do NOT filter individual OSM camp sites (Site 1, Site 2, etc.)
+          // These are explicitly tagged camping locations and should be shown
+          // The individual site filter only applies to derived spots (dead-ends)
 
           // NOTE: We do NOT filter camp sites by campground proximity here
           // OSM camp sites are explicitly tagged camping locations and should be shown
@@ -555,6 +559,9 @@ const DispersedExplorer = () => {
       // This matches the logic in use-dispersed-roads.ts for Full mode
       if (isFalseDeadEnd(spot, allRoads)) return false;
 
+      // NOTE: Private road filtering is handled at database import time
+      // Derived spots near private roads should not be in the database
+
       // Exclude spots in National Parks or State Parks (dispersed camping not allowed)
       if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
 
@@ -597,9 +604,36 @@ const DispersedExplorer = () => {
     if (falseDeadEndCount > 0) {
       console.log(`Filtered out ${falseDeadEndCount} false dead-ends (actually intersections)`);
     }
-    console.log(`Derived spots: ${derivedSpots.length} total, ${filteredDerived.length} after filtering`);
 
-    const allSpots = [...campSites, ...filteredDerived];
+    // Remove derived spots that are very close to camp sites
+    // OSM camp sites are explicitly tagged and should take precedence
+    // Use 0.06 miles (~100 meters) to match Full mode
+    const CAMP_DEDUP_MILES = 0.06;
+    const dedupedDerived = filteredDerived.filter(derived => {
+      const nearCampSite = campSites.some(camp => {
+        const latDiff = Math.abs(derived.lat - camp.lat);
+        const lngDiff = Math.abs(derived.lng - camp.lng);
+        // Approximate: 1 degree ≈ 69 miles
+        const distMiles = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) * 69;
+        return distMiles < CAMP_DEDUP_MILES;
+      });
+      return !nearCampSite;
+    });
+
+    // Also deduplicate derived spots that are very close to each other
+    const DERIVED_DEDUP_THRESHOLD = 0.0005; // ~50 meters
+    const finalDerived = dedupedDerived.filter((spot, index, array) => {
+      // Keep this spot only if no earlier spot is within threshold
+      return !array.slice(0, index).some(earlier => {
+        const latDiff = Math.abs(spot.lat - earlier.lat);
+        const lngDiff = Math.abs(spot.lng - earlier.lng);
+        return latDiff < DERIVED_DEDUP_THRESHOLD && lngDiff < DERIVED_DEDUP_THRESHOLD;
+      });
+    });
+
+    console.log(`Derived spots: ${derivedSpots.length} total, ${filteredDerived.length} after filtering, ${finalDerived.length} after dedup`);
+
+    const allSpots = [...campSites, ...finalDerived];
 
     // Apply filters
     return allSpots.filter((spot) => {
@@ -1237,12 +1271,12 @@ const DispersedExplorer = () => {
             })}
 
             {/* OSM Tracks */}
-            {filteredOsmTracks.map((track) => {
+            {filteredOsmTracks.map((track, index) => {
               const path = toLatLngPath(track.geometry?.coordinates);
               if (path.length < 2) return null;
               return (
                 <Polyline
-                  key={`osm-${track.id}`}
+                  key={`osm-${track.id}-${index}`}
                   path={path}
                   options={{
                     strokeColor: getOSMColor(track),
