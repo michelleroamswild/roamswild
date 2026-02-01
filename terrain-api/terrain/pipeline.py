@@ -283,7 +283,7 @@ def enforce_diversity(
     classified.sort(key=lambda x: -x[1])
 
     # Group by category
-    by_category = {"rim": [], "macro-glow": [], "micro-glow": [], "other": []}
+    by_category = {"rim": [], "macro-glow": [], "micro-glow": [], "texture": [], "other": []}
     for cat, score, sl, subj in classified:
         by_category[cat].append((score, sl, subj))
 
