@@ -39,6 +39,7 @@ export interface OSMTrack {
   tracktype?: string;
   access?: string;
   fourWdOnly?: boolean;
+  isPaved?: boolean; // True for paved roads (used for junction filtering, not dead-end generation)
   geometry: {
     type: 'LineString';
     coordinates: [number, number][];
@@ -271,7 +272,8 @@ function isNearRoad(
   lng: number,
   mvumRoads: MVUMRoad[],
   osmTracks: OSMTrack[],
-  thresholdMiles: number = 0.25
+  thresholdMiles: number = 0.25,
+  blmRoads: BLMRoad[] = []
 ): boolean {
   // Helper to get coordinate values safely
   const getCoordLng = (coord: any): number | null => {
@@ -289,6 +291,20 @@ function isNearRoad(
 
   // Check MVUM roads
   for (const road of mvumRoads) {
+    if (!road.geometry?.coordinates?.length) continue;
+    for (const coord of road.geometry.coordinates) {
+      const coordLat = getCoordLat(coord);
+      const coordLng = getCoordLng(coord);
+      if (coordLat !== null && coordLng !== null) {
+        if (getDistanceMiles(lat, lng, coordLat, coordLng) < thresholdMiles) {
+          return true;
+        }
+      }
+    }
+  }
+
+  // Check BLM roads
+  for (const road of blmRoads) {
     if (!road.geometry?.coordinates?.length) continue;
     for (const coord of road.geometry.coordinates) {
       const coordLat = getCoordLat(coord);
@@ -826,8 +842,13 @@ function findDeadEnds(
   });
 
   // Process OSM tracks - check if they're likely on public land
+  // Skip paved roads for dead-end generation (they're only used for junction filtering)
   osmTracks.forEach(track => {
     if (!track.geometry?.coordinates?.length) return;
+
+    // Skip paved roads - we don't want dead-ends from them
+    // They're included in the data only for junction filtering
+    if (track.isPaved) return;
 
     const likelyPublic = isLikelyPublicLand(track);
     const coords = track.geometry.coordinates;
@@ -853,10 +874,15 @@ function findDeadEnds(
       lat: startLat, lng: startLng, count: 0, roads: [],
       isPublicLand: false, isHighClearance: false, hasMVUMRoad: false, hasBLMRoad: false
     };
+    // Track is high-clearance/4WD if: 4wd_only, rough tracktype, or generic track without grade1
+    const isRuggedRoad = track.fourWdOnly ||
+      track.tracktype === 'grade3' || track.tracktype === 'grade4' || track.tracktype === 'grade5' ||
+      (track.highway === 'track' && track.tracktype !== 'grade1');
+
     startEntry.count++;
     startEntry.roads.push(track.name || 'Unnamed Track');
     startEntry.isPublicLand = startEntry.isPublicLand || likelyPublic;
-    startEntry.isHighClearance = startEntry.isHighClearance || track.fourWdOnly;
+    startEntry.isHighClearance = startEntry.isHighClearance || isRuggedRoad;
     // Note: hasMVUMRoad stays false for OSM tracks
     endpointMap.set(startKey, startEntry);
 
@@ -874,7 +900,7 @@ function findDeadEnds(
     endEntry.count++;
     endEntry.roads.push(track.name || 'Unnamed Track');
     endEntry.isPublicLand = endEntry.isPublicLand || likelyPublic;
-    endEntry.isHighClearance = endEntry.isHighClearance || track.fourWdOnly;
+    endEntry.isHighClearance = endEntry.isHighClearance || isRuggedRoad;
     // Note: hasMVUMRoad stays false for OSM tracks
     endpointMap.set(endKey, endEntry);
   });
@@ -921,22 +947,39 @@ function findDeadEnds(
 
       // Named roads suggest more established access
       const roadName = entry.roads[0];
-      if (roadName && !roadName.match(/^(track|path|road|way)$/i)) {
-        score += 5;
+      // Check for a real name - not generic placeholders
+      const hasRealName = roadName &&
+        !roadName.match(/^(track|path|road|way|unnamed\s*track)$/i) &&
+        !roadName.startsWith('Unnamed');
+      if (hasRealName) {
+        score += 10; // Named roads are significant for dispersed camping
         reasons.push('Named road');
       }
 
-      // Passenger accessible roads are typically better established
-      if (accessibility.passengerReachable) {
+      // 4WD/high-clearance roads are more remote and desirable for dispersed camping
+      if (entry.isHighClearance) {
         score += 3;
-        reasons.push('Passenger vehicle accessible');
+        reasons.push('Remote 4WD road');
+      }
+
+      // Generate a meaningful name
+      let spotName: string;
+      if (hasRealName) {
+        spotName = `End of ${roadName}`;
+      } else {
+        // Generate a short location code from coordinates (e.g., "Site N38.55 W109.78")
+        const latDir = entry.lat >= 0 ? 'N' : 'S';
+        const lngDir = entry.lng >= 0 ? 'E' : 'W';
+        const latStr = Math.abs(entry.lat).toFixed(2);
+        const lngStr = Math.abs(entry.lng).toFixed(2);
+        spotName = `Dispersed ${latDir}${latStr} ${lngDir}${lngStr}`;
       }
 
       spots.push({
         id: `deadend-${key}`,
         lat: entry.lat,
         lng: entry.lng,
-        name: roadName ? `End of ${roadName}` : 'Road Terminus',
+        name: spotName,
         type: 'dead-end',
         score,
         reasons,
@@ -977,15 +1020,62 @@ function findDeadEnds(
 
   console.log(`Found ${privateRoadPoints.length} private road points for proximity filtering`);
 
-  // Filter out false dead-ends that are actually at intersections
-  // This happens when OSM tracks are split into segments that don't share exact coordinates
-  // If a "dead-end" is VERY close to the MIDDLE of another road segment (but NOT near its endpoints),
-  // it's likely a false dead-end caused by imprecise coordinate matching
+  // Filter out false dead-ends:
+  // 1. Dead-ends near the interior of another road (actually intersections due to coordinate mismatch)
+  // 2. Dead-ends at junctions with paved/higher-class roads (where dirt track meets pavement)
   const filteredSpots = spots.filter(spot => {
     if (spot.type !== 'dead-end') return true;
 
-    // Use a tighter threshold - only filter obvious intersections
     const INTERSECTION_THRESHOLD = 0.00012; // ~12 meters - must be very close
+    const PAVED_JUNCTION_THRESHOLD = 0.0003; // ~30 meters for paved road junctions
+
+    // Helper to get lat/lng from coord
+    const getLatLng = (coord: any): { lat: number; lng: number } | null => {
+      if (Array.isArray(coord) && typeof coord[0] === 'number') {
+        return { lat: coord[1], lng: coord[0] };
+      } else if (coord && typeof coord.lat === 'number') {
+        return { lat: coord.lat, lng: coord.lng ?? coord.lon };
+      }
+      return null;
+    };
+
+    // Check if dead-end is at a junction with a paved or higher-class road
+    // These are where dirt tracks meet pavement - not good camping spots
+    const isAtPavedRoadJunction = (): boolean => {
+      for (const track of osmTracks) {
+        if (!track.geometry?.coordinates?.length) continue;
+        if (!track.isPaved) continue; // Only check paved roads
+
+        const coords = track.geometry.coordinates;
+
+        // Check if spot is near either endpoint of this paved road
+        const startPt = getLatLng(coords[0]);
+        const endPt = getLatLng(coords[coords.length - 1]);
+
+        if (startPt) {
+          const latDiff = Math.abs(spot.lat - startPt.lat);
+          const lngDiff = Math.abs(spot.lng - startPt.lng);
+          if (latDiff < PAVED_JUNCTION_THRESHOLD && lngDiff < PAVED_JUNCTION_THRESHOLD) {
+            console.log(`Filtering dead-end at paved road junction: ${spot.name} near ${track.highway} road`);
+            return true;
+          }
+        }
+        if (endPt) {
+          const latDiff = Math.abs(spot.lat - endPt.lat);
+          const lngDiff = Math.abs(spot.lng - endPt.lng);
+          if (latDiff < PAVED_JUNCTION_THRESHOLD && lngDiff < PAVED_JUNCTION_THRESHOLD) {
+            console.log(`Filtering dead-end at paved road junction: ${spot.name} near ${track.highway} road`);
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    // Filter out dead-ends at paved road junctions
+    if (isAtPavedRoadJunction()) {
+      return false;
+    }
 
     // Check if a point is near an interior point of a road (not its endpoints)
     // Returns true only if the spot is near the MIDDLE of the road, not near either endpoint
@@ -997,27 +1087,17 @@ function findDeadEnds(
         // Skip roads with fewer than 5 points (too short to reliably detect "interior")
         if (coords.length < 5) continue;
 
-        // Helper to get lat/lng from coord
-        const getLatLng = (coord: any): { lat: number; lng: number } | null => {
-          if (Array.isArray(coord) && typeof coord[0] === 'number') {
-            return { lat: coord[1], lng: coord[0] };
-          } else if (coord && typeof coord.lat === 'number') {
-            return { lat: coord.lat, lng: coord.lng ?? coord.lon };
-          }
-          return null;
-        };
-
-        // Check if spot is near road's endpoints (which would be a legitimate junction)
+        // Check if spot is near road's endpoints (which would be a track-to-track junction, keep it)
         const startPt = getLatLng(coords[0]);
         const endPt = getLatLng(coords[coords.length - 1]);
 
         if (startPt) {
           const distToStart = Math.abs(spot.lat - startPt.lat) + Math.abs(spot.lng - startPt.lng);
-          if (distToStart < INTERSECTION_THRESHOLD * 2) continue; // Near start endpoint - legitimate junction
+          if (distToStart < INTERSECTION_THRESHOLD * 2) continue; // Near start endpoint - track junction
         }
         if (endPt) {
           const distToEnd = Math.abs(spot.lat - endPt.lat) + Math.abs(spot.lng - endPt.lng);
-          if (distToEnd < INTERSECTION_THRESHOLD * 2) continue; // Near end endpoint - legitimate junction
+          if (distToEnd < INTERSECTION_THRESHOLD * 2) continue; // Near end endpoint - track junction
         }
 
         // Check interior points only (skip first 2 and last 2 points to avoid endpoint proximity)
@@ -1367,6 +1447,14 @@ export interface PrivateLandArea {
   };
 }
 
+// Exclusion point (ranger stations, visitor centers, parking lots)
+interface ExclusionPoint {
+  lat: number;
+  lng: number;
+  type: string;
+  name?: string;
+}
+
 /**
  * Combined OSM query for tracks and camp sites
  * This reduces API calls to avoid rate limiting
@@ -1376,6 +1464,7 @@ interface OSMCombinedResult {
   campSites: PotentialSpot[];
   publicLands: PublicLandArea[];
   privateLands: PrivateLandArea[];
+  exclusionPoints: ExclusionPoint[];
 }
 
 async function fetchAllOSMData(
@@ -1396,6 +1485,13 @@ async function fetchAllOSMData(
       way["highway"="secondary"]["surface"~"unpaved|gravel|dirt|ground|sand|mud"](${minLat},${minLng},${maxLat},${maxLng});
       way["4wd_only"="yes"](${minLat},${minLng},${maxLat},${maxLng});
 
+      // Paved roads - needed to filter out dead-ends at paved road junctions
+      way["highway"="tertiary"](${minLat},${minLng},${maxLat},${maxLng});
+      way["highway"="secondary"](${minLat},${minLng},${maxLat},${maxLng});
+      way["highway"="primary"](${minLat},${minLng},${maxLat},${maxLng});
+      way["highway"="residential"](${minLat},${minLng},${maxLat},${maxLng});
+      way["highway"="unclassified"](${minLat},${minLng},${maxLat},${maxLng});
+
       // Camp sites - nodes and ways
       node["tourism"="camp_site"](${minLat},${minLng},${maxLat},${maxLng});
       node["tourism"="camp_pitch"](${minLat},${minLng},${maxLat},${maxLng});
@@ -1410,6 +1506,12 @@ async function fetchAllOSMData(
       way["landuse"="landfill"](${minLat},${minLng},${maxLat},${maxLng});
       way["landuse"="military"](${minLat},${minLng},${maxLat},${maxLng});
       way["access"="private"]["landuse"](${minLat},${minLng},${maxLat},${maxLng});
+      // Ranger stations, visitor centers, and similar facilities
+      node["amenity"="ranger_station"](${minLat},${minLng},${maxLat},${maxLng});
+      way["amenity"="ranger_station"](${minLat},${minLng},${maxLat},${maxLng});
+      node["tourism"="information"]["information"="visitor_centre"](${minLat},${minLng},${maxLat},${maxLng});
+      node["tourism"="information"]["information"="office"](${minLat},${minLng},${maxLat},${maxLng});
+      way["amenity"="parking"](${minLat},${minLng},${maxLat},${maxLng});
       // Industrial water features (evaporation ponds, settling basins, etc.)
       way["water"="basin"](${minLat},${minLng},${maxLat},${maxLng});
       way["water"="reservoir"]["reservoir_type"="evaporation"](${minLat},${minLng},${maxLat},${maxLng});
@@ -1471,7 +1573,7 @@ async function fetchAllOSMData(
 
   if (!data.elements) {
     console.log('No elements in OSM response');
-    return { tracks: [], campSites: [], publicLands: [], privateLands: [] };
+    return { tracks: [], campSites: [], publicLands: [], privateLands: [], exclusionPoints: [] };
   }
 
   console.log('OSM response elements:', data.elements.length, 'total');
@@ -1484,21 +1586,39 @@ async function fetchAllOSMData(
   console.log('OSM breakdown:', { wayCount, nodeCount, waysWithGeom, waysWithHighway });
 
   // Parse tracks
+  const pavedHighways = ['tertiary', 'secondary', 'primary', 'residential', 'trunk', 'motorway'];
+  const pavedSurfaces = ['paved', 'asphalt', 'concrete', 'cobblestone'];
+  const unpavedSurfaces = ['unpaved', 'gravel', 'dirt', 'ground', 'sand', 'mud', 'grass'];
+
   const tracks: OSMTrack[] = data.elements
     .filter((el: any) => el.type === 'way' && el.geometry && el.tags?.highway)
-    .map((el: any) => ({
-      id: el.id,
-      name: el.tags?.name,
-      highway: el.tags?.highway || 'track',
-      surface: el.tags?.surface,
-      tracktype: el.tags?.tracktype,
-      access: el.tags?.access,
-      fourWdOnly: el.tags?.['4wd_only'] === 'yes',
-      geometry: {
-        type: 'LineString' as const,
-        coordinates: el.geometry.map((pt: any) => [pt.lon, pt.lat]),
-      },
-    }));
+    .map((el: any) => {
+      const highway = el.tags?.highway || 'track';
+      const surface = el.tags?.surface || '';
+
+      // Determine if this is a paved road (used for junction filtering, not dead-end generation)
+      // A road is paved if: it has a paved surface, OR it's a higher-class road without unpaved surface
+      const hasPavedSurface = pavedSurfaces.some(s => surface.includes(s));
+      const hasUnpavedSurface = unpavedSurfaces.some(s => surface.includes(s));
+      const isHigherClassRoad = pavedHighways.includes(highway);
+      const isPaved = hasPavedSurface || (isHigherClassRoad && !hasUnpavedSurface);
+
+      return {
+        id: el.id,
+        // Use name if available, otherwise ref (e.g., "FR 123"), otherwise undefined
+        name: el.tags?.name || el.tags?.ref,
+        highway,
+        surface: el.tags?.surface,
+        tracktype: el.tags?.tracktype,
+        access: el.tags?.access,
+        fourWdOnly: el.tags?.['4wd_only'] === 'yes',
+        isPaved,
+        geometry: {
+          type: 'LineString' as const,
+          coordinates: el.geometry.map((pt: any) => [pt.lon, pt.lat]),
+        },
+      };
+    });
 
   // Parse camp sites
   const campSites: PotentialSpot[] = data.elements
@@ -1669,7 +1789,35 @@ async function fetchAllOSMData(
 
   console.log(`Found ${privateLands.length} private/industrial land areas from OSM`);
 
-  return { tracks, campSites, publicLands, privateLands };
+  // Parse exclusion points (ranger stations, visitor centers, parking lots)
+  const exclusionPoints: ExclusionPoint[] = data.elements
+    .filter((el: any) => {
+      const tags = el.tags || {};
+      return tags.amenity === 'ranger_station' ||
+        tags.amenity === 'parking' ||
+        (tags.tourism === 'information' && (tags.information === 'visitor_centre' || tags.information === 'office'));
+    })
+    .map((el: any) => {
+      const tags = el.tags || {};
+      // For nodes, use lat/lon directly; for ways, calculate center
+      let lat = el.lat;
+      let lng = el.lon;
+      if (!lat && el.geometry && el.geometry.length > 0) {
+        lat = el.geometry.reduce((sum: number, pt: any) => sum + pt.lat, 0) / el.geometry.length;
+        lng = el.geometry.reduce((sum: number, pt: any) => sum + pt.lon, 0) / el.geometry.length;
+      }
+      return {
+        lat,
+        lng,
+        type: tags.amenity || tags.tourism || 'exclusion',
+        name: tags.name,
+      };
+    })
+    .filter((p: ExclusionPoint) => p.lat && p.lng);
+
+  console.log(`Found ${exclusionPoints.length} exclusion points (ranger stations, parking, etc.)`);
+
+  return { tracks, campSites, publicLands, privateLands, exclusionPoints };
 }
 
 /**
@@ -1734,7 +1882,7 @@ export function useDispersedRoads(
             return data;
           }).catch((err) => {
             console.error('OSM fetch error:', err);
-            return { tracks: [], campSites: [], publicLands: [], privateLands: [] };
+            return { tracks: [], campSites: [], publicLands: [], privateLands: [], exclusionPoints: [] };
           }),
           fetchUSFSCampgrounds(minLat, minLng, maxLat, maxLng).catch((err) => {
             console.error('USFS campgrounds fetch error:', err);
@@ -1746,7 +1894,7 @@ export function useDispersedRoads(
           }),
         ]);
 
-        const { tracks: osm, campSites: camps, publicLands, privateLands } = osmData;
+        const { tracks: osm, campSites: camps, publicLands, privateLands, exclusionPoints } = osmData;
 
         // Merge RIDB and USFS campgrounds, deduplicating by proximity
         const allCampgrounds = [...ridbCampgrounds];
@@ -1846,6 +1994,16 @@ export function useDispersedRoads(
             return false;
           }
 
+          // Check if near ranger stations, visitor centers, or parking lots
+          const nearExclusionPoint = exclusionPoints.some(ep =>
+            getDistanceMiles(spot.lat, spot.lng, ep.lat, ep.lng) < 0.25
+          );
+          if (nearExclusionPoint) {
+            if (isDebugSpot) console.log(`[DEBUG] Ranger station spot filtered: near exclusion point`);
+            console.log(`Filtering out spot near ranger station/visitor center: ${spot.name}`);
+            return false;
+          }
+
           if (isDebugSpot) console.log(`[DEBUG] Ranger station spot PASSED all filters at ${spot.lat}, ${spot.lng}`);
           return true;
         });
@@ -1853,9 +2011,10 @@ export function useDispersedRoads(
         // Filter out backcountry/hike-in campsites that aren't near any road
         // These are for backpackers, not car camping
         // Also determine vehicle accessibility for each camp-site based on nearby roads
+        // Use 0.5 mile threshold to be inclusive - some OSM sites are slightly off from roads
         const roadAccessibleCamps = camps
           .filter(camp => {
-            const nearRoad = isNearRoad(camp.lat, camp.lng, mvum, osm, 0.25);
+            const nearRoad = isNearRoad(camp.lat, camp.lng, mvum, osm, 0.5, blm);
             // Debug: check specific camp sites
             const isDebugCamp1 = Math.abs(camp.lat - 38.457196) < 0.001 && Math.abs(camp.lng - (-109.476386)) < 0.001;
             const isDebugCamp2 = Math.abs(camp.lat - 38.466396) < 0.001 && Math.abs(camp.lng - (-109.60488)) < 0.001;

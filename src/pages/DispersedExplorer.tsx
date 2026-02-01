@@ -96,6 +96,24 @@ function isWithinAnyPublicLand(
 }
 
 /**
+ * Find which public land a point is within and return its name
+ */
+function findContainingLand(
+  lat: number,
+  lng: number,
+  publicLands: { name?: string; unitName?: string; managingAgency?: string; polygon?: { lat: number; lng: number }[] }[]
+): { name: string; agency: string } | null {
+  for (const land of publicLands) {
+    if (land.polygon && isPointInPolygon({ lat, lng }, land.polygon)) {
+      // Prefer unitName (e.g., "Manti-La Sal National Forest") over generic name
+      const name = land.unitName || land.name || '';
+      return { name, agency: land.managingAgency || '' };
+    }
+  }
+  return null;
+}
+
+/**
  * Check if a dead-end spot is actually near the interior of another road (false dead-end).
  * This happens when OSM tracks are split into segments that don't share exact coordinates.
  * Matches the logic in use-dispersed-roads.ts findDeadEnds() filter.
@@ -634,7 +652,37 @@ const DispersedExplorer = () => {
 
     console.log(`Derived spots: ${derivedSpots.length} total, ${filteredDerived.length} after filtering, ${finalDerived.length} after dedup`);
 
-    const allSpots = [...campSites, ...finalDerived];
+    // Filter out spots with score < 25 (we don't show the Unverified category)
+    const qualifiedDerived = finalDerived.filter(s => s.score >= 25);
+
+    // Enrich unnamed spots with public land names
+    // Track counts per land area for numbering
+    const landCounts = new Map<string, number>();
+    const enrichedDerived = qualifiedDerived.map(spot => {
+      // Only enrich spots with coordinate-based names (starting with "Dispersed")
+      if (!spot.name.startsWith('Dispersed ')) return spot;
+
+      const containingLand = findContainingLand(spot.lat, spot.lng, publicLands);
+      if (containingLand && containingLand.name) {
+        // Shorten long land names
+        let landName = containingLand.name
+          .replace(/National Recreation Area$/i, 'NRA')
+          .replace(/National Monument$/i, 'NM')
+          .replace(/National Forest$/i, 'NF')
+          .replace(/Wilderness Study Area$/i, 'WSA')
+          .replace(/Special Recreation Management Area$/i, 'SRMA');
+
+        // Get count for this land area
+        const count = (landCounts.get(landName) || 0) + 1;
+        landCounts.set(landName, count);
+
+        return { ...spot, name: `${landName} #${count}` };
+      }
+
+      return spot;
+    });
+
+    const allSpots = [...campSites, ...enrichedDerived];
 
     // Apply filters
     return allSpots.filter((spot) => {
@@ -644,14 +692,12 @@ const DispersedExplorer = () => {
         const isKnown = spot.type === 'camp-site';
         const isHigh = !isKnown && spot.score >= 35;
         const isMedium = !isKnown && spot.score >= 25 && spot.score < 35;
-        const isLow = !isKnown && spot.score < 25;
 
         // Check if spot matches any selected filter
         const matches =
           (spotFilters.has('known') && isKnown) ||
           (spotFilters.has('high') && isHigh) ||
-          (spotFilters.has('medium') && isMedium) ||
-          (spotFilters.has('low') && isLow);
+          (spotFilters.has('medium') && isMedium);
 
         if (!matches) return false;
       }
@@ -1081,8 +1127,11 @@ const DispersedExplorer = () => {
   }, [mvumRoads, roadFilter]);
 
   const filteredOsmTracks = useMemo(() => {
-    if (roadFilter === 'all') return osmTracks;
-    return osmTracks.filter(track => {
+    // Filter out paved/residential roads - they're only in the data for junction detection
+    const displayableTracks = osmTracks.filter(track => !track.isPaved);
+
+    if (roadFilter === 'all') return displayableTracks;
+    return displayableTracks.filter(track => {
       if (roadFilter === 'passenger') {
         // Only show grade1 (paved) tracks for passenger vehicles
         // OSM data quality varies too much to trust grade2+ as passenger-accessible
@@ -1655,10 +1704,6 @@ const DispersedExplorer = () => {
                       <span>Moderate</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#e83a3a' }} />
-                      <span>Unverified</span>
-                    </div>
-                    <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-blue-500 rounded-full" />
                       <span>Campground</span>
                     </div>
@@ -1793,8 +1838,8 @@ const DispersedExplorer = () => {
             {/* Results: Stats, Filters, Campsites */}
             {searchLocation && !loading && (
               <>
-                {/* Stats row - 6 across */}
-                <div className="grid grid-cols-6 gap-2 mb-5">
+                {/* Stats row - 5 across */}
+                <div className="grid grid-cols-5 gap-2 mb-5">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="p-2 bg-mossgreen/10 dark:bg-mossgreen/20 rounded-lg border border-mossgreen/30 text-center cursor-pointer">
@@ -1833,21 +1878,9 @@ const DispersedExplorer = () => {
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 text-center cursor-pointer">
-                        <p className="text-xl font-bold text-red-600 dark:text-red-400">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score < 25).length}</p>
-                        <p className="text-xs font-medium text-red-600 dark:text-red-400">Unverified</p>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="font-medium">Unverified (&lt;25)</p>
-                      <p className="text-xs text-muted-foreground">Needs review - limited data quality</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
                       <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-center cursor-pointer">
                         <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{allEstablishedCampgrounds.length}</p>
-                        <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Camps</p>
+                        <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Campgrounds</p>
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -1859,7 +1892,7 @@ const DispersedExplorer = () => {
                     <TooltipTrigger asChild>
                       <div className="p-2 bg-violet-50 dark:bg-violet-900/20 rounded-lg border border-violet-200 dark:border-violet-800 text-center cursor-pointer">
                         <p className="text-xl font-bold text-violet-600 dark:text-violet-400">{campsites.length}</p>
-                        <p className="text-xs font-medium text-violet-600 dark:text-violet-400">Mine</p>
+                        <p className="text-xs font-medium text-violet-600 dark:text-violet-400">My Sites</p>
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -1932,18 +1965,6 @@ const DispersedExplorer = () => {
                     >
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#f97316' }} />
                       Moderate
-                    </button>
-                    <button
-                      onClick={() => toggleFilter('low')}
-                      className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
-                        spotFilters.has('low')
-                          ? 'text-white border-coralred'
-                          : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                      }`}
-                      style={spotFilters.has('low') ? { backgroundColor: '#e83a3a' } : {}}
-                    >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#e83a3a' }} />
-                      Unverified
                     </button>
                     {spotFilters.size > 0 && (
                       <button
@@ -2210,7 +2231,7 @@ const DispersedExplorer = () => {
                         }`} />
                         <span className="text-sm font-medium">
                           {selectedSpot.type === 'camp-site' ? 'Known Campsite' :
-                           selectedSpot.score >= 35 ? 'High' : selectedSpot.score >= 25 ? 'Moderate' : 'Unverified'}
+                           selectedSpot.score >= 35 ? 'High' : 'Moderate'}
                         </span>
                         {selectedSpot.type !== 'camp-site' && (
                           <span className="text-xs text-muted-foreground">({selectedSpot.score} pts)</span>
