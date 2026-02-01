@@ -914,12 +914,9 @@ function findDeadEnds(
       const reasons: string[] = ['Road terminus (dead-end)', 'On public land'];
 
       // Official road sources are more reliable
-      if (entry.hasMVUMRoad) {
+      if (entry.hasMVUMRoad || entry.hasBLMRoad) {
         score += 10;
-        reasons.push('On MVUM road (official)');
-      } else if (entry.hasBLMRoad) {
-        score += 8;
-        reasons.push('On BLM road (official)');
+        reasons.push(entry.hasMVUMRoad ? 'On MVUM road (official)' : 'On BLM road (official)');
       }
 
       // Named roads suggest more established access
