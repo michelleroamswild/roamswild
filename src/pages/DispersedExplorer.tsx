@@ -171,7 +171,8 @@ const DispersedExplorer = () => {
   const [selectedCampsite, setSelectedCampsite] = useState<Campsite | null>(null);
 
   // Toggle between database (fast) and client-side (comprehensive with roads) data sources
-  const [useDatabase, setUseDatabase] = useState(true);
+  // Currently defaulting to Full mode (client-side) while database ingestion is paused
+  const [useDatabase, setUseDatabase] = useState(false);
 
 
   // Database hooks - fast pre-computed spots, campgrounds, and roads
@@ -1587,28 +1588,28 @@ const DispersedExplorer = () => {
               sideOffset={8}
             >
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <MapTrifold className="w-4 h-4" />
-                    Map Legend
-                  </h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2"
-                    onClick={() => setShowPublicLands(!showPublicLands)}
-                  >
-                    {showPublicLands ? (
-                      <Eye className="w-4 h-4" />
-                    ) : (
-                      <EyeSlash className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <MapTrifold className="w-4 h-4" />
+                  Map Legend
+                </h3>
 
                 {/* Land Overlays */}
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Land Overlays</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Land Overlays</p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 w-5 p-0"
+                      onClick={() => setShowPublicLands(!showPublicLands)}
+                    >
+                      {showPublicLands ? (
+                        <Eye className="w-3.5 h-3.5" />
+                      ) : (
+                        <EyeSlash className="w-3.5 h-3.5" />
+                      )}
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-emerald-500/30 border border-emerald-600 rounded" />
@@ -1691,7 +1692,7 @@ const DispersedExplorer = () => {
                   </div>
                 </div>
 
-                {/* Data Source Toggle */}
+                {/* Data Source Toggle - Hidden while database ingestion is paused
                 <div className="space-y-2 pt-2 border-t border-border">
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Data Source</p>
                   <div className="flex gap-2">
@@ -1718,6 +1719,7 @@ const DispersedExplorer = () => {
                       : "Computing from road network (shows roads)"}
                   </p>
                 </div>
+                */}
               </div>
             </PopoverContent>
           </Popover>
