@@ -908,21 +908,43 @@ function findDeadEnds(
     const accessibility = getAccessibility(entry.lat, entry.lng);
 
     if (entry.count === 1) {
-      // Dead end - road terminus on public land = high confidence
-      // Vehicle access (high clearance/4wd) is a filter, not a scoring factor
-      const score = 35;
+      // Dead end - road terminus on public land
+      // Score based on data quality indicators
+      let score = 25; // Base score for any dead-end on public land
       const reasons: string[] = ['Road terminus (dead-end)', 'On public land'];
+
+      // Official road sources are more reliable
+      if (entry.hasMVUMRoad) {
+        score += 10;
+        reasons.push('On MVUM road (official)');
+      } else if (entry.hasBLMRoad) {
+        score += 8;
+        reasons.push('On BLM road (official)');
+      }
+
+      // Named roads suggest more established access
+      const roadName = entry.roads[0];
+      if (roadName && !roadName.match(/^(track|path|road|way)$/i)) {
+        score += 5;
+        reasons.push('Named road');
+      }
+
+      // Passenger accessible roads are typically better established
+      if (accessibility.passengerReachable) {
+        score += 3;
+        reasons.push('Passenger vehicle accessible');
+      }
 
       spots.push({
         id: `deadend-${key}`,
         lat: entry.lat,
         lng: entry.lng,
-        name: `End of ${entry.roads[0]}`,
+        name: roadName ? `End of ${roadName}` : 'Road Terminus',
         type: 'dead-end',
         score,
         reasons,
         source: 'derived',
-        roadName: entry.roads[0],
+        roadName: roadName,
         highClearance: entry.isHighClearance,
         isOnMVUMRoad: entry.hasMVUMRoad,
         isOnBLMRoad: entry.hasBLMRoad,
@@ -1546,24 +1568,56 @@ async function fetchAllOSMData(
       let displayName = name || 'Camp Site';
       if (isFirepit && !name) displayName = 'Fire Ring';
 
-      let score = 30;
+      // Granular scoring based on data quality
+      let score = 35; // Base score for any OSM camp site
       const reasons: string[] = [];
 
-      if (isFirepit) {
-        score = 35;
-        reasons.push('Fire ring/pit (likely camp spot)');
-      } else if (isBackcountry) {
-        score = 40;
-        reasons.push('Known camp site', 'Backcountry/primitive');
-      } else if (isEstablishedCampground) {
+      if (isEstablishedCampground) {
+        // Established campgrounds get base score, shown differently in UI
         reasons.push('Established campground');
       } else if (tags.tourism === 'camp_site') {
-        // OSM camp_site tag indicates a known camping location - score 40 to match database
-        score = 40;
-        reasons.push('Known camp site');
+        reasons.push('OSM camp site');
+
+        // Bonus for having a real name (not generic)
+        if (name && !name.match(/^(camp\s*site|campsite|camping)$/i)) {
+          score += 5;
+          reasons.push('Named location');
+        }
+
+        // Bonus for backcountry/primitive designation
+        if (isBackcountry) {
+          score += 5;
+          reasons.push('Backcountry/primitive');
+        }
+
+        // Bonus for fire ring (infrastructure confirms camping)
+        if (isFirepit) {
+          score += 3;
+          reasons.push('Has fire ring');
+        }
+
+        // Bonus for multiple confirming tags
+        const confirmingTags = [
+          tags.camp_site,
+          tags.camp_type,
+          tags.openfire,
+          tags.drinking_water,
+          tags.toilets
+        ].filter(Boolean).length;
+        if (confirmingTags >= 2) {
+          score += 2;
+          reasons.push('Multiple confirming tags');
+        }
       } else if (tags.camp_site || tags.camp_type) {
-        score = 35;
+        score = 33;
         reasons.push('Mapped camping location');
+        if (name && !name.match(/^(camp\s*site|campsite|camping)$/i)) {
+          score += 3;
+          reasons.push('Named location');
+        }
+      } else if (isFirepit) {
+        score = 30;
+        reasons.push('Fire ring/pit (likely camp spot)');
       } else {
         reasons.push('Camping-related feature');
       }

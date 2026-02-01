@@ -1652,11 +1652,11 @@ const DispersedExplorer = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#f97316' }} />
-                      <span>Med Confidence</span>
+                      <span>Moderate</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#e83a3a' }} />
-                      <span>Low Confidence</span>
+                      <span>Unverified</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-blue-500 rounded-full" />
@@ -1816,31 +1816,31 @@ const DispersedExplorer = () => {
                     </TooltipTrigger>
                     <TooltipContent>
                       <p className="font-medium">High Confidence (35+)</p>
-                      <p className="text-xs text-muted-foreground">Dead-ends on MVUM/BLM roads</p>
+                      <p className="text-xs text-muted-foreground">Official roads (MVUM/BLM), named roads, or good access</p>
                     </TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800 text-center cursor-pointer">
                         <p className="text-xl font-bold text-orange-600 dark:text-orange-400">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 25 && s.score < 35).length}</p>
-                        <p className="text-xs font-medium text-orange-600 dark:text-orange-400">Medium</p>
+                        <p className="text-xs font-medium text-orange-600 dark:text-orange-400">Moderate</p>
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p className="font-medium">Medium Confidence (25-34)</p>
-                      <p className="text-xs text-muted-foreground">Dead-ends on public land tracks</p>
+                      <p className="font-medium">Moderate Confidence (25-34)</p>
+                      <p className="text-xs text-muted-foreground">Unnamed tracks on public land</p>
                     </TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 text-center cursor-pointer">
                         <p className="text-xl font-bold text-red-600 dark:text-red-400">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score < 25).length}</p>
-                        <p className="text-xs font-medium text-red-600 dark:text-red-400">Low</p>
+                        <p className="text-xs font-medium text-red-600 dark:text-red-400">Unverified</p>
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p className="font-medium">Low Confidence (&lt;25)</p>
-                      <p className="text-xs text-muted-foreground">Spots needing more verification</p>
+                      <p className="font-medium">Unverified (&lt;25)</p>
+                      <p className="text-xs text-muted-foreground">Needs review - limited data quality</p>
                     </TooltipContent>
                   </Tooltip>
                   <Tooltip>
@@ -1931,7 +1931,7 @@ const DispersedExplorer = () => {
                       style={spotFilters.has('medium') ? { backgroundColor: '#f97316' } : {}}
                     >
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#f97316' }} />
-                      Medium
+                      Moderate
                     </button>
                     <button
                       onClick={() => toggleFilter('low')}
@@ -1943,7 +1943,7 @@ const DispersedExplorer = () => {
                       style={spotFilters.has('low') ? { backgroundColor: '#e83a3a' } : {}}
                     >
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#e83a3a' }} />
-                      Low
+                      Unverified
                     </button>
                     {spotFilters.size > 0 && (
                       <button
@@ -2210,7 +2210,7 @@ const DispersedExplorer = () => {
                         }`} />
                         <span className="text-sm font-medium">
                           {selectedSpot.type === 'camp-site' ? 'Known Campsite' :
-                           selectedSpot.score >= 35 ? 'High' : selectedSpot.score >= 25 ? 'Medium' : 'Lower'}
+                           selectedSpot.score >= 35 ? 'High' : selectedSpot.score >= 25 ? 'Moderate' : 'Unverified'}
                         </span>
                         {selectedSpot.type !== 'camp-site' && (
                           <span className="text-xs text-muted-foreground">({selectedSpot.score} pts)</span>
