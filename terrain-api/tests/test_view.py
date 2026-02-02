@@ -10,7 +10,7 @@ Tests:
 
 import math
 import time
-from typing import Tuple
+from typing import Tuple, List
 import numpy as np
 from terrain.dem import DEMGrid
 from terrain.view import (
@@ -45,8 +45,13 @@ from terrain.view import (
     compute_sun_position_at_offset,
     compute_timestep_score,
     compute_glow_window,
+    generate_glow_window_sun_track,
     GLOW_WINDOW_STEP_MINUTES,
     GLOW_WINDOW_GOOD_THRESHOLD,
+    GLOW_WINDOW_SUNRISE_START,
+    GLOW_WINDOW_SUNRISE_END,
+    GLOW_WINDOW_SUNSET_START,
+    GLOW_WINDOW_SUNSET_END,
 )
 from terrain.types import (
     SunPosition,
@@ -58,6 +63,7 @@ from terrain.types import (
     DistantGlowWindow,
     VisualAnchor,
 )
+from datetime import datetime
 
 
 def create_flat_dem(
@@ -2098,6 +2104,15 @@ class TestGlowWindow:
         slope_break = compute_slope_break_grid(slope_deg)
         return curvature, slope_break
 
+    def _create_test_sun_track(self, event_type: str = "sunrise") -> List[SunPosition]:
+        """Create a simple sun track for testing using real ephemeris."""
+        return generate_glow_window_sun_track(
+            lat=38.5,
+            lon=-109.5,
+            event_date=datetime(2024, 6, 21),  # Summer solstice
+            event_type=event_type,
+        )
+
     def test_glow_window_basic_computation(self):
         """Glow window should compute basic metrics."""
         dem = create_ridge_dem()
@@ -2108,7 +2123,7 @@ class TestGlowWindow:
         curvature, slope_break = self._compute_structure_grids(dem)
         slope_deg, aspect_deg = compute_slope_aspect(dem)
 
-        sun_pos = create_sun_position(azimuth_deg=90.0, altitude_deg=2.0)
+        sun_track = self._create_test_sun_track("sunrise")
 
         # Create visual anchor manually for testing
         visual_anchor = VisualAnchor(
@@ -2122,8 +2137,7 @@ class TestGlowWindow:
 
         glow_window = compute_glow_window(
             dem=dem,
-            base_sun_position=sun_pos,
-            event_type="sunrise",
+            sun_track=sun_track,
             view_bearing_deg=90.0,
             depth_p90_m=5000.0,
             open_sky_sector_fraction=0.8,
@@ -2152,7 +2166,7 @@ class TestGlowWindow:
         curvature, slope_break = self._compute_structure_grids(dem)
         slope_deg, aspect_deg = compute_slope_aspect(dem)
 
-        sun_pos = create_sun_position(azimuth_deg=90.0, altitude_deg=0.0)
+        sun_track = self._create_test_sun_track("sunrise")
 
         visual_anchor = VisualAnchor(
             anchor_score=0.5,
@@ -2163,8 +2177,7 @@ class TestGlowWindow:
 
         glow_window = compute_glow_window(
             dem=dem,
-            base_sun_position=sun_pos,
-            event_type="sunrise",
+            sun_track=sun_track,
             view_bearing_deg=90.0,
             depth_p90_m=5000.0,
             open_sky_sector_fraction=0.8,
@@ -2196,7 +2209,7 @@ class TestGlowWindow:
         curvature, slope_break = self._compute_structure_grids(dem)
         slope_deg, aspect_deg = compute_slope_aspect(dem)
 
-        sun_pos = create_sun_position(azimuth_deg=270.0, altitude_deg=0.0)
+        sun_track = self._create_test_sun_track("sunset")
 
         visual_anchor = VisualAnchor(
             anchor_score=0.5,
@@ -2207,8 +2220,7 @@ class TestGlowWindow:
 
         glow_window = compute_glow_window(
             dem=dem,
-            base_sun_position=sun_pos,
-            event_type="sunset",
+            sun_track=sun_track,
             view_bearing_deg=270.0,
             depth_p90_m=5000.0,
             open_sky_sector_fraction=0.8,
@@ -2240,7 +2252,7 @@ class TestGlowWindow:
         curvature, slope_break = self._compute_structure_grids(dem)
         slope_deg, aspect_deg = compute_slope_aspect(dem)
 
-        sun_pos = create_sun_position(azimuth_deg=90.0, altitude_deg=2.0)
+        sun_track = self._create_test_sun_track("sunrise")
 
         visual_anchor = VisualAnchor(
             anchor_score=0.5,
@@ -2252,8 +2264,7 @@ class TestGlowWindow:
         # Without debug
         glow_window_no_debug = compute_glow_window(
             dem=dem,
-            base_sun_position=sun_pos,
-            event_type="sunrise",
+            sun_track=sun_track,
             view_bearing_deg=90.0,
             depth_p90_m=5000.0,
             open_sky_sector_fraction=0.8,
@@ -2273,8 +2284,7 @@ class TestGlowWindow:
         # With debug
         glow_window_debug = compute_glow_window(
             dem=dem,
-            base_sun_position=sun_pos,
-            event_type="sunrise",
+            sun_track=sun_track,
             view_bearing_deg=90.0,
             depth_p90_m=5000.0,
             open_sky_sector_fraction=0.8,
@@ -2302,7 +2312,7 @@ class TestGlowWindow:
         curvature, slope_break = self._compute_structure_grids(dem)
         slope_deg, aspect_deg = compute_slope_aspect(dem)
 
-        sun_pos = create_sun_position(azimuth_deg=90.0, altitude_deg=1.0)
+        sun_track = self._create_test_sun_track("sunrise")
 
         visual_anchor = VisualAnchor(
             anchor_score=0.6,
@@ -2313,8 +2323,7 @@ class TestGlowWindow:
 
         glow_window = compute_glow_window(
             dem=dem,
-            base_sun_position=sun_pos,
-            event_type="sunrise",
+            sun_track=sun_track,
             view_bearing_deg=90.0,
             depth_p90_m=5000.0,
             open_sky_sector_fraction=0.8,
@@ -2342,7 +2351,7 @@ class TestGlowWindow:
         curvature, slope_break = self._compute_structure_grids(dem)
         slope_deg, aspect_deg = compute_slope_aspect(dem)
 
-        sun_pos = create_sun_position(azimuth_deg=90.0, altitude_deg=3.0)
+        sun_track = self._create_test_sun_track("sunrise")
 
         visual_anchor = VisualAnchor(
             anchor_score=0.7,
@@ -2353,8 +2362,7 @@ class TestGlowWindow:
 
         glow_window = compute_glow_window(
             dem=dem,
-            base_sun_position=sun_pos,
-            event_type="sunrise",
+            sun_track=sun_track,
             view_bearing_deg=90.0,
             depth_p90_m=5000.0,
             open_sky_sector_fraction=0.8,
@@ -2382,13 +2390,12 @@ class TestGlowWindow:
         from terrain.analysis import compute_slope_aspect
 
         slope_deg, aspect_deg = compute_slope_aspect(dem)
-        sun_pos = create_sun_position(azimuth_deg=90.0, altitude_deg=2.0)
+        sun_track = self._create_test_sun_track("sunrise")
 
         # No anchor
         glow_window = compute_glow_window(
             dem=dem,
-            base_sun_position=sun_pos,
-            event_type="sunrise",
+            sun_track=sun_track,
             view_bearing_deg=90.0,
             depth_p90_m=5000.0,
             open_sky_sector_fraction=0.8,
@@ -2414,8 +2421,7 @@ class TestGlowWindow:
 
         glow_window_none = compute_glow_window(
             dem=dem,
-            base_sun_position=sun_pos,
-            event_type="sunrise",
+            sun_track=sun_track,
             view_bearing_deg=90.0,
             depth_p90_m=5000.0,
             open_sky_sector_fraction=0.8,
@@ -2432,7 +2438,7 @@ class TestGlowWindow:
         assert glow_window_none is None, "Should return None when anchor type is NONE"
 
     def test_glow_window_integration_via_overlook_view(self):
-        """Glow window should integrate with compute_overlook_view."""
+        """Glow window should integrate with compute_overlook_view using sun_track."""
         dem = create_ridge_dem()
         dem.init_local_coords()
 
@@ -2444,8 +2450,9 @@ class TestGlowWindow:
         slope_break = compute_slope_break_grid(slope_deg)
 
         sun_pos = create_sun_position(azimuth_deg=90.0, altitude_deg=3.0)
+        sun_track = self._create_test_sun_track("sunrise")
 
-        # With timeseries enabled
+        # With timeseries enabled and precomputed sun_track
         view = compute_overlook_view(
             dem=dem,
             lat=38.5,
@@ -2458,6 +2465,7 @@ class TestGlowWindow:
             aspect_grid=aspect_deg,
             distant_glow_timeseries=True,
             event_type="sunrise",
+            sun_track=sun_track,
             include_debug=True,
         )
 
@@ -2500,38 +2508,161 @@ class TestGlowWindow:
         assert view.distant_glow.glow_window is None, \
             "glow_window should be None when timeseries disabled"
 
-    def test_sun_position_at_offset_sunrise(self):
-        """Sun position at offset should increase altitude for sunrise."""
-        base_sun = create_sun_position(azimuth_deg=90.0, altitude_deg=0.0)
-
-        sun_10min = compute_sun_position_at_offset(
-            base_sun_position=base_sun,
-            offset_minutes=10.0,
+    def test_sun_track_altitudes_not_linear(self):
+        """Sun track altitudes should NOT be linear (guards against approximation)."""
+        # Generate sun track using real ephemeris
+        sun_track = generate_glow_window_sun_track(
+            lat=38.5,
+            lon=-109.5,
+            event_date=datetime(2024, 6, 21),
             event_type="sunrise",
-            lat=38.5,
-            lon=-109.5,
         )
 
-        # Sun should be higher after 10 min for sunrise (~2.5°)
-        assert sun_10min.altitude_deg > base_sun.altitude_deg
-        assert abs(sun_10min.altitude_deg - 2.5) < 0.5  # ~0.25°/min * 10min
+        assert len(sun_track) == 16, "Should have 16 timesteps (0 to 75 in steps of 5)"
 
-    def test_sun_position_at_offset_sunset(self):
-        """Sun position at offset should decrease altitude for sunset."""
-        base_sun = create_sun_position(azimuth_deg=270.0, altitude_deg=5.0)
+        # Extract altitude differences between consecutive points
+        altitudes = [pos.altitude_deg for pos in sun_track]
+        diffs = [altitudes[i+1] - altitudes[i] for i in range(len(altitudes)-1)]
 
-        sun_10min = compute_sun_position_at_offset(
-            base_sun_position=base_sun,
-            offset_minutes=10.0,
+        # With linear approximation (0.25°/min), all diffs would be 5*0.25 = 1.25°
+        # Real ephemeris has non-linear altitude change (varies with time of day)
+        # Check that not all diffs are the same (within small tolerance)
+        unique_diffs = set(round(d, 2) for d in diffs)
+        assert len(unique_diffs) > 1, \
+            f"Altitude differences should vary (not linear). Got {diffs}"
+
+    def test_sun_track_uses_real_ephemeris_not_approximation(self):
+        """Sun track should use real ephemeris, not the deprecated 0.25°/min approximation."""
+        # Generate tracks at different latitudes - they should differ significantly
+        track_equator = generate_glow_window_sun_track(
+            lat=0.0,  # Equator
+            lon=-109.5,
+            event_date=datetime(2024, 6, 21),
+            event_type="sunrise",
+        )
+
+        track_arctic = generate_glow_window_sun_track(
+            lat=65.0,  # Arctic circle
+            lon=-109.5,
+            event_date=datetime(2024, 6, 21),
+            event_type="sunrise",
+        )
+
+        # At summer solstice, sun rises much slower at high latitudes
+        # Compare altitude at 75 minutes after sunrise
+        final_alt_equator = track_equator[-1].altitude_deg
+        final_alt_arctic = track_arctic[-1].altitude_deg
+
+        # Linear approximation would give same result regardless of latitude
+        # Real ephemeris should show significant difference
+        assert abs(final_alt_equator - final_alt_arctic) > 2.0, \
+            f"Sun altitude at 75min should differ between equator ({final_alt_equator:.1f}°) " \
+            f"and arctic ({final_alt_arctic:.1f}°) with real ephemeris"
+
+    def test_compute_glow_window_uses_passed_sun_track(self):
+        """compute_glow_window should use the exact sun positions from passed sun_track."""
+        dem = create_flat_dem()
+        dem.init_local_coords()
+
+        from terrain.analysis import compute_slope_aspect
+        slope_deg, aspect_deg = compute_slope_aspect(dem)
+
+        # Create a custom sun track with specific values
+        custom_track = [
+            SunPosition(
+                time_iso="2024-06-21T06:00:00Z",
+                minutes_from_start=0.0,
+                azimuth_deg=85.0,  # Custom azimuth
+                altitude_deg=1.0,  # Custom altitude
+                vector=(0.1, 0.1, 0.017),
+            ),
+            SunPosition(
+                time_iso="2024-06-21T06:05:00Z",
+                minutes_from_start=5.0,
+                azimuth_deg=87.0,
+                altitude_deg=3.5,
+                vector=(0.1, 0.1, 0.061),
+            ),
+            SunPosition(
+                time_iso="2024-06-21T06:10:00Z",
+                minutes_from_start=10.0,
+                azimuth_deg=89.0,
+                altitude_deg=6.0,
+                vector=(0.1, 0.1, 0.104),
+            ),
+        ]
+
+        visual_anchor = VisualAnchor(
+            anchor_score=0.5,
+            anchor_type="RIDGELINE",
+            anchor_distance_m=3000.0,
+            anchor_bearing_deg=90.0,
+        )
+
+        glow_window = compute_glow_window(
+            dem=dem,
+            sun_track=custom_track,
+            view_bearing_deg=90.0,
+            depth_p90_m=5000.0,
+            open_sky_sector_fraction=0.8,
+            rim_strength=0.5,
+            blocking_margin_deg=2.0,
+            visual_anchor=visual_anchor,
+            viewpoint_lat=38.5,
+            viewpoint_lon=-109.5,
+            slope_grid=slope_deg,
+            aspect_grid=aspect_deg,
+            include_debug=True,
+        )
+
+        assert glow_window is not None
+        assert glow_window.score_series is not None
+        assert len(glow_window.score_series) == 3, "Should have 3 samples matching custom track"
+
+        # Verify the sun positions used match our custom track
+        for i, sample in enumerate(glow_window.score_series):
+            assert sample.minutes == int(custom_track[i].minutes_from_start), \
+                f"Sample {i} minutes should match custom track"
+            assert abs(sample.sun_altitude_deg - custom_track[i].altitude_deg) < 0.01, \
+                f"Sample {i} altitude should match custom track"
+            assert abs(sample.sun_azimuth_deg - custom_track[i].azimuth_deg) < 0.01, \
+                f"Sample {i} azimuth should match custom track"
+
+    def test_generate_glow_window_sun_track_sunrise_count(self):
+        """Sunrise sun track should have exactly 16 timesteps."""
+        track = generate_glow_window_sun_track(
+            lat=38.5,
+            lon=-109.5,
+            event_date=datetime(2024, 6, 21),
+            event_type="sunrise",
+        )
+
+        # 0, 5, 10, ..., 75 = 16 timesteps
+        assert len(track) == 16, f"Expected 16 timesteps for sunrise, got {len(track)}"
+
+        # Verify minutes are correct
+        expected_minutes = list(range(0, 76, 5))
+        actual_minutes = [int(pos.minutes_from_start) for pos in track]
+        assert actual_minutes == expected_minutes, \
+            f"Expected minutes {expected_minutes}, got {actual_minutes}"
+
+    def test_generate_glow_window_sun_track_sunset_count(self):
+        """Sunset sun track should have exactly 16 timesteps."""
+        track = generate_glow_window_sun_track(
+            lat=38.5,
+            lon=-109.5,
+            event_date=datetime(2024, 6, 21),
             event_type="sunset",
-            lat=38.5,
-            lon=-109.5,
         )
 
-        # Sun should be lower after 10 min for sunset
-        assert sun_10min.altitude_deg < base_sun.altitude_deg
-        expected_alt = 5.0 - 10 * 0.25  # 2.5°
-        assert abs(sun_10min.altitude_deg - expected_alt) < 0.5
+        # -75, -70, ..., 0 = 16 timesteps
+        assert len(track) == 16, f"Expected 16 timesteps for sunset, got {len(track)}"
+
+        # Verify minutes are correct
+        expected_minutes = list(range(-75, 1, 5))
+        actual_minutes = [int(pos.minutes_from_start) for pos in track]
+        assert actual_minutes == expected_minutes, \
+            f"Expected minutes {expected_minutes}, got {actual_minutes}"
 
     def test_timestep_score_changes_with_sun_position(self):
         """Timestep score should change as sun position varies."""

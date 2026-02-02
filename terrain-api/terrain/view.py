@@ -11,12 +11,16 @@ import numpy as np
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Dict
 
+from datetime import datetime, timedelta
+import warnings
+
 from .dem import DEMGrid
 from .types import (
     HorizonSample, SunAlignment, OverlookView, SunPosition,
     StandingLocation, ViewExplanations, DistantGlowScore, VisualAnchor,
     AnchorLight, DistantGlowWindow, DistantGlowWindowSample,
 )
+from .sun import compute_sun_position, compute_sun_vector, find_sunrise_sunset
 
 
 # Default parameters
@@ -1351,6 +1355,11 @@ def compute_sun_position_at_offset(
     lon: float,
 ) -> SunPosition:
     """
+    DEPRECATED: Use generate_glow_window_sun_track() instead for accurate ephemeris.
+
+    This function uses a linear approximation (~0.25°/min) that is unreliable
+    across latitudes and seasons.
+
     Compute sun position at a time offset from the base position.
 
     Uses simple solar geometry approximation for short time offsets.
@@ -1365,6 +1374,12 @@ def compute_sun_position_at_offset(
     Returns:
         SunPosition at the offset time
     """
+    warnings.warn(
+        "compute_sun_position_at_offset is deprecated. Use generate_glow_window_sun_track() "
+        "with real ephemeris for accurate sun positions.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     # Sun moves ~0.25° per minute in altitude near sunrise/sunset
     # Azimuth change is more complex but we can approximate
     altitude_rate_deg_per_min = 0.25 if event_type == "sunrise" else -0.25
@@ -1392,6 +1407,75 @@ def compute_sun_position_at_offset(
         azimuth_deg=new_azimuth,
         vector=(Sx, Sy, Sz),
     )
+
+
+def generate_glow_window_sun_track(
+    lat: float,
+    lon: float,
+    event_date: datetime,
+    event_type: str,
+) -> List[SunPosition]:
+    """
+    Generate sun track for glow window evaluation using real ephemeris.
+
+    Precomputes sun positions at 5-minute intervals for the glow window:
+    - Sunrise: minutes 0, 5, 10, ..., 75 (16 timesteps)
+    - Sunset: minutes -75, -70, ..., 0 (16 timesteps)
+
+    This replaces the deprecated linear approximation in compute_sun_position_at_offset().
+
+    Design choice: Option A - compute sun_track at AOI center lat/lon and reuse
+    for all viewpoints. This is fast (16 ephemeris calls per request) and the
+    sun position difference across typical AOI sizes (5-20km) is negligible
+    (<0.01° at most latitudes).
+
+    Args:
+        lat: Center latitude of AOI (or viewpoint latitude)
+        lon: Center longitude of AOI (or viewpoint longitude)
+        event_date: Date of the sunrise/sunset event
+        event_type: "sunrise" or "sunset"
+
+    Returns:
+        List of SunPosition objects, one per timestep, sorted by minutes.
+        Each SunPosition has minutes stored in minutes_from_start field.
+    """
+    # Find the event time (sunrise or sunset)
+    event_time = find_sunrise_sunset(lat, lon, event_date, event_type)
+
+    # Use event date as reference for consistent day-of-year calculations
+    reference_date = event_date
+
+    # Define time offsets based on event type
+    if event_type == "sunrise":
+        time_offsets = list(range(
+            GLOW_WINDOW_SUNRISE_START,
+            GLOW_WINDOW_SUNRISE_END + 1,
+            GLOW_WINDOW_STEP_MINUTES
+        ))
+    else:
+        time_offsets = list(range(
+            GLOW_WINDOW_SUNSET_START,
+            GLOW_WINDOW_SUNSET_END + 1,
+            GLOW_WINDOW_STEP_MINUTES
+        ))
+
+    # Generate sun positions using real ephemeris
+    sun_track: List[SunPosition] = []
+
+    for minutes in time_offsets:
+        dt = event_time + timedelta(minutes=minutes)
+        azimuth, altitude = compute_sun_position(lat, lon, dt, reference_date)
+        vector = compute_sun_vector(azimuth, altitude)
+
+        sun_track.append(SunPosition(
+            time_iso=dt.isoformat() + "Z",
+            minutes_from_start=float(minutes),
+            azimuth_deg=azimuth,
+            altitude_deg=altitude,
+            vector=vector,
+        ))
+
+    return sun_track
 
 
 def compute_timestep_score(
@@ -1490,8 +1574,7 @@ def compute_timestep_score(
 
 def compute_glow_window(
     dem: DEMGrid,
-    base_sun_position: SunPosition,
-    event_type: str,
+    sun_track: List[SunPosition],
     view_bearing_deg: float,
     depth_p90_m: float,
     open_sky_sector_fraction: float,
@@ -1510,10 +1593,13 @@ def compute_glow_window(
     Evaluates distant_glow_final_score over a time grid around sunrise/sunset
     to find the optimal shooting window.
 
+    Uses precomputed sun_track with real ephemeris positions instead of
+    linear approximation, ensuring accurate timing across all latitudes/seasons.
+
     Args:
         dem: DEMGrid with elevation data
-        base_sun_position: Sun position at event time
-        event_type: "sunrise" or "sunset"
+        sun_track: Precomputed sun positions from generate_glow_window_sun_track().
+                   Each entry must have minutes_from_start set to the offset.
         view_bearing_deg: Best viewing direction
         depth_p90_m: View depth
         open_sky_sector_fraction: Sector openness
@@ -1532,6 +1618,9 @@ def compute_glow_window(
     if visual_anchor is None or visual_anchor.anchor_type == "NONE":
         return None
 
+    if not sun_track:
+        return None
+
     # Compute anchor location
     anchor_lat, anchor_lon = compute_anchor_location(
         dem=dem,
@@ -1541,17 +1630,7 @@ def compute_glow_window(
         anchor_distance_m=visual_anchor.anchor_distance_m,
     )
 
-    # Define time grid
-    if event_type == "sunrise":
-        start_offset = GLOW_WINDOW_SUNRISE_START
-        end_offset = GLOW_WINDOW_SUNRISE_END
-    else:
-        start_offset = GLOW_WINDOW_SUNSET_START
-        end_offset = GLOW_WINDOW_SUNSET_END
-
-    time_offsets = list(range(start_offset, end_offset + 1, GLOW_WINDOW_STEP_MINUTES))
-
-    # Evaluate at each timestep
+    # Evaluate at each timestep using precomputed sun positions
     samples: List[DistantGlowWindowSample] = []
     peak_score = 0.0
     peak_minutes = 0
@@ -1559,15 +1638,9 @@ def compute_glow_window(
     sun_clears_ridge_minutes: Optional[int] = None
     previous_shadowed = True
 
-    for offset in time_offsets:
-        # Compute sun position at this offset
-        sun_pos = compute_sun_position_at_offset(
-            base_sun_position=base_sun_position,
-            offset_minutes=float(offset),
-            event_type=event_type,
-            lat=viewpoint_lat,
-            lon=viewpoint_lon,
-        )
+    for sun_pos in sun_track:
+        # Get minutes offset from the sun position
+        offset = int(sun_pos.minutes_from_start)
 
         # Compute score at this timestep
         final_score, anchor_light_score, anchor_shadowed = compute_timestep_score(
@@ -2112,6 +2185,8 @@ def compute_overlook_view(
     aspect_grid: Optional[np.ndarray] = None,
     distant_glow_timeseries: bool = False,
     event_type: str = "sunrise",
+    event_date: Optional[datetime] = None,
+    sun_track: Optional[List[SunPosition]] = None,
     include_debug: bool = False,
 ) -> OverlookView:
     """
@@ -2133,6 +2208,12 @@ def compute_overlook_view(
         aspect_grid: Optional aspect grid for Light-at-Anchor (LAA)
         distant_glow_timeseries: If True, compute glow window time-series
         event_type: "sunrise" or "sunset" (for glow window time range)
+        event_date: Date for glow window sun track (required if distant_glow_timeseries
+                    is True and sun_track is not provided)
+        sun_track: Precomputed sun track from generate_glow_window_sun_track().
+                   If not provided and distant_glow_timeseries=True, will be
+                   generated using event_date. Precompute once per request and
+                   pass to multiple viewpoints for efficiency.
         include_debug: If True, include debug info (e.g., full score_series)
 
     Returns:
@@ -2268,23 +2349,35 @@ def compute_overlook_view(
 
         # Compute glow window time-series if requested
         if distant_glow_timeseries and visual_anchor is not None:
-            glow_window = compute_glow_window(
-                dem=dem,
-                base_sun_position=sun_position,
-                event_type=event_type,
-                view_bearing_deg=best_bearing,
-                depth_p90_m=depth_p90_m,
-                open_sky_sector_fraction=open_sky_sector_fraction,
-                rim_strength=rim_strength,
-                blocking_margin_deg=sun_alignment.blocking_margin_deg,
-                visual_anchor=visual_anchor,
-                viewpoint_lat=lat,
-                viewpoint_lon=lon,
-                slope_grid=slope_grid,
-                aspect_grid=aspect_grid,
-                include_debug=include_debug,
-            )
-            distant_glow.glow_window = glow_window
+            # Use provided sun_track or generate one
+            track_to_use = sun_track
+            if track_to_use is None and event_date is not None:
+                # Generate sun track using AOI center (Option A: fast, reusable)
+                # This computes real ephemeris at 16 timesteps
+                track_to_use = generate_glow_window_sun_track(
+                    lat=lat,
+                    lon=lon,
+                    event_date=event_date,
+                    event_type=event_type,
+                )
+
+            if track_to_use is not None:
+                glow_window = compute_glow_window(
+                    dem=dem,
+                    sun_track=track_to_use,
+                    view_bearing_deg=best_bearing,
+                    depth_p90_m=depth_p90_m,
+                    open_sky_sector_fraction=open_sky_sector_fraction,
+                    rim_strength=rim_strength,
+                    blocking_margin_deg=sun_alignment.blocking_margin_deg,
+                    visual_anchor=visual_anchor,
+                    viewpoint_lat=lat,
+                    viewpoint_lon=lon,
+                    slope_grid=slope_grid,
+                    aspect_grid=aspect_grid,
+                    include_debug=include_debug,
+                )
+                distant_glow.glow_window = glow_window
 
     # Build output
     return OverlookView(
