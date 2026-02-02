@@ -29,12 +29,14 @@ import {
   CaretDown,
   Mountains,
   Crosshair,
+  Funnel,
+  Bug,
 } from "@phosphor-icons/react";
 import { useGoogleMaps } from "@/components/GoogleMapsProvider";
 import { useTerrainAnalysis } from "@/hooks/use-terrain-analysis";
 import { Header } from "@/components/Header";
 import { PlaceSearch } from "@/components/PlaceSearch";
-import type { TerrainAnalysisResult, Subject, StandingLocation, SunPosition } from "@/types/terrainValidation";
+import type { TerrainAnalysisResult, Subject, StandingLocation, SunPosition, RimOverlookDebugStats } from "@/types/terrainValidation";
 
 // Convert degrees to compass direction
 function degreesToCompass(deg: number): string {
@@ -227,6 +229,146 @@ function LightTimeline({ events }: { events: TimelineEvent[] }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Scouting Funnel Component - shows candidate coverage and filtering stages
+function ScoutingFunnel({ debug }: { debug: RimOverlookDebugStats | undefined }) {
+  if (!debug) return null;
+
+  const stages = [
+    {
+      label: "Cells in AOI",
+      count: debug.grid_cells_total || 0,
+      tooltip: "Total DEM grid cells in the analysis area",
+    },
+    {
+      label: "Rim candidates",
+      count: debug.rim_mask_cells || 0,
+      tooltip: `Cells passing TPI (>${debug.chosen_tpi_threshold_m?.toFixed(1) || '?'}m) and slope (<${debug.chosen_slope_max_deg?.toFixed(0) || '?'}°) filters`,
+      rejected: (debug.rejected_tpi || 0) + (debug.rejected_slope || 0) + (debug.rejected_edge || 0),
+      rejectedLabel: `TPI: ${(debug.rejected_tpi || 0).toLocaleString()}, Slope: ${(debug.rejected_slope || 0).toLocaleString()}, Edge: ${(debug.rejected_edge || 0).toLocaleString()}`,
+    },
+    {
+      label: "Local maxima",
+      count: debug.rim_local_maxima_cells || 0,
+      tooltip: "Distinct rim peaks after non-maximum suppression (NMS)",
+      rejected: debug.rejected_nms || 0,
+      rejectedLabel: `Collapsed by NMS: ${(debug.rejected_nms || 0).toLocaleString()}`,
+    },
+    {
+      label: "View analyzed",
+      count: debug.view_analyzed_total || 0,
+      tooltip: `Top ${debug.chosen_view_candidates_k || '?'} candidates selected for horizon analysis`,
+      rejected: debug.rejected_topk || 0,
+      rejectedLabel: `Skipped (top-K): ${(debug.rejected_topk || 0).toLocaleString()}`,
+    },
+    {
+      label: "Final results",
+      count: debug.results_post_dedup || 0,
+      tooltip: "After spatial deduplication (minimum distance between overlooks)",
+      rejected: debug.rejected_after_view_dedup || 0,
+      rejectedLabel: `Removed as duplicates: ${(debug.rejected_after_view_dedup || 0).toLocaleString()}`,
+    },
+  ];
+
+  // Check funnel health - warn if ratio between stages is too aggressive
+  const getHealthColor = (current: number, next: number): string => {
+    if (next === 0 || current === 0) return "text-red-600";
+    const ratio = current / next;
+    if (ratio < 5) return "text-green-600";
+    if (ratio < 10) return "text-yellow-600";
+    if (ratio < 50) return "text-orange-600";
+    return "text-red-600";
+  };
+
+  // Density sanity check
+  const rimRatio = debug.rim_mask_cells / debug.grid_cells_total;
+  const density = rimRatio < 0.01 ? "LOW" : rimRatio < 0.5 ? "OK" : "HIGH";
+  const densityColor = density === "LOW" ? "text-red-600" : density === "OK" ? "text-green-600" : "text-yellow-600";
+  const densityMessage = density === "LOW"
+    ? "Scouting too narrow — thresholds likely too strict or AOI too small"
+    : density === "OK"
+    ? "Healthy candidate coverage"
+    : "Very broad coverage — may include non-rim areas";
+
+  return (
+    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm">
+      {/* Header with density indicator */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Funnel className="w-4 h-4 text-purple-600" weight="fill" />
+          <span className="font-semibold text-purple-800">Scouting Funnel</span>
+        </div>
+        <div className={`px-2 py-0.5 rounded text-xs font-bold ${densityColor} bg-white`}>
+          {density}
+        </div>
+      </div>
+
+      <p className="text-xs text-purple-600 mb-3">{densityMessage}</p>
+
+      {/* Funnel stages */}
+      <div className="space-y-2">
+        {stages.map((stage, idx) => {
+          const nextStage = stages[idx + 1];
+          const healthColor = nextStage ? getHealthColor(stage.count, nextStage.count) : "text-gray-600";
+          const barWidth = Math.max(5, Math.min(100, (stage.count / stages[0].count) * 100));
+
+          return (
+            <div key={stage.label} className="relative group">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-700 w-28">{stage.label}:</span>
+                <div className="flex-1 mx-2">
+                  <div
+                    className="h-2 bg-purple-300 rounded"
+                    style={{ width: `${barWidth}%` }}
+                  />
+                </div>
+                <span className={`font-mono font-bold w-20 text-right ${healthColor}`}>
+                  {stage.count.toLocaleString()}
+                </span>
+              </div>
+              {/* Tooltip on hover */}
+              <div className="hidden group-hover:block absolute z-10 left-0 top-full mt-1 p-2 bg-gray-900 text-white text-xs rounded shadow-lg max-w-xs">
+                <p>{stage.tooltip}</p>
+                {stage.rejected != null && stage.rejected > 0 && (
+                  <p className="mt-1 text-gray-300">{stage.rejectedLabel}</p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Threshold info */}
+      <div className="mt-3 pt-3 border-t border-purple-200 text-xs text-purple-600">
+        <div className="flex justify-between">
+          <span>TPI threshold:</span>
+          <span className="font-mono">{debug.chosen_tpi_threshold_m?.toFixed(1) || '—'}m</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Max slope:</span>
+          <span className="font-mono">{debug.chosen_slope_max_deg?.toFixed(0) || '—'}°</span>
+        </div>
+        {debug.auto_threshold_applied && (
+          <div className="mt-1 text-purple-500 italic">Auto-adjusted thresholds</div>
+        )}
+      </div>
+
+      {/* View analysis stats */}
+      {debug.avg_overlook_score != null && (
+        <div className="mt-2 pt-2 border-t border-purple-200 text-xs text-purple-600">
+          <div className="flex justify-between">
+            <span>Avg overlook score:</span>
+            <span className="font-mono">{(debug.avg_overlook_score * 100).toFixed(0)}%</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Avg open sky:</span>
+            <span className="font-mono">{((debug.avg_open_sky_fraction || 0) * 100).toFixed(0)}%</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -864,6 +1006,11 @@ export default function PhotoScout() {
   const [showAllPositions, setShowAllPositions] = useState(false);
   const [showRejectedCandidates, setShowRejectedCandidates] = useState(false);
   const [showAnalysisZones, setShowAnalysisZones] = useState(false);
+  // Scout coverage debug mode
+  const [showScoutDebug, setShowScoutDebug] = useState(false);
+  const [showDebugRimCandidates, setShowDebugRimCandidates] = useState(true);
+  const [showDebugLocalMaxima, setShowDebugLocalMaxima] = useState(true);
+  const [showDebugViewAnalyzed, setShowDebugViewAnalyzed] = useState(true);
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const overlaysRef = useRef<google.maps.MVCObject[]>([]);
@@ -879,8 +1026,9 @@ export default function PhotoScout() {
       date,
       event,
       radius_km: parseFloat(radius),
+      debug: showScoutDebug,  // Enable debug stats when scout debug mode is on
     });
-  }, [analyze, parsedCoords, date, event, radius]);
+  }, [analyze, parsedCoords, date, event, radius, showScoutDebug]);
 
   // Auto-select first good subject
   useEffect(() => {
@@ -895,14 +1043,32 @@ export default function PhotoScout() {
     }
   }, [result]);
 
+  // Get overlook standings (rim_overlook sources with no subject)
+  const overlookStandings = useMemo(
+    () => result?.standing_locations.filter((sl) => sl.source === 'rim_overlook' || sl.subject_id === null) || [],
+    [result]
+  );
+
   const selectedSubject = useMemo(
     () => result?.subjects.find((s) => s.subject_id === selectedSubjectId) || null,
     [result, selectedSubjectId]
   );
 
   const selectedStanding = useMemo(
-    () => result?.standing_locations.find((sl) => sl.subject_id === selectedSubjectId) || null,
-    [result, selectedSubjectId]
+    () => {
+      // First try to find a subject-based standing
+      const subjectStanding = result?.standing_locations.find((sl) => sl.subject_id === selectedSubjectId);
+      if (subjectStanding) return subjectStanding;
+      // Then try to find an overlook standing by standing_id
+      return overlookStandings.find((sl) => sl.standing_id === selectedSubjectId) || null;
+    },
+    [result, selectedSubjectId, overlookStandings]
+  );
+
+  // Check if selected item is an overlook (not a subject)
+  const selectedOverlook = useMemo(
+    () => overlookStandings.find((sl) => sl.standing_id === selectedSubjectId) || null,
+    [overlookStandings, selectedSubjectId]
   );
 
   // Verdict counts
@@ -1227,6 +1393,159 @@ export default function PhotoScout() {
       }
     });
 
+    // Draw rim-overlook standings (standalone viewpoints with no subject)
+    overlookStandings.forEach((overlook) => {
+      const isSelected = overlook.standing_id === selectedSubjectId;
+      const overlookScore = overlook.view?.overlook_score ?? 0;
+      const markerColor = overlookScore >= 0.7 ? "#0891b2" : overlookScore >= 0.4 ? "#06b6d4" : "#67e8f9";
+
+      // Overlook marker (eye icon)
+      if (isSelected || showAllPositions) {
+        const overlookMarker = new google.maps.Marker({
+          position: { lat: overlook.location.lat, lng: overlook.location.lon },
+          map,
+          icon: {
+            url: "data:image/svg+xml," + encodeURIComponent(`
+              <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="16" cy="16" r="14" fill="${markerColor}" stroke="white" stroke-width="3"/>
+                <ellipse cx="16" cy="16" rx="8" ry="5" fill="white" stroke="white"/>
+                <circle cx="16" cy="16" r="3" fill="${markerColor}"/>
+              </svg>
+            `),
+            scaledSize: new google.maps.Size(isSelected ? 36 : 28, isSelected ? 36 : 28),
+            anchor: new google.maps.Point(isSelected ? 18 : 14, isSelected ? 18 : 14),
+          },
+          title: `Overlook #${overlook.standing_id} - ${overlookScore >= 0.7 ? 'Great view' : overlookScore >= 0.4 ? 'Good view' : 'Limited view'}`,
+          zIndex: isSelected ? 100 : 50,
+        });
+        overlookMarker.addListener("click", () => setSelectedSubjectId(overlook.standing_id));
+        overlaysRef.current.push(overlookMarker);
+      }
+
+      // View cone for selected overlook
+      if (isSelected && overlook.view?.view_cone && overlook.view.view_cone.length >= 3) {
+        const viewConePolygon = new google.maps.Polygon({
+          paths: overlook.view.view_cone.map(([lat, lng]) => ({ lat, lng })),
+          strokeColor: "#0891b2", // darker cyan
+          strokeWeight: 2,
+          strokeOpacity: 0.9,
+          fillColor: "#06b6d4",
+          fillOpacity: 0.2,
+          map,
+          zIndex: 80,
+        });
+        overlaysRef.current.push(viewConePolygon);
+
+        // Best bearing direction line
+        if (overlook.view.best_bearing_deg != null) {
+          const bearing = overlook.view.best_bearing_deg;
+          const bearingRad = (bearing - 90) * Math.PI / 180;
+          const distanceM = 200;
+          const metersPerDegreeLat = 111320;
+          const metersPerDegreeLon = 111320 * Math.cos(overlook.location.lat * Math.PI / 180);
+
+          const endLat = overlook.location.lat + (distanceM * Math.sin(bearingRad + Math.PI / 2)) / metersPerDegreeLat;
+          const endLon = overlook.location.lon + (distanceM * Math.cos(bearingRad + Math.PI / 2)) / metersPerDegreeLon;
+
+          const bearingLine = new google.maps.Polyline({
+            path: [
+              { lat: overlook.location.lat, lng: overlook.location.lon },
+              { lat: endLat, lng: endLon },
+            ],
+            strokeColor: "#0891b2",
+            strokeWeight: 3,
+            strokeOpacity: 0.8,
+            icons: [
+              {
+                icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 4, fillColor: "#0891b2", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 1 },
+                offset: "100%",
+              },
+            ],
+            map,
+          });
+          overlaysRef.current.push(bearingLine);
+        }
+      }
+    });
+
+    // Draw scout coverage debug layers
+    if (showScoutDebug && result.meta.rim_overlook_debug) {
+      const debug = result.meta.rim_overlook_debug;
+
+      // Layer 1: Rim candidates (pre-NMS) - pink dots
+      if (showDebugRimCandidates && debug.sample_rim_candidates) {
+        debug.sample_rim_candidates.forEach((cand) => {
+          // Color by TPI - higher TPI = darker
+          const tpiNorm = Math.min(1, (cand.tpi_large_m - 20) / 80); // Normalize 20-100m range
+          const opacity = 0.3 + tpiNorm * 0.5;
+
+          const marker = new google.maps.Marker({
+            position: { lat: cand.lat, lng: cand.lon },
+            map,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 3,
+              fillColor: "#ec4899", // pink
+              fillOpacity: opacity,
+              strokeColor: "#fff",
+              strokeWeight: 0.5,
+            },
+            title: `Rim candidate: TPI=${cand.tpi_large_m.toFixed(1)}m, slope=${cand.slope_deg.toFixed(1)}°`,
+            zIndex: 5,
+          });
+          overlaysRef.current.push(marker);
+        });
+      }
+
+      // Layer 2: Local maxima (post-NMS) - yellow dots
+      if (showDebugLocalMaxima && debug.sample_local_maxima) {
+        debug.sample_local_maxima.forEach((maxima) => {
+          const strengthNorm = maxima.rim_strength;
+          const size = 4 + strengthNorm * 4;
+
+          const marker = new google.maps.Marker({
+            position: { lat: maxima.lat, lng: maxima.lon },
+            map,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: size,
+              fillColor: "#eab308", // yellow
+              fillOpacity: 0.7,
+              strokeColor: "#fff",
+              strokeWeight: 1,
+            },
+            title: `Local max: TPI=${maxima.tpi_large_m.toFixed(1)}m, strength=${(maxima.rim_strength * 100).toFixed(0)}%, elev=${maxima.elevation_m.toFixed(0)}m`,
+            zIndex: 10,
+          });
+          overlaysRef.current.push(marker);
+        });
+      }
+
+      // Layer 3: View analyzed points - cyan diamonds
+      if (showDebugViewAnalyzed && debug.sample_view_analyzed) {
+        debug.sample_view_analyzed.forEach((analyzed) => {
+          const scoreColor = analyzed.overlook_score >= 0.7 ? "#0891b2" :
+                            analyzed.overlook_score >= 0.4 ? "#06b6d4" : "#67e8f9";
+
+          const marker = new google.maps.Marker({
+            position: { lat: analyzed.lat, lng: analyzed.lon },
+            map,
+            icon: {
+              path: "M 0,-8 L 6,0 L 0,8 L -6,0 Z", // Diamond shape
+              scale: 1,
+              fillColor: scoreColor,
+              fillOpacity: 0.9,
+              strokeColor: "#fff",
+              strokeWeight: 1.5,
+            },
+            title: `View analyzed: score=${(analyzed.overlook_score * 100).toFixed(0)}%, depth=${analyzed.depth_p90_m.toFixed(0)}m, sky=${(analyzed.open_sky_fraction * 100).toFixed(0)}%`,
+            zIndex: 15,
+          });
+          overlaysRef.current.push(marker);
+        });
+      }
+    }
+
     // Fit bounds
     if (result.meta.dem_bounds) {
       const bounds = new google.maps.LatLngBounds(
@@ -1235,7 +1554,7 @@ export default function PhotoScout() {
       );
       map.fitBounds(bounds);
     }
-  }, [map, result, selectedSubjectId, showAllPositions, showRejectedCandidates, showAnalysisZones, parsedCoords]);
+  }, [map, result, selectedSubjectId, showAllPositions, showRejectedCandidates, showAnalysisZones, parsedCoords, overlookStandings, showScoutDebug, showDebugRimCandidates, showDebugLocalMaxima, showDebugViewAnalyzed]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1321,6 +1640,14 @@ export default function PhotoScout() {
               <div className="flex items-center gap-2">
                 <div className="w-4 h-3 rounded border-2 border-cyan-500 bg-cyan-100 opacity-70" />
                 <span>View cone</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 32 32">
+                  <circle cx="16" cy="16" r="12" fill="#0891b2" stroke="white" strokeWidth="2"/>
+                  <ellipse cx="16" cy="16" rx="6" ry="4" fill="white"/>
+                  <circle cx="16" cy="16" r="2" fill="#0891b2"/>
+                </svg>
+                <span>Rim overlook</span>
               </div>
               {/* Color key */}
               <div className="flex items-center gap-2 pt-1 border-t border-gray-100 mt-1">
@@ -1413,6 +1740,53 @@ export default function PhotoScout() {
                 )}
               </div>
             )}
+            {/* Scout coverage debug toggle */}
+            <div className="mt-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showScoutDebug}
+                  onChange={(e) => setShowScoutDebug(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                />
+                <Bug className="w-4 h-4 text-purple-500" />
+                <span>Scout coverage (debug)</span>
+              </label>
+              {showScoutDebug && (
+                <div className="mt-2 ml-6 space-y-1">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs">
+                    <input
+                      type="checkbox"
+                      checked={showDebugRimCandidates}
+                      onChange={(e) => setShowDebugRimCandidates(e.target.checked)}
+                      className="w-3 h-3 rounded border-gray-300 text-pink-500"
+                    />
+                    <div className="w-2 h-2 rounded-full bg-pink-400" />
+                    <span>Rim candidates (pre-NMS)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs">
+                    <input
+                      type="checkbox"
+                      checked={showDebugLocalMaxima}
+                      onChange={(e) => setShowDebugLocalMaxima(e.target.checked)}
+                      className="w-3 h-3 rounded border-gray-300 text-yellow-500"
+                    />
+                    <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                    <span>Local maxima (post-NMS)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs">
+                    <input
+                      type="checkbox"
+                      checked={showDebugViewAnalyzed}
+                      onChange={(e) => setShowDebugViewAnalyzed(e.target.checked)}
+                      className="w-3 h-3 rounded border-gray-300 text-cyan-500"
+                    />
+                    <div className="w-2 h-2 rounded-full bg-cyan-500" />
+                    <span>View analyzed</span>
+                  </label>
+                </div>
+              )}
+            </div>
             {/* Sun azimuth indicator */}
             {result && result.sun_track?.length > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-200">
@@ -1490,25 +1864,30 @@ export default function PhotoScout() {
           {/* Summary Header */}
           {result && (
             <div className="p-4 border-b">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-semibold text-lg">Lighting Zones</span>
-                <span className="text-sm text-muted-foreground">
-                  {result.subjects.length} zone{result.subjects.length !== 1 ? "s" : ""} found
-                </span>
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-lg">Scouting Results</span>
               </div>
-              <div className="flex gap-4">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 dark:bg-green-950 rounded-full">
-                  <CheckCircle className="w-4 h-4 text-green-600" weight="fill" />
-                  <span className="text-sm font-medium text-green-700 dark:text-green-400">{verdictCounts.yes} good</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-50 dark:bg-yellow-950 rounded-full">
-                  <Warning className="w-4 h-4 text-yellow-600" weight="fill" />
-                  <span className="text-sm font-medium text-yellow-700 dark:text-yellow-400">{verdictCounts.maybe} maybe</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 dark:bg-red-950 rounded-full">
-                  <XCircle className="w-4 h-4 text-red-500" weight="fill" />
-                  <span className="text-sm font-medium text-red-600 dark:text-red-400">{verdictCounts.no} skip</span>
-                </div>
+              {/* Zone-centric summary - success-oriented framing */}
+              <div className="flex items-center gap-3 text-sm">
+                {result.subjects.length > 0 && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 dark:bg-amber-950 rounded-full">
+                    <Sun className="w-4 h-4 text-amber-600" weight="fill" />
+                    <span className="font-medium text-amber-700 dark:text-amber-400">
+                      {result.subjects.length} lighting zone{result.subjects.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                )}
+                {overlookStandings.length > 0 && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-50 dark:bg-cyan-950 rounded-full">
+                    <Eye className="w-4 h-4 text-cyan-600" weight="fill" />
+                    <span className="font-medium text-cyan-700 dark:text-cyan-400">
+                      {overlookStandings.length} overlook{overlookStandings.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                )}
+                {result.subjects.length === 0 && overlookStandings.length === 0 && (
+                  <span className="text-muted-foreground">No viable locations found</span>
+                )}
               </div>
               {result.meta.dem_source && (
                 <div className="mt-3 text-xs text-muted-foreground">
@@ -1516,7 +1895,7 @@ export default function PhotoScout() {
                   {result.meta.dem_resolution_m && ` • ${result.meta.dem_resolution_m}m resolution`}
                 </div>
               )}
-              {result.meta.structure_debug && (
+              {result.meta.structure_debug && showScoutDebug && (
                 <div className="mt-1 text-xs text-purple-400 font-mono">
                   Structure: {result.meta.structure_debug.enabled ? "enabled" : "disabled"}
                   {" • "}{result.meta.structure_debug.computed_cells} cells computed
@@ -1528,6 +1907,11 @@ export default function PhotoScout() {
 
           {/* Shot Cards */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {/* Scouting Funnel (debug mode) - inside scrollable area */}
+            {showScoutDebug && result && (
+              <ScoutingFunnel debug={result.meta.rim_overlook_debug} />
+            )}
+
             {error && (
               <div className="p-4 bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400 rounded-lg">
                 {error}
@@ -1570,11 +1954,165 @@ export default function PhotoScout() {
               );
             })}
 
-            {result && result.subjects.length === 0 && (
+            {/* Rim Overlook Cards - standalone viewpoints with Top Picks / More Options */}
+            {overlookStandings.length > 0 && (() => {
+              // Sort overlooks by score (highest first) and compute zone stats
+              const sortedOverlooks = [...overlookStandings].sort((a, b) =>
+                (b.view?.overlook_score ?? 0) - (a.view?.overlook_score ?? 0)
+              );
+              const topPicks = sortedOverlooks.slice(0, 3);
+              const moreOptions = sortedOverlooks.slice(3);
+
+              // Compute zone score for debug display
+              const top3Scores = topPicks.map(o => o.view?.overlook_score ?? 0);
+              const top3Avg = top3Scores.length > 0 ? top3Scores.reduce((a, b) => a + b, 0) / top3Scores.length : 0;
+              const epicCount = sortedOverlooks.filter(o => o.view?.view_category === 'EPIC_OVERLOOK').length;
+              const total = sortedOverlooks.length;
+              const zoneScore = 0.55 * top3Avg + 0.25 * Math.min(1, epicCount / 3) + 0.20 * Math.min(1, total / 20);
+
+              // Get category label
+              const getCategoryLabel = (category?: string) => {
+                switch (category) {
+                  case 'EPIC_OVERLOOK': return { label: 'Epic Overlook', color: 'text-purple-700', bgColor: 'bg-purple-100' };
+                  case 'DRAMATIC_ENCLOSED': return { label: 'Dramatic View', color: 'text-indigo-700', bgColor: 'bg-indigo-100' };
+                  default: return { label: 'Scenic View', color: 'text-cyan-700', bgColor: 'bg-cyan-100' };
+                }
+              };
+
+              const renderOverlookCard = (overlook: typeof overlookStandings[0], isTopPick: boolean) => {
+                const isSelected = overlook.standing_id === selectedSubjectId;
+                const overlookScore = overlook.view?.overlook_score ?? 0;
+                const category = getCategoryLabel(overlook.view?.view_category);
+
+                return (
+                  <Card
+                    key={overlook.standing_id}
+                    className={`cursor-pointer transition-all ${
+                      isSelected ? "ring-2 ring-cyan-500 shadow-md" : "hover:shadow-md"
+                    } ${isTopPick ? "" : "opacity-90"}`}
+                    onClick={() => setSelectedSubjectId(overlook.standing_id)}
+                  >
+                    <CardContent className={isTopPick ? "p-4" : "p-3"}>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <div className={`${isTopPick ? "w-10 h-10" : "w-8 h-8"} rounded-full bg-cyan-100 flex items-center justify-center`}>
+                            <Eye className={`${isTopPick ? "w-6 h-6" : "w-5 h-5"} text-cyan-600`} weight="fill" />
+                          </div>
+                          <div>
+                            <div className={`${isTopPick ? "font-bold text-lg" : "font-semibold text-base"} flex items-center gap-2`}>
+                              {overlook.view?.view_category === 'EPIC_OVERLOOK' ? 'Epic Overlook' :
+                               overlook.view?.view_category === 'DRAMATIC_ENCLOSED' ? 'Dramatic View' : 'Rim Overlook'}
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${category.bgColor} ${category.color}`}>
+                                {Math.round(overlookScore * 100)}%
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              Face {degreesToCompass(overlook.view?.best_bearing_deg ?? 0)} for best view
+                            </div>
+                          </div>
+                        </div>
+                        {overlook.nav_link && isTopPick && (
+                          <a
+                            href={overlook.nav_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-cyan-600 hover:text-cyan-800 hover:bg-cyan-100 rounded transition-colors"
+                          >
+                            <MapPin className="w-4 h-4" />
+                            Navigate
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Chips for key metrics */}
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {overlook.view?.depth_p90_m != null && (
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
+                            Depth: {(overlook.view.depth_p90_m / 1000).toFixed(1)}km
+                          </span>
+                        )}
+                        {overlook.view?.open_sky_fraction != null && (
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
+                            Open ahead: {Math.round(overlook.view.open_sky_fraction * 100)}%
+                          </span>
+                        )}
+                        {overlook.properties.access_type && overlook.properties.access_type !== 'none' && (
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            overlook.properties.access_type === 'road' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {overlook.properties.access_type}
+                            {overlook.properties.distance_to_road_m != null && ` ${Math.round(overlook.properties.distance_to_road_m)}m`}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Explanation - only for top picks */}
+                      {isTopPick && overlook.view?.explanations && (
+                        <p className="text-sm text-gray-600 leading-relaxed">
+                          {overlook.view.explanations.short}
+                        </p>
+                      )}
+
+                      {/* Coordinates in debug section - only for top picks */}
+                      {isTopPick && (
+                        <Collapsible className="mt-3">
+                          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
+                            <CaretDown className="w-3 h-3" />
+                            Coordinates
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mt-2 p-2 bg-gray-50 rounded text-xs font-mono">
+                            <div>{overlook.location.lat.toFixed(6)}, {overlook.location.lon.toFixed(6)}</div>
+                            <div className="text-gray-500 mt-1">Elevation: {Math.round(overlook.properties.elevation_diff_m || 0)}m relative</div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              };
+
+              return (
+                <>
+                  {/* Top Picks Header */}
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                    <div className="flex items-center gap-2">
+                      <Eye className="w-5 h-5 text-cyan-600" weight="fill" />
+                      <h3 className="font-semibold text-sm text-gray-700">Top Picks</h3>
+                      <span className="text-xs text-gray-500">({topPicks.length} of {sortedOverlooks.length})</span>
+                    </div>
+                    {/* Debug: show zone score */}
+                    {showScoutDebug && (
+                      <div className="text-xs font-mono text-gray-400">
+                        score={zoneScore.toFixed(2)} (top3={top3Avg.toFixed(2)}, epic={epicCount}, n={total})
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Top 3 Picks - always visible */}
+                  {topPicks.map(overlook => renderOverlookCard(overlook, true))}
+
+                  {/* More Options - collapsed by default */}
+                  {moreOptions.length > 0 && (
+                    <Collapsible className="mt-2">
+                      <CollapsibleTrigger className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm text-gray-600 hover:text-gray-800 transition-colors">
+                        <CaretDown className="w-4 h-4" />
+                        <span>+{moreOptions.length} more overlook{moreOptions.length !== 1 ? "s" : ""}</span>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-2 space-y-2">
+                        {moreOptions.map(overlook => renderOverlookCard(overlook, false))}
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )}
+                </>
+              );
+            })()}
+
+            {result && result.subjects.length === 0 && overlookStandings.length === 0 && (
               <div className="text-center text-muted-foreground py-12">
                 <Mountains className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                <p>No lighting zones found</p>
-                <p className="text-sm mt-2">Try a location with more varied terrain</p>
+                <p>No viable overlooks found</p>
+                <p className="text-sm mt-2">Try a location with more dramatic terrain or canyon edges</p>
               </div>
             )}
           </div>

@@ -60,6 +60,7 @@ class AnalyzeRequestModel(BaseModel):
 
 def dataclass_to_dict(obj):
     """Recursively convert dataclass instances to dicts."""
+    import numpy as np
     if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
         return {k: dataclass_to_dict(v) for k, v in dataclasses.asdict(obj).items()}
     elif isinstance(obj, list):
@@ -68,6 +69,12 @@ def dataclass_to_dict(obj):
         return {k: dataclass_to_dict(v) for k, v in obj.items()}
     elif isinstance(obj, tuple):
         return list(obj)
+    elif isinstance(obj, (np.bool_, np.integer)):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
     else:
         return obj
 

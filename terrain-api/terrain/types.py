@@ -380,9 +380,13 @@ class RimOverlookDebugStats:
     grid_cells_total: int = 0
     rim_mask_cells: int = 0
     rim_local_maxima_cells: int = 0
+    maxima_found_total: int = 0  # Total local maxima found before any cap
+    maxima_kept: int = 0  # Local maxima kept after max_candidates cap
+    maxima_cap_used: int = 0  # Dynamic cap that was applied
     rim_candidates_selected: int = 0
-    view_analysis_run: int = 0
-    results_after_dedup: int = 0
+    view_analyzed_total: int = 0  # Total candidates that got view analysis
+    results_pre_dedup: int = 0  # Results before spatial deduplication
+    results_post_dedup: int = 0  # Results after spatial deduplication (final)
 
     # TPI distribution stats (within AOI)
     tpi_large_m_p50: float = 0.0
@@ -403,9 +407,18 @@ class RimOverlookDebugStats:
     # Drop reason breakdown
     rejected_slope: int = 0
     rejected_tpi: int = 0
+    rejected_edge: int = 0  # Rejected by edge gating
     rejected_nms: int = 0
+    rejected_maxima_cap: int = 0  # Rejected by maxima cap
     rejected_topk: int = 0
-    rejected_dedup: int = 0
+    rejected_after_view_dedup: int = 0  # Rejected by spatial deduplication after view
+
+    # Edge gating stats
+    rim_mask_cells_before_edge_gate: int = 0
+    rim_mask_cells_after_edge_gate: int = 0
+    edge_mode: str = "STEEP_ADJACENCY"  # SLOPE_BREAK, STEEP_ADJACENCY, BOTH, NONE
+    steep_cells_count: int = 0
+    near_steep_cells_count: int = 0
 
     # Auto-threshold: chosen thresholds (after adjustment)
     chosen_tpi_threshold_m: Optional[float] = None
@@ -418,6 +431,12 @@ class RimOverlookDebugStats:
     pct_results_within_access_distance: Optional[float] = None  # % of final results within access_max_distance_m
     distance_to_access_p50_m: Optional[float] = None  # Median distance to nearest road/trail
     distance_to_access_p90_m: Optional[float] = None  # 90th percentile distance
+
+    # Sample coordinates for debug visualization (only populated when debug=True)
+    # Each is a list of dicts with lat, lon, and relevant metrics
+    sample_rim_candidates: Optional[List[Dict]] = None  # Pre-NMS rim candidates (sampled)
+    sample_local_maxima: Optional[List[Dict]] = None  # Post-NMS local maxima
+    sample_view_analyzed: Optional[List[Dict]] = None  # Points that went through view analysis
 
 
 @dataclass

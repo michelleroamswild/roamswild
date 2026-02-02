@@ -50,6 +50,7 @@ export function useTerrainAnalysis(): UseTerrainAnalysisResult {
           date: request.date,
           event: request.event,
           radius_km: request.radius_km,
+          debug: request.debug ?? false,
         }),
       });
 

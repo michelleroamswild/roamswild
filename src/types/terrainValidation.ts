@@ -297,6 +297,90 @@ export interface StructureDebug {
   attached_to_subjects: number;
 }
 
+// Sample rim candidate for debug visualization
+export interface SampleRimCandidate {
+  lat: number;
+  lon: number;
+  tpi_large_m: number;
+  slope_deg: number;
+}
+
+// Sample local maxima for debug visualization
+export interface SampleLocalMaxima {
+  lat: number;
+  lon: number;
+  tpi_large_m: number;
+  slope_deg: number;
+  rim_strength: number;
+  elevation_m: number;
+}
+
+// Sample view analyzed point for debug visualization
+export interface SampleViewAnalyzed {
+  lat: number;
+  lon: number;
+  overlook_score: number;
+  depth_p90_m: number;
+  open_sky_fraction: number;
+  rim_strength: number;
+}
+
+// Rim overlook debug stats
+export interface RimOverlookDebugStats {
+  // Stage counts (funnel)
+  grid_cells_total: number;
+  rim_mask_cells: number;
+  rim_local_maxima_cells: number;
+  maxima_found_total: number;  // Total local maxima before cap
+  maxima_kept: number;  // Local maxima kept after max_candidates cap
+  maxima_cap_used: number;  // Dynamic cap that was applied
+  rim_candidates_selected: number;
+  view_analyzed_total: number;  // Total candidates that got view analysis
+  results_pre_dedup: number;  // Results before spatial deduplication
+  results_post_dedup: number;  // Results after spatial deduplication (final)
+  // TPI distribution stats
+  tpi_large_m_p50: number;
+  tpi_large_m_p90: number;
+  tpi_large_m_p95: number;
+  // Slope distribution stats
+  slope_deg_pct_under_20: number;
+  slope_deg_pct_under_25: number;
+  slope_deg_pct_under_30: number;
+  // View analysis stats
+  depth_p90_m_p50?: number;
+  depth_p90_m_p90?: number;
+  avg_open_sky_fraction?: number;
+  avg_overlook_score?: number;
+  // Drop reason breakdown
+  rejected_slope: number;
+  rejected_tpi: number;
+  rejected_edge: number;  // Rejected by edge gating
+  rejected_nms: number;
+  rejected_maxima_cap: number;  // Rejected by maxima cap
+  rejected_topk: number;
+  rejected_after_view_dedup: number;  // Rejected by spatial deduplication
+  // Edge gating stats
+  rim_mask_cells_before_edge_gate: number;
+  rim_mask_cells_after_edge_gate: number;
+  edge_mode: 'SLOPE_BREAK' | 'STEEP_ADJACENCY' | 'BOTH' | 'NONE';
+  steep_cells_count: number;
+  near_steep_cells_count: number;
+  // Auto-threshold info
+  chosen_tpi_threshold_m?: number;
+  chosen_slope_max_deg?: number;
+  chosen_view_candidates_k?: number;
+  auto_threshold_applied: boolean;
+  // Access proximity stats
+  access_bias_applied: string;
+  pct_results_within_access_distance?: number;
+  distance_to_access_p50_m?: number;
+  distance_to_access_p90_m?: number;
+  // Sample coordinates for debug visualization
+  sample_rim_candidates?: SampleRimCandidate[];
+  sample_local_maxima?: SampleLocalMaxima[];
+  sample_view_analyzed?: SampleViewAnalyzed[];
+}
+
 // Analysis metadata
 export interface AnalysisMeta {
   request_id: string;
@@ -315,6 +399,7 @@ export interface AnalysisMeta {
   dem_vertical_accuracy_m?: number;
   dem_citation?: string;
   structure_debug?: StructureDebug;
+  rim_overlook_debug?: RimOverlookDebugStats;
 }
 
 // =============================================================================
@@ -442,6 +527,7 @@ export interface AnalyzeRequest {
   date: string;
   event: 'sunrise' | 'sunset';
   radius_km: number;
+  debug?: boolean;  // Enable debug stats in response
 }
 
 // Layer visibility state

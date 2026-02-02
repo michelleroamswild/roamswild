@@ -889,11 +889,16 @@ TPI_THRESHOLD_MAX = 30.0
 SLOPE_MAX_DEG_MIN = 18.0
 SLOPE_MAX_DEG_MAX = 32.0
 
-# View analysis scaling
-VIEW_CANDIDATES_MIN = 50    # Minimum candidates for view analysis
-VIEW_CANDIDATES_MAX = 80    # Maximum candidates for view analysis
-TARGET_RESULTS_MIN = 8      # If fewer results, increase view candidates
+# View analysis scaling - increased for better coverage on large AOIs
+VIEW_CANDIDATES_MIN = 150   # Minimum candidates for view analysis
+VIEW_CANDIDATES_MAX = 500   # Maximum candidates for view analysis
+TARGET_RESULTS_MIN = 15     # If fewer results, increase view candidates
 TARGET_RESULTS_MAX = 30     # Cap final results at this
+
+# Local maxima cap scaling
+MAXIMA_CAP_MIN = 500        # Minimum maxima to keep after NMS
+MAXIMA_CAP_MAX = 2000       # Maximum maxima to keep after NMS
+MAXIMA_CAP_DIVISOR = 100    # grid_cells / divisor = base cap
 
 
 def compute_auto_thresholds(
@@ -1504,6 +1509,7 @@ def generate_rim_overlook_standings(
         compute_rim_candidate_mask,
         compute_rim_strength_grid,
         extract_rim_candidates_nms,
+        RIM_EDGE_MODE_DEFAULT,
     )
 
     rows, cols = tpi_large.shape
@@ -1539,9 +1545,13 @@ def generate_rim_overlook_standings(
             'grid_cells_total': total_cells,
             'rim_mask_cells': 0,
             'rim_local_maxima_cells': 0,
+            'maxima_found_total': 0,  # Total local maxima before cap
+            'maxima_kept': 0,  # Local maxima kept after max_candidates cap
+            'maxima_cap_used': 0,  # The dynamic cap applied
             'rim_candidates_selected': 0,
-            'view_analysis_run': 0,
-            'results_after_dedup': 0,
+            'view_analyzed_total': 0,  # Total candidates that got view analysis
+            'results_pre_dedup': 0,  # Results before spatial deduplication
+            'results_post_dedup': 0,  # Results after spatial deduplication (final)
             # TPI stats
             'tpi_large_m_p50': float(np.percentile(tpi_large, 50)),
             'tpi_large_m_p90': float(np.percentile(tpi_large, 90)),
@@ -1558,9 +1568,17 @@ def generate_rim_overlook_standings(
             # Drop reason breakdown
             'rejected_slope': 0,
             'rejected_tpi': 0,
+            'rejected_edge': 0,  # Rejected by edge gating (not near steep/slope break)
             'rejected_nms': 0,
+            'rejected_maxima_cap': 0,  # Rejected by maxima cap
             'rejected_topk': 0,
-            'rejected_dedup': 0,
+            'rejected_after_view_dedup': 0,  # Rejected by spatial deduplication
+            # Edge gating stats
+            'rim_mask_cells_before_edge_gate': 0,
+            'rim_mask_cells_after_edge_gate': 0,
+            'edge_mode': 'STEEP_ADJACENCY',
+            'steep_cells_count': 0,
+            'near_steep_cells_count': 0,
             # Auto-threshold info
             'chosen_tpi_threshold_m': chosen_tpi,
             'chosen_slope_max_deg': chosen_slope,
@@ -1579,19 +1597,53 @@ def generate_rim_overlook_standings(
         debug_stats['rejected_tpi'] = int(np.sum(~tpi_pass))
         debug_stats['rejected_slope'] = int(np.sum(tpi_pass & ~slope_pass))
 
-    # Step 1: Build per-cell rim candidate mask (using chosen thresholds)
-    rim_mask = compute_rim_candidate_mask(
+    # Step 1: Build per-cell rim candidate mask (using chosen thresholds + edge gating)
+    rim_mask, edge_debug = compute_rim_candidate_mask(
         tpi_large=tpi_large,
         slope_deg=slope_deg,
         tpi_threshold_m=chosen_tpi,
         slope_max_deg=chosen_slope,
+        edge_mode=RIM_EDGE_MODE_DEFAULT,  # STEEP_ADJACENCY by default
+        return_debug=True,
     )
 
     mask_count = int(np.sum(rim_mask))
-    logging.info(f"Rim overlook: {mask_count} cells pass rim mask (TPI>{chosen_tpi:.1f}m, slope<{chosen_slope:.1f}°)")
+    before_edge = edge_debug.get('rim_mask_cells_before_edge_gate', mask_count)
+    logging.info(
+        f"Rim overlook: {mask_count} cells pass rim mask "
+        f"(TPI>{chosen_tpi:.1f}m, slope<{chosen_slope:.1f}°, "
+        f"edge mode={edge_debug.get('edge_mode')}, "
+        f"before edge gate={before_edge})"
+    )
 
     if collect_debug_stats:
         debug_stats['rim_mask_cells'] = mask_count
+        # Edge gating debug stats
+        debug_stats['rim_mask_cells_before_edge_gate'] = edge_debug.get('rim_mask_cells_before_edge_gate', mask_count)
+        debug_stats['rim_mask_cells_after_edge_gate'] = edge_debug.get('rim_mask_cells_after_edge_gate', mask_count)
+        debug_stats['edge_mode'] = edge_debug.get('edge_mode', 'NONE')
+        debug_stats['steep_cells_count'] = edge_debug.get('steep_cells_count', 0)
+        debug_stats['near_steep_cells_count'] = edge_debug.get('near_steep_cells_count', 0)
+        # Update rejected counts to include edge rejection
+        debug_stats['rejected_edge'] = edge_debug.get('rim_mask_cells_before_edge_gate', 0) - edge_debug.get('rim_mask_cells_after_edge_gate', 0)
+
+        # Sample pre-NMS rim candidates for debug visualization
+        # Take up to 200 random samples from mask cells
+        mask_indices = np.argwhere(rim_mask)
+        sample_count = min(200, len(mask_indices))
+        if sample_count > 0:
+            sample_idx = np.random.choice(len(mask_indices), size=sample_count, replace=False)
+            sample_rim_candidates = []
+            for idx in sample_idx:
+                row, col = mask_indices[idx]
+                lat, lon = dem.indices_to_lat_lon(int(row), int(col))
+                sample_rim_candidates.append({
+                    'lat': float(lat),
+                    'lon': float(lon),
+                    'tpi_large_m': float(tpi_large[row, col]),
+                    'slope_deg': float(slope_deg[row, col]),
+                })
+            debug_stats['sample_rim_candidates'] = sample_rim_candidates
 
     if mask_count == 0:
         logging.info("Rim overlook: No rim candidate cells found")
@@ -1600,8 +1652,14 @@ def generate_rim_overlook_standings(
     # Step 2: Compute rim strength grid
     rim_strength = compute_rim_strength_grid(tpi_large)
 
-    # Step 3: Extract distinct candidates via NMS
-    rim_candidates = extract_rim_candidates_nms(
+    # Step 3: Extract distinct candidates via NMS with spatial tiling
+    # Dynamic maxima cap based on AOI size: larger AOIs get more candidates
+    # Formula: min(2000, max(500, grid_cells / 100))
+    dynamic_maxima_cap = min(MAXIMA_CAP_MAX, max(MAXIMA_CAP_MIN, total_cells // MAXIMA_CAP_DIVISOR))
+    logging.info(f"Rim overlook: Dynamic maxima cap = {dynamic_maxima_cap} (from {total_cells} grid cells)")
+
+    # Use spatial tiling to ensure even distribution across AOI
+    rim_candidates, total_maxima_found = extract_rim_candidates_nms(
         rim_mask=rim_mask,
         rim_strength=rim_strength,
         tpi_large=tpi_large,
@@ -1609,18 +1667,46 @@ def generate_rim_overlook_standings(
         elevations=elevations,
         dem_grid=dem,
         neighborhood_size=5,
-        max_candidates=500,
+        max_candidates=dynamic_maxima_cap,
+        use_spatial_tiling=True,  # Enable spatial tiling to prevent clustering
+        tile_count=16,  # 4x4 grid
     )
 
     nms_count = len(rim_candidates)
-    logging.info(f"Rim overlook: {nms_count} candidates after NMS (from {mask_count} cells)")
+    logging.info(f"Rim overlook: {nms_count} candidates after NMS (from {mask_count} cells, {total_maxima_found} total maxima found)")
 
     if collect_debug_stats:
         debug_stats['rim_local_maxima_cells'] = nms_count
-        debug_stats['rejected_nms'] = mask_count - nms_count
+        debug_stats['maxima_found_total'] = total_maxima_found  # Total before cap
+        debug_stats['maxima_kept'] = nms_count  # After max_candidates cap
+        debug_stats['maxima_cap_used'] = dynamic_maxima_cap
+        debug_stats['rejected_nms'] = mask_count - total_maxima_found  # Rejected by NMS itself
+        debug_stats['rejected_maxima_cap'] = max(0, total_maxima_found - nms_count)  # Rejected by cap
+
+        # Sample local maxima (post-NMS) for debug visualization
+        sample_local_maxima = []
+        for cand in rim_candidates[:200]:  # Take up to 200 maxima
+            sample_local_maxima.append({
+                'lat': float(cand.lat),
+                'lon': float(cand.lon),
+                'tpi_large_m': float(cand.tpi_large_m),
+                'slope_deg': float(cand.slope_deg),
+                'rim_strength': float(cand.rim_strength),
+                'elevation_m': float(cand.elevation_m),
+            })
+        debug_stats['sample_local_maxima'] = sample_local_maxima
 
     if not rim_candidates:
         return [], debug_stats
+
+    # Scale view_analyzed_k based on maxima count
+    # More maxima = analyze more candidates for better coverage
+    # Formula: min(500, max(150, sqrt(maxima_found_total) * 12))
+    # Example: 1000 maxima -> sqrt(1000)*12 = ~379 view candidates
+    scaled_view_k = min(VIEW_CANDIDATES_MAX, max(VIEW_CANDIDATES_MIN, int(math.sqrt(total_maxima_found) * 12)))
+    # Don't exceed what we have
+    chosen_top_k = min(scaled_view_k, nms_count)
+    logging.info(f"Rim overlook: Scaling view analysis K to {chosen_top_k} (formula gave {scaled_view_k}, have {nms_count} maxima)")
 
     # Step 4: Apply access bias ranking (if enabled) before selecting top-K
     # This biases results toward accessible locations without excluding remote ones
@@ -1701,19 +1787,39 @@ def generate_rim_overlook_standings(
             overlook_score_values.append(view.overlook_score)
 
     if collect_debug_stats:
-        debug_stats['view_analysis_run'] = len(top_standings)
         if depth_p90_values:
             debug_stats['depth_p90_m_p50'] = float(np.percentile(depth_p90_values, 50))
             debug_stats['depth_p90_m_p90'] = float(np.percentile(depth_p90_values, 90))
             debug_stats['avg_open_sky_fraction'] = float(np.mean(open_sky_values))
             debug_stats['avg_overlook_score'] = float(np.mean(overlook_score_values))
 
-    # Step 6: Deduplicate spatially
+        # Sample view analyzed points for debug visualization
+        sample_view_analyzed = []
+        for standing in top_standings:
+            view = standing.view
+            sample_view_analyzed.append({
+                'lat': float(standing.location['lat']),
+                'lon': float(standing.location['lon']),
+                'overlook_score': float(view.overlook_score) if view else 0.0,
+                'depth_p90_m': float(view.depth_p90_m) if view else 0.0,
+                'open_sky_fraction': float(view.open_sky_fraction) if view else 0.0,
+                'rim_strength': float(getattr(standing.properties, 'rim_strength', 0.0)),
+            })
+        debug_stats['sample_view_analyzed'] = sample_view_analyzed
+
+    # Track total analyzed for debug stats
+    all_analyzed = list(top_standings)
+    view_analyzed_total = len(top_standings)
+
+    # Step 6: Deduplicate spatially (first pass)
     final_standings = deduplicate_overlooks_spatially(
         overlook_standings=top_standings,
         min_distance_m=dedup_distance_m,
         max_results=max_results,
     )
+
+    # Track pre-dedup count (all analyzed candidates)
+    results_pre_dedup = len(top_standings)
 
     # Step 6b: Yield boost - if results are too few and we have more candidates,
     # increase top_k and run view analysis on additional candidates
@@ -1755,6 +1861,9 @@ def generate_rim_overlook_standings(
 
         # Re-deduplicate with all analyzed candidates
         all_analyzed = top_standings + additional_standings
+        view_analyzed_total = len(all_analyzed)
+        results_pre_dedup = len(all_analyzed)
+
         final_standings = deduplicate_overlooks_spatially(
             overlook_standings=all_analyzed,
             min_distance_m=dedup_distance_m,
@@ -1763,15 +1872,11 @@ def generate_rim_overlook_standings(
 
         chosen_top_k = boost_k
 
-        if collect_debug_stats:
-            debug_stats['view_analysis_run'] = len(all_analyzed)
-            debug_stats['chosen_view_candidates_k'] = chosen_top_k
-            debug_stats['rejected_topk'] = len(standings) - len(all_analyzed)
-            if depth_p90_values:
-                debug_stats['depth_p90_m_p50'] = float(np.percentile(depth_p90_values, 50))
-                debug_stats['depth_p90_m_p90'] = float(np.percentile(depth_p90_values, 90))
-                debug_stats['avg_open_sky_fraction'] = float(np.mean(open_sky_values))
-                debug_stats['avg_overlook_score'] = float(np.mean(overlook_score_values))
+        if collect_debug_stats and depth_p90_values:
+            debug_stats['depth_p90_m_p50'] = float(np.percentile(depth_p90_values, 50))
+            debug_stats['depth_p90_m_p90'] = float(np.percentile(depth_p90_values, 90))
+            debug_stats['avg_open_sky_fraction'] = float(np.mean(open_sky_values))
+            debug_stats['avg_overlook_score'] = float(np.mean(overlook_score_values))
 
         logging.info(f"Rim overlook: After yield boost, {len(final_standings)} results")
 
@@ -1780,9 +1885,15 @@ def generate_rim_overlook_standings(
         final_standings = final_standings[:TARGET_RESULTS_MAX]
         logging.info(f"Rim overlook: Capped to {TARGET_RESULTS_MAX} results")
 
+    # Final counts
+    results_post_dedup = len(final_standings)
+
     if collect_debug_stats:
-        debug_stats['results_after_dedup'] = len(final_standings)
-        debug_stats['rejected_dedup'] = debug_stats['view_analysis_run'] - len(final_standings)
+        debug_stats['view_analyzed_total'] = view_analyzed_total
+        debug_stats['results_pre_dedup'] = results_pre_dedup
+        debug_stats['results_post_dedup'] = results_post_dedup
+        debug_stats['rejected_after_view_dedup'] = results_pre_dedup - results_post_dedup
+        debug_stats['rejected_topk'] = len(standings) - view_analyzed_total
         debug_stats['chosen_view_candidates_k'] = chosen_top_k
 
     logging.info(

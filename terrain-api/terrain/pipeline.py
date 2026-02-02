@@ -75,6 +75,8 @@ from .illumination import (
 )
 from .shadows import check_shadow_at_peak
 from .standing import find_standing_location, _summarize_rejections, log_rejection_histogram
+from .view import generate_view_cone
+from .types import OverlookView
 from .accessibility import (
     fetch_osm_roads,
     fetch_osm_landcover,
@@ -827,6 +829,29 @@ async def analyze_terrain(
                 f"Subject {subject.subject_id} accessible: {accessibility.accessibility_status} [{access_debug}]"
             )
 
+        # Generate view cone for subject standing (showing field of view toward subject)
+        # FOV is ~70° for typical landscape framing
+        subject_view_fov = 70.0
+        subject_view_cone = generate_view_cone(
+            dem=dem,
+            lat=standing.location["lat"],
+            lon=standing.location["lon"],
+            best_bearing_deg=standing.properties.camera_bearing_deg,
+            fov_deg=subject_view_fov,
+            depth_p50_m=standing.properties.distance_to_subject_m,
+        )
+        standing.view = OverlookView(
+            open_sky_fraction=0.5,  # Assumed for subject standings
+            depth_p50_m=standing.properties.distance_to_subject_m,
+            depth_p90_m=standing.properties.distance_to_subject_m * 1.5,
+            horizon_complexity=1,
+            overlook_score=0.8,  # Good view of subject
+            best_bearing_deg=standing.properties.camera_bearing_deg,
+            fov_deg=subject_view_fov,
+            view_cone=subject_view_cone,
+            explanations=None,
+        )
+
         standing_locations.append(standing)
 
         if is_top_peak:
@@ -965,6 +990,27 @@ async def analyze_terrain(
                     f"{facet_accessibility.rejection_reason}"
                 )
                 continue
+
+            # Generate view cone for facet standing
+            facet_view_cone = generate_view_cone(
+                dem=dem,
+                lat=facet_standing.location["lat"],
+                lon=facet_standing.location["lon"],
+                best_bearing_deg=facet_standing.properties.camera_bearing_deg,
+                fov_deg=70.0,
+                depth_p50_m=facet_standing.properties.distance_to_subject_m,
+            )
+            facet_standing.view = OverlookView(
+                open_sky_fraction=0.5,  # Assumed for facet standings
+                depth_p50_m=facet_standing.properties.distance_to_subject_m,
+                depth_p90_m=facet_standing.properties.distance_to_subject_m * 1.5,
+                horizon_complexity=1,
+                overlook_score=0.7,  # Slightly lower for facets
+                best_bearing_deg=facet_standing.properties.camera_bearing_deg,
+                fov_deg=70.0,
+                view_cone=facet_view_cone,
+                explanations=None,
+            )
 
             standing_locations.append(facet_standing)
             logging.info(
@@ -1108,9 +1154,13 @@ async def analyze_terrain(
             grid_cells_total=rim_debug_stats.get('grid_cells_total', 0),
             rim_mask_cells=rim_debug_stats.get('rim_mask_cells', 0),
             rim_local_maxima_cells=rim_debug_stats.get('rim_local_maxima_cells', 0),
+            maxima_found_total=rim_debug_stats.get('maxima_found_total', 0),
+            maxima_kept=rim_debug_stats.get('maxima_kept', 0),
+            maxima_cap_used=rim_debug_stats.get('maxima_cap_used', 0),
             rim_candidates_selected=rim_debug_stats.get('rim_candidates_selected', 0),
-            view_analysis_run=rim_debug_stats.get('view_analysis_run', 0),
-            results_after_dedup=rim_debug_stats.get('results_after_dedup', 0),
+            view_analyzed_total=rim_debug_stats.get('view_analyzed_total', 0),
+            results_pre_dedup=rim_debug_stats.get('results_pre_dedup', 0),
+            results_post_dedup=rim_debug_stats.get('results_post_dedup', 0),
             tpi_large_m_p50=rim_debug_stats.get('tpi_large_m_p50', 0.0),
             tpi_large_m_p90=rim_debug_stats.get('tpi_large_m_p90', 0.0),
             tpi_large_m_p95=rim_debug_stats.get('tpi_large_m_p95', 0.0),
@@ -1123,14 +1173,26 @@ async def analyze_terrain(
             avg_overlook_score=rim_debug_stats.get('avg_overlook_score'),
             rejected_slope=rim_debug_stats.get('rejected_slope', 0),
             rejected_tpi=rim_debug_stats.get('rejected_tpi', 0),
+            rejected_edge=rim_debug_stats.get('rejected_edge', 0),
             rejected_nms=rim_debug_stats.get('rejected_nms', 0),
+            rejected_maxima_cap=rim_debug_stats.get('rejected_maxima_cap', 0),
             rejected_topk=rim_debug_stats.get('rejected_topk', 0),
-            rejected_dedup=rim_debug_stats.get('rejected_dedup', 0),
+            rejected_after_view_dedup=rim_debug_stats.get('rejected_after_view_dedup', 0),
+            # Edge gating stats
+            rim_mask_cells_before_edge_gate=rim_debug_stats.get('rim_mask_cells_before_edge_gate', 0),
+            rim_mask_cells_after_edge_gate=rim_debug_stats.get('rim_mask_cells_after_edge_gate', 0),
+            edge_mode=rim_debug_stats.get('edge_mode', 'STEEP_ADJACENCY'),
+            steep_cells_count=rim_debug_stats.get('steep_cells_count', 0),
+            near_steep_cells_count=rim_debug_stats.get('near_steep_cells_count', 0),
             # Auto-threshold fields
             chosen_tpi_threshold_m=rim_debug_stats.get('chosen_tpi_threshold_m'),
             chosen_slope_max_deg=rim_debug_stats.get('chosen_slope_max_deg'),
             chosen_view_candidates_k=rim_debug_stats.get('chosen_view_candidates_k'),
             auto_threshold_applied=rim_debug_stats.get('auto_threshold_applied', False),
+            # Sample coordinates for debug visualization
+            sample_rim_candidates=rim_debug_stats.get('sample_rim_candidates'),
+            sample_local_maxima=rim_debug_stats.get('sample_local_maxima'),
+            sample_view_analyzed=rim_debug_stats.get('sample_view_analyzed'),
         )
 
     # Build result
