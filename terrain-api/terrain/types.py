@@ -303,6 +303,174 @@ class ViewExplanations:
 
 
 @dataclass
+class VisualAnchor:
+    """
+    Visual Anchor Score (VAS) for detecting salient features in the view cone.
+
+    Identifies whether there's a strong subject/anchor in the viewing direction -
+    river bends, spires, mesas, ridgelines, dramatic skyline features that give
+    the distant view a focal point.
+
+    Used to enhance DAGS by rewarding views with distinct visual anchors.
+
+    Multi-depth sampling: Searches for anchors at multiple distances along each
+    azimuth (not just the horizon), finding mid-distance canyon walls, river
+    gorges, and benches that make better photographic anchors.
+    """
+    # Overall anchor score 0-1
+    anchor_score: float
+
+    # Anchor type classification
+    anchor_type: str = "NONE"  # "RIDGELINE", "SPIRES_KNOBS", "LAYERED_SKYLINE", "NONE"
+
+    # Location of the strongest anchor
+    anchor_distance_m: float = 0.0      # Distance to the anchor feature
+    anchor_bearing_deg: float = 0.0     # Bearing to the anchor within sector
+
+    # Component scores that determined the type
+    curvature_salience: float = 0.0     # Salience from curvature (knobs/spires)
+    slope_break_salience: float = 0.0   # Salience from slope breaks (ridgelines)
+    relief_salience: float = 0.0        # Salience from local relief
+
+    # Human-readable explanations
+    explanation_short: str = ""   # e.g., "Strong skyline anchor ~8km at 252°"
+    explanation_long: str = ""    # Full explanation with anchor type
+
+    # Debug fields (populated when debug=True)
+    anchor_search_mode: str = "MULTI_DEPTH"  # "HORIZON_ONLY" | "MULTI_DEPTH"
+    anchor_candidates_sampled: int = 0        # Total candidates sampled (azimuths * distances)
+    best_candidate_distance_m: float = 0.0    # Same as anchor_distance_m (for debug clarity)
+
+
+@dataclass
+class AnchorLight:
+    """
+    Light-at-Anchor score for estimating whether the anchor feature is lit.
+
+    Computes whether the visual anchor (e.g., distant ridgeline, spire) is
+    receiving direct sunlight based on surface orientation and shadow analysis.
+    This adds "is the anchor glowing?" to "can I see the anchor?".
+    """
+    # Sun incidence at anchor surface (dot product of normal and sun vector)
+    # Range: -1 (facing away) to +1 (facing directly into sun)
+    anchor_sun_incidence: float
+
+    # Light type classification based on geometry
+    anchor_light_type: str = "BACK_LIT"  # "FRONT_LIT", "SIDE_LIT", "BACK_LIT", "RIM_LIT"
+
+    # Shadow state at the anchor point
+    anchor_shadowed: bool = False
+
+    # Overall anchor light score 0-1
+    anchor_light_score: float = 0.0
+
+    # Anchor surface orientation (for debugging)
+    anchor_slope_deg: float = 0.0
+    anchor_aspect_deg: float = 0.0
+
+    # Human-readable explanations
+    explanation_short: str = ""   # e.g., "Anchor is side-lit (incidence 0.22)"
+    explanation_long: str = ""    # Full explanation with shadow status
+
+
+@dataclass
+class DistantGlowWindowSample:
+    """
+    Single timestep sample in DAGS glow window time-series (debug only).
+
+    Used for DISTANT_ATMOSPHERIC mode, not to be confused with subject-centric GlowWindow.
+    """
+    minutes: int                    # Minutes from event (sunrise/sunset)
+    final_score: float              # distant_glow_final_score at this time
+    anchor_light_score: float       # anchor_light_score at this time
+    anchor_shadowed: bool           # Whether anchor is shadowed
+    sun_altitude_deg: float         # Sun altitude
+    sun_azimuth_deg: float          # Sun azimuth
+
+
+@dataclass
+class DistantGlowWindow:
+    """
+    Time-series glow window metrics for DISTANT_ATMOSPHERIC mode.
+
+    Evaluates distant_glow_final_score over a time grid around sunrise/sunset
+    to find the optimal shooting window. Accounts for shadows clearing the
+    anchor feature over time.
+
+    Note: This is distinct from the subject-centric GlowWindow class which
+    uses peak_incidence and peak_glow_score for subject surfaces.
+    """
+    # Window bounds (minutes from event)
+    start_minutes: int              # Start of good window
+    end_minutes: int                # End of good window
+    peak_minutes: int               # Time of peak score
+    duration_minutes: int           # Length of good window
+
+    # Peak metrics
+    peak_score: float               # Maximum distant_glow_final_score
+    peak_anchor_light_score: float  # anchor_light_score at peak time
+
+    # Turning point detection
+    sun_clears_ridge_minutes: Optional[int] = None  # First minute anchor becomes unshaded
+
+    # Debug: full time-series (only when debug=True)
+    score_series: Optional[List[DistantGlowWindowSample]] = None
+
+
+@dataclass
+class DistantGlowScore:
+    """
+    Distant Atmospheric Glow Score (DAGS) for viewpoint-first distant glow.
+
+    This scores viewpoints for their potential to capture distant atmospheric glow -
+    like layered canyon views at sunrise where the "glowing subjects" are miles away.
+
+    Differs from subject-centric glow which scores terrain facing the sun.
+    DAGS scores the VIEWPOINT for its ability to see distant layered terrain.
+    """
+    # Overall score 0-1
+    distant_glow_score: float
+
+    # Glow type classification
+    distant_glow_type: str = "DISTANT_ATMOSPHERIC"  # Always this for DAGS
+
+    # Component scores (all 0-1)
+    depth_norm: float = 0.0       # Normalized depth (p90/30km)
+    open_norm: float = 0.0        # Sector openness fraction
+    rim_norm: float = 0.0         # Rim strength (TPI-based)
+    sun_low_norm: float = 0.0     # Higher when sun is low (golden light)
+    sun_clear_norm: float = 0.0   # Higher when sun clears horizon
+    dir_norm: float = 0.0         # Directionality/contra-jour score
+
+    # Directionality details
+    view_bearing_deg: float = 0.0       # Best viewing direction
+    sun_bearing_deg: float = 0.0        # Sun azimuth at event
+    bearing_delta_deg: float = 0.0      # Angular difference
+    directionality_type: str = "neutral"  # "side_lit", "contra_jour", "neutral"
+
+    # Visual Anchor Score (VAS) - salient features in the view
+    visual_anchor: Optional[VisualAnchor] = None
+
+    # Combined DAGS + VAS score
+    # Formula: dags * (0.7 + 0.3 * anchor_score)
+    distant_glow_with_anchor_score: float = 0.0
+
+    # Light-at-Anchor - is the anchor feature itself lit?
+    anchor_light: Optional[AnchorLight] = None
+
+    # Final combined score including anchor lighting
+    # Formula: distant_glow_with_anchor_score * (0.75 + 0.25 * anchor_light_score)
+    distant_glow_final_score: float = 0.0
+
+    # Time-series glow window (computed when distant_glow_timeseries=True)
+    glow_window: Optional[DistantGlowWindow] = None
+
+    # Human-readable explanations
+    explanation_short: str = ""   # e.g., "Distant layered glow potential (p90 18km)"
+    explanation_long: str = ""    # Full explanation with directionality
+
+
+@dataclass
 class OverlookView:
     """View analysis for overlook/viewpoint locations."""
     # View metrics (full 360°)
@@ -335,6 +503,11 @@ class OverlookView:
 
     # Sun alignment (optional - computed if sun_track available)
     sun_alignment: Optional[SunAlignment] = None
+
+    # Distant Atmospheric Glow Score (DAGS) - viewpoint-first distant glow
+    # Scores the viewpoint for capturing distant layered atmospheric glow
+    # (e.g., sunrise over distant canyons from a rim overlook)
+    distant_glow: Optional[DistantGlowScore] = None
 
     # Debug: full horizon profile (only if debug enabled)
     horizon_profile: Optional[List[HorizonSample]] = None

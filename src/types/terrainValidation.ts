@@ -206,6 +206,111 @@ export interface ViewExplanations {
   long: string;   // 1-2 sentences with details
 }
 
+// Visual Anchor Score (VAS) - salient features in the view cone
+// Detects ridgelines, spires, mesas that provide focal interest
+export interface VisualAnchor {
+  // Overall anchor score 0-1
+  anchor_score: number;
+  // Anchor type classification
+  anchor_type: 'RIDGELINE' | 'SPIRES_KNOBS' | 'LAYERED_SKYLINE' | 'NONE';
+  // Location of the strongest anchor
+  anchor_distance_m: number;      // Distance to the anchor feature
+  anchor_bearing_deg: number;     // Bearing to the anchor within sector
+  // Component scores that determined the type
+  curvature_salience: number;     // Salience from curvature (knobs/spires)
+  slope_break_salience: number;   // Salience from slope breaks (ridgelines)
+  relief_salience: number;        // Salience from local relief
+  // Human-readable explanations
+  explanation_short: string;   // e.g., "Strong skyline anchor ~8km at 252°"
+  explanation_long: string;    // Full explanation with anchor type
+  // Debug fields (populated when debug=True)
+  anchor_search_mode?: 'HORIZON_ONLY' | 'MULTI_DEPTH';  // Search mode used
+  anchor_candidates_sampled?: number;  // Total candidates sampled (azimuths * distances)
+  best_candidate_distance_m?: number;  // Same as anchor_distance_m (for debug clarity)
+}
+
+// Light-at-Anchor (LAA) - whether the anchor feature is lit
+// Estimates if the visual anchor is receiving direct sunlight
+export interface AnchorLight {
+  // Sun incidence at anchor surface (dot product of normal and sun vector)
+  // Range: -1 (facing away) to +1 (facing directly into sun)
+  anchor_sun_incidence: number;
+  // Light type classification based on geometry
+  anchor_light_type: 'FRONT_LIT' | 'SIDE_LIT' | 'BACK_LIT' | 'RIM_LIT';
+  // Shadow state at the anchor point
+  anchor_shadowed: boolean;
+  // Overall anchor light score 0-1
+  anchor_light_score: number;
+  // Anchor surface orientation (for debugging)
+  anchor_slope_deg: number;
+  anchor_aspect_deg: number;
+  // Human-readable explanations
+  explanation_short: string;   // e.g., "Anchor is side-lit (incidence 0.22)"
+  explanation_long: string;    // Full explanation with shadow status
+}
+
+// Glow window time-series sample (debug only)
+export interface DistantGlowWindowSample {
+  minutes: number;                // Minutes from event (sunrise/sunset)
+  final_score: number;            // distant_glow_final_score at this time
+  anchor_light_score: number;     // anchor_light_score at this time
+  anchor_shadowed: boolean;       // Whether anchor is shadowed
+  sun_altitude_deg: number;       // Sun altitude
+  sun_azimuth_deg: number;        // Sun azimuth
+}
+
+// Glow window time-series metrics for DISTANT_ATMOSPHERIC mode
+// Evaluates distant_glow_final_score over time to find optimal shooting window
+export interface DistantGlowWindow {
+  // Window bounds (minutes from event)
+  start_minutes: number;              // Start of good window
+  end_minutes: number;                // End of good window
+  peak_minutes: number;               // Time of peak score
+  duration_minutes: number;           // Length of good window
+  // Peak metrics
+  peak_score: number;                 // Maximum distant_glow_final_score
+  peak_anchor_light_score: number;    // anchor_light_score at peak time
+  // Turning point detection
+  sun_clears_ridge_minutes?: number;  // First minute anchor becomes unshaded
+  // Debug: full time-series (only when debug=True)
+  score_series?: DistantGlowWindowSample[];
+}
+
+// Distant Atmospheric Glow Score (DAGS) - viewpoint-first distant glow
+// Scores viewpoints for capturing distant layered atmospheric glow
+// (e.g., sunrise over distant canyons from a rim overlook)
+export interface DistantGlowScore {
+  // Overall score 0-1
+  distant_glow_score: number;
+  // Glow type classification
+  distant_glow_type: 'DISTANT_ATMOSPHERIC';
+  // Component scores (all 0-1)
+  depth_norm: number;       // Normalized depth (p90/30km)
+  open_norm: number;        // Sector openness fraction
+  rim_norm: number;         // Rim strength (TPI-based)
+  sun_low_norm: number;     // Higher when sun is low (golden light)
+  sun_clear_norm: number;   // Higher when sun clears horizon
+  dir_norm: number;         // Directionality/contra-jour score
+  // Directionality details
+  view_bearing_deg: number;       // Best viewing direction
+  sun_bearing_deg: number;        // Sun azimuth at event
+  bearing_delta_deg: number;      // Angular difference
+  directionality_type: 'side_lit' | 'contra_jour' | 'neutral';
+  // Visual Anchor Score (VAS) - salient features in the view
+  visual_anchor?: VisualAnchor;
+  // Combined DAGS + VAS score: dags * (0.7 + 0.3 * anchor_score)
+  distant_glow_with_anchor_score: number;
+  // Light-at-Anchor (LAA) - is the anchor feature lit?
+  anchor_light?: AnchorLight;
+  // Final combined score: combined * (0.75 + 0.25 * anchor_light_score)
+  distant_glow_final_score: number;
+  // Time-series glow window (computed when distant_glow_timeseries=True)
+  glow_window?: DistantGlowWindow;
+  // Human-readable explanations
+  explanation_short: string;   // e.g., "Distant layered glow potential (p90 18km)"
+  explanation_long: string;    // Full explanation with directionality
+}
+
 // Sun alignment analysis
 export interface SunAlignment {
   alignment_type: 'backlit' | 'sidelit' | 'frontlit' | 'neutral';
@@ -229,9 +334,15 @@ export interface OverlookView {
   overlook_score: number;
   best_bearing_deg: number;
   fov_deg: number;
+  // Sector openness in shooting direction (±45° from best_bearing)
+  open_sky_sector_fraction?: number;
+  // View category classification
+  view_category?: 'EPIC_OVERLOOK' | 'DRAMATIC_ENCLOSED' | 'QUICK_SCENIC';
   view_cone?: [number, number][];  // Lat/lon polygon for map rendering
   explanations?: ViewExplanations;
   sun_alignment?: SunAlignment;
+  // Distant Atmospheric Glow Score (DAGS) - viewpoint-first distant glow
+  distant_glow?: DistantGlowScore;
   horizon_profile?: HorizonSample[];
 }
 
