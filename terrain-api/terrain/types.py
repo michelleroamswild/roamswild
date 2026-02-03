@@ -44,6 +44,18 @@ class ShadowSample:
     ray_z: float
     terrain_z: float
     blocked: bool
+    # New fields for terrain angle analysis
+    terrain_angle_deg: Optional[float] = None  # Angle from start to terrain at this distance
+
+
+@dataclass
+class BlockingPoint:
+    """Location where sun ray is first blocked by terrain."""
+    lat: float
+    lon: float
+    elevation_m: float
+    distance_m: float
+    terrain_angle_deg: float
 
 
 @dataclass
@@ -53,6 +65,11 @@ class ShadowCheck:
     sun_altitude_deg: float
     samples: List[ShadowSample]
     sun_visible: bool
+    # New fields for improved shadow analysis
+    max_terrain_angle_deg: Optional[float] = None  # Maximum terrain angle encountered
+    blocking_margin_deg: Optional[float] = None  # sun_altitude - max_terrain_angle (negative = blocked)
+    first_blocked_distance_m: Optional[float] = None  # Distance to first blocker
+    blocking_point: Optional[BlockingPoint] = None  # Location of first blocker
 
 
 @dataclass
@@ -239,6 +256,12 @@ class StandingProperties:
     # Approach difficulty classification
     approach_difficulty: str = "unknown"  # easy, moderate, hard, unknown
     approach_profile: str = "moderate"  # Profile used for limits (casual, moderate, spicy)
+    # Rim/overlook metrics (for cell-based overlook candidates)
+    rim_strength: Optional[float] = None  # 0-1 score from TPI (higher = more elevated)
+    tpi_large_m: Optional[float] = None  # Large-scale TPI value
+    # Access type classification for rim-overlook results
+    # "road" = nearest access is a road/track, "trail" = path/footway, "none" = no access data
+    access_type: str = "none"
 
 
 @dataclass
@@ -255,9 +278,245 @@ class ShootingTiming:
 
 
 @dataclass
+class HorizonSample:
+    """Single azimuth sample in a horizon profile."""
+    azimuth_deg: float
+    horizon_alt_deg: float  # Elevation angle to horizon (positive = terrain above eye level)
+    distance_to_horizon_m: float  # Distance where horizon occurs
+
+
+@dataclass
+class SunAlignment:
+    """Sun position relative to local horizon."""
+    sun_azimuth_deg: float
+    sun_altitude_deg: float
+    horizon_alt_at_sun_az_deg: float  # Horizon altitude in sun's direction
+    blocking_margin_deg: float  # sun_altitude - horizon_alt (negative = sun behind ridge)
+    behind_ridge: bool  # True if sun is below local horizon
+
+
+@dataclass
+class ViewExplanations:
+    """Human-readable explanations for view quality."""
+    short: str  # <= 80 chars summary
+    long: str   # 1-2 sentences with details
+
+
+@dataclass
+class VisualAnchor:
+    """
+    Visual Anchor Score (VAS) for detecting salient features in the view cone.
+
+    Identifies whether there's a strong subject/anchor in the viewing direction -
+    river bends, spires, mesas, ridgelines, dramatic skyline features that give
+    the distant view a focal point.
+
+    Used to enhance DAGS by rewarding views with distinct visual anchors.
+
+    Multi-depth sampling: Searches for anchors at multiple distances along each
+    azimuth (not just the horizon), finding mid-distance canyon walls, river
+    gorges, and benches that make better photographic anchors.
+    """
+    # Overall anchor score 0-1
+    anchor_score: float
+
+    # Anchor type classification
+    anchor_type: str = "NONE"  # "RIDGELINE", "SPIRES_KNOBS", "LAYERED_SKYLINE", "NONE"
+
+    # Location of the strongest anchor
+    anchor_distance_m: float = 0.0      # Distance to the anchor feature
+    anchor_bearing_deg: float = 0.0     # Bearing to the anchor within sector
+
+    # Component scores that determined the type
+    curvature_salience: float = 0.0     # Salience from curvature (knobs/spires)
+    slope_break_salience: float = 0.0   # Salience from slope breaks (ridgelines)
+    relief_salience: float = 0.0        # Salience from local relief
+
+    # Human-readable explanations
+    explanation_short: str = ""   # e.g., "Strong skyline anchor ~8km at 252°"
+    explanation_long: str = ""    # Full explanation with anchor type
+
+    # Debug fields (populated when debug=True)
+    anchor_search_mode: str = "MULTI_DEPTH"  # "HORIZON_ONLY" | "MULTI_DEPTH"
+    anchor_candidates_sampled: int = 0        # Total candidates sampled (azimuths * distances)
+    best_candidate_distance_m: float = 0.0    # Same as anchor_distance_m (for debug clarity)
+
+
+@dataclass
+class AnchorLight:
+    """
+    Light-at-Anchor score for estimating whether the anchor feature is lit.
+
+    Computes whether the visual anchor (e.g., distant ridgeline, spire) is
+    receiving direct sunlight based on surface orientation and shadow analysis.
+    This adds "is the anchor glowing?" to "can I see the anchor?".
+    """
+    # Sun incidence at anchor surface (dot product of normal and sun vector)
+    # Range: -1 (facing away) to +1 (facing directly into sun)
+    anchor_sun_incidence: float
+
+    # Light type classification based on geometry
+    anchor_light_type: str = "BACK_LIT"  # "FRONT_LIT", "SIDE_LIT", "BACK_LIT", "RIM_LIT"
+
+    # Shadow state at the anchor point
+    anchor_shadowed: bool = False
+
+    # Overall anchor light score 0-1
+    anchor_light_score: float = 0.0
+
+    # Anchor surface orientation (for debugging)
+    anchor_slope_deg: float = 0.0
+    anchor_aspect_deg: float = 0.0
+
+    # Human-readable explanations
+    explanation_short: str = ""   # e.g., "Anchor is side-lit (incidence 0.22)"
+    explanation_long: str = ""    # Full explanation with shadow status
+
+
+@dataclass
+class DistantGlowWindowSample:
+    """
+    Single timestep sample in DAGS glow window time-series (debug only).
+
+    Used for DISTANT_ATMOSPHERIC mode, not to be confused with subject-centric GlowWindow.
+    """
+    minutes: int                    # Minutes from event (sunrise/sunset)
+    final_score: float              # distant_glow_final_score at this time
+    anchor_light_score: float       # anchor_light_score at this time
+    anchor_shadowed: bool           # Whether anchor is shadowed
+    sun_altitude_deg: float         # Sun altitude
+    sun_azimuth_deg: float          # Sun azimuth
+
+
+@dataclass
+class DistantGlowWindow:
+    """
+    Time-series glow window metrics for DISTANT_ATMOSPHERIC mode.
+
+    Evaluates distant_glow_final_score over a time grid around sunrise/sunset
+    to find the optimal shooting window. Accounts for shadows clearing the
+    anchor feature over time.
+
+    Note: This is distinct from the subject-centric GlowWindow class which
+    uses peak_incidence and peak_glow_score for subject surfaces.
+    """
+    # Window bounds (minutes from event)
+    start_minutes: int              # Start of good window
+    end_minutes: int                # End of good window
+    peak_minutes: int               # Time of peak score
+    duration_minutes: int           # Length of good window
+
+    # Peak metrics
+    peak_score: float               # Maximum distant_glow_final_score
+    peak_anchor_light_score: float  # anchor_light_score at peak time
+
+    # Turning point detection
+    sun_clears_ridge_minutes: Optional[int] = None  # First minute anchor becomes unshaded
+
+    # Debug: full time-series (only when debug=True)
+    score_series: Optional[List[DistantGlowWindowSample]] = None
+
+
+@dataclass
+class DistantGlowScore:
+    """
+    Distant Atmospheric Glow Score (DAGS) for viewpoint-first distant glow.
+
+    This scores viewpoints for their potential to capture distant atmospheric glow -
+    like layered canyon views at sunrise where the "glowing subjects" are miles away.
+
+    Differs from subject-centric glow which scores terrain facing the sun.
+    DAGS scores the VIEWPOINT for its ability to see distant layered terrain.
+    """
+    # Overall score 0-1
+    distant_glow_score: float
+
+    # Glow type classification
+    distant_glow_type: str = "DISTANT_ATMOSPHERIC"  # Always this for DAGS
+
+    # Component scores (all 0-1)
+    depth_norm: float = 0.0       # Normalized depth (p90/30km)
+    open_norm: float = 0.0        # Sector openness fraction
+    rim_norm: float = 0.0         # Rim strength (TPI-based)
+    sun_low_norm: float = 0.0     # Higher when sun is low (golden light)
+    sun_clear_norm: float = 0.0   # Higher when sun clears horizon
+    dir_norm: float = 0.0         # Directionality/contra-jour score
+
+    # Directionality details
+    view_bearing_deg: float = 0.0       # Best viewing direction
+    sun_bearing_deg: float = 0.0        # Sun azimuth at event
+    bearing_delta_deg: float = 0.0      # Angular difference
+    directionality_type: str = "neutral"  # "side_lit", "contra_jour", "neutral"
+
+    # Visual Anchor Score (VAS) - salient features in the view
+    visual_anchor: Optional[VisualAnchor] = None
+
+    # Combined DAGS + VAS score
+    # Formula: dags * (0.7 + 0.3 * anchor_score)
+    distant_glow_with_anchor_score: float = 0.0
+
+    # Light-at-Anchor - is the anchor feature itself lit?
+    anchor_light: Optional[AnchorLight] = None
+
+    # Final combined score including anchor lighting
+    # Formula: distant_glow_with_anchor_score * (0.75 + 0.25 * anchor_light_score)
+    distant_glow_final_score: float = 0.0
+
+    # Time-series glow window (computed when distant_glow_timeseries=True)
+    glow_window: Optional[DistantGlowWindow] = None
+
+    # Human-readable explanations
+    explanation_short: str = ""   # e.g., "Distant layered glow potential (p90 18km)"
+    explanation_long: str = ""    # Full explanation with directionality
+
+
+@dataclass
+class OverlookView:
+    """View analysis for overlook/viewpoint locations."""
+    # View metrics (full 360°)
+    open_sky_fraction: float  # Fraction of azimuths with horizon < 1° (full 360°)
+    depth_p50_m: float  # Median distance to horizon
+    depth_p90_m: float  # 90th percentile distance to horizon
+    horizon_complexity: int  # Number of peaks in horizon profile
+    overlook_score: float  # Combined overlook quality score (0-1)
+
+    # Best viewing direction
+    best_bearing_deg: float  # Azimuth with best openness*depth
+    fov_deg: float = 60.0  # Field of view for best bearing
+
+    # Sector-based openness (in shooting direction)
+    # More useful than full 360° for scoring - a canyon rim enclosed behind
+    # but open forward should score well
+    open_sky_sector_fraction: float = 0.0  # Fraction open in ±45° sector around best_bearing
+
+    # View category classification
+    # - EPIC_OVERLOOK: Big horizon, deep layers, wide-open views
+    # - DRAMATIC_ENCLOSED: Enclosed canyon/valley with complex skyline, good for silhouettes
+    # - QUICK_SCENIC: Easy viewpoint, good quick stop
+    view_category: str = "QUICK_SCENIC"
+
+    # View cone polygon for map rendering [[lat,lon], ...] - apex, left, right, apex (closed)
+    view_cone: Optional[List[List[float]]] = None
+
+    # Human-readable explanations
+    explanations: Optional[ViewExplanations] = None
+
+    # Sun alignment (optional - computed if sun_track available)
+    sun_alignment: Optional[SunAlignment] = None
+
+    # Distant Atmospheric Glow Score (DAGS) - viewpoint-first distant glow
+    # Scores the viewpoint for capturing distant layered atmospheric glow
+    # (e.g., sunrise over distant canyons from a rim overlook)
+    distant_glow: Optional[DistantGlowScore] = None
+
+    # Debug: full horizon profile (only if debug enabled)
+    horizon_profile: Optional[List[HorizonSample]] = None
+
+
+@dataclass
 class StandingLocation:
     standing_id: int
-    subject_id: int
+    subject_id: Optional[int]  # None for rim_overlook standing locations
     location: Dict  # {"lat": float, "lon": float}
     properties: StandingProperties
     line_of_sight: LineOfSight
@@ -266,6 +525,10 @@ class StandingLocation:
     shooting_timing: Optional[ShootingTiming] = None
     # Navigation link (Google Maps)
     nav_link: Optional[str] = None
+    # Overlook view analysis (optional - for rim/viewpoint locations)
+    view: Optional[OverlookView] = None
+    # Source type: "subject" (default) or "rim_overlook" (cell-based overlook detection)
+    source: str = "subject"
 
 
 @dataclass
@@ -284,6 +547,72 @@ class StructureDebug:
 
 
 @dataclass
+class RimOverlookDebugStats:
+    """Debug stats for rim overlook detection pipeline."""
+    # Stage counts
+    grid_cells_total: int = 0
+    rim_mask_cells: int = 0
+    rim_local_maxima_cells: int = 0
+    maxima_found_total: int = 0  # Total local maxima found before any cap
+    maxima_kept: int = 0  # Local maxima kept after max_candidates cap
+    maxima_cap_used: int = 0  # Dynamic cap that was applied
+    rim_candidates_selected: int = 0
+    view_analyzed_total: int = 0  # Total candidates that got view analysis
+    results_pre_dedup: int = 0  # Results before spatial deduplication
+    results_post_dedup: int = 0  # Results after spatial deduplication (final)
+
+    # TPI distribution stats (within AOI)
+    tpi_large_m_p50: float = 0.0
+    tpi_large_m_p90: float = 0.0
+    tpi_large_m_p95: float = 0.0
+
+    # Slope distribution stats
+    slope_deg_pct_under_20: float = 0.0
+    slope_deg_pct_under_25: float = 0.0
+    slope_deg_pct_under_30: float = 0.0
+
+    # View analysis stats (for candidates analyzed)
+    depth_p90_m_p50: Optional[float] = None
+    depth_p90_m_p90: Optional[float] = None
+    avg_open_sky_fraction: Optional[float] = None
+    avg_overlook_score: Optional[float] = None
+
+    # Drop reason breakdown
+    rejected_slope: int = 0
+    rejected_tpi: int = 0
+    rejected_edge: int = 0  # Rejected by edge gating
+    rejected_nms: int = 0
+    rejected_maxima_cap: int = 0  # Rejected by maxima cap
+    rejected_topk: int = 0
+    rejected_after_view_dedup: int = 0  # Rejected by spatial deduplication after view
+
+    # Edge gating stats
+    rim_mask_cells_before_edge_gate: int = 0
+    rim_mask_cells_after_edge_gate: int = 0
+    edge_mode: str = "STEEP_ADJACENCY"  # SLOPE_BREAK, STEEP_ADJACENCY, BOTH, NONE
+    steep_cells_count: int = 0
+    near_steep_cells_count: int = 0
+
+    # Auto-threshold: chosen thresholds (after adjustment)
+    chosen_tpi_threshold_m: Optional[float] = None
+    chosen_slope_max_deg: Optional[float] = None
+    chosen_view_candidates_k: Optional[int] = None
+    auto_threshold_applied: bool = False
+
+    # Access proximity stats (when access_bias is enabled)
+    access_bias_applied: str = "NONE"  # Which bias mode was used
+    pct_results_within_access_distance: Optional[float] = None  # % of final results within access_max_distance_m
+    distance_to_access_p50_m: Optional[float] = None  # Median distance to nearest road/trail
+    distance_to_access_p90_m: Optional[float] = None  # 90th percentile distance
+
+    # Sample coordinates for debug visualization (only populated when debug=True)
+    # Each is a list of dicts with lat, lon, and relevant metrics
+    sample_rim_candidates: Optional[List[Dict]] = None  # Pre-NMS rim candidates (sampled)
+    sample_local_maxima: Optional[List[Dict]] = None  # Post-NMS local maxima
+    sample_view_analyzed: Optional[List[Dict]] = None  # Points that went through view analysis
+
+
+@dataclass
 class AnalysisMeta:
     request_id: str
     computed_at: str
@@ -297,6 +626,7 @@ class AnalysisMeta:
     dem_citation: Optional[str] = None
     # Debug info
     structure_debug: Optional[StructureDebug] = None
+    rim_overlook_debug: Optional[RimOverlookDebugStats] = None
 
 
 @dataclass
@@ -474,3 +804,14 @@ class AnalyzeRequest:
     radius_km: float = 2.0
     dem_source: Literal["auto", "copernicus-glo30", "usgs-3dep", "aws-terrain-tiles"] = "auto"
     # Note: aws-terrain-tiles is for visualization ONLY, not analysis
+    debug: bool = False  # Enable debug stats in response
+    # Auto-threshold mode: adjusts TPI and slope thresholds per-request
+    # to target a healthy number of rim candidates (5-15% of grid cells)
+    auto_thresholds: bool = True
+    # Access bias: bias rim-overlook results toward accessible locations near roads/trails
+    # - "NONE": No access bias (default)
+    # - "NEAR_ROADS": Bias toward locations near roads/tracks
+    # - "NEAR_TRAILS": Bias toward locations near trails/paths
+    # - "NEAR_ROADS_OR_TRAILS": Bias toward locations near any road or trail
+    access_bias: Literal["NONE", "NEAR_ROADS", "NEAR_TRAILS", "NEAR_ROADS_OR_TRAILS"] = "NONE"
+    access_max_distance_m: float = 800.0  # Max distance for full access bonus

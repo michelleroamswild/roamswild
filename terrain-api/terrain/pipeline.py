@@ -16,6 +16,7 @@ from .types import (
     AnalyzeRequest, TerrainAnalysisResult, AnalysisMeta,
     Subject, SubjectProperties, SubjectValidation, SubjectExplain,
     StandingLocation, ShootingTiming, StructureMetrics, StructureDebug,
+    RimOverlookDebugStats,
 )
 from .structure import (
     get_structure_explanation,
@@ -74,6 +75,8 @@ from .illumination import (
 )
 from .shadows import check_shadow_at_peak
 from .standing import find_standing_location, _summarize_rejections, log_rejection_histogram
+from .view import generate_view_cone
+from .types import OverlookView
 from .accessibility import (
     fetch_osm_roads,
     fetch_osm_landcover,
@@ -282,7 +285,7 @@ def enforce_diversity(
     classified.sort(key=lambda x: -x[1])
 
     # Group by category
-    by_category = {"rim": [], "macro-glow": [], "micro-glow": [], "other": []}
+    by_category = {"rim": [], "macro-glow": [], "micro-glow": [], "texture": [], "other": []}
     for cat, score, sl, subj in classified:
         by_category[cat].append((score, sl, subj))
 
@@ -826,6 +829,29 @@ async def analyze_terrain(
                 f"Subject {subject.subject_id} accessible: {accessibility.accessibility_status} [{access_debug}]"
             )
 
+        # Generate view cone for subject standing (showing field of view toward subject)
+        # FOV is ~70° for typical landscape framing
+        subject_view_fov = 70.0
+        subject_view_cone = generate_view_cone(
+            dem=dem,
+            lat=standing.location["lat"],
+            lon=standing.location["lon"],
+            best_bearing_deg=standing.properties.camera_bearing_deg,
+            fov_deg=subject_view_fov,
+            depth_p50_m=standing.properties.distance_to_subject_m,
+        )
+        standing.view = OverlookView(
+            open_sky_fraction=0.5,  # Assumed for subject standings
+            depth_p50_m=standing.properties.distance_to_subject_m,
+            depth_p90_m=standing.properties.distance_to_subject_m * 1.5,
+            horizon_complexity=1,
+            overlook_score=0.8,  # Good view of subject
+            best_bearing_deg=standing.properties.camera_bearing_deg,
+            fov_deg=subject_view_fov,
+            view_cone=subject_view_cone,
+            explanations=None,
+        )
+
         standing_locations.append(standing)
 
         if is_top_peak:
@@ -965,6 +991,27 @@ async def analyze_terrain(
                 )
                 continue
 
+            # Generate view cone for facet standing
+            facet_view_cone = generate_view_cone(
+                dem=dem,
+                lat=facet_standing.location["lat"],
+                lon=facet_standing.location["lon"],
+                best_bearing_deg=facet_standing.properties.camera_bearing_deg,
+                fov_deg=70.0,
+                depth_p50_m=facet_standing.properties.distance_to_subject_m,
+            )
+            facet_standing.view = OverlookView(
+                open_sky_fraction=0.5,  # Assumed for facet standings
+                depth_p50_m=facet_standing.properties.distance_to_subject_m,
+                depth_p90_m=facet_standing.properties.distance_to_subject_m * 1.5,
+                horizon_complexity=1,
+                overlook_score=0.7,  # Slightly lower for facets
+                best_bearing_deg=facet_standing.properties.camera_bearing_deg,
+                fov_deg=70.0,
+                view_cone=facet_view_cone,
+                explanations=None,
+            )
+
             standing_locations.append(facet_standing)
             logging.info(
                 f"Facet {facet_det.subject_id}: Standing location found at "
@@ -1029,6 +1076,58 @@ async def analyze_terrain(
         )
         logging.info(f"After diversity selection: {len(standing_locations)} standing locations")
 
+    # Step 8b: Generate rim-based overlook standing locations (parallel path)
+    # This runs independently of subject detection to find viewpoint opportunities
+    # from high TPI cells (canyon rims, ridgelines, overlooks)
+    import logging
+    from .structure import compute_tpi_grids
+    from .view import generate_rim_overlook_standings
+
+    logging.info("Rim overlook detection: Starting cell-based overlook discovery")
+
+    # Compute TPI grids (may already be computed for subjects, but cheap to redo)
+    tpi_small, tpi_large = compute_tpi_grids(
+        elevations=dem.elevations,
+        cell_size_m=dem.cell_size_m,
+    )
+
+    # Get sun position at midpoint for sun alignment analysis
+    mid_sun = sun_track[len(sun_track) // 2] if sun_track else None
+
+    # Generate rim-based overlook standing locations
+    rim_overlook_standings, rim_debug_stats = generate_rim_overlook_standings(
+        dem=dem,
+        tpi_large=tpi_large,
+        slope_deg=slope_deg,
+        elevations=dem.elevations,
+        sun_position=mid_sun,
+        tpi_threshold_m=12.0,  # Default, may be auto-adjusted
+        slope_max_deg=25.0,    # Default, may be auto-adjusted
+        top_k_for_view=50,     # Run view analysis on top 50 (may increase for yield)
+        max_results=20,        # Keep up to 20 after dedup
+        dedup_distance_m=500.0,  # 500m minimum between results
+        collect_debug_stats=request.debug,  # Pass debug flag from request
+        auto_thresholds=request.auto_thresholds,  # Auto-adjust thresholds per-request
+        roads=osm_roads,  # Pass OSM roads for access bias
+        access_bias=request.access_bias,  # Access bias mode
+        access_max_distance_m=request.access_max_distance_m,  # Max distance for access bonus
+    )
+
+    # Log summary
+    if rim_overlook_standings:
+        scores = [s.view.overlook_score if s.view else 0 for s in rim_overlook_standings]
+        avg_score = sum(scores) / len(scores) if scores else 0
+        logging.info(
+            f"Rim overlook detection: {len(rim_overlook_standings)} overlooks found, "
+            f"avg overlook_score={avg_score:.2f}"
+        )
+    else:
+        logging.info("Rim overlook detection: No overlooks found")
+
+    # Merge rim overlooks with subject-based standings
+    # Rim overlooks are appended after subject-based results
+    standing_locations.extend(rim_overlook_standings)
+
     # Step 9: Detect lighting zones (scale-aware)
     # Identifies terrain zones with consistent favorable lighting
     # Guides photographers to areas where micro-features likely exist
@@ -1048,6 +1147,54 @@ async def analyze_terrain(
         attached_to_subjects=structure_attached_to_subjects,
     )
 
+    # Convert rim debug stats dict to RimOverlookDebugStats if present
+    rim_overlook_debug = None
+    if rim_debug_stats is not None:
+        rim_overlook_debug = RimOverlookDebugStats(
+            grid_cells_total=rim_debug_stats.get('grid_cells_total', 0),
+            rim_mask_cells=rim_debug_stats.get('rim_mask_cells', 0),
+            rim_local_maxima_cells=rim_debug_stats.get('rim_local_maxima_cells', 0),
+            maxima_found_total=rim_debug_stats.get('maxima_found_total', 0),
+            maxima_kept=rim_debug_stats.get('maxima_kept', 0),
+            maxima_cap_used=rim_debug_stats.get('maxima_cap_used', 0),
+            rim_candidates_selected=rim_debug_stats.get('rim_candidates_selected', 0),
+            view_analyzed_total=rim_debug_stats.get('view_analyzed_total', 0),
+            results_pre_dedup=rim_debug_stats.get('results_pre_dedup', 0),
+            results_post_dedup=rim_debug_stats.get('results_post_dedup', 0),
+            tpi_large_m_p50=rim_debug_stats.get('tpi_large_m_p50', 0.0),
+            tpi_large_m_p90=rim_debug_stats.get('tpi_large_m_p90', 0.0),
+            tpi_large_m_p95=rim_debug_stats.get('tpi_large_m_p95', 0.0),
+            slope_deg_pct_under_20=rim_debug_stats.get('slope_deg_pct_under_20', 0.0),
+            slope_deg_pct_under_25=rim_debug_stats.get('slope_deg_pct_under_25', 0.0),
+            slope_deg_pct_under_30=rim_debug_stats.get('slope_deg_pct_under_30', 0.0),
+            depth_p90_m_p50=rim_debug_stats.get('depth_p90_m_p50'),
+            depth_p90_m_p90=rim_debug_stats.get('depth_p90_m_p90'),
+            avg_open_sky_fraction=rim_debug_stats.get('avg_open_sky_fraction'),
+            avg_overlook_score=rim_debug_stats.get('avg_overlook_score'),
+            rejected_slope=rim_debug_stats.get('rejected_slope', 0),
+            rejected_tpi=rim_debug_stats.get('rejected_tpi', 0),
+            rejected_edge=rim_debug_stats.get('rejected_edge', 0),
+            rejected_nms=rim_debug_stats.get('rejected_nms', 0),
+            rejected_maxima_cap=rim_debug_stats.get('rejected_maxima_cap', 0),
+            rejected_topk=rim_debug_stats.get('rejected_topk', 0),
+            rejected_after_view_dedup=rim_debug_stats.get('rejected_after_view_dedup', 0),
+            # Edge gating stats
+            rim_mask_cells_before_edge_gate=rim_debug_stats.get('rim_mask_cells_before_edge_gate', 0),
+            rim_mask_cells_after_edge_gate=rim_debug_stats.get('rim_mask_cells_after_edge_gate', 0),
+            edge_mode=rim_debug_stats.get('edge_mode', 'STEEP_ADJACENCY'),
+            steep_cells_count=rim_debug_stats.get('steep_cells_count', 0),
+            near_steep_cells_count=rim_debug_stats.get('near_steep_cells_count', 0),
+            # Auto-threshold fields
+            chosen_tpi_threshold_m=rim_debug_stats.get('chosen_tpi_threshold_m'),
+            chosen_slope_max_deg=rim_debug_stats.get('chosen_slope_max_deg'),
+            chosen_view_candidates_k=rim_debug_stats.get('chosen_view_candidates_k'),
+            auto_threshold_applied=rim_debug_stats.get('auto_threshold_applied', False),
+            # Sample coordinates for debug visualization
+            sample_rim_candidates=rim_debug_stats.get('sample_rim_candidates'),
+            sample_local_maxima=rim_debug_stats.get('sample_local_maxima'),
+            sample_view_analyzed=rim_debug_stats.get('sample_view_analyzed'),
+        )
+
     # Build result
     meta = AnalysisMeta(
         request_id=request_id,
@@ -1061,6 +1208,7 @@ async def analyze_terrain(
         dem_vertical_accuracy_m=source_info.vertical_accuracy_m if source_info else None,
         dem_citation=source_info.citation if source_info else None,
         structure_debug=structure_debug,
+        rim_overlook_debug=rim_overlook_debug,
     )
 
     return TerrainAnalysisResult(

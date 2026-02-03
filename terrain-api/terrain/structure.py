@@ -58,12 +58,274 @@ class StructureMetrics:
     max_structure_location: Optional[Tuple[float, float]] = None  # (lat, lon) of best cell
     distance_centroid_to_max_m: float = 0.0  # Distance from centroid to max location
 
+    # TPI (Topographic Position Index) metrics
+    # Positive TPI = ridges/overlooks (cell higher than surroundings)
+    # Negative TPI = basins/valleys (cell lower than surroundings)
+    tpi_small_m: float = 0.0   # TPI at ~400m radius (local position)
+    tpi_large_m: float = 0.0   # TPI at ~2000m radius (landscape position)
+    rim_strength: float = 0.0  # 0-1 score for rim/overlook candidacy (positive TPI)
+    basin_strength: float = 0.0  # 0-1 score for basin/valley candidacy (negative TPI)
+    is_rim_candidate: bool = False   # True if high TPI + reasonable slope
+    is_basin_candidate: bool = False  # True if low (negative) TPI
+
 
 # Thresholds for structure classification
 MICRO_RELIEF_THRESHOLD = 5.0    # meters - minimum for micro-dramatic
 MACRO_RELIEF_THRESHOLD = 30.0   # meters - minimum for macro-dramatic
 CURVATURE_THRESHOLD = 0.02      # curvature units for "interesting" terrain
 SLOPE_BREAK_THRESHOLD = 8.0     # degrees - significant slope change
+
+# TPI (Topographic Position Index) parameters
+TPI_SMALL_RADIUS_M = 400.0      # ~400m radius for local position
+TPI_LARGE_RADIUS_M = 2000.0     # ~2000m radius for landscape position
+TPI_THRESHOLD_M = 20.0          # meters - threshold for rim/basin classification
+TPI_SLOPE_MAX_DEG = 20.0        # max slope for rim candidate (overlooks are walkable)
+TPI_NORMALIZATION_M = 50.0      # meters - for normalizing strength to 0-1
+
+
+# =============================================================================
+# TPI (Topographic Position Index) using Integral Image
+# =============================================================================
+
+def summed_area_table(Z: np.ndarray) -> np.ndarray:
+    """
+    Compute summed-area table (integral image) for elevation grid.
+
+    SAT[i,j] = sum of all Z values from (0,0) to (i,j) inclusive.
+    This enables O(1) computation of any rectangular window sum.
+
+    Args:
+        Z: 2D elevation array
+
+    Returns:
+        SAT array with same shape as Z
+    """
+    # Use cumsum for efficiency
+    sat = np.cumsum(np.cumsum(Z, axis=0), axis=1)
+    return sat
+
+
+def window_sum_from_sat(
+    sat: np.ndarray,
+    row: int,
+    col: int,
+    half_window: int,
+) -> Tuple[float, int]:
+    """
+    Compute sum of values in a square window using the SAT.
+
+    Window is centered at (row, col) with size (2*half_window+1) x (2*half_window+1).
+    Handles edge clamping automatically.
+
+    Args:
+        sat: Summed-area table
+        row: Center row index
+        col: Center column index
+        half_window: Half-width of window in cells
+
+    Returns:
+        (window_sum, window_count) - sum of values and number of cells in window
+    """
+    rows, cols = sat.shape
+
+    # Clamp window bounds to grid
+    r_min = max(0, row - half_window)
+    r_max = min(rows - 1, row + half_window)
+    c_min = max(0, col - half_window)
+    c_max = min(cols - 1, col + half_window)
+
+    # SAT formula: sum(r_min:r_max, c_min:c_max) =
+    #   SAT[r_max, c_max]
+    # - SAT[r_min-1, c_max] (if r_min > 0)
+    # - SAT[r_max, c_min-1] (if c_min > 0)
+    # + SAT[r_min-1, c_min-1] (if both > 0)
+
+    total = sat[r_max, c_max]
+
+    if r_min > 0:
+        total -= sat[r_min - 1, c_max]
+
+    if c_min > 0:
+        total -= sat[r_max, c_min - 1]
+
+    if r_min > 0 and c_min > 0:
+        total += sat[r_min - 1, c_min - 1]
+
+    count = (r_max - r_min + 1) * (c_max - c_min + 1)
+
+    return float(total), count
+
+
+def compute_window_mean_grid(
+    Z: np.ndarray,
+    half_window_cells: int,
+) -> np.ndarray:
+    """
+    Compute mean elevation in square window around each cell using SAT.
+
+    Args:
+        Z: 2D elevation array
+        half_window_cells: Half-width of window in cells
+
+    Returns:
+        2D array of same shape with window means
+    """
+    sat = summed_area_table(Z)
+    rows, cols = Z.shape
+
+    mean_grid = np.zeros_like(Z, dtype=np.float64)
+
+    for r in range(rows):
+        for c in range(cols):
+            window_sum, count = window_sum_from_sat(sat, r, c, half_window_cells)
+            mean_grid[r, c] = window_sum / count if count > 0 else Z[r, c]
+
+    return mean_grid
+
+
+def compute_tpi_grids(
+    elevations: np.ndarray,
+    cell_size_m: float,
+    small_radius_m: float = TPI_SMALL_RADIUS_M,
+    large_radius_m: float = TPI_LARGE_RADIUS_M,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Compute TPI (Topographic Position Index) grids at two scales.
+
+    TPI = elevation - mean(neighborhood)
+    Positive = higher than surroundings (ridges, overlooks)
+    Negative = lower than surroundings (valleys, basins)
+
+    Args:
+        elevations: 2D elevation array
+        cell_size_m: Cell size in meters
+        small_radius_m: Target radius for small-scale TPI (~400m)
+        large_radius_m: Target radius for large-scale TPI (~2000m)
+
+    Returns:
+        (tpi_small, tpi_large) - two TPI arrays
+    """
+    rows, cols = elevations.shape
+
+    # Convert radius to half-window cells
+    half_small = max(1, round(small_radius_m / cell_size_m))
+    half_large = max(1, round(large_radius_m / cell_size_m))
+
+    # Clamp to reasonable size (max half = min dimension // 2 - 1)
+    max_half = min(rows, cols) // 2 - 1
+    max_half = max(1, max_half)
+
+    half_small = min(half_small, max_half)
+    half_large = min(half_large, max_half)
+
+    # Compute window means
+    mean_small = compute_window_mean_grid(elevations, half_small)
+    mean_large = compute_window_mean_grid(elevations, half_large)
+
+    # TPI = elevation - mean
+    tpi_small = elevations - mean_small
+    tpi_large = elevations - mean_large
+
+    return tpi_small, tpi_large
+
+
+def compute_tpi_derived_fields(
+    tpi_large: np.ndarray,
+    slope_deg: np.ndarray,
+    cells: List[Tuple[int, int]],
+    tpi_threshold_m: float = TPI_THRESHOLD_M,
+    slope_max_deg: float = TPI_SLOPE_MAX_DEG,
+    normalization_m: float = TPI_NORMALIZATION_M,
+) -> Tuple[float, float, float, float, bool, bool]:
+    """
+    Compute TPI-derived fields for a set of cells.
+
+    Args:
+        tpi_large: Large-scale TPI grid
+        slope_deg: Slope grid in degrees
+        cells: List of (row, col) cell indices
+        tpi_threshold_m: Threshold for rim/basin classification
+        slope_max_deg: Maximum slope for rim candidate
+        normalization_m: Scale for normalizing strength to 0-1
+
+    Returns:
+        (mean_tpi_small, mean_tpi_large, rim_strength, basin_strength,
+         is_rim_candidate, is_basin_candidate)
+    """
+    if not cells:
+        return 0.0, 0.0, 0.0, 0.0, False, False
+
+    # Get TPI values for cells
+    tpi_values = np.array([tpi_large[r, c] for r, c in cells])
+    slope_values = np.array([slope_deg[r, c] for r, c in cells])
+
+    mean_tpi_large = float(np.mean(tpi_values))
+
+    # Compute rim strength: how much the area is elevated above surroundings
+    # Normalize positive TPI to 0-1 range
+    if mean_tpi_large > 0:
+        rim_strength = min(1.0, mean_tpi_large / normalization_m)
+    else:
+        rim_strength = 0.0
+
+    # Compute basin strength: how much the area is depressed below surroundings
+    # Normalize negative TPI to 0-1 range
+    if mean_tpi_large < 0:
+        basin_strength = min(1.0, abs(mean_tpi_large) / normalization_m)
+    else:
+        basin_strength = 0.0
+
+    # Check rim candidate: high positive TPI + reasonable slope
+    mean_slope = float(np.mean(slope_values))
+    is_rim_candidate = (mean_tpi_large > tpi_threshold_m) and (mean_slope < slope_max_deg)
+
+    # Check basin candidate: significantly negative TPI
+    is_basin_candidate = mean_tpi_large < -tpi_threshold_m
+
+    return mean_tpi_large, rim_strength, basin_strength, is_rim_candidate, is_basin_candidate
+
+
+def compute_tpi_for_cell(
+    row: int,
+    col: int,
+    tpi_small: np.ndarray,
+    tpi_large: np.ndarray,
+    slope_deg: np.ndarray,
+    tpi_threshold_m: float = TPI_THRESHOLD_M,
+    slope_max_deg: float = TPI_SLOPE_MAX_DEG,
+    normalization_m: float = TPI_NORMALIZATION_M,
+) -> Tuple[float, float, float, float, bool, bool]:
+    """
+    Compute TPI metrics for a single cell.
+
+    Args:
+        row, col: Cell indices
+        tpi_small: Small-scale TPI grid
+        tpi_large: Large-scale TPI grid
+        slope_deg: Slope grid
+        tpi_threshold_m: Threshold for rim/basin classification
+        slope_max_deg: Maximum slope for rim candidate
+        normalization_m: Scale for normalizing strength
+
+    Returns:
+        (tpi_small_m, tpi_large_m, rim_strength, basin_strength,
+         is_rim_candidate, is_basin_candidate)
+    """
+    tpi_s = float(tpi_small[row, col])
+    tpi_l = float(tpi_large[row, col])
+    slope = float(slope_deg[row, col])
+
+    # Rim strength
+    rim_strength = min(1.0, max(0.0, tpi_l / normalization_m)) if tpi_l > 0 else 0.0
+
+    # Basin strength
+    basin_strength = min(1.0, max(0.0, abs(tpi_l) / normalization_m)) if tpi_l < 0 else 0.0
+
+    # Candidates
+    is_rim_candidate = (tpi_l > tpi_threshold_m) and (slope < slope_max_deg)
+    is_basin_candidate = tpi_l < -tpi_threshold_m
+
+    return tpi_s, tpi_l, rim_strength, basin_strength, is_rim_candidate, is_basin_candidate
 
 
 def compute_local_relief(
@@ -269,6 +531,8 @@ def compute_structure_metrics(
     dem_grid=None,  # Optional DEMGrid for lat/lon conversion
     centroid_row: float = None,
     centroid_col: float = None,
+    tpi_small: np.ndarray = None,  # Optional precomputed TPI grids
+    tpi_large: np.ndarray = None,
 ) -> StructureMetrics:
     """
     Compute comprehensive structure metrics for a terrain region.
@@ -282,6 +546,8 @@ def compute_structure_metrics(
         dem_grid: Optional DEMGrid for lat/lon conversion (for max location)
         centroid_row: Optional centroid row for per-cell analysis
         centroid_col: Optional centroid col for per-cell analysis
+        tpi_small: Optional precomputed small-scale TPI grid
+        tpi_large: Optional precomputed large-scale TPI grid
 
     Returns:
         StructureMetrics with all computed values
@@ -306,6 +572,12 @@ def compute_structure_metrics(
             max_structure_score_in_zone=0.0,
             max_structure_location=None,
             distance_centroid_to_max_m=0.0,
+            tpi_small_m=0.0,
+            tpi_large_m=0.0,
+            rim_strength=0.0,
+            basin_strength=0.0,
+            is_rim_candidate=False,
+            is_basin_candidate=False,
         )
 
     # 1. Local relief at two scales
@@ -402,6 +674,25 @@ def compute_structure_metrics(
         max_lat, max_lon = dem_grid.indices_to_lat_lon(max_r, max_c)
         max_structure_location = (float(max_lat), float(max_lon))
 
+    # 8. TPI (Topographic Position Index) metrics
+    # Compute TPI grids if not provided
+    if tpi_small is None or tpi_large is None:
+        tpi_small_grid, tpi_large_grid = compute_tpi_grids(elevations, cell_size_m)
+    else:
+        tpi_small_grid, tpi_large_grid = tpi_small, tpi_large
+
+    # Compute TPI-derived fields for the cells
+    (mean_tpi_large, rim_strength, basin_strength,
+     is_rim_candidate, is_basin_candidate) = compute_tpi_derived_fields(
+        tpi_large=tpi_large_grid,
+        slope_deg=slope_deg,
+        cells=cells,
+    )
+
+    # Get mean small TPI as well
+    tpi_small_values = [tpi_small_grid[r, c] for r, c in cells]
+    mean_tpi_small = float(np.mean(tpi_small_values)) if tpi_small_values else 0.0
+
     return StructureMetrics(
         micro_relief_m=micro_relief,
         macro_relief_m=macro_relief,
@@ -421,6 +712,13 @@ def compute_structure_metrics(
         max_structure_score_in_zone=max_structure_score_in_zone,
         max_structure_location=max_structure_location,
         distance_centroid_to_max_m=distance_centroid_to_max_m,
+        # TPI fields
+        tpi_small_m=mean_tpi_small,
+        tpi_large_m=mean_tpi_large,
+        rim_strength=rim_strength,
+        basin_strength=basin_strength,
+        is_rim_candidate=is_rim_candidate,
+        is_basin_candidate=is_basin_candidate,
     )
 
 
@@ -686,6 +984,393 @@ def validate_subject_structure(
     is_valid = subject_max >= zone_max_score - tolerance
 
     return is_valid, subject_min, subject_median, subject_max
+
+
+# =============================================================================
+# Per-Cell Rim Candidate Detection
+# =============================================================================
+
+@dataclass
+class RimCandidate:
+    """A single rim/overlook candidate cell."""
+    row: int
+    col: int
+    lat: float
+    lon: float
+    elevation_m: float
+    slope_deg: float
+    tpi_large_m: float
+    rim_strength: float
+
+
+# Per-cell rim candidate thresholds (more permissive than zone-level)
+RIM_CELL_TPI_THRESHOLD_M = 12.0     # Lower than zone-level (20m) to catch more candidates
+RIM_CELL_SLOPE_MAX_DEG = 25.0       # Slightly steeper allowed for viewpoints
+RIM_CELL_SLOPE_BREAK_THRESHOLD_DEG = 8.0  # Minimum slope break to qualify as edge/rim
+RIM_CELL_STEEP_SLOPE_DEG = 35.0     # Slope threshold for "steep" cells
+RIM_CELL_NEAR_STEEP_RADIUS = 2      # Radius in cells for steep adjacency check
+RIM_NMS_NEIGHBORHOOD = 5            # Non-max suppression neighborhood (cells)
+RIM_MAX_RAW_CANDIDATES = 500        # Cap on raw candidates before NMS
+
+# Edge gating modes
+RIM_EDGE_MODE_NONE = "NONE"
+RIM_EDGE_MODE_SLOPE_BREAK = "SLOPE_BREAK"
+RIM_EDGE_MODE_STEEP_ADJACENCY = "STEEP_ADJACENCY"
+RIM_EDGE_MODE_BOTH = "BOTH"
+RIM_EDGE_MODE_DEFAULT = RIM_EDGE_MODE_STEEP_ADJACENCY  # Default: steep adjacency
+
+
+def compute_slope_break_grid(slope_deg: np.ndarray) -> np.ndarray:
+    """
+    Compute per-cell max slope break (edge-ness) efficiently using numpy.
+
+    For each cell, computes the maximum absolute slope difference to any
+    of its 8 neighbors. High values indicate edges, cliffs, rim boundaries.
+
+    Args:
+        slope_deg: Slope grid in degrees
+
+    Returns:
+        2D array of max slope break values (degrees) for each cell
+    """
+    rows, cols = slope_deg.shape
+
+    # Pad the array to handle edges
+    padded = np.pad(slope_deg, pad_width=1, mode='edge')
+
+    # Compute max difference to any neighbor using rolling windows
+    max_break = np.zeros_like(slope_deg, dtype=np.float64)
+
+    # Offsets for 8 neighbors
+    offsets = [(-1, -1), (-1, 0), (-1, 1),
+               (0, -1),           (0, 1),
+               (1, -1),  (1, 0),  (1, 1)]
+
+    for dr, dc in offsets:
+        neighbor = padded[1 + dr:rows + 1 + dr, 1 + dc:cols + 1 + dc]
+        diff = np.abs(slope_deg - neighbor)
+        max_break = np.maximum(max_break, diff)
+
+    return max_break
+
+
+def compute_near_steep_mask(
+    slope_deg: np.ndarray,
+    steep_slope_deg: float = RIM_CELL_STEEP_SLOPE_DEG,
+    radius_cells: int = RIM_CELL_NEAR_STEEP_RADIUS,
+) -> tuple:
+    """
+    Compute mask for cells that are near steep terrain (within radius).
+
+    This is effective for canyon rims: finds walkable cells adjacent to drops.
+
+    Args:
+        slope_deg: Slope grid in degrees
+        steep_slope_deg: Threshold for "steep" cells (default 35°)
+        radius_cells: Radius in cells to search for steep neighbors (default 2)
+
+    Returns:
+        Tuple of (near_steep_mask, steep_mask, steep_count, near_steep_count)
+    """
+    rows, cols = slope_deg.shape
+
+    # Step 1: Identify steep cells
+    steep_mask = slope_deg > steep_slope_deg
+    steep_count = int(np.sum(steep_mask))
+
+    # Step 2: Dilate steep_mask by radius_cells using simple neighborhood max
+    # This is equivalent to: near_steep[r,c] = any(steep within radius)
+    near_steep_mask = np.zeros_like(steep_mask, dtype=bool)
+
+    # Pad steep_mask for edge handling
+    padded = np.pad(steep_mask, pad_width=radius_cells, mode='constant', constant_values=False)
+
+    # For each cell, check if any cell in the radius is steep
+    for dr in range(-radius_cells, radius_cells + 1):
+        for dc in range(-radius_cells, radius_cells + 1):
+            # Extract shifted view
+            shifted = padded[
+                radius_cells + dr:radius_cells + dr + rows,
+                radius_cells + dc:radius_cells + dc + cols
+            ]
+            near_steep_mask = near_steep_mask | shifted
+
+    near_steep_count = int(np.sum(near_steep_mask))
+
+    return near_steep_mask, steep_mask, steep_count, near_steep_count
+
+
+def compute_rim_candidate_mask(
+    tpi_large: np.ndarray,
+    slope_deg: np.ndarray,
+    tpi_threshold_m: float = RIM_CELL_TPI_THRESHOLD_M,
+    slope_max_deg: float = RIM_CELL_SLOPE_MAX_DEG,
+    edge_mode: str = RIM_EDGE_MODE_DEFAULT,
+    slope_break_threshold_deg: float = RIM_CELL_SLOPE_BREAK_THRESHOLD_DEG,
+    steep_slope_deg: float = RIM_CELL_STEEP_SLOPE_DEG,
+    near_steep_radius_cells: int = RIM_CELL_NEAR_STEEP_RADIUS,
+    slope_break_grid: np.ndarray = None,
+    return_debug: bool = False,
+) -> np.ndarray:
+    """
+    Build per-cell rim candidate mask with edge-ness gating.
+
+    A cell is a rim candidate if:
+    - tpi_large > tpi_threshold_m (cell is higher than surroundings)
+    - slope < slope_max_deg (cell is walkable)
+    - Edge condition based on edge_mode:
+      - SLOPE_BREAK: max_slope_break > slope_break_threshold_deg
+      - STEEP_ADJACENCY: cell is within radius_cells of a steep cell
+      - BOTH: either condition passes
+      - NONE: no edge filtering (original behavior)
+
+    Args:
+        tpi_large: Large-scale TPI grid (elevation - neighborhood mean)
+        slope_deg: Slope grid in degrees
+        tpi_threshold_m: Minimum TPI for rim candidacy (default 12m)
+        slope_max_deg: Maximum slope for rim candidacy (default 25°)
+        edge_mode: Edge gating mode (SLOPE_BREAK, STEEP_ADJACENCY, BOTH, NONE)
+        slope_break_threshold_deg: Minimum slope break for edge-ness (default 8°)
+        steep_slope_deg: Threshold for steep cells (default 35°)
+        near_steep_radius_cells: Radius for steep adjacency check (default 2)
+        slope_break_grid: Pre-computed slope break grid (optional)
+        return_debug: If True, return tuple with debug info
+
+    Returns:
+        If return_debug=False: Boolean mask where True = rim candidate cell
+        If return_debug=True: Tuple of (rim_mask, debug_dict) with edge gating stats
+    """
+    # Base mask: high TPI + walkable slope
+    base_mask = (tpi_large > tpi_threshold_m) & (slope_deg < slope_max_deg)
+    cells_before_edge = int(np.sum(base_mask))
+
+    debug_info = {
+        'rim_mask_cells_before_edge_gate': cells_before_edge,
+        'rim_mask_cells_after_edge_gate': 0,
+        'edge_mode': edge_mode,
+        'slope_break_threshold_deg': slope_break_threshold_deg,
+        'steep_slope_deg': steep_slope_deg,
+        'near_steep_radius_cells': near_steep_radius_cells,
+        'steep_cells_count': 0,
+        'near_steep_cells_count': 0,
+    }
+
+    # No edge filtering
+    if edge_mode == RIM_EDGE_MODE_NONE:
+        debug_info['rim_mask_cells_after_edge_gate'] = cells_before_edge
+        if return_debug:
+            return base_mask, debug_info
+        return base_mask
+
+    # Compute edge masks based on mode
+    edge_mask = np.zeros_like(base_mask, dtype=bool)
+
+    if edge_mode in (RIM_EDGE_MODE_SLOPE_BREAK, RIM_EDGE_MODE_BOTH):
+        # Compute slope break grid if not provided
+        if slope_break_grid is None:
+            slope_break_grid = compute_slope_break_grid(slope_deg)
+        slope_break_edge = slope_break_grid > slope_break_threshold_deg
+        edge_mask = edge_mask | slope_break_edge
+
+    if edge_mode in (RIM_EDGE_MODE_STEEP_ADJACENCY, RIM_EDGE_MODE_BOTH):
+        near_steep_mask, steep_mask, steep_count, near_steep_count = compute_near_steep_mask(
+            slope_deg=slope_deg,
+            steep_slope_deg=steep_slope_deg,
+            radius_cells=near_steep_radius_cells,
+        )
+        edge_mask = edge_mask | near_steep_mask
+        debug_info['steep_cells_count'] = steep_count
+        debug_info['near_steep_cells_count'] = near_steep_count
+
+    # Final mask: base conditions + edge condition
+    rim_mask = base_mask & edge_mask
+    debug_info['rim_mask_cells_after_edge_gate'] = int(np.sum(rim_mask))
+
+    if return_debug:
+        return rim_mask, debug_info
+    return rim_mask
+
+
+def compute_rim_strength_grid(
+    tpi_large: np.ndarray,
+    normalization_m: float = TPI_NORMALIZATION_M,
+) -> np.ndarray:
+    """
+    Compute per-cell rim strength (0-1) from TPI.
+
+    Args:
+        tpi_large: Large-scale TPI grid
+        normalization_m: TPI value that maps to strength 1.0
+
+    Returns:
+        Rim strength grid (0-1), 0 for negative TPI
+    """
+    rim_strength = np.clip(tpi_large / normalization_m, 0.0, 1.0)
+    # Zero out negative TPI (basins)
+    rim_strength = np.where(tpi_large > 0, rim_strength, 0.0)
+    return rim_strength
+
+
+def extract_rim_candidates_nms(
+    rim_mask: np.ndarray,
+    rim_strength: np.ndarray,
+    tpi_large: np.ndarray,
+    slope_deg: np.ndarray,
+    elevations: np.ndarray,
+    dem_grid,  # DEMGrid for lat/lon conversion
+    neighborhood_size: int = RIM_NMS_NEIGHBORHOOD,
+    max_candidates: int = RIM_MAX_RAW_CANDIDATES,
+    use_spatial_tiling: bool = False,
+    tile_count: int = 16,  # 4x4 grid of tiles
+) -> Tuple[List[RimCandidate], int]:
+    """
+    Extract distinct rim candidate points using non-maximum suppression.
+
+    For each local maximum of rim_strength within the rim_mask,
+    keeps only the strongest point in each neighborhood.
+
+    Args:
+        rim_mask: Boolean mask of rim candidate cells
+        rim_strength: Per-cell rim strength grid (0-1)
+        tpi_large: Large-scale TPI grid
+        slope_deg: Slope grid
+        elevations: Elevation grid
+        dem_grid: DEMGrid for coordinate conversion
+        neighborhood_size: Size of NMS neighborhood (cells, must be odd)
+        max_candidates: Maximum candidates to return
+        use_spatial_tiling: If True, select candidates evenly across spatial tiles
+        tile_count: Number of tiles (must be a perfect square, e.g., 16 for 4x4)
+
+    Returns:
+        Tuple of (List of RimCandidate objects, total_maxima_found before cap)
+    """
+    rows, cols = rim_mask.shape
+
+    # Ensure odd neighborhood
+    if neighborhood_size % 2 == 0:
+        neighborhood_size += 1
+    half_n = neighborhood_size // 2
+
+    # Apply mask to rim_strength (set non-candidates to 0)
+    masked_strength = np.where(rim_mask, rim_strength, 0.0)
+
+    # Find all candidate cells (where mask is True)
+    candidate_indices = np.argwhere(rim_mask)
+
+    if len(candidate_indices) == 0:
+        return []
+
+    # Sort by rim_strength descending
+    strengths = [masked_strength[r, c] for r, c in candidate_indices]
+    sorted_indices = np.argsort(strengths)[::-1]
+
+    # Non-maximum suppression
+    suppressed = np.zeros_like(rim_mask, dtype=bool)
+    candidates = []
+
+    for idx in sorted_indices:
+        r, c = candidate_indices[idx]
+
+        # Skip if already suppressed
+        if suppressed[r, c]:
+            continue
+
+        # Check if this is a local maximum in the neighborhood
+        r_min = max(0, r - half_n)
+        r_max = min(rows, r + half_n + 1)
+        c_min = max(0, c - half_n)
+        c_max = min(cols, c + half_n + 1)
+
+        neighborhood = masked_strength[r_min:r_max, c_min:c_max]
+        local_max = np.max(neighborhood)
+
+        # Only keep if this cell is the local maximum (or tied)
+        if masked_strength[r, c] < local_max - 1e-6:
+            continue
+
+        # This is a local maximum - keep it
+        lat, lon = dem_grid.indices_to_lat_lon(r, c)
+
+        candidates.append(RimCandidate(
+            row=int(r),
+            col=int(c),
+            lat=float(lat),
+            lon=float(lon),
+            elevation_m=float(elevations[r, c]),
+            slope_deg=float(slope_deg[r, c]),
+            tpi_large_m=float(tpi_large[r, c]),
+            rim_strength=float(rim_strength[r, c]),
+        ))
+
+        # Suppress neighborhood
+        suppressed[r_min:r_max, c_min:c_max] = True
+
+    # Track total maxima found before any cap
+    total_maxima_found = len(candidates)
+
+    # Apply spatial tiling if requested and we have too many candidates
+    if use_spatial_tiling and len(candidates) > max_candidates:
+        candidates = _select_candidates_by_spatial_tiles(
+            candidates, max_candidates, tile_count, rows, cols
+        )
+    elif len(candidates) > max_candidates:
+        # Simple truncation by strength (already sorted)
+        candidates = candidates[:max_candidates]
+
+    return candidates, total_maxima_found
+
+
+def _select_candidates_by_spatial_tiles(
+    candidates: List[RimCandidate],
+    max_candidates: int,
+    tile_count: int,
+    rows: int,
+    cols: int,
+) -> List[RimCandidate]:
+    """
+    Select candidates evenly distributed across spatial tiles.
+
+    Divides the grid into tiles and selects top candidates from each tile
+    to ensure spatial coverage across the AOI.
+    """
+    import math
+
+    # Compute tile dimensions
+    tiles_per_side = int(math.sqrt(tile_count))
+    tile_rows = rows // tiles_per_side
+    tile_cols = cols // tiles_per_side
+
+    # Assign each candidate to a tile
+    tile_candidates: Dict[Tuple[int, int], List[RimCandidate]] = {}
+    for cand in candidates:
+        tile_r = min(cand.row // tile_rows, tiles_per_side - 1)
+        tile_c = min(cand.col // tile_cols, tiles_per_side - 1)
+        tile_key = (tile_r, tile_c)
+        if tile_key not in tile_candidates:
+            tile_candidates[tile_key] = []
+        tile_candidates[tile_key].append(cand)
+
+    # Round-robin selection from tiles
+    selected = []
+    candidates_per_tile = max(1, max_candidates // len(tile_candidates))
+
+    # First pass: take up to candidates_per_tile from each tile
+    for tile_key, tile_cands in tile_candidates.items():
+        # Candidates are already sorted by strength
+        selected.extend(tile_cands[:candidates_per_tile])
+
+    # Second pass: fill remaining slots with best remaining candidates
+    if len(selected) < max_candidates:
+        remaining = []
+        for tile_key, tile_cands in tile_candidates.items():
+            remaining.extend(tile_cands[candidates_per_tile:])
+        # Sort remaining by strength and fill
+        remaining.sort(key=lambda c: c.rim_strength, reverse=True)
+        selected.extend(remaining[:max_candidates - len(selected)])
+
+    # Sort final selection by strength
+    selected.sort(key=lambda c: c.rim_strength, reverse=True)
+    return selected[:max_candidates]
 
 
 def get_structure_explanation(metrics: StructureMetrics) -> str:

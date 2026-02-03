@@ -24,6 +24,50 @@ except ImportError:
 # AWS Terrain Tiles URL (Terrarium format)
 TERRAIN_TILES_URL = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
 
+# Earth radius approximations for local tangent plane
+METERS_PER_DEG_LAT = 111320.0
+
+
+def latlon_to_xy_m(lat: float, lon: float, lat0: float, lon0: float) -> Tuple[float, float]:
+    """
+    Convert lat/lon to local tangent plane coordinates (x_m, y_m).
+
+    Uses a flat-earth approximation centered at (lat0, lon0).
+    x_m increases eastward, y_m increases northward.
+
+    Args:
+        lat: Latitude to convert
+        lon: Longitude to convert
+        lat0: Reference latitude (center of tangent plane)
+        lon0: Reference longitude (center of tangent plane)
+
+    Returns:
+        (x_m, y_m) in meters relative to (lat0, lon0)
+    """
+    meters_per_deg_lon = METERS_PER_DEG_LAT * cos(radians(lat0))
+    x_m = (lon - lon0) * meters_per_deg_lon
+    y_m = (lat - lat0) * METERS_PER_DEG_LAT
+    return x_m, y_m
+
+
+def xy_m_to_latlon(x_m: float, y_m: float, lat0: float, lon0: float) -> Tuple[float, float]:
+    """
+    Convert local tangent plane coordinates (x_m, y_m) back to lat/lon.
+
+    Args:
+        x_m: Easting in meters from reference point
+        y_m: Northing in meters from reference point
+        lat0: Reference latitude (center of tangent plane)
+        lon0: Reference longitude (center of tangent plane)
+
+    Returns:
+        (lat, lon) in degrees
+    """
+    meters_per_deg_lon = METERS_PER_DEG_LAT * cos(radians(lat0))
+    lat = lat0 + y_m / METERS_PER_DEG_LAT
+    lon = lon0 + x_m / meters_per_deg_lon
+    return lat, lon
+
 
 @dataclass
 class DEMGrid:
@@ -34,6 +78,12 @@ class DEMGrid:
     cell_size_m: float  # Approximate cell size in meters
     bounds: dict  # {"north", "south", "east", "west"}
 
+    # Local tangent plane coordinates (initialized by init_local_coords)
+    _lat0: float = None  # Reference latitude
+    _lon0: float = None  # Reference longitude
+    _x_coords_m: np.ndarray = None  # x coordinate of each column (meters east of lon0)
+    _y_coords_m: np.ndarray = None  # y coordinate of each row (meters north of lat0)
+
     @property
     def rows(self) -> int:
         return self.elevations.shape[0]
@@ -41,6 +91,145 @@ class DEMGrid:
     @property
     def cols(self) -> int:
         return self.elevations.shape[1]
+
+    @property
+    def has_local_coords(self) -> bool:
+        """Check if local meter coordinates have been initialized."""
+        return self._x_coords_m is not None and self._y_coords_m is not None
+
+    @property
+    def grid_diagonal_m(self) -> float:
+        """
+        Compute the diagonal extent of the grid in meters.
+
+        Uses local coordinates if initialized, otherwise estimates from bounds.
+        """
+        if self.has_local_coords:
+            x_extent = abs(self._x_coords_m[-1] - self._x_coords_m[0])
+            y_extent = abs(self._y_coords_m[0] - self._y_coords_m[-1])
+        else:
+            # Estimate from bounds
+            lat_extent = abs(self.bounds["north"] - self.bounds["south"])
+            lon_extent = abs(self.bounds["east"] - self.bounds["west"])
+            center_lat = (self.bounds["north"] + self.bounds["south"]) / 2
+            y_extent = lat_extent * METERS_PER_DEG_LAT
+            x_extent = lon_extent * METERS_PER_DEG_LAT * cos(radians(center_lat))
+
+        return (x_extent**2 + y_extent**2) ** 0.5
+
+    def init_local_coords(self, lat0: float = None, lon0: float = None) -> None:
+        """
+        Initialize local tangent plane coordinates for the grid.
+
+        Precomputes x/y meter coordinates for each grid cell relative to
+        the reference point (lat0, lon0). If not specified, uses grid center.
+
+        Args:
+            lat0: Reference latitude (default: grid center)
+            lon0: Reference longitude (default: grid center)
+        """
+        if lat0 is None:
+            lat0 = (self.bounds["north"] + self.bounds["south"]) / 2
+        if lon0 is None:
+            lon0 = (self.bounds["east"] + self.bounds["west"]) / 2
+
+        self._lat0 = lat0
+        self._lon0 = lon0
+
+        meters_per_deg_lon = METERS_PER_DEG_LAT * cos(radians(lat0))
+
+        # Compute x coordinate for each column (lon -> x_m)
+        self._x_coords_m = (self.lons - lon0) * meters_per_deg_lon
+
+        # Compute y coordinate for each row (lat -> y_m)
+        # Note: lats array goes north to south, so y decreases with increasing row index
+        self._y_coords_m = (self.lats - lat0) * METERS_PER_DEG_LAT
+
+    def latlon_to_xy(self, lat: float, lon: float) -> Tuple[float, float]:
+        """
+        Convert lat/lon to local (x_m, y_m) using this grid's reference point.
+
+        Requires init_local_coords() to have been called.
+        """
+        if not self.has_local_coords:
+            raise ValueError("Local coordinates not initialized. Call init_local_coords() first.")
+        return latlon_to_xy_m(lat, lon, self._lat0, self._lon0)
+
+    def xy_to_latlon(self, x_m: float, y_m: float) -> Tuple[float, float]:
+        """
+        Convert local (x_m, y_m) back to lat/lon using this grid's reference point.
+
+        Requires init_local_coords() to have been called.
+        """
+        if not self.has_local_coords:
+            raise ValueError("Local coordinates not initialized. Call init_local_coords() first.")
+        return xy_m_to_latlon(x_m, y_m, self._lat0, self._lon0)
+
+    def sample_dem_z_xy(self, x_m: float, y_m: float) -> float:
+        """
+        Sample DEM elevation at local (x_m, y_m) using bilinear interpolation.
+
+        This is the primary method for ray-marching in local coordinates.
+        Returns NaN if point is outside grid bounds.
+
+        Requires init_local_coords() to have been called.
+
+        Args:
+            x_m: Easting in meters from reference point
+            y_m: Northing in meters from reference point
+
+        Returns:
+            Interpolated elevation in meters, or NaN if out of bounds
+        """
+        if not self.has_local_coords:
+            raise ValueError("Local coordinates not initialized. Call init_local_coords() first.")
+
+        # Find fractional column index from x_m
+        # x_coords_m[0] is west edge, x_coords_m[-1] is east edge
+        x_min, x_max = self._x_coords_m[0], self._x_coords_m[-1]
+        if x_m < x_min or x_m > x_max:
+            return float('nan')
+
+        # Linear interpolation to find column fraction
+        dx = self._x_coords_m[1] - self._x_coords_m[0] if self.cols > 1 else 1.0
+        fcol = (x_m - x_min) / dx if dx != 0 else 0.0
+
+        # Find fractional row index from y_m
+        # y_coords_m[0] is north edge (max y), y_coords_m[-1] is south edge (min y)
+        y_max, y_min = self._y_coords_m[0], self._y_coords_m[-1]
+        if y_m < y_min or y_m > y_max:
+            return float('nan')
+
+        # Note: row increases as y decreases (north to south)
+        dy = self._y_coords_m[0] - self._y_coords_m[1] if self.rows > 1 else 1.0
+        frow = (y_max - y_m) / dy if dy != 0 else 0.0
+
+        # Clamp to valid range for interpolation
+        frow = max(0.0, min(frow, self.rows - 1.0001))
+        fcol = max(0.0, min(fcol, self.cols - 1.0001))
+
+        # Integer indices
+        r0 = int(frow)
+        c0 = int(fcol)
+        r1 = min(r0 + 1, self.rows - 1)
+        c1 = min(c0 + 1, self.cols - 1)
+
+        # Fractional parts
+        dr = frow - r0
+        dc = fcol - c0
+
+        # Bilinear interpolation
+        z00 = self.elevations[r0, c0]
+        z01 = self.elevations[r0, c1]
+        z10 = self.elevations[r1, c0]
+        z11 = self.elevations[r1, c1]
+
+        return float(
+            z00 * (1 - dr) * (1 - dc) +
+            z01 * (1 - dr) * dc +
+            z10 * dr * (1 - dc) +
+            z11 * dr * dc
+        )
 
     def lat_lon_to_indices(self, lat: float, lon: float) -> tuple[int, int]:
         """Convert lat/lon to grid indices (row, col)."""
