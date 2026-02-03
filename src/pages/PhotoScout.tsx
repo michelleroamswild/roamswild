@@ -27,16 +27,148 @@ import {
   CheckCircle,
   XCircle,
   CaretDown,
+  CaretRight,
   Mountains,
   Crosshair,
   Funnel,
   Bug,
+  ThumbsUp,
+  ThumbsDown,
+  Minus,
+  Gear,
+  ArrowUp,
+  ArrowDown,
+  Lightning,
 } from "@phosphor-icons/react";
+import { toast } from "@/hooks/use-toast";
 import { useGoogleMaps } from "@/components/GoogleMapsProvider";
 import { useTerrainAnalysis } from "@/hooks/use-terrain-analysis";
 import { Header } from "@/components/Header";
 import { PlaceSearch } from "@/components/PlaceSearch";
-import type { TerrainAnalysisResult, Subject, StandingLocation, SunPosition, RimOverlookDebugStats } from "@/types/terrainValidation";
+import type { TerrainAnalysisResult, Subject, StandingLocation, SunPosition, RimOverlookDebugStats, DistantGlowScore } from "@/types/terrainValidation";
+
+// =============================================================================
+// Calibration Types & Helpers
+// =============================================================================
+
+interface CalibrationStats {
+  total_ratings: number;
+  by_rating: {
+    hit: number;
+    meh: number;
+    miss: number;
+  };
+  unique_regions: number;
+  ready_for_tuning: boolean;
+}
+
+interface WeightProfile {
+  name: string;
+  dags_weights: {
+    depth: number;
+    open: number;
+    rim: number;
+    sun_low: number;
+    sun_clear: number;
+    dir: number;
+  };
+  vas_weights: {
+    base_mult: number;
+    anchor_mult: number;
+  };
+  laa_weights: {
+    final_base_mult: number;
+    final_light_mult: number;
+  };
+  created_at: string;
+  tuned_from_n_samples?: number;
+}
+
+// Default weights matching backend defaults
+const DEFAULT_WEIGHTS: WeightProfile = {
+  name: "default",
+  dags_weights: { depth: 0.25, open: 0.20, rim: 0.15, sun_low: 0.15, sun_clear: 0.10, dir: 0.15 },
+  vas_weights: { base_mult: 0.70, anchor_mult: 0.30 },
+  laa_weights: { final_base_mult: 0.75, final_light_mult: 0.25 },
+  created_at: "",
+};
+
+// Feature name to human-readable label mapping
+const FEATURE_LABELS: Record<string, string> = {
+  depth: "Depth",
+  open: "Open sky",
+  rim: "Rim position",
+  sun_low: "Low sun",
+  sun_clear: "Sun clear",
+  dir: "Direction",
+  anchor: "Anchor feature",
+  anchor_light: "Anchor light",
+};
+
+/**
+ * Compute re-ranked score using custom weights.
+ * Mirrors backend scoring: DAGS -> VAS -> LAA
+ */
+function computeRerankScore(dg: DistantGlowScore, weights: WeightProfile): number {
+  // Step 1: DAGS score (weighted sum of normalized components)
+  const dags =
+    weights.dags_weights.depth * dg.depth_norm +
+    weights.dags_weights.open * dg.open_norm +
+    weights.dags_weights.rim * dg.rim_norm +
+    weights.dags_weights.sun_low * dg.sun_low_norm +
+    weights.dags_weights.sun_clear * dg.sun_clear_norm +
+    weights.dags_weights.dir * dg.dir_norm;
+
+  // Step 2: VAS combination (DAGS * (base + anchor_mult * anchor_score))
+  const anchorScore = dg.visual_anchor?.anchor_score ?? 0;
+  const dagsWithAnchor = dags * (weights.vas_weights.base_mult + weights.vas_weights.anchor_mult * anchorScore);
+
+  // Step 3: LAA combination (combined * (base + light_mult * anchor_light_score))
+  const anchorLightScore = dg.anchor_light?.anchor_light_score ?? 0;
+  const finalScore = dagsWithAnchor * (weights.laa_weights.final_base_mult + weights.laa_weights.final_light_mult * anchorLightScore);
+
+  return Math.max(0, Math.min(1, finalScore));
+}
+
+/**
+ * Compute per-feature contributions for explainability.
+ * Returns array of {feature, contribution} sorted by contribution (descending).
+ */
+function computeFeatureContributions(
+  dg: DistantGlowScore,
+  weights: WeightProfile
+): Array<{ feature: string; contribution: number; label: string }> {
+  const contributions: Array<{ feature: string; contribution: number; label: string }> = [];
+
+  // DAGS component contributions
+  contributions.push({ feature: "depth", contribution: weights.dags_weights.depth * dg.depth_norm, label: FEATURE_LABELS.depth });
+  contributions.push({ feature: "open", contribution: weights.dags_weights.open * dg.open_norm, label: FEATURE_LABELS.open });
+  contributions.push({ feature: "rim", contribution: weights.dags_weights.rim * dg.rim_norm, label: FEATURE_LABELS.rim });
+  contributions.push({ feature: "sun_low", contribution: weights.dags_weights.sun_low * dg.sun_low_norm, label: FEATURE_LABELS.sun_low });
+  contributions.push({ feature: "sun_clear", contribution: weights.dags_weights.sun_clear * dg.sun_clear_norm, label: FEATURE_LABELS.sun_clear });
+  contributions.push({ feature: "dir", contribution: weights.dags_weights.dir * dg.dir_norm, label: FEATURE_LABELS.dir });
+
+  // Anchor contribution (VAS boost)
+  const anchorScore = dg.visual_anchor?.anchor_score ?? 0;
+  if (anchorScore > 0) {
+    // Anchor contribution is roughly the boost it provides
+    const dagsBase = contributions.reduce((sum, c) => sum + c.contribution, 0);
+    const anchorBoost = dagsBase * weights.vas_weights.anchor_mult * anchorScore;
+    contributions.push({ feature: "anchor", contribution: anchorBoost, label: FEATURE_LABELS.anchor });
+  }
+
+  // Anchor light contribution (LAA boost)
+  const anchorLightScore = dg.anchor_light?.anchor_light_score ?? 0;
+  if (anchorLightScore > 0) {
+    // Light contribution is the boost from LAA
+    const combined = contributions.reduce((sum, c) => sum + c.contribution, 0);
+    const lightBoost = combined * weights.laa_weights.final_light_mult * anchorLightScore * 0.5; // Scale down for readability
+    contributions.push({ feature: "anchor_light", contribution: lightBoost, label: FEATURE_LABELS.anchor_light });
+  }
+
+  // Sort by contribution (descending) and return top contributors
+  return contributions.sort((a, b) => b.contribution - a.contribution);
+}
 
 // Convert degrees to compass direction
 function degreesToCompass(deg: number): string {
@@ -993,6 +1125,9 @@ function parseCoordinates(input: string): { lat: number; lon: number } | null {
   return { lat, lon };
 }
 
+// Terrain API URL for calibration ratings
+const TERRAIN_API_URL = import.meta.env.VITE_TERRAIN_API_URL || 'http://localhost:8000';
+
 export default function PhotoScout() {
   const { isLoaded } = useGoogleMaps();
 
@@ -1012,6 +1147,16 @@ export default function PhotoScout() {
   const [showDebugLocalMaxima, setShowDebugLocalMaxima] = useState(true);
   const [showDebugViewAnalyzed, setShowDebugViewAnalyzed] = useState(true);
 
+  // Calibration rating state - track which overlooks have been rated
+  const [ratedOverlooks, setRatedOverlooks] = useState<Record<number, 'hit' | 'meh' | 'miss'>>({});
+
+  // Calibration panel state
+  const [calibrationStats, setCalibrationStats] = useState<CalibrationStats | null>(null);
+  const [tunedWeights, setTunedWeights] = useState<WeightProfile | null>(null);
+  const [useTunedRanking, setUseTunedRanking] = useState(false);
+  const [calibrationPanelOpen, setCalibrationPanelOpen] = useState(false);
+  const [isTuning, setIsTuning] = useState(false);
+
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const overlaysRef = useRef<google.maps.MVCObject[]>([]);
 
@@ -1029,6 +1174,139 @@ export default function PhotoScout() {
       debug: showScoutDebug,  // Enable debug stats when scout debug mode is on
     });
   }, [analyze, parsedCoords, date, event, radius, showScoutDebug]);
+
+  // Calibration: submit rating for an overlook
+  const submitRating = useCallback(async (
+    overlook: StandingLocation,
+    rating: 'hit' | 'meh' | 'miss'
+  ) => {
+    if (!parsedCoords) return;
+
+    // Build the payload
+    const payload = {
+      region_lat: parsedCoords.lat,
+      region_lon: parsedCoords.lon,
+      date,
+      event_type: event,
+      viewpoint_id: `overlook_${overlook.standing_id}`,
+      viewpoint_lat: overlook.location.lat,
+      viewpoint_lon: overlook.location.lon,
+      rating,
+      // Include full distant_glow object for feature extraction on backend
+      distant_glow: overlook.view?.distant_glow || null,
+    };
+
+    try {
+      const response = await fetch(`${TERRAIN_API_URL}/calibration/rate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      // Update local state to show which rating was selected
+      setRatedOverlooks(prev => ({ ...prev, [overlook.standing_id]: rating }));
+
+      toast({
+        title: "Rating saved",
+        description: `Marked as ${rating}`,
+      });
+    } catch (err) {
+      console.error('Failed to submit rating:', err);
+      toast({
+        title: "Failed to save rating",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  }, [parsedCoords, date, event]);
+
+  // Fetch calibration stats
+  const fetchCalibrationStats = useCallback(async () => {
+    try {
+      const response = await fetch(`${TERRAIN_API_URL}/calibration/stats`);
+      if (response.ok) {
+        const data = await response.json();
+        setCalibrationStats(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch calibration stats:', err);
+    }
+  }, []);
+
+  // Fetch tuned weights if they exist
+  const fetchTunedWeights = useCallback(async () => {
+    try {
+      const response = await fetch(`${TERRAIN_API_URL}/calibration/weights?name=tuned`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.name === 'tuned' && data.tuned_from_n_samples > 0) {
+          setTunedWeights(data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch tuned weights:', err);
+    }
+  }, []);
+
+  // Tune weights
+  const handleTuneWeights = useCallback(async () => {
+    setIsTuning(true);
+    try {
+      const response = await fetch(`${TERRAIN_API_URL}/calibration/tune`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'logistic', save_as: 'tuned' }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Update local tuned weights
+      setTunedWeights(data.weights);
+
+      toast({
+        title: "Weights tuned successfully",
+        description: `Computed from ${data.samples_used.total} ratings (${data.samples_used.hit} hits, ${data.samples_used.miss} misses)`,
+      });
+
+      // Refresh stats
+      fetchCalibrationStats();
+    } catch (err) {
+      console.error('Failed to tune weights:', err);
+      toast({
+        title: "Failed to tune weights",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTuning(false);
+    }
+  }, [fetchCalibrationStats]);
+
+  // Fetch calibration data on mount and after ratings
+  useEffect(() => {
+    fetchCalibrationStats();
+    fetchTunedWeights();
+  }, [fetchCalibrationStats, fetchTunedWeights]);
+
+  // Refresh stats after a rating is submitted
+  useEffect(() => {
+    if (Object.keys(ratedOverlooks).length > 0) {
+      fetchCalibrationStats();
+    }
+  }, [ratedOverlooks, fetchCalibrationStats]);
+
+  // Get active weights for scoring
+  const activeWeights = useMemo(() => {
+    return useTunedRanking && tunedWeights ? tunedWeights : DEFAULT_WEIGHTS;
+  }, [useTunedRanking, tunedWeights]);
 
   // Auto-select first good subject
   useEffect(() => {
@@ -1912,6 +2190,106 @@ export default function PhotoScout() {
               <ScoutingFunnel debug={result.meta.rim_overlook_debug} />
             )}
 
+            {/* Calibration Panel - collapsible */}
+            <div className="border rounded-lg bg-white dark:bg-gray-900">
+              <button
+                onClick={() => setCalibrationPanelOpen(!calibrationPanelOpen)}
+                className="w-full flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Gear className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm font-medium">Calibration</span>
+                  {calibrationStats && (
+                    <span className="text-xs text-gray-400">
+                      {calibrationStats.total_ratings} ratings
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${
+                    useTunedRanking ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {useTunedRanking ? 'Tuned' : 'Default'}
+                  </span>
+                  {calibrationPanelOpen ? (
+                    <CaretDown className="w-4 h-4 text-gray-400" />
+                  ) : (
+                    <CaretRight className="w-4 h-4 text-gray-400" />
+                  )}
+                </div>
+              </button>
+
+              {calibrationPanelOpen && (
+                <div className="px-3 pb-3 border-t space-y-3">
+                  {/* Rating stats */}
+                  {calibrationStats && (
+                    <div className="flex items-center gap-3 pt-3">
+                      <div className="flex items-center gap-1">
+                        <ThumbsUp className="w-3.5 h-3.5 text-green-600" />
+                        <span className="text-xs text-gray-600">{calibrationStats.by_rating.hit}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Minus className="w-3.5 h-3.5 text-yellow-600" />
+                        <span className="text-xs text-gray-600">{calibrationStats.by_rating.meh}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <ThumbsDown className="w-3.5 h-3.5 text-red-600" />
+                        <span className="text-xs text-gray-600">{calibrationStats.by_rating.miss}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">
+                        ({calibrationStats.unique_regions} regions)
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Tune button */}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleTuneWeights}
+                      disabled={isTuning || !calibrationStats?.ready_for_tuning}
+                      className="text-xs"
+                    >
+                      {isTuning ? 'Tuning...' : 'Tune Weights'}
+                    </Button>
+                    {tunedWeights && (
+                      <span className="text-xs text-gray-400">
+                        Last tuned: {tunedWeights.tuned_from_n_samples} samples
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Use tuned ranking toggle */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="use-tuned" className="text-xs text-gray-600">
+                        Use Tuned Ranking
+                      </label>
+                      {!tunedWeights && (
+                        <span className="text-xs text-gray-400" title="Tune weights first">
+                          (unavailable)
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      id="use-tuned"
+                      type="checkbox"
+                      checked={useTunedRanking}
+                      onChange={(e) => setUseTunedRanking(e.target.checked)}
+                      disabled={!tunedWeights}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:opacity-50"
+                    />
+                  </div>
+
+                  {/* Tuning hint */}
+                  <p className="text-xs text-gray-400">
+                    Tuning works best after ~20+ ratings with a mix of hits and misses.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {error && (
               <div className="p-4 bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400 rounded-lg">
                 {error}
@@ -1956,10 +2334,35 @@ export default function PhotoScout() {
 
             {/* Rim Overlook Cards - standalone viewpoints with Top Picks / More Options */}
             {overlookStandings.length > 0 && (() => {
-              // Sort overlooks by score (highest first) and compute zone stats
-              const sortedOverlooks = [...overlookStandings].sort((a, b) =>
+              // Compute original server ranking (by overlook_score)
+              const serverSorted = [...overlookStandings].sort((a, b) =>
                 (b.view?.overlook_score ?? 0) - (a.view?.overlook_score ?? 0)
               );
+              const serverRankMap = new Map(serverSorted.map((o, i) => [o.standing_id, i + 1]));
+
+              // Compute re-ranked scores if using tuned weights
+              const withScores = overlookStandings.map(o => {
+                const dg = o.view?.distant_glow;
+                const rerankScore = dg ? computeRerankScore(dg, activeWeights) : (o.view?.overlook_score ?? 0);
+                return { overlook: o, rerankScore, serverRank: serverRankMap.get(o.standing_id) ?? 0 };
+              });
+
+              // Sort by rerank score (if tuned ranking) or server score
+              const sortedOverlooks = useTunedRanking
+                ? [...withScores].sort((a, b) => b.rerankScore - a.rerankScore).map(x => x.overlook)
+                : serverSorted;
+
+              // Compute new rank map for rank change calculation
+              const newRankMap = new Map(sortedOverlooks.map((o, i) => [o.standing_id, i + 1]));
+
+              // Helper to get rank change for an overlook
+              const getRankChange = (overlook: typeof overlookStandings[0]) => {
+                if (!useTunedRanking) return 0;
+                const oldRank = serverRankMap.get(overlook.standing_id) ?? 0;
+                const newRank = newRankMap.get(overlook.standing_id) ?? 0;
+                return oldRank - newRank; // Positive = moved up, negative = moved down
+              };
+
               const topPicks = sortedOverlooks.slice(0, 3);
               const moreOptions = sortedOverlooks.slice(3);
 
@@ -1983,6 +2386,13 @@ export default function PhotoScout() {
                 const isSelected = overlook.standing_id === selectedSubjectId;
                 const overlookScore = overlook.view?.overlook_score ?? 0;
                 const category = getCategoryLabel(overlook.view?.view_category);
+                const rankChange = getRankChange(overlook);
+                const dg = overlook.view?.distant_glow;
+
+                // Compute top drivers for explainability (only if distant_glow exists)
+                const topDrivers = dg
+                  ? computeFeatureContributions(dg, activeWeights).slice(0, 3)
+                  : [];
 
                 return (
                   <Card
@@ -2005,6 +2415,15 @@ export default function PhotoScout() {
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${category.bgColor} ${category.color}`}>
                                 {Math.round(overlookScore * 100)}%
                               </span>
+                              {/* Rank change badge when using tuned ranking */}
+                              {useTunedRanking && rankChange !== 0 && (
+                                <span className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium ${
+                                  rankChange > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                }`}>
+                                  {rankChange > 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                                  {Math.abs(rankChange)}
+                                </span>
+                              )}
                             </div>
                             <div className="text-sm text-gray-500">
                               Face {degreesToCompass(overlook.view?.best_bearing_deg ?? 0)} for best view
@@ -2052,6 +2471,53 @@ export default function PhotoScout() {
                         <p className="text-sm text-gray-600 leading-relaxed">
                           {overlook.view.explanations.short}
                         </p>
+                      )}
+
+                      {/* Top drivers (why this spot is ranked) - only for top picks with distant_glow */}
+                      {isTopPick && topDrivers.length > 0 && (
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <Lightning className="w-3.5 h-3.5 text-amber-500" weight="fill" />
+                          <span className="text-xs text-gray-400">Why:</span>
+                          {topDrivers.map((driver) => (
+                            <span
+                              key={driver.feature}
+                              className="px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded text-xs"
+                              title={`${driver.label} contributes ${(driver.contribution * 100).toFixed(0)}% to score`}
+                            >
+                              {driver.label} +{(driver.contribution * 100).toFixed(0)}%
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Calibration rating buttons - only for top picks with distant_glow data */}
+                      {isTopPick && overlook.view?.distant_glow && (
+                        <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-100">
+                          <span className="text-xs text-gray-400 mr-1">Rate this spot:</span>
+                          {(['hit', 'meh', 'miss'] as const).map((rating) => {
+                            const isRated = ratedOverlooks[overlook.standing_id] === rating;
+                            const Icon = rating === 'hit' ? ThumbsUp : rating === 'miss' ? ThumbsDown : Minus;
+                            const colors = {
+                              hit: isRated ? 'bg-green-500 text-white' : 'bg-gray-100 text-green-600 hover:bg-green-100',
+                              meh: isRated ? 'bg-yellow-500 text-white' : 'bg-gray-100 text-yellow-600 hover:bg-yellow-100',
+                              miss: isRated ? 'bg-red-500 text-white' : 'bg-gray-100 text-red-600 hover:bg-red-100',
+                            };
+                            return (
+                              <button
+                                key={rating}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  submitRating(overlook, rating);
+                                }}
+                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${colors[rating]}`}
+                                title={rating === 'hit' ? 'Great spot!' : rating === 'meh' ? 'Okay spot' : 'Not good'}
+                              >
+                                <Icon className="w-3.5 h-3.5" weight={isRated ? "fill" : "regular"} />
+                                {rating.charAt(0).toUpperCase() + rating.slice(1)}
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
 
                       {/* Coordinates in debug section - only for top picks */}
