@@ -81,16 +81,16 @@ export const SavedLocations = () => {
 
   return (
     <section className="w-full max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col items-center text-center sm:flex-row sm:items-center sm:text-left sm:justify-between gap-4 mb-6">
         <div>
           <h2 className="font-display font-bold text-foreground">Saved Locations</h2>
           <p className="text-muted-foreground mt-1">
             {locations.length} saved location{locations.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <Button variant="ghost" className="text-primary font-medium" onClick={handleViewAll}>
+        <Button variant="tertiary" size="sm" className="text-foreground border-border hover:border-primary hover:bg-primary/10" onClick={handleViewAll}>
           View All
-          <CaretRight className="w-4 h-4" weight="bold" />
+          <CaretRight className="w-4 h-4 ml-1" weight="bold" />
         </Button>
       </div>
 

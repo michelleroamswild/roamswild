@@ -16,17 +16,6 @@ import { GoogleMap } from "@/components/GoogleMap";
 import { Marker } from "@react-google-maps/api";
 import { createMarkerIcon } from "@/utils/mapMarkers";
 
-// Hero images for rotating parallax section
-import heroImage1 from "@/images/herophotos/DJI_0693.jpg";
-import heroImage2 from "@/images/herophotos/DJI_0671.jpg";
-import heroImage3 from "@/images/herophotos/DSC09190.jpg";
-import heroImage4 from "@/images/herophotos/DJI_0879.jpg";
-import heroImage5 from "@/images/herophotos/DSC03022.jpg";
-import heroImage6 from "@/images/herophotos/DSC05769.jpg";
-import heroImage7 from "@/images/herophotos/DSC09645.jpg";
-
-const heroImages = [heroImage1, heroImage2, heroImage3, heroImage4, heroImage5, heroImage6, heroImage7];
-
 // Example points of interest for Zion National Park (empty state preview)
 const ZION_EXAMPLE_POIS = {
   center: { lat: 37.24, lng: -112.95 },
@@ -50,8 +39,6 @@ const Index = () => {
   const [surpriseMeOpen, setSurpriseMeOpen] = useState(false);
   const [bestHikesOpen, setBestHikesOpen] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
-  // Random hero image on page load
-  const [currentHeroIndex] = useState(() => Math.floor(Math.random() * heroImages.length));
 
   const handleFindCampsNearMe = () => {
     if (!navigator.geolocation) {
@@ -170,9 +157,9 @@ const Index = () => {
 
         {/* Saved Trips Section */}
         {savedTrips.length > 0 ? (
-          <section className="bg-background-secondary dark:bg-card pt-24 lg:pt-32 pb-16 md:pb-20 grainy">
+          <section className="bg-background-secondary dark:bg-card pt-16 lg:pt-24 pb-16 md:pb-20 grainy">
           <div className="container px-4 md:px-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col items-center text-center sm:flex-row sm:items-center sm:text-left sm:justify-between gap-4 mb-6">
               <div>
                 <h2 className="font-display font-bold text-white dark:text-foreground">My Trips</h2>
                 <p className="text-white/70 dark:text-muted-foreground mt-1">
@@ -449,14 +436,6 @@ const Index = () => {
             </div>
           </section>
         )}
-
-        {/* Full-width hero image section with parallax */}
-        <div className="w-full h-64 md:h-80 lg:h-[28rem] relative overflow-hidden">
-          <div
-            className="absolute inset-0 bg-cover bg-center bg-fixed"
-            style={{ backgroundImage: `url(${heroImages[currentHeroIndex]})` }}
-          />
-        </div>
       </div>
 
       <main className="container px-4 md:px-6 py-8 md:py-12">
