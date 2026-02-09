@@ -201,7 +201,6 @@ export function LocationSelector({
     );
   }
 
-  const inputHeight = compact ? "h-9" : "h-10";
   const iconSize = compact ? "w-3.5 h-3.5" : "w-4 h-4";
   const buttonSize = compact ? "sm" : "default";
 
@@ -225,7 +224,7 @@ export function LocationSelector({
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder={placeholder}
-                className={`pl-9 pr-8 ${inputHeight} text-base`}
+                className={`pl-9 pr-8 text-base`}
               />
             </Autocomplete>
           </>
@@ -246,7 +245,7 @@ export function LocationSelector({
                 }
               }}
               placeholder="lat, lng (e.g. 39.07, -106.99)"
-              className={`pl-9 pr-8 ${inputHeight} text-base ${coordError ? 'border-destructive' : ''}`}
+              className={`pl-9 pr-8 text-base ${coordError ? 'border-destructive' : ''}`}
             />
           </>
         )}
@@ -268,7 +267,7 @@ export function LocationSelector({
           variant="outline"
           size={buttonSize}
           onClick={toggleMode}
-          className={`${inputHeight} px-2`}
+          className={`px-2`}
           title={mode === 'search' ? 'Switch to coordinates' : 'Switch to search'}
         >
           {mode === 'search' ? (
@@ -286,7 +285,7 @@ export function LocationSelector({
           size={buttonSize}
           onClick={handleMyLocation}
           disabled={isGettingLocation}
-          className={`${inputHeight} px-2`}
+          className={`px-2`}
           title="Use my location"
         >
           <NavigationArrow className={`${iconSize} ${isGettingLocation ? 'animate-pulse' : ''}`} />
@@ -300,7 +299,7 @@ export function LocationSelector({
             <Button
               variant="outline"
               size={buttonSize}
-              className={`${inputHeight} px-2`}
+              className={`px-2`}
               title="Saved locations"
             >
               <BookmarkSimple className={iconSize} />
@@ -334,7 +333,6 @@ export function LocationSelector({
         <Button
           size={buttonSize}
           onClick={handleCoordinateSubmit}
-          className={inputHeight}
         >
           Go
         </Button>
