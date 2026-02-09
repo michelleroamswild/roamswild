@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Camera, Sun, SunHorizon, CloudSun, ArrowsClockwise, Compass, Moon, Mountains, SunDim, Star, Check, X, Question, Crosshair, NavigationArrow } from '@phosphor-icons/react';
+import { Camera, Sun, SunHorizon, CloudSun, ArrowsClockwise, Compass, Moon, Mountains, SunDim, Star, Check, X, Question } from '@phosphor-icons/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { PlaceSearch } from '@/components/PlaceSearch';
+import { LocationSelector, SelectedLocation } from '@/components/LocationSelector';
 import { Header } from '@/components/Header';
 import { formatTime, getSunTimes, formatAzimuth, SunTimes } from '@/utils/sunCalc';
 import { analyzeHorizonProfile, getElevation, HorizonProfile } from '@/utils/terrainVisibility';
@@ -22,12 +21,6 @@ interface DayForecast {
   sunsetIndex: number | null;
   sunriseForecast: PhotoForecast | null;
   sunsetForecast: PhotoForecast | null;
-}
-
-interface SelectedLocation {
-  name: string;
-  lat: number;
-  lng: number;
 }
 
 // Open-Meteo response types
@@ -145,11 +138,6 @@ export default function PhotoWeatherTest() {
   const [activeTab, setActiveTab] = useState<SunEventType>('sunset');
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
 
-  // GPS coordinate input
-  const [gpsLat, setGpsLat] = useState('');
-  const [gpsLng, setGpsLng] = useState('');
-  const [gpsError, setGpsError] = useState<string | null>(null);
-
   // Photo spots (OSM)
   const [photoSpots, setPhotoSpots] = useState<RecommendedSpot[]>([]);
   const [photoSpotsLoading, setPhotoSpotsLoading] = useState(false);
@@ -164,59 +152,6 @@ export default function PhotoWeatherTest() {
   const [googleSpots, setGoogleSpots] = useState<GooglePhotoSpot[]>([]);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
-
-  // Handle GPS coordinate submission
-  const handleGpsSubmit = () => {
-    setGpsError(null);
-    const lat = parseFloat(gpsLat);
-    const lng = parseFloat(gpsLng);
-
-    if (isNaN(lat) || isNaN(lng)) {
-      setGpsError('Please enter valid coordinates');
-      return;
-    }
-
-    if (lat < -90 || lat > 90) {
-      setGpsError('Latitude must be between -90 and 90');
-      return;
-    }
-
-    if (lng < -180 || lng > 180) {
-      setGpsError('Longitude must be between -180 and 180');
-      return;
-    }
-
-    setLocation({
-      name: `GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-      lat,
-      lng,
-    });
-  };
-
-  // Use current location from browser
-  const handleUseCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setGpsError('Geolocation is not supported by your browser');
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        setGpsLat(lat.toFixed(6));
-        setGpsLng(lng.toFixed(6));
-        setLocation({
-          name: `Current Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-          lat,
-          lng,
-        });
-      },
-      (error) => {
-        setGpsError(`Location error: ${error.message}`);
-      }
-    );
-  };
 
   // Fetch Open-Meteo data when location changes
   useEffect(() => {
@@ -419,15 +354,6 @@ export default function PhotoWeatherTest() {
     fetchHorizonProfile();
   }, [location, selectedSunTimes, activeTab]);
 
-  const handlePlaceSelect = (place: google.maps.places.PlaceResult) => {
-    if (place.geometry?.location) {
-      setLocation({
-        name: place.name || place.formatted_address || 'Selected Location',
-        lat: place.geometry.location.lat(),
-        lng: place.geometry.location.lng(),
-      });
-    }
-  };
 
   // Get the hourly index for the selected day's event (sunrise or sunset)
   const selectedEventIndex = useMemo(() => {
@@ -678,68 +604,20 @@ export default function PhotoWeatherTest() {
         {/* Location Search */}
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle className="text-base">Search Location</CardTitle>
+            <CardTitle className="text-base">Location</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <PlaceSearch
-              onPlaceSelect={handlePlaceSelect}
-              placeholder="Search for a place..."
+          <CardContent>
+            <LocationSelector
+              value={location}
+              onChange={setLocation}
+              placeholder="Search for a location..."
+              showMyLocation={true}
+              showSavedLocations={true}
+              showCoordinates={true}
             />
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-muted-foreground">Or enter GPS coordinates</span>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <label className="text-xs text-muted-foreground mb-1 block">Latitude</label>
-                <Input
-                  type="text"
-                  placeholder="e.g. 37.7749"
-                  value={gpsLat}
-                  onChange={(e) => setGpsLat(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleGpsSubmit()}
-                />
-              </div>
-              <div className="flex-1">
-                <label className="text-xs text-muted-foreground mb-1 block">Longitude</label>
-                <Input
-                  type="text"
-                  placeholder="e.g. -122.4194"
-                  value={gpsLng}
-                  onChange={(e) => setGpsLng(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleGpsSubmit()}
-                />
-              </div>
-              <div className="flex items-end">
-                <Button onClick={handleGpsSubmit} size="default">
-                  <Crosshair className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleUseCurrentLocation}
-              className="w-full"
-            >
-              <NavigationArrow className="w-4 h-4 mr-2" />
-              Use My Current Location
-            </Button>
-
-            {gpsError && (
-              <p className="text-sm text-red-500">{gpsError}</p>
-            )}
-
             {location && (
-              <p className="text-sm text-muted-foreground">
-                Selected: {location.name} ({location.lat.toFixed(4)}, {location.lng.toFixed(4)})
+              <p className="text-sm text-muted-foreground mt-3">
+                {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
               </p>
             )}
           </CardContent>

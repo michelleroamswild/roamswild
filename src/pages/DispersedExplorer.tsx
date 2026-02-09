@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { GoogleMap } from '@/components/GoogleMap';
 import { Polyline, Marker, Polygon, InfoWindow } from '@react-google-maps/api';
-import { PlaceSearch } from '@/components/PlaceSearch';
+import { LocationSelector, SelectedLocation } from '@/components/LocationSelector';
 import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
 import { usePublicLands } from '@/hooks/use-public-lands';
 import { useDispersedDatabase } from '@/hooks/use-dispersed-database';
@@ -21,11 +21,7 @@ import { SpotClusterer } from '@/components/SpotClusterer';
 import { createMarkerIcon } from '@/utils/mapMarkers';
 import type { Campsite } from '@/types/campsite';
 
-interface SearchLocation {
-  lat: number;
-  lng: number;
-  name: string;
-}
+// Using SelectedLocation from LocationSelector
 
 // Unified spot type for the combined list
 interface UnifiedSpot {
@@ -160,7 +156,7 @@ function isFalseDeadEnd(
 const DispersedExplorer = () => {
   const { isLoaded } = useGoogleMaps();
   const [searchParams] = useSearchParams();
-  const [searchLocation, setSearchLocation] = useState<SearchLocation | null>(null);
+  const [searchLocation, setSearchLocation] = useState<SelectedLocation | null>(null);
   const [initialLocationLoaded, setInitialLocationLoaded] = useState(false);
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: 39.5, lng: -105.5 });
   const [mapZoom, setMapZoom] = useState(7);
@@ -1055,26 +1051,16 @@ const DispersedExplorer = () => {
     return () => clearTimeout(timeoutId);
   }, [searchLocation, topRecommendations]);
 
-  const handlePlaceSelect = useCallback((place: google.maps.places.PlaceResult) => {
-    if (place.geometry?.location) {
-      const lat = typeof place.geometry.location.lat === 'function'
-        ? place.geometry.location.lat()
-        : place.geometry.location.lat;
-      const lng = typeof place.geometry.location.lng === 'function'
-        ? place.geometry.location.lng()
-        : place.geometry.location.lng;
-      setSearchLocation({
-        lat,
-        lng,
-        name: place.name || place.formatted_address || 'Selected Location',
-      });
-      setMapCenter({ lat, lng });
+  const handleLocationChange = useCallback((location: SelectedLocation | null) => {
+    setSearchLocation(location);
+    if (location) {
+      setMapCenter({ lat: location.lat, lng: location.lng });
       setMapZoom(12);
-      setSelectedRoad(null);
-      setSelectedSpot(null);
-      setSelectedCampground(null);
-      setRecommendationPage(0); // Reset recommendations on new search
     }
+    setSelectedRoad(null);
+    setSelectedSpot(null);
+    setSelectedCampground(null);
+    setRecommendationPage(0); // Reset recommendations on new search
   }, []);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
@@ -1774,47 +1760,22 @@ const DispersedExplorer = () => {
         <div className="order-1 lg:order-2 space-y-5 p-4 md:p-6 lg:h-full lg:overflow-y-auto">
             {/* Search Card */}
             <Card>
-              <CardContent className="p-5">
-                <h3 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
-                  <MagnifyingGlass className="w-5 h-5" />
-                  Search Location
-                </h3>
-                <PlaceSearch
-                  onPlaceSelect={handlePlaceSelect}
-                  placeholder="Search a location..."
-                  defaultValue={searchLocation?.name}
+              <CardContent className="p-4">
+                <LocationSelector
+                  value={searchLocation}
+                  onChange={handleLocationChange}
+                  placeholder="Search location..."
+                  showMyLocation={true}
+                  showSavedLocations={true}
+                  showCoordinates={true}
+                  onMapClickHint={true}
+                  compact={true}
                 />
-
                 {searchLocation && (
-                  <div className="mt-4 p-3.5 bg-primary/5 rounded-lg border border-primary/20">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-base font-medium text-foreground">{searchLocation.name}</p>
-                        <p className="text-sm text-muted-foreground mt-0.5">
-                          {searchLocation.lat.toFixed(4)}, {searchLocation.lng.toFixed(4)}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2.5 text-sm"
-                        onClick={() => {
-                          setSearchLocation(null);
-                          setSelectedCampground(null);
-                          setSelectedSpot(null);
-                          setSelectedRoad(null);
-                        }}
-                      >
-                        Clear
-                      </Button>
-                    </div>
-                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {searchLocation.lat.toFixed(4)}, {searchLocation.lng.toFixed(4)}
+                  </p>
                 )}
-
-                <p className="text-sm text-muted-foreground mt-4 flex items-center gap-1.5">
-                  <Crosshair className="w-4 h-4" />
-                  Or click anywhere on the map to drop a pin
-                </p>
               </CardContent>
             </Card>
 
