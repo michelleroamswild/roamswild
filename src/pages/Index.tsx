@@ -7,10 +7,18 @@ import { LocalConditionsWidget } from "@/components/LocalConditionsWidget";
 import { RecentSearchesWidget } from "@/components/RecentSearchesWidget";
 import { SurpriseMeDialog } from "@/components/SurpriseMeDialog";
 import { BestHikesTodayDialog } from "@/components/BestHikesTodayDialog";
+import { LocationSelector, SelectedLocation } from "@/components/LocationSelector";
 import { useTrip } from "@/context/TripContext";
-import { Path, Calendar, MapPinArea, CaretRight, Boot, ArrowRight, Users, Mountains, Tent, SunHorizon, Shuffle, Compass, SpinnerGap } from "@phosphor-icons/react";
+import { Path, Calendar, MapPinArea, CaretRight, Boot, ArrowRight, Users, Mountains, Tent, SunHorizon, Shuffle, Compass, SpinnerGap, MapPin } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { getTripUrl } from "@/utils/slugify";
 import { GoogleMap } from "@/components/GoogleMap";
 import { Marker } from "@react-google-maps/api";
@@ -39,10 +47,12 @@ const Index = () => {
   const [surpriseMeOpen, setSurpriseMeOpen] = useState(false);
   const [bestHikesOpen, setBestHikesOpen] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [campsLocationOpen, setCampsLocationOpen] = useState(false);
+  const [campsManualLocation, setCampsManualLocation] = useState<SelectedLocation | null>(null);
 
   const handleFindCampsNearMe = () => {
     if (!navigator.geolocation) {
-      alert('Geolocation is not supported by your browser');
+      setCampsLocationOpen(true);
       return;
     }
 
@@ -53,13 +63,18 @@ const Index = () => {
         setIsGettingLocation(false);
         navigate(`/dispersed?lat=${latitude}&lng=${longitude}&name=My%20Location`);
       },
-      (error) => {
+      () => {
         setIsGettingLocation(false);
-        console.error('Geolocation error:', error);
-        alert('Unable to get your location. Please check your browser permissions.');
+        setCampsLocationOpen(true);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
+  };
+
+  const handleCampsManualLocation = () => {
+    if (!campsManualLocation) return;
+    setCampsLocationOpen(false);
+    navigate(`/dispersed?lat=${campsManualLocation.lat}&lng=${campsManualLocation.lng}&name=${encodeURIComponent(campsManualLocation.name)}`);
   };
 
   const handleTripClick = (tripId: string, tripName: string) => {
@@ -472,6 +487,37 @@ const Index = () => {
 
       {/* Best Hikes Today Dialog */}
       <BestHikesTodayDialog open={bestHikesOpen} onOpenChange={setBestHikesOpen} />
+
+      {/* Campsites Location Fallback Dialog */}
+      <Dialog open={campsLocationOpen} onOpenChange={(open) => { setCampsLocationOpen(open); if (!open) setCampsManualLocation(null); }}>
+        <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader className="text-left">
+            <DialogTitle className="flex items-center gap-2">
+              <Tent className="w-5 h-5 text-primary" weight="fill" />
+              Find Campsites
+            </DialogTitle>
+            <DialogDescription>
+              We couldn't get your location. Search for a place to find nearby campsites.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <LocationSelector
+              value={campsManualLocation}
+              onChange={setCampsManualLocation}
+              placeholder="Search for a city or place..."
+              showMyLocation={false}
+              showSavedLocations={false}
+              showCoordinates={false}
+              showClear={true}
+              compact
+            />
+            <Button onClick={handleCampsManualLocation} disabled={!campsManualLocation} className="w-full">
+              Find campsites near here
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

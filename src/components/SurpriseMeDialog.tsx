@@ -78,6 +78,7 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
   const [nearestLocation, setNearestLocation] = useState<string | null>(null);
   const [showLocationFallback, setShowLocationFallback] = useState(false);
   const [manualLocation, setManualLocation] = useState<SelectedLocation | null>(null);
+  const [lastUsedCoords, setLastUsedCoords] = useState<{ lat: number; lng: number; overrides?: { maxDistanceMiles?: number } } | null>(null);
 
   // Clear state when dialog closes
   useEffect(() => {
@@ -86,6 +87,7 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
       setNearestLocation(null);
       setShowLocationFallback(false);
       setManualLocation(null);
+      setLastUsedCoords(null);
     }
   }, [open, clearResult]);
 
@@ -147,7 +149,9 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
       });
 
       setGettingLocation(false);
-      await getSurprise(position.coords.latitude, position.coords.longitude);
+      const coords = { lat: position.coords.latitude, lng: position.coords.longitude };
+      setLastUsedCoords(coords);
+      await getSurprise(coords.lat, coords.lng);
     } catch (err) {
       setGettingLocation(false);
       setShowLocationFallback(true);
@@ -196,26 +200,31 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
   const handleUseManualLocation = async () => {
     if (!manualLocation) return;
     setShowLocationFallback(false);
+    setLastUsedCoords({ lat: manualLocation.lat, lng: manualLocation.lng });
     await getSurprise(manualLocation.lat, manualLocation.lng);
   };
 
   const handleAnywhere = async () => {
     setShowLocationFallback(false);
     // Geographic center of the contiguous US
-    await getSurprise(39.83, -98.58, { maxDistanceMiles: 2000 });
+    const overrides = { maxDistanceMiles: 2000 };
+    setLastUsedCoords({ lat: 39.83, lng: -98.58, overrides });
+    await getSurprise(39.83, -98.58, overrides);
   };
 
   const handleTryAgain = () => {
     clearResult();
-    setShowLocationFallback(false);
-    setManualLocation(null);
-    handleGetSurprise();
+    if (lastUsedCoords) {
+      getSurprise(lastUsedCoords.lat, lastUsedCoords.lng, lastUsedCoords.overrides);
+    } else {
+      handleGetSurprise();
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md">
-        <DialogHeader>
+      <DialogContent size="md" className="max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-none max-sm:h-[100dvh] max-sm:flex max-sm:flex-col max-sm:rounded-none max-sm:border-0" onInteractOutside={(e) => { if (showLocationFallback) e.preventDefault(); }}>
+        <DialogHeader className="text-left">
           <DialogTitle className="flex items-center gap-2">
             <Shuffle className="w-5 h-5 text-primary" weight="bold" />
             Surprise Me
@@ -229,7 +238,7 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4">
+        <div className="py-4 max-sm:flex-1 max-sm:overflow-y-auto">
           {/* Loading State */}
           {(loading || gettingLocation) && (
             <div className="flex flex-col items-center justify-center py-8">
@@ -275,7 +284,7 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
                   <div className="flex-1 border-t border-border" />
                 </div>
 
-                <Button variant="outline" onClick={handleAnywhere} className="w-full">
+                <Button onClick={handleAnywhere} className="w-full">
                   <GlobeHemisphereWest className="w-4 h-4 mr-2" />
                   Surprise me from anywhere
                 </Button>
@@ -304,7 +313,7 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
           )}
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
+        <DialogFooter className="flex-col sm:flex-row gap-2 max-sm:mt-auto">
           {result && !loading && (
             <>
               <Button variant="outline" onClick={handleTryAgain} className="w-full sm:w-auto">
