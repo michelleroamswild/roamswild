@@ -44,7 +44,7 @@ import { toast } from "@/hooks/use-toast";
 import { useGoogleMaps } from "@/components/GoogleMapsProvider";
 import { useTerrainAnalysis } from "@/hooks/use-terrain-analysis";
 import { Header } from "@/components/Header";
-import { PlaceSearch } from "@/components/PlaceSearch";
+import { LocationSelector, SelectedLocation } from "@/components/LocationSelector";
 import type { TerrainAnalysisResult, Subject, StandingLocation, SunPosition, RimOverlookDebugStats, DistantGlowScore } from "@/types/terrainValidation";
 
 // =============================================================================
@@ -1131,7 +1131,11 @@ const TERRAIN_API_URL = import.meta.env.VITE_TERRAIN_API_URL || 'http://localhos
 export default function PhotoScout() {
   const { isLoaded } = useGoogleMaps();
 
-  const [coordinates, setCoordinates] = useState("39.0708, -106.9890");
+  const [location, setLocation] = useState<SelectedLocation | null>({
+    lat: 39.0708,
+    lng: -106.9890,
+    name: "39.0708, -106.9890",
+  });
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [event, setEvent] = useState<"sunrise" | "sunset">("sunrise");
   const [radius, setRadius] = useState("2.0");
@@ -1160,8 +1164,8 @@ export default function PhotoScout() {
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const overlaysRef = useRef<google.maps.MVCObject[]>([]);
 
-  // Parse coordinates for use
-  const parsedCoords = useMemo(() => parseCoordinates(coordinates), [coordinates]);
+  // Get coordinates from location
+  const parsedCoords = useMemo(() => location ? { lat: location.lat, lon: location.lng } : null, [location]);
 
   const handleAnalyze = useCallback(() => {
     if (!parsedCoords) return;
@@ -1845,21 +1849,16 @@ export default function PhotoScout() {
     };
   }, []);
 
-  // Handle place selection from PlaceSearch
-  const handlePlaceSelect = useCallback((place: google.maps.places.PlaceResult) => {
-    if (place.geometry?.location) {
-      const lat = place.geometry.location.lat();
-      const lng = place.geometry.location.lng();
-      setCoordinates(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-    }
-  }, []);
-
   // Handle map click to set location
   const handleMapClick = useCallback((e: google.maps.MapMouseEvent) => {
     if (e.latLng) {
       const lat = e.latLng.lat();
       const lng = e.latLng.lng();
-      setCoordinates(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+      setLocation({
+        lat,
+        lng,
+        name: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+      });
     }
   }, []);
 
@@ -2088,24 +2087,18 @@ export default function PhotoScout() {
               <h2 className="text-lg font-semibold">Photo Scout</h2>
             </div>
 
-            {/* Place Search */}
+            {/* Location Search */}
             <div>
-              <Label className="text-sm text-muted-foreground mb-1.5 block">Search Location</Label>
-              <PlaceSearch
-                onPlaceSelect={handlePlaceSelect}
-                placeholder="Search for a place..."
-                className="w-full"
-              />
-            </div>
-
-            {/* Coordinate Input (fallback) */}
-            <div>
-              <Label className="text-sm text-muted-foreground mb-1.5 block">Or enter coordinates</Label>
-              <Input
-                value={coordinates}
-                onChange={(e) => setCoordinates(e.target.value)}
-                className={`w-full ${!parsedCoords && coordinates ? "border-red-300" : ""}`}
-                placeholder="lat, lon (e.g., 39.0708, -106.9890)"
+              <Label className="text-sm text-muted-foreground mb-1.5 block">Location</Label>
+              <LocationSelector
+                value={location}
+                onChange={setLocation}
+                placeholder="Search location..."
+                showMyLocation={true}
+                showSavedLocations={true}
+                showCoordinates={true}
+                onMapClickHint={true}
+                compact={true}
               />
             </div>
 

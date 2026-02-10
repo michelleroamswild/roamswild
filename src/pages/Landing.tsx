@@ -504,13 +504,13 @@ const Landing = () => {
                         setWaitlistEmail(e.target.value);
                         if (emailError) setEmailError(false);
                       }}
-                      className={`flex-1 h-12 px-4 rounded-lg border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors ${
+                      className={`flex-1 h-12 min-h-[48px] px-4 text-base rounded-lg border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors ${
                         emailError ? 'border-destructive' : 'border-border'
                       }`}
                     />
                     <Button
                       type="submit"
-                      className="h-12 px-6 whitespace-nowrap"
+                      className="h-12 min-h-[48px] px-6 whitespace-nowrap"
                       disabled={waitlistLoading}
                     >
                       {waitlistLoading ? (
@@ -764,13 +764,13 @@ const Landing = () => {
                       setWaitlistEmail(e.target.value);
                       if (emailError) setEmailError(false);
                     }}
-                    className={`flex-1 h-12 px-4 rounded-lg border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors ${
+                    className={`flex-1 h-12 min-h-[48px] px-4 text-base rounded-lg border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors ${
                       emailError ? 'border-destructive' : 'border-border'
                     }`}
                   />
                   <Button
                     type="submit"
-                    className="h-12 px-6 whitespace-nowrap"
+                    className="h-12 min-h-[48px] px-6 whitespace-nowrap"
                     disabled={waitlistLoading}
                   >
                     {waitlistLoading ? (

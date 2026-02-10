@@ -127,7 +127,7 @@ export function useSurpriseMe(options: UseSurpriseMeOptions = {}): UseSurpriseMe
   const [historyId, setHistoryId] = useState<string | null>(null);
 
   const getSurprise = useCallback(
-    async (lat: number, lng: number): Promise<SurpriseMeResponse> => {
+    async (lat: number, lng: number, overrides?: { maxDistanceMiles?: number }): Promise<SurpriseMeResponse> => {
       setLoading(true);
       setError(null);
       setResult(null);
@@ -138,7 +138,7 @@ export function useSurpriseMe(options: UseSurpriseMeOptions = {}): UseSurpriseMe
         const request: SurpriseMeRequest = {
           userLat: lat,
           userLng: lng,
-          maxDistanceMiles: options.maxDistanceMiles ?? 500,
+          maxDistanceMiles: overrides?.maxDistanceMiles ?? options.maxDistanceMiles ?? 500,
           minDistanceMiles: options.minDistanceMiles ?? 0,
         };
 

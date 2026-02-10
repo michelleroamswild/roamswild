@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSurpriseMe } from '@/hooks/use-surprise-me';
 import { useGoogleMaps } from '@/components/GoogleMapsProvider';
+import { LocationSelector, SelectedLocation } from '@/components/LocationSelector';
 import { SurpriseMeSuccessResponse, BiomeType, ScenicAnchorHighlight } from '@/types/surpriseMe';
 import {
   Shuffle,
@@ -31,6 +32,7 @@ import {
   Tent,
   NavigationArrow,
   ArrowSquareOut,
+  GlobeHemisphereWest,
 } from '@phosphor-icons/react';
 
 interface SurpriseMeDialogProps {
@@ -72,16 +74,18 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
   const { loading, error, result, getSurprise, clearResult, recordClick } = useSurpriseMe();
   const { isLoaded: googleMapsLoaded } = useGoogleMaps();
 
-  const [locationError, setLocationError] = useState<string | null>(null);
   const [gettingLocation, setGettingLocation] = useState(false);
   const [nearestLocation, setNearestLocation] = useState<string | null>(null);
+  const [showLocationFallback, setShowLocationFallback] = useState(false);
+  const [manualLocation, setManualLocation] = useState<SelectedLocation | null>(null);
 
   // Clear state when dialog closes
   useEffect(() => {
     if (!open) {
       clearResult();
-      setLocationError(null);
       setNearestLocation(null);
+      setShowLocationFallback(false);
+      setManualLocation(null);
     }
   }, [open, clearResult]);
 
@@ -124,13 +128,13 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
 
   // Start getting surprise when dialog opens
   useEffect(() => {
-    if (open && !result && !loading && !error && !locationError) {
+    if (open && !result && !loading && !error && !showLocationFallback) {
       handleGetSurprise();
     }
   }, [open]);
 
   const handleGetSurprise = async () => {
-    setLocationError(null);
+    setShowLocationFallback(false);
     setGettingLocation(true);
 
     try {
@@ -146,21 +150,7 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
       await getSurprise(position.coords.latitude, position.coords.longitude);
     } catch (err) {
       setGettingLocation(false);
-      if (err instanceof GeolocationPositionError) {
-        switch (err.code) {
-          case err.PERMISSION_DENIED:
-            setLocationError('Location access denied. Please enable location services.');
-            break;
-          case err.POSITION_UNAVAILABLE:
-            setLocationError('Unable to determine your location.');
-            break;
-          case err.TIMEOUT:
-            setLocationError('Location request timed out.');
-            break;
-        }
-      } else {
-        setLocationError('Failed to get your location.');
-      }
+      setShowLocationFallback(true);
     }
   };
 
@@ -203,8 +193,22 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
     }
   };
 
+  const handleUseManualLocation = async () => {
+    if (!manualLocation) return;
+    setShowLocationFallback(false);
+    await getSurprise(manualLocation.lat, manualLocation.lng);
+  };
+
+  const handleAnywhere = async () => {
+    setShowLocationFallback(false);
+    // Geographic center of the contiguous US
+    await getSurprise(39.83, -98.58, { maxDistanceMiles: 2000 });
+  };
+
   const handleTryAgain = () => {
     clearResult();
+    setShowLocationFallback(false);
+    setManualLocation(null);
     handleGetSurprise();
   };
 
@@ -236,14 +240,57 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
             </div>
           )}
 
-          {/* Error State */}
-          {(error || locationError) && !loading && !gettingLocation && (
+          {/* Location Fallback State */}
+          {showLocationFallback && !loading && !gettingLocation && (
+            <div className="flex flex-col items-center py-4 text-center space-y-4">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                <MapPin className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <p className="text-sm text-foreground/70">
+                We couldn't get your location. Search for a place or explore anywhere.
+              </p>
+
+              <div className="w-full space-y-3">
+                <LocationSelector
+                  value={manualLocation}
+                  onChange={setManualLocation}
+                  placeholder="Search for a city or place..."
+                  showMyLocation={false}
+                  showSavedLocations={false}
+                  showCoordinates={false}
+                  showClear={true}
+                  compact
+                />
+
+                {manualLocation && (
+                  <Button onClick={handleUseManualLocation} className="w-full">
+                    Use this location
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                )}
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 border-t border-border" />
+                  <span className="text-xs text-muted-foreground">or</span>
+                  <div className="flex-1 border-t border-border" />
+                </div>
+
+                <Button variant="outline" onClick={handleAnywhere} className="w-full">
+                  <GlobeHemisphereWest className="w-4 h-4 mr-2" />
+                  Surprise me from anywhere
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Error State (non-location errors) */}
+          {error && !showLocationFallback && !loading && !gettingLocation && (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
                 <Warning className="w-6 h-6 text-destructive" weight="fill" />
               </div>
               <p className="text-sm text-destructive font-medium mb-2">
-                {locationError || error}
+                {error}
               </p>
               <Button variant="outline" size="sm" onClick={handleTryAgain} className="mt-2">
                 Try Again
