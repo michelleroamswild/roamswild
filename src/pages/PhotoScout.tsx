@@ -1160,12 +1160,18 @@ export default function PhotoScout() {
   const [useTunedRanking, setUseTunedRanking] = useState(false);
   const [calibrationPanelOpen, setCalibrationPanelOpen] = useState(false);
   const [isTuning, setIsTuning] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(true);
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const overlaysRef = useRef<google.maps.MVCObject[]>([]);
 
   // Get coordinates from location
   const parsedCoords = useMemo(() => location ? { lat: location.lat, lon: location.lng } : null, [location]);
+
+  // Collapse search panel when results arrive
+  useEffect(() => {
+    if (result) setSearchOpen(false);
+  }, [result]);
 
   const handleAnalyze = useCallback(() => {
     if (!parsedCoords) return;
@@ -1864,8 +1870,8 @@ export default function PhotoScout() {
 
   if (!isLoaded) {
     return (
-      <div className="h-screen flex items-center justify-center">
-        <div className="text-gray-500">Loading maps...</div>
+      <div className="h-screen flex items-center justify-center bg-background">
+        <div className="text-muted-foreground">Loading maps...</div>
       </div>
     );
   }
@@ -2079,58 +2085,76 @@ export default function PhotoScout() {
         </div>
 
         {/* Right Panel - Controls and Shot Opportunities */}
-        <div className="border-l bg-card flex flex-col overflow-hidden">
+        <div className="flex flex-col overflow-hidden">
           {/* Search Controls */}
-          <div className="p-4 border-b bg-muted/30 space-y-4">
-            <div className="flex items-center gap-2">
-              <Camera className="w-5 h-5 text-primary" weight="fill" />
-              <h2 className="text-lg font-semibold">Photo Scout</h2>
-            </div>
+          <Collapsible open={searchOpen} onOpenChange={setSearchOpen}>
+            <div className="p-4 border-b">
+              <CollapsibleTrigger className="w-full text-left">
+                <div className="flex flex-col space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
+                      <Camera className="w-5 h-5 text-primary" weight="fill" />
+                      Photo Scout
+                    </h2>
+                    {searchOpen ? <CaretDown className="w-4 h-4 text-muted-foreground" /> : <CaretRight className="w-4 h-4 text-muted-foreground" />}
+                  </div>
+                  {searchOpen ? (
+                    <p className="text-sm text-muted-foreground">Find the best spots for sunrise and sunset photography</p>
+                  ) : location ? (
+                    <p className="text-sm text-muted-foreground truncate">{location.name} &middot; {date} &middot; <span className="capitalize">{event}</span></p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Select a location to scout</p>
+                  )}
+                </div>
+              </CollapsibleTrigger>
 
-            {/* Location Search */}
-            <div>
-              <Label className="text-sm text-muted-foreground mb-1.5 block">Location</Label>
-              <LocationSelector
-                value={location}
-                onChange={setLocation}
-                placeholder="Search location..."
-                showMyLocation={true}
-                showSavedLocations={true}
-                showCoordinates={true}
-                onMapClickHint={true}
-                compact={true}
-              />
-            </div>
+              <CollapsibleContent className="space-y-4 mt-4">
+                {/* Location Search */}
+                <div>
+                  <Label className="text-sm text-muted-foreground mb-1.5 block">Location</Label>
+                  <LocationSelector
+                    value={location}
+                    onChange={setLocation}
+                    placeholder="Search location..."
+                    showMyLocation={true}
+                    showSavedLocations={true}
+                    showCoordinates={true}
+                    onMapClickHint={true}
+                    compact={true}
+                  />
+                </div>
 
-            {/* Date and Event Selection */}
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <Label className="text-sm text-muted-foreground mb-1.5 block">Date</Label>
-                <Input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full"
-                />
-              </div>
-              <div className="flex-1">
-                <Label className="text-sm text-muted-foreground mb-1.5 block">Event</Label>
-                <Select value={event} onValueChange={(value: "sunrise" | "sunset") => setEvent(value)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sunrise">Sunrise</SelectItem>
-                    <SelectItem value="sunset">Sunset</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                {/* Date and Event Selection */}
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <Label className="text-sm text-muted-foreground mb-1.5 block">Date</Label>
+                    <Input
+                      type="date"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-sm text-muted-foreground mb-1.5 block">Event</Label>
+                    <Select value={event} onValueChange={(value: "sunrise" | "sunset") => setEvent(value)}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sunrise">Sunrise</SelectItem>
+                        <SelectItem value="sunset">Sunset</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-            <Button onClick={handleAnalyze} disabled={isLoading || !parsedCoords} className="w-full">
-              {isLoading ? "Scanning terrain..." : "Scout Location"}
-            </Button>
-          </div>
+                <Button onClick={handleAnalyze} disabled={isLoading || !parsedCoords} className="w-full">
+                  {isLoading ? "Scanning terrain..." : "Scout Location"}
+                </Button>
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
 
           {/* Summary Header */}
           {result && (
