@@ -5,7 +5,7 @@
  * with weather-aware recommendations and explanations.
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -29,8 +29,11 @@ import {
   Drop,
   CheckCircle,
   Info,
+  MapPin,
+  ArrowRight,
 } from "@phosphor-icons/react";
 import { useBestHikesToday } from "@/hooks/use-best-hikes-today";
+import { LocationSelector, SelectedLocation } from "@/components/LocationSelector";
 import { ScoredHike } from "@/scoring";
 
 interface BestHikesTodayDialogProps {
@@ -164,21 +167,29 @@ function HikeCard({ scoredHike, rank }: { scoredHike: ScoredHike; rank: number }
 }
 
 export function BestHikesTodayDialog({ open, onOpenChange }: BestHikesTodayDialogProps) {
-  const { scoredHikes, loading, error, fetchBestHikes, clearResults } = useBestHikesToday();
+  const { scoredHikes, loading, error, locationError, fetchBestHikes, clearResults } = useBestHikesToday();
+  const [manualLocation, setManualLocation] = useState<SelectedLocation | null>(null);
 
   // Fetch when dialog opens
   useEffect(() => {
-    if (open && scoredHikes.length === 0 && !loading && !error) {
+    if (open && scoredHikes.length === 0 && !loading && !error && !locationError) {
       fetchBestHikes();
     }
-  }, [open, scoredHikes.length, loading, error, fetchBestHikes]);
+  }, [open, scoredHikes.length, loading, error, locationError, fetchBestHikes]);
 
   // Clear when dialog closes
   useEffect(() => {
     if (!open) {
       clearResults();
+      setManualLocation(null);
     }
   }, [open, clearResults]);
+
+  const handleUseManualLocation = () => {
+    if (!manualLocation) return;
+    clearResults();
+    fetchBestHikes({ lat: manualLocation.lat, lng: manualLocation.lng });
+  };
 
   const handleTryAgain = () => {
     clearResults();
@@ -187,7 +198,7 @@ export function BestHikesTodayDialog({ open, onOpenChange }: BestHikesTodayDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent size="md" className="max-h-[85vh] overflow-hidden flex flex-col max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-none max-sm:max-h-none max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-0" onInteractOutside={(e) => { if (locationError) e.preventDefault(); }}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Compass className="w-5 h-5 text-primary" weight="fill" />
@@ -216,8 +227,36 @@ export function BestHikesTodayDialog({ open, onOpenChange }: BestHikesTodayDialo
             </div>
           )}
 
-          {/* Error State */}
-          {error && !loading && (
+          {/* Location Fallback State */}
+          {locationError && !loading && (
+            <div className="flex flex-col items-center py-6 text-center space-y-4">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                <MapPin className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <p className="text-sm text-foreground/70">
+                We couldn't get your location. Search for a place to find nearby hikes.
+              </p>
+              <div className="w-full space-y-3">
+                <LocationSelector
+                  value={manualLocation}
+                  onChange={setManualLocation}
+                  placeholder="Search for a city or place..."
+                  showMyLocation={false}
+                  showSavedLocations={false}
+                  showCoordinates={false}
+                  showClear={true}
+                  compact
+                />
+                <Button onClick={handleUseManualLocation} disabled={!manualLocation} className="w-full">
+                  Find hikes near here
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Error State (non-location errors) */}
+          {error && !locationError && !loading && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
                 <Warning className="w-6 h-6 text-destructive" weight="fill" />
@@ -244,15 +283,6 @@ export function BestHikesTodayDialog({ open, onOpenChange }: BestHikesTodayDialo
             </div>
           )}
 
-          {/* Empty State */}
-          {!loading && !error && scoredHikes.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Compass className="w-12 h-12 text-foreground/20 mb-4" />
-              <p className="text-sm text-foreground/60">
-                Click the button below to find the best hikes for today
-              </p>
-            </div>
-          )}
         </div>
 
         {/* Footer with refresh */}

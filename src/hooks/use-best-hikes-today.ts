@@ -252,24 +252,33 @@ export function useBestHikesToday() {
   const [scoredHikes, setScoredHikes] = useState<ScoredHike[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locationError, setLocationError] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
 
-  const fetchBestHikes = useCallback(async () => {
+  const fetchBestHikes = useCallback(async (manualCoords?: { lat: number; lng: number }) => {
     setLoading(true);
     setError(null);
 
     try {
-      // Step 1: Get user's location
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
-          timeout: 10000,
-          maximumAge: 300000, // Cache for 5 minutes
-        });
-      });
+      let userLat: number;
+      let userLng: number;
 
-      const userLat = position.coords.latitude;
-      const userLng = position.coords.longitude;
+      if (manualCoords) {
+        userLat = manualCoords.lat;
+        userLng = manualCoords.lng;
+      } else {
+        // Step 1: Get user's location
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: false,
+            timeout: 10000,
+            maximumAge: 300000, // Cache for 5 minutes
+          });
+        });
+
+        userLat = position.coords.latitude;
+        userLng = position.coords.longitude;
+      }
       setUserLocation({ lat: userLat, lng: userLng });
 
       // Step 2: Fetch nearby hikes
@@ -330,17 +339,7 @@ export function useBestHikesToday() {
       setScoredHikes(scored);
     } catch (err) {
       if (err instanceof GeolocationPositionError) {
-        switch (err.code) {
-          case err.PERMISSION_DENIED:
-            setError("Location access denied. Please enable location services.");
-            break;
-          case err.POSITION_UNAVAILABLE:
-            setError("Unable to determine your location.");
-            break;
-          case err.TIMEOUT:
-            setError("Location request timed out.");
-            break;
-        }
+        setLocationError(true);
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -354,12 +353,14 @@ export function useBestHikesToday() {
   const clearResults = useCallback(() => {
     setScoredHikes([]);
     setError(null);
+    setLocationError(false);
   }, []);
 
   return {
     scoredHikes,
     loading,
     error,
+    locationError,
     userLocation,
     fetchBestHikes,
     clearResults,
