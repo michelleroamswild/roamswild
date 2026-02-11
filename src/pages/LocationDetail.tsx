@@ -416,7 +416,7 @@ const LocationDetail = () => {
 
     if (added) {
       toast.success(`Saved ${location.name}`, {
-        description: "Added to your saved locations",
+        description: "Added to your favorites",
       });
     }
   };
@@ -426,7 +426,7 @@ const LocationDetail = () => {
 
     removeLocation(savedLocation.id);
     toast.success(`Removed ${location.name}`, {
-      description: "Removed from saved locations",
+      description: "Removed from favorites",
     });
   };
 

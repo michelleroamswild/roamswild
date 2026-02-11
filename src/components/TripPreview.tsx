@@ -27,7 +27,7 @@ export const TripPreview = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="font-display font-bold text-foreground">Suggested Route</h2>
-          <p className="text-muted-foreground mt-1">Based on your saved locations</p>
+          <p className="text-muted-foreground mt-1">Based on your favorite locations</p>
         </div>
       </div>
 

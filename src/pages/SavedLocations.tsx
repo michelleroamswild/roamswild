@@ -25,7 +25,7 @@ const SavedLocations = () => {
   const handleConfirmDelete = () => {
     removeLocation(deleteModal.id);
     toast.success(`Removed ${deleteModal.name}`, {
-      description: "Removed from saved locations",
+      description: "Removed from favorites",
     });
   };
 
@@ -36,9 +36,9 @@ const SavedLocations = () => {
       <main className="container px-4 md:px-6 py-8 max-w-4xl mx-auto">
         {/* Page Title */}
         <div className="mb-6">
-          <h1 className="text-3xl font-display font-bold text-foreground">Saved Locations</h1>
+          <h1 className="text-3xl font-display font-bold text-foreground">Favorites</h1>
           <p className="text-muted-foreground mt-1">
-            {locations.length} saved location{locations.length !== 1 ? 's' : ''}
+            {locations.length} favorite location{locations.length !== 1 ? 's' : ''}
           </p>
         </div>
         {locations.length > 0 ? (
@@ -97,7 +97,7 @@ const SavedLocations = () => {
               <MapPin className="w-10 h-10 text-muted-foreground opacity-50" />
             </div>
             <h2 className="font-display font-bold text-foreground mb-2">
-              No saved locations yet
+              No favorites yet
             </h2>
             <p className="text-muted-foreground mb-6 max-w-md">
               Search for destinations and save them to quickly access them later
@@ -118,7 +118,7 @@ const SavedLocations = () => {
         onClose={() => setDeleteModal({ isOpen: false, id: '', name: '' })}
         onConfirm={handleConfirmDelete}
         title="Remove Location"
-        description="Are you sure you want to remove this saved location?"
+        description="Are you sure you want to remove this favorite location?"
         itemName={deleteModal.name}
       />
     </div>

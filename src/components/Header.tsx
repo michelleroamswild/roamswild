@@ -103,18 +103,7 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
                 : "text-muted-foreground hover:text-foreground hover:bg-muted"
             )}
           >
-            Saved
-          </Link>
-          <Link
-            to="/photo-scout"
-            className={cn(
-              "text-base font-bold transition-colors px-3 py-1.5 rounded-full",
-              isActive('/photo-scout')
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
-            )}
-          >
-            Photo Scout
+            Favorites
           </Link>
         </nav>
 
@@ -252,20 +241,7 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
                   )}
                 >
                   <Heart className="w-5 h-5" weight={isActive('/saved') ? "fill" : "regular"} />
-                  Saved
-                </Link>
-                <Link
-                  to="/photo-scout"
-                  onClick={closeMobileMenu}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
-                    isActive('/photo-scout')
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground hover:bg-muted"
-                  )}
-                >
-                  <Camera className="w-5 h-5" weight={isActive('/photo-scout') ? "fill" : "regular"} />
-                  Photo Scout
+                  Favorites
                 </Link>
                 {isFeatureEnabled('campsites') && (
                   <Link

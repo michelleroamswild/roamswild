@@ -18,7 +18,7 @@ import { useGoogleMaps } from '@/components/GoogleMapsProvider';
 import { Header } from '@/components/Header';
 import { ConfirmSpotDialog } from '@/components/ConfirmSpotDialog';
 import { SpotClusterer } from '@/components/SpotClusterer';
-import { createMarkerIcon } from '@/utils/mapMarkers';
+import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
 import type { Campsite } from '@/types/campsite';
 
 // Using SelectedLocation from LocationSelector
@@ -1143,16 +1143,16 @@ const DispersedExplorer = () => {
   }, [explorerSpots]);
 
   // Get marker icon for a spot
-  // - Tent icons for confirmed spots and OSM camp-sites
+  // - Purple dots for confirmed spots and OSM camp-sites
   // - Simple colored circles for derived/potential spots
   const getSpotMarkerIcon = useCallback((spot: PotentialSpot, isSelected: boolean) => {
     const confirmedSpot = isSpotConfirmed(spot);
 
-    // Confirmed spots get tent icon
+    // Confirmed spots get purple dot
     if (confirmedSpot) {
-      return createMarkerIcon('camp', {
+      return createSimpleMarkerIcon('camp', {
         isActive: isSelected,
-        size: isSelected ? 40 : 32
+        size: isSelected ? 10 : 8
       });
     }
 
@@ -1534,9 +1534,9 @@ const DispersedExplorer = () => {
                 key={`my-${cs.id}`}
                 position={{ lat: cs.lat, lng: cs.lng }}
                 title={cs.name}
-                icon={createMarkerIcon('camp', {
+                icon={createSimpleMarkerIcon('camp', {
                   isActive: selectedCampsite?.id === cs.id,
-                  size: selectedCampsite?.id === cs.id ? 44 : 36
+                  size: selectedCampsite?.id === cs.id ? 10 : 8
                 })}
                 onClick={() => {
                   setSelectedCampsite(cs);

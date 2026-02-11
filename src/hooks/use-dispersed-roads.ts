@@ -513,10 +513,11 @@ function analyzeRoadAccessibility(
     const endKey = toNodeKey(endLat, endLng);
 
     // Determine vehicle type for MVUM road
-    let vehicleType: 'passenger' | 'high-clearance' | '4wd' = 'passenger';
-    if (road.highClearanceVehicle && !road.passengerVehicle) {
-      vehicleType = 'high-clearance';
-    } else if (!road.passengerVehicle && !road.highClearanceVehicle && (road.atv || road.motorcycle)) {
+    // Default to high-clearance — only mark passenger if explicitly flagged
+    let vehicleType: 'passenger' | 'high-clearance' | '4wd' = 'high-clearance';
+    if (road.passengerVehicle) {
+      vehicleType = 'passenger';
+    } else if (!road.highClearanceVehicle && (road.atv || road.motorcycle)) {
       vehicleType = '4wd';
     }
 

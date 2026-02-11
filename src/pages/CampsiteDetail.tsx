@@ -40,7 +40,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Campsite, CampsiteFormData, CampsiteType, RoadAccess, CampsiteVisibility } from '@/types/campsite';
 import { toast } from 'sonner';
 import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
-import { createMarkerIcon } from '@/utils/mapMarkers';
+import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
 
 const typeLabels: Record<CampsiteType, string> = {
   dispersed: 'Dispersed Camping',
@@ -265,7 +265,7 @@ const CampsiteDetail = () => {
               >
                 <Marker
                   position={{ lat: campsite.lat, lng: campsite.lng }}
-                  icon={createMarkerIcon('camp', { size: 40 })}
+                  icon={createSimpleMarkerIcon('camp', { size: 10 })}
                 />
               </GoogleMap>
             </div>
