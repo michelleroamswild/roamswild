@@ -22,7 +22,7 @@ import {
 import { getTripUrl } from "@/utils/slugify";
 import { GoogleMap } from "@/components/GoogleMap";
 import { Marker } from "@react-google-maps/api";
-import { createMarkerIcon } from "@/utils/mapMarkers";
+import { createMarkerIcon, createSimpleMarkerIcon } from "@/utils/mapMarkers";
 
 // Example points of interest for Zion National Park (empty state preview)
 const ZION_EXAMPLE_POIS = {
@@ -389,7 +389,7 @@ const Index = () => {
                         key={camp.id}
                         position={{ lat: camp.lat, lng: camp.lng }}
                         title={camp.name}
-                        icon={createMarkerIcon('camp', { size: 32 })}
+                        icon={createSimpleMarkerIcon('camp', { size: 8 })}
                       />
                     ))}
                     {/* Viewpoint markers */}
@@ -454,7 +454,7 @@ const Index = () => {
       </div>
 
       <main className="container px-4 md:px-6 py-8 md:py-12">
-        {/* Saved Locations */}
+        {/* Favorites */}
         <div className="mb-12">
           <SavedLocations />
         </div>

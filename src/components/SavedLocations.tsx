@@ -24,7 +24,7 @@ export const SavedLocations = () => {
   const handleConfirmDelete = () => {
     removeLocation(deleteModal.id);
     toast.success(`Removed ${deleteModal.name}`, {
-      description: "Removed from saved locations",
+      description: "Removed from favorites",
     });
   };
 
@@ -37,7 +37,7 @@ export const SavedLocations = () => {
     return (
       <section className="w-full max-w-4xl mx-auto">
         <div className="mb-6 text-center">
-          <h2 className="font-display font-bold text-foreground">Saved Locations</h2>
+          <h2 className="font-display font-bold text-foreground">Favorites</h2>
         </div>
 
         <div className="py-8 md:py-12">
@@ -83,9 +83,9 @@ export const SavedLocations = () => {
     <section className="w-full max-w-4xl mx-auto">
       <div className="flex flex-col items-center text-center sm:flex-row sm:items-center sm:text-left sm:justify-between gap-4 mb-6">
         <div>
-          <h2 className="font-display font-bold text-foreground">Saved Locations</h2>
+          <h2 className="font-display font-bold text-foreground">Favorites</h2>
           <p className="text-muted-foreground mt-1">
-            {locations.length} saved location{locations.length !== 1 ? 's' : ''}
+            {locations.length} favorite location{locations.length !== 1 ? 's' : ''}
           </p>
         </div>
         <Button variant="tertiary" size="sm" className="text-foreground border-border hover:border-primary hover:bg-primary/10" onClick={handleViewAll}>
@@ -142,7 +142,7 @@ export const SavedLocations = () => {
         onClose={() => setDeleteModal({ isOpen: false, id: '', name: '' })}
         onConfirm={handleConfirmDelete}
         title="Remove Location"
-        description="Are you sure you want to remove this saved location?"
+        description="Are you sure you want to remove this favorite location?"
         itemName={deleteModal.name}
       />
     </section>

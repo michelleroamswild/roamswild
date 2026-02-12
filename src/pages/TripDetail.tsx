@@ -43,7 +43,7 @@ import { useRoutePhotoSpots, PhotoSpot } from '@/hooks/use-photo-spots';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { DatePicker } from '@/components/ui/date-picker';
-import { createMarkerIcon, getTypeStyles, getPhotoHotspotColor } from '@/utils/mapMarkers';
+import { createMarkerIcon, createSimpleMarkerIcon, getTypeStyles, getPhotoHotspotColor } from '@/utils/mapMarkers';
 import { estimateDayTime } from '@/utils/tripValidation';
 import { getAllTrailsUrl, estimateTrailLength } from '@/utils/hikeUtils';
 import { ShareTripModal } from '@/components/ShareTripModal';
@@ -1763,7 +1763,7 @@ const TripDetail = () => {
                             <Marker
                               key="day-origin-camp"
                               position={campsite.coordinates}
-                              icon={createMarkerIcon('camp', { isActive: true, size: 36 })}
+                              icon={createSimpleMarkerIcon('camp', { isActive: true, size: 8 })}
                               title={`From: ${campsite.name}`}
                             />
                           );

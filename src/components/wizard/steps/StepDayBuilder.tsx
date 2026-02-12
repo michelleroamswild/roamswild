@@ -20,7 +20,7 @@ import { useAreaRecommendations, AreaRecommendation } from "@/hooks/use-area-rec
 import { CampsiteSelectorPanel } from "../CampsiteSelectorPanel";
 import { GoogleMap } from "@/components/GoogleMap";
 import { Marker, InfoWindow } from "@react-google-maps/api";
-import { createMarkerIcon } from "@/utils/mapMarkers";
+import { createMarkerIcon, createSimpleMarkerIcon } from "@/utils/mapMarkers";
 
 interface AreaData {
   name: string;
@@ -314,7 +314,7 @@ export function StepDayBuilder({
               {campsite && (
                 <Marker
                   position={campsite.coordinates}
-                  icon={createMarkerIcon('camp', { size: 36, isActive: true }) || undefined}
+                  icon={createSimpleMarkerIcon('camp', { size: 8, isActive: true }) || undefined}
                   title={campsite.name}
                 />
               )}

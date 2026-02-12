@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -33,7 +33,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { GoogleMap } from '@/components/GoogleMap';
-import { Marker } from '@react-google-maps/api';
+import { CampsiteClusterer } from '@/components/CampsiteClusterer';
 import { useCampsites } from '@/context/CampsitesContext';
 import { useFriends } from '@/context/FriendsContext';
 import { toast } from 'sonner';
@@ -41,7 +41,6 @@ import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
 import { Campsite, CampsiteType, CampsiteVisibility } from '@/types/campsite';
 import { AddCampsiteModal } from '@/components/AddCampsiteModal';
 import { ImportCampsitesModal } from '@/components/ImportCampsitesModal';
-import { createMarkerIcon } from '@/utils/mapMarkers';
 import { Header } from '@/components/Header';
 
 const typeLabels: Record<CampsiteType, string> = {
@@ -85,6 +84,11 @@ const Campsites = () => {
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const [filterHasNotes, setFilterHasNotes] = useState(false);
   const [selectedCampsiteId, setSelectedCampsiteId] = useState<string | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    mapRef.current = map;
+  }, []);
 
   // Load public campsites when switching tabs
   const handleTabChange = (tab: 'mine' | 'friends' | 'explorer' | 'public') => {
@@ -273,20 +277,17 @@ const Campsites = () => {
               center={mapCenter}
               zoom={displayedCampsites.length === 1 ? 12 : 5}
               className="w-full h-full"
+              onLoad={onMapLoad}
             >
-              {displayedCampsites.map((campsite) => (
-                <Marker
-                  key={campsite.id}
-                  position={{ lat: campsite.lat, lng: campsite.lng }}
-                  icon={createMarkerIcon('camp', {
-                    size: selectedCampsiteId === campsite.id ? 48 : 36,
-                  })}
-                  onClick={() => {
-                    setSelectedCampsiteId(campsite.id);
-                    navigate(`/campsites/${campsite.id}`);
-                  }}
-                />
-              ))}
+              <CampsiteClusterer
+                map={mapRef.current}
+                campsites={displayedCampsites}
+                onCampsiteClick={(campsite) => {
+                  setSelectedCampsiteId(campsite.id);
+                  navigate(`/campsites/${campsite.id}`);
+                }}
+                selectedCampsiteId={selectedCampsiteId}
+              />
             </GoogleMap>
           </div>
 

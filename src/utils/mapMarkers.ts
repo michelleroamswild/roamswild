@@ -121,8 +121,8 @@ export function createSimpleMarkerIcon(
     path: google.maps.SymbolPath.CIRCLE,
     fillColor: colors.bg,
     fillOpacity: 1,
-    strokeColor: isActive ? '#3f3e2c' : 'transparent',
-    strokeWeight: isActive ? 2 : 0,
+    strokeColor: isActive ? '#3f3e2c' : '#ffffff',
+    strokeWeight: isActive ? 2 : 1,
     scale: isActive ? size * 1.25 : size,
   };
 }

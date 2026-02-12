@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Jeep, List, SignOut, Tent, Compass, Heart, Moon, Sun, MapTrifold, Users, Camera } from "@phosphor-icons/react";
+import { Jeep, List, SignOut, Tent, Compass, Heart, Moon, Sun, MapTrifold, Users, Camera, Lock } from "@phosphor-icons/react";
 import { useFriends } from "@/context/FriendsContext";
 import { Button } from "./ui/button";
 import { Link, useLocation } from "react-router-dom";
@@ -50,6 +50,7 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
   const userName = user?.user_metadata?.name as string | undefined;
   const initials = getInitials(userName, user?.email);
   const pendingRequestCount = incomingRequests.length;
+  const isAdmin = user?.email && ['michelle@roamswild.com', 'mictaylo@gmail.com'].includes(user.email);
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -102,18 +103,7 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
                 : "text-muted-foreground hover:text-foreground hover:bg-muted"
             )}
           >
-            Saved
-          </Link>
-          <Link
-            to="/photo-scout"
-            className={cn(
-              "text-base font-bold transition-colors px-3 py-1.5 rounded-full",
-              isActive('/photo-scout')
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
-            )}
-          >
-            Photo Scout
+            Favorites
           </Link>
         </nav>
 
@@ -152,6 +142,17 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
                     Campsites
                   </Link>
                 </DropdownMenuItem>
+              )}
+              {isAdmin && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to="/admin" className="flex items-center">
+                      <Lock className="w-4 h-4 mr-2" weight="bold" />
+                      Admin
+                    </Link>
+                  </DropdownMenuItem>
+                </>
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={toggleTheme} className="flex items-center cursor-pointer">
@@ -240,20 +241,7 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
                   )}
                 >
                   <Heart className="w-5 h-5" weight={isActive('/saved') ? "fill" : "regular"} />
-                  Saved
-                </Link>
-                <Link
-                  to="/photo-scout"
-                  onClick={closeMobileMenu}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
-                    isActive('/photo-scout')
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground hover:bg-muted"
-                  )}
-                >
-                  <Camera className="w-5 h-5" weight={isActive('/photo-scout') ? "fill" : "regular"} />
-                  Photo Scout
+                  Favorites
                 </Link>
                 {isFeatureEnabled('campsites') && (
                   <Link
@@ -268,6 +256,21 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
                   >
                     <Tent className="w-5 h-5" weight={isActive('/campsites') ? "fill" : "regular"} />
                     Campsites
+                  </Link>
+                )}
+                {isAdmin && (
+                  <Link
+                    to="/admin"
+                    onClick={closeMobileMenu}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-colors",
+                      isActive('/admin')
+                        ? "bg-accent text-accent-foreground"
+                        : "text-foreground hover:bg-muted"
+                    )}
+                  >
+                    <Lock className="w-5 h-5" weight={isActive('/admin') ? "fill" : "regular"} />
+                    Admin
                   </Link>
                 )}
               </nav>
