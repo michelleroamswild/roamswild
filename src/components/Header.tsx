@@ -65,10 +65,10 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
 
   return (
     <header className={cn("sticky top-0 z-50 w-full border-b", showBorder ? "border-border/50" : "border-transparent")}>
-      <div className="container flex items-center justify-between h-20 px-4 md:px-6">
-        <Link to="/" className="flex items-center gap-2">
-          <Jeep className="w-6 h-6 text-primary" weight="regular" />
-          <span className="text-xl font-display font-bold text-foreground">RoamsWild</span>
+      <div className="container flex items-center justify-between h-12 md:h-20 px-3 md:px-6">
+        <Link to="/" className="flex items-center gap-1.5 md:gap-2">
+          <Jeep className="w-5 h-5 md:w-6 md:h-6 text-primary" weight="regular" />
+          <span className="text-base md:text-xl font-display font-bold text-foreground">RoamsWild</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-2">
@@ -179,7 +179,7 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
           {/* Mobile Menu */}
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden">
+              <Button variant="ghost" size="icon" className="md:hidden h-8 w-8">
                 <List className="w-5 h-5" weight="bold" />
               </Button>
             </SheetTrigger>

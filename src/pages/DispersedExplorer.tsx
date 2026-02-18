@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { MapPin, MagnifyingGlass, Path, SpinnerGap, TreeEvergreen, Warning, Crosshair, Tent, Drop, MapPinLine, Eye, EyeSlash, Info, Star, NavigationArrow, Car, Jeep, Copy, Check, MapTrifold, CheckCircle, Users, Funnel } from '@phosphor-icons/react';
+import { MapPin, MagnifyingGlass, Path, SpinnerGap, TreeEvergreen, Warning, Crosshair, Tent, Drop, MapPinLine, Eye, EyeSlash, Info, Star, NavigationArrow, Car, Jeep, Copy, Check, MapTrifold, CheckCircle, Users, Funnel, ListBullets } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent } from '@/components/ui/card';
@@ -182,6 +182,7 @@ const DispersedExplorer = () => {
   const [explorerSpots, setExplorerSpots] = useState<Campsite[]>([]);
   const [showMyCampsites, setShowMyCampsites] = useState(true);
   const [showFriendsCampsites, setShowFriendsCampsites] = useState(true);
+  const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
   const [selectedCampsite, setSelectedCampsite] = useState<Campsite | null>(null);
 
   // Toggle between database (fast) and client-side (comprehensive with roads) data sources
@@ -1217,9 +1218,52 @@ const DispersedExplorer = () => {
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       <Header showBorder />
 
-      <div className="flex-1 grid lg:grid-cols-2 overflow-hidden">
-        {/* Map - Left side on desktop, bottom on mobile */}
-        <div className="order-2 lg:order-1 h-[400px] lg:h-full relative">
+      {/* Mobile: Search + toggle above content */}
+      <div className="lg:hidden shrink-0 p-3 pb-0 space-y-2">
+        <Card>
+          <CardContent className="p-3">
+            <LocationSelector
+              value={searchLocation}
+              onChange={handleLocationChange}
+              placeholder="Search location..."
+              showMyLocation={true}
+              showSavedLocations={true}
+              showCoordinates={true}
+              onMapClickHint={true}
+              compact={true}
+              coordinatesDisplay={searchLocation ? `${searchLocation.lat.toFixed(4)}, ${searchLocation.lng.toFixed(4)}` : undefined}
+            />
+          </CardContent>
+        </Card>
+        <div className="flex border-b border-border">
+          <button
+            onClick={() => setMobileView('list')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-sm font-medium transition-colors ${
+              mobileView === 'list'
+                ? 'text-foreground border-b-2 border-primary'
+                : 'text-muted-foreground'
+            }`}
+          >
+            <ListBullets className="w-4 h-4" />
+            List
+          </button>
+          <button
+            onClick={() => setMobileView('map')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-sm font-medium transition-colors ${
+              mobileView === 'map'
+                ? 'text-foreground border-b-2 border-primary'
+                : 'text-muted-foreground'
+            }`}
+          >
+            <MapTrifold className="w-4 h-4" />
+            Map
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-2 overflow-hidden">
+        {/* Map - Left side on desktop, toggled on mobile */}
+        <div className={`order-2 lg:order-1 lg:h-full relative ${mobileView === 'map' ? 'flex-1' : 'hidden lg:block'}`}>
           {/* Click instruction overlay */}
           {!searchLocation && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-background/90 backdrop-blur-sm px-4 py-2 rounded-full border border-border shadow-lg flex items-center gap-2">
@@ -1474,26 +1518,21 @@ const DispersedExplorer = () => {
                   </p>
                   <div className="flex gap-1.5">
                     <button
-                      onClick={() => {
-                        window.open(
-                          `https://www.google.com/maps/@${selectedSpot.lat},${selectedSpot.lng},500m/data=!3m1!1e3`,
-                          '_blank'
-                        );
-                      }}
+                      onClick={() => setConfirmDialogOpen(true)}
                       className="flex-1 px-2 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded hover:bg-emerald-700 transition-colors"
                     >
-                      Satellite
+                      {existingCampsiteForSpot ? 'Saved' : 'Save'}
                     </button>
                     <button
                       onClick={() => {
                         window.open(
-                          `https://www.google.com/maps/dir/?api=1&destination=${selectedSpot.lat},${selectedSpot.lng}`,
+                          `https://www.google.com/maps/search/?api=1&query=${selectedSpot.lat},${selectedSpot.lng}`,
                           '_blank'
                         );
                       }}
                       className="flex-1 px-2 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
                     >
-                      Directions
+                      Open Map
                     </button>
                   </div>
                 </div>
@@ -1577,30 +1616,17 @@ const DispersedExplorer = () => {
                       <span className="px-1.5 py-0.5 bg-cyan-100 text-cyan-700 rounded text-[10px] font-medium">Water</span>
                     )}
                   </div>
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => {
-                        window.open(
-                          `https://www.google.com/maps/@${selectedCampsite.lat},${selectedCampsite.lng},500m/data=!3m1!1e3`,
-                          '_blank'
-                        );
-                      }}
-                      className="flex-1 px-2 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded hover:bg-emerald-700 transition-colors"
-                    >
-                      Satellite
-                    </button>
-                    <button
-                      onClick={() => {
-                        window.open(
-                          `https://www.google.com/maps/dir/?api=1&destination=${selectedCampsite.lat},${selectedCampsite.lng}`,
-                          '_blank'
-                        );
-                      }}
-                      className="flex-1 px-2 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
-                    >
-                      Directions
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => {
+                      window.open(
+                        `https://www.google.com/maps/search/?api=1&query=${selectedCampsite.lat},${selectedCampsite.lng}`,
+                        '_blank'
+                      );
+                    }}
+                    className="w-full px-2 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                  >
+                    Open Map
+                  </button>
                 </div>
               </InfoWindow>
             )}
@@ -1756,10 +1782,10 @@ const DispersedExplorer = () => {
           </Popover>
         </div>
 
-        {/* Sidebar - Right side on desktop, top on mobile */}
-        <div className="order-1 lg:order-2 space-y-5 p-4 md:p-6 lg:h-full lg:overflow-y-auto">
-            {/* Search Card */}
-            <Card>
+        {/* Sidebar - Right side on desktop, toggled on mobile */}
+        <div className={`order-1 lg:order-2 space-y-3 sm:space-y-5 p-3 sm:p-4 md:p-6 min-h-0 overflow-y-auto ${mobileView === 'list' ? 'flex-1' : 'hidden lg:block'}`}>
+            {/* Search Card - desktop only (mobile has it above the toggle) */}
+            <Card className="hidden lg:block">
               <CardContent className="p-4">
                 <LocationSelector
                   value={searchLocation}
@@ -1770,12 +1796,8 @@ const DispersedExplorer = () => {
                   showCoordinates={true}
                   onMapClickHint={true}
                   compact={true}
+                  coordinatesDisplay={searchLocation ? `${searchLocation.lat.toFixed(4)}, ${searchLocation.lng.toFixed(4)}` : undefined}
                 />
-                {searchLocation && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {searchLocation.lat.toFixed(4)}, {searchLocation.lng.toFixed(4)}
-                  </p>
-                )}
               </CardContent>
             </Card>
 
@@ -1799,8 +1821,8 @@ const DispersedExplorer = () => {
             {/* Results: Stats, Filters, Campsites */}
             {searchLocation && !loading && (
               <>
-                {/* Stats row - 5 across */}
-                <div className="grid grid-cols-5 gap-2 mb-5">
+                {/* Stats row - 5 across, desktop only */}
+                <div className="hidden sm:grid grid-cols-5 gap-2 mb-5">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="p-2 bg-mossgreen/10 dark:bg-mossgreen/20 rounded-lg border border-mossgreen/30 text-center cursor-pointer">
