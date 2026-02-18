@@ -51,6 +51,7 @@ interface LocationSelectorProps {
   showClear?: boolean;
   compact?: boolean;
   onMapClickHint?: boolean; // Show "or click map" hint
+  coordinatesDisplay?: string; // Show coordinates inline to the right of buttons
 }
 
 // Parse coordinate string like "39.0708, -106.9890" or "39.0708 -106.9890"
@@ -87,6 +88,7 @@ export function LocationSelector({
   showClear = true,
   compact = false,
   onMapClickHint = false,
+  coordinatesDisplay,
 }: LocationSelectorProps) {
   const { isLoaded } = useGoogleMaps();
   const { user } = useAuth();
@@ -192,8 +194,8 @@ export function LocationSelector({
 
   if (!isLoaded) {
     return (
-      <div className={`flex items-center gap-2 ${className}`}>
-        <div className="relative flex-1">
+      <div className={`flex flex-col sm:flex-row sm:items-center gap-2 ${className}`}>
+        <div className="relative flex-1 w-full">
           <MagnifyingGlass className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input disabled placeholder="Loading..." className="pl-9 h-10" />
         </div>
@@ -205,9 +207,9 @@ export function LocationSelector({
   const buttonSize = compact ? "sm" : "default";
 
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      {/* Main input area */}
-      <div className="relative flex-1">
+    <div className={`flex flex-col sm:flex-row sm:items-center gap-2 ${className}`}>
+      {/* Main input area - full width on mobile */}
+      <div className="relative flex-1 w-full">
         {mode === 'search' ? (
           <>
             <MapPin className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${iconSize} text-muted-foreground z-10`} />
@@ -261,94 +263,104 @@ export function LocationSelector({
         )}
       </div>
 
-      {/* Mode toggle (search vs coordinates) */}
-      {showCoordinates && (
-        <Button
-          variant="outline"
-          size={buttonSize}
-          onClick={toggleMode}
-          className={`px-2`}
-          title={mode === 'search' ? 'Switch to coordinates' : 'Switch to search'}
-        >
-          {mode === 'search' ? (
-            <Crosshair className={iconSize} />
-          ) : (
-            <MagnifyingGlass className={iconSize} />
-          )}
-        </Button>
-      )}
+      {/* Action buttons - row below search on mobile, inline on desktop */}
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Mode toggle (search vs coordinates) */}
+        {showCoordinates && (
+          <Button
+            variant="outline"
+            size={buttonSize}
+            onClick={toggleMode}
+            className={`px-2`}
+            title={mode === 'search' ? 'Switch to coordinates' : 'Switch to search'}
+          >
+            {mode === 'search' ? (
+              <Crosshair className={iconSize} />
+            ) : (
+              <MagnifyingGlass className={iconSize} />
+            )}
+          </Button>
+        )}
 
-      {/* My location button */}
-      {showMyLocation && (
-        <Button
-          variant="outline"
-          size={buttonSize}
-          onClick={handleMyLocation}
-          disabled={isGettingLocation}
-          className={`px-2`}
-          title="Use my location"
-        >
-          <NavigationArrow className={`${iconSize} ${isGettingLocation ? 'animate-pulse' : ''}`} />
-        </Button>
-      )}
+        {/* My location button */}
+        {showMyLocation && (
+          <Button
+            variant="outline"
+            size={buttonSize}
+            onClick={handleMyLocation}
+            disabled={isGettingLocation}
+            className={`px-2`}
+            title="Use my location"
+          >
+            <NavigationArrow className={`${iconSize} ${isGettingLocation ? 'animate-pulse' : ''}`} />
+          </Button>
+        )}
 
-      {/* Saved locations dropdown */}
-      {showSavedLocations && user && savedLocations.length > 0 && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size={buttonSize}
-              className={`px-2`}
-              title="Saved locations"
-            >
-              <BookmarkSimple className={iconSize} />
-              <CaretDown className="w-3 h-3 ml-0.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuLabel>Saved Locations</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {savedLocations.slice(0, 10).map((location) => (
-              <DropdownMenuItem
-                key={location.id}
-                onClick={() => handleSavedLocationSelect(location)}
-                className="flex items-center gap-2"
+        {/* Saved locations dropdown */}
+        {showSavedLocations && user && savedLocations.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size={buttonSize}
+                className={`px-2`}
+                title="Saved locations"
               >
-                <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium truncate">{location.name}</div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                <BookmarkSimple className={iconSize} />
+                <CaretDown className="w-3 h-3 ml-0.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>Saved Locations</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {savedLocations.slice(0, 10).map((location) => (
+                <DropdownMenuItem
+                  key={location.id}
+                  onClick={() => handleSavedLocationSelect(location)}
+                  className="flex items-center gap-2"
+                >
+                  <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{location.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                    </div>
                   </div>
-                </div>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
 
-      {/* Coordinate submit button (only in coordinates mode) */}
-      {mode === 'coordinates' && inputValue && (
-        <Button
-          size={buttonSize}
-          onClick={handleCoordinateSubmit}
-        >
-          Go
-        </Button>
-      )}
+        {/* Coordinate submit button (only in coordinates mode) */}
+        {mode === 'coordinates' && inputValue && (
+          <Button
+            size={buttonSize}
+            onClick={handleCoordinateSubmit}
+          >
+            Go
+          </Button>
+        )}
 
-      {/* Error message */}
-      {coordError && (
-        <span className="text-xs text-destructive whitespace-nowrap">{coordError}</span>
-      )}
+        {/* Error message */}
+        {coordError && (
+          <span className="text-xs text-destructive whitespace-nowrap">{coordError}</span>
+        )}
 
-      {/* Map click hint */}
-      {onMapClickHint && (
-        <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">
-          or click map
-        </span>
-      )}
+        {/* Map click hint */}
+        {onMapClickHint && (
+          <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">
+            or click map
+          </span>
+        )}
+
+        {/* Coordinates display - inline to the right of all buttons */}
+        {coordinatesDisplay && (
+          <span className="text-xs text-muted-foreground whitespace-nowrap ml-auto font-mono">
+            {coordinatesDisplay}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
