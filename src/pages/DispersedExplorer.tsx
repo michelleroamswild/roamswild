@@ -17,6 +17,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useGoogleMaps } from '@/components/GoogleMapsProvider';
 import { Header } from '@/components/Header';
 import { ConfirmSpotDialog } from '@/components/ConfirmSpotDialog';
+import { AddCampsiteModal } from '@/components/AddCampsiteModal';
 import { SpotClusterer } from '@/components/SpotClusterer';
 import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
 import type { Campsite } from '@/types/campsite';
@@ -183,6 +184,8 @@ const DispersedExplorer = () => {
   const [showMyCampsites, setShowMyCampsites] = useState(true);
   const [showFriendsCampsites, setShowFriendsCampsites] = useState(true);
   const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
+  const [mapTapPoint, setMapTapPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [saveFromMapOpen, setSaveFromMapOpen] = useState(false);
   const [selectedCampsite, setSelectedCampsite] = useState<Campsite | null>(null);
 
   // Toggle between database (fast) and client-side (comprehensive with roads) data sources
@@ -1072,6 +1075,7 @@ const DispersedExplorer = () => {
     if (e.latLng) {
       const lat = e.latLng.lat();
       const lng = e.latLng.lng();
+      setMapTapPoint({ lat, lng });
       setSearchLocation({
         lat,
         lng,
@@ -1081,6 +1085,7 @@ const DispersedExplorer = () => {
       setSelectedRoad(null);
       setSelectedSpot(null);
       setSelectedCampground(null);
+      setSelectedCampsite(null);
     }
   }, []);
 
@@ -1264,13 +1269,6 @@ const DispersedExplorer = () => {
       <div className="flex-1 flex flex-col lg:grid lg:grid-cols-2 overflow-hidden">
         {/* Map - Left side on desktop, toggled on mobile */}
         <div className={`order-2 lg:order-1 lg:h-full relative ${mobileView === 'map' ? 'flex-1' : 'hidden lg:block'}`}>
-          {/* Click instruction overlay */}
-          {!searchLocation && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-background/90 backdrop-blur-sm px-4 py-2 rounded-full border border-border shadow-lg flex items-center gap-2">
-              <Crosshair className="w-4 h-4 text-primary" />
-              <span className="text-sm text-foreground">Click anywhere on the map to search that area</span>
-            </div>
-          )}
           <GoogleMap
             center={mapCenter}
             zoom={mapZoom}
@@ -1627,6 +1625,39 @@ const DispersedExplorer = () => {
                   >
                     Open Map
                   </button>
+                </div>
+              </InfoWindow>
+            )}
+
+            {/* Info window for map tap - save any location */}
+            {mapTapPoint && !selectedSpot && !selectedRoad && !selectedCampground && !selectedCampsite && (
+              <InfoWindow
+                position={mapTapPoint}
+                onCloseClick={() => setMapTapPoint(null)}
+              >
+                <div className="min-w-[180px]">
+                  <p className="text-xs text-gray-500 mb-2 font-mono">
+                    {mapTapPoint.lat.toFixed(5)}, {mapTapPoint.lng.toFixed(5)}
+                  </p>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => setSaveFromMapOpen(true)}
+                      className="flex-1 px-2 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded hover:bg-emerald-700 transition-colors"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        window.open(
+                          `https://www.google.com/maps/search/?api=1&query=${mapTapPoint.lat},${mapTapPoint.lng}`,
+                          '_blank'
+                        );
+                      }}
+                      className="flex-1 px-2 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                    >
+                      Open Map
+                    </button>
+                  </div>
                 </div>
               </InfoWindow>
             )}
@@ -2417,6 +2448,19 @@ const DispersedExplorer = () => {
               getExplorerSpots(searchLocation.lat, searchLocation.lng, 10).then(setExplorerSpots);
             }
           }}
+        />
+      )}
+
+      {/* Save from map tap */}
+      {mapTapPoint && (
+        <AddCampsiteModal
+          isOpen={saveFromMapOpen}
+          onClose={() => {
+            setSaveFromMapOpen(false);
+            setMapTapPoint(null);
+          }}
+          initialLat={mapTapPoint.lat}
+          initialLng={mapTapPoint.lng}
         />
       )}
     </div>

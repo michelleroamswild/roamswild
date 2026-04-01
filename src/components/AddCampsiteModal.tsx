@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -25,9 +25,11 @@ import { toast } from 'sonner';
 interface AddCampsiteModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialLat?: number;
+  initialLng?: number;
 }
 
-export function AddCampsiteModal({ isOpen, onClose }: AddCampsiteModalProps) {
+export function AddCampsiteModal({ isOpen, onClose, initialLat, initialLng }: AddCampsiteModalProps) {
   const { addCampsite } = useCampsites();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -35,6 +37,14 @@ export function AddCampsiteModal({ isOpen, onClose }: AddCampsiteModalProps) {
   const [name, setName] = useState('');
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
+
+  // Sync initial coordinates when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      if (initialLat !== undefined) setLat(String(initialLat));
+      if (initialLng !== undefined) setLng(String(initialLng));
+    }
+  }, [isOpen, initialLat, initialLng]);
   const [type, setType] = useState<CampsiteType>('dispersed');
   const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
