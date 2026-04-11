@@ -11,7 +11,6 @@ import { FriendsProvider } from "@/context/FriendsContext";
 import { GoogleMapsProvider } from "@/components/GoogleMapsProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { FeatureGate } from "@/components/FeatureGate";
-import { EmailGate } from "@/components/EmailGate";
 import { SpinnerGap } from "@phosphor-icons/react";
 import Index from "./pages/Index";
 import Landing from "./pages/Landing";
@@ -105,13 +104,7 @@ const App = () => (
                       <ProtectedRoute><CampsiteDetail /></ProtectedRoute>
                     </FeatureGate>
                   } />
-                  <Route path="/style-guide" element={
-                    <ProtectedRoute>
-                      <EmailGate allowedEmails={["mictaylo@gmail.com"]}>
-                        <StyleGuide />
-                      </EmailGate>
-                    </ProtectedRoute>
-                  } />
+                  <Route path="/style-guide" element={<StyleGuide />} />
                   <Route path="/photo-weather-test" element={
                     <FeatureGate feature="photoWeatherTest"><PhotoWeatherTest /></FeatureGate>
                   } />
