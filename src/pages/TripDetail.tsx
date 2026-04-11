@@ -39,11 +39,9 @@ import { TripStop, TripDay } from '@/types/trip';
 import { toast } from 'sonner';
 import { AlternativeHikesModal } from '@/components/AlternativeHikesModal';
 import { AlternativeCampsitesModal } from '@/components/AlternativeCampsitesModal';
-import { useRoutePhotoSpots, PhotoSpot } from '@/hooks/use-photo-spots';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { DatePicker } from '@/components/ui/date-picker';
-import { createMarkerIcon, createSimpleMarkerIcon, getTypeStyles, getPhotoHotspotColor } from '@/utils/mapMarkers';
+import { createMarkerIcon, createSimpleMarkerIcon, getTypeStyles } from '@/utils/mapMarkers';
 import { estimateDayTime } from '@/utils/tripValidation';
 import { getAllTrailsUrl, estimateTrailLength } from '@/utils/hikeUtils';
 import { ShareTripModal } from '@/components/ShareTripModal';
@@ -181,10 +179,6 @@ const TripDetail = () => {
   const [dateEditModal, setDateEditModal] = useState(false);
   const [editingStartDate, setEditingStartDate] = useState<Date | undefined>(undefined);
   const [editingEndDate, setEditingEndDate] = useState<Date | undefined>(undefined);
-  const [showPhotoHotspots, setShowPhotoHotspots] = useState(false);
-  const [photoHotspotsExpanded, setPhotoHotspotsExpanded] = useState(false);
-  const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoSpot | null>(null);
-  const [enlargedPhoto, setEnlargedPhoto] = useState<{ url: string; name: string } | null>(null);
   const [editLocationModal, setEditLocationModal] = useState<{
     isOpen: boolean;
     type: 'start' | 'destination' | 'end';
@@ -201,63 +195,6 @@ const TripDetail = () => {
   const [addDestinationModal, setAddDestinationModal] = useState(false);
   const [pendingNewDestination, setPendingNewDestination] = useState<google.maps.places.PlaceResult | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
-
-  // Get destination coordinates for photo hotspots search
-  const { destinationSearchPoints, searchPointsHash } = useMemo(() => {
-    if (!generatedTrip) return { destinationSearchPoints: [], searchPointsHash: '' };
-
-    const points: Array<{ lat: number; lng: number }> = [];
-    const hashParts: string[] = [];
-
-    // Add each destination as a search point
-    for (const dest of generatedTrip.config.destinations || []) {
-      points.push(dest.coordinates);
-      hashParts.push(`${dest.coordinates.lat.toFixed(3)},${dest.coordinates.lng.toFixed(3)}`);
-    }
-
-    const hash = hashParts.join('|');
-    return { destinationSearchPoints: points, searchPointsHash: hash };
-  }, [generatedTrip]);
-
-  // Check if we have valid cached photo hotspots
-  const hasCachedHotspots = generatedTrip?.cachedPhotoHotspots &&
-    generatedTrip.cachedPhotoHotspots.length > 0 &&
-    generatedTrip.photoHotspotsHash === searchPointsHash;
-
-  // Only fetch if no valid cache
-  const shouldFetchHotspots = !hasCachedHotspots && destinationSearchPoints.length > 0;
-
-  // Fetch photo spots at each destination (only if not cached)
-  const { spots: fetchedHotspots, loading: loadingPhotoHotspots } = useRoutePhotoSpots(
-    shouldFetchHotspots ? destinationSearchPoints : [],
-    32 // 32km radius at each destination
-  );
-
-  // Use cached hotspots or fetched hotspots
-  const photoHotspots = hasCachedHotspots ? generatedTrip!.cachedPhotoHotspots! : fetchedHotspots;
-
-  // Cache the fetched hotspots when they arrive
-  useEffect(() => {
-    if (fetchedHotspots.length > 0 && generatedTrip && !hasCachedHotspots) {
-      // Save to trip
-      const updatedTrip = {
-        ...generatedTrip,
-        cachedPhotoHotspots: fetchedHotspots.map(h => ({
-          id: h.id,
-          name: h.name,
-          lat: h.lat,
-          lng: h.lng,
-          photoCount: h.photoCount,
-          samplePhotoUrl: h.samplePhotoUrl,
-          rating: h.rating,
-          reviewCount: h.reviewCount,
-          source: h.source,
-        })),
-        photoHotspotsHash: searchPointsHash,
-      };
-      setGeneratedTrip(updatedTrip);
-    }
-  }, [fetchedHotspots, generatedTrip, hasCachedHotspots, searchPointsHash, setGeneratedTrip]);
 
   // Get elevation from stop if available (parse from string like "8,500 ft")
   const selectedStopElevation = useMemo(() => {
@@ -309,82 +246,6 @@ const TripDetail = () => {
   }, [generatedTrip?.id, fetchCollaborators]);
 
   // Find the best day to add a photo spot based on proximity to that day's stops
-  const findBestDayForPhotoSpot = useCallback((photoLat: number, photoLng: number): number => {
-    if (!generatedTrip || generatedTrip.days.length === 0) return 1;
-
-    // Calculate distance helper (Haversine)
-    const getDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
-      const R = 6371; // km
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLng = (lng2 - lng1) * Math.PI / 180;
-      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLng/2) * Math.sin(dLng/2);
-      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    };
-
-    let bestDay = 1;
-    let minAvgDistance = Infinity;
-
-    for (const day of generatedTrip.days) {
-      if (day.stops.length === 0) continue;
-
-      // Calculate average distance from all stops on this day to the photo spot
-      let totalDistance = 0;
-      for (const stop of day.stops) {
-        totalDistance += getDistance(photoLat, photoLng, stop.coordinates.lat, stop.coordinates.lng);
-      }
-      const avgDistance = totalDistance / day.stops.length;
-
-      // Also check distance to campsite if exists (photo spots near camp are convenient)
-      const campsiteDistance = day.campsite
-        ? getDistance(photoLat, photoLng, day.campsite.coordinates.lat, day.campsite.coordinates.lng)
-        : avgDistance;
-
-      // Weight: prefer days where photo spot is close to both activities and camp
-      const weightedDistance = (avgDistance + campsiteDistance) / 2;
-
-      if (weightedDistance < minAvgDistance) {
-        minAvgDistance = weightedDistance;
-        bestDay = day.day;
-      }
-    }
-
-    return bestDay;
-  }, [generatedTrip]);
-
-  // Add a photo spot to the trip
-  const handleAddPhotoSpotToTrip = useCallback((hotspot: PhotoSpot) => {
-    if (!generatedTrip) return;
-
-    const bestDay = findBestDayForPhotoSpot(hotspot.lat, hotspot.lng);
-
-    // Build description based on available data
-    let description = 'Scenic photo spot';
-    if (hotspot.photoCount) {
-      description = `Photo hotspot with ${hotspot.photoCount.toLocaleString()} geotagged photos`;
-    } else if (hotspot.rating) {
-      description = `Scenic viewpoint (${hotspot.rating.toFixed(1)} stars)`;
-    }
-
-    const photoStop: TripStop = {
-      id: `photo-${Date.now()}`,
-      name: hotspot.name || 'Photo Spot',
-      type: 'photo',
-      coordinates: { lat: hotspot.lat, lng: hotspot.lng },
-      duration: '30 min - 1 hr',
-      distance: '',
-      description,
-      day: bestDay,
-    };
-
-    addTripStop(bestDay, photoStop);
-    setSelectedPhotoHotspot(null);
-    toast.success(`Added "${hotspot.name}" to Day ${bestDay}`, {
-      description: 'Photo spot added to your itinerary',
-    });
-  }, [generatedTrip, findBestDayForPhotoSpot, addTripStop]);
-
   const handleSaveTrip = async () => {
     if (generatedTrip) {
       try {
@@ -1830,103 +1691,6 @@ const TripDetail = () => {
                     />
                   ))}
 
-                  {/* Photo hotspot markers */}
-                  {showPhotoHotspots && photoHotspots.map((hotspot) => (
-                    <Marker
-                      key={hotspot.id}
-                      position={{ lat: hotspot.lat, lng: hotspot.lng }}
-                      icon={createMarkerIcon('photo', {
-                        isActive: selectedPhotoHotspot?.id === hotspot.id,
-                        size: 36,
-                        customColor: getPhotoHotspotColor(hotspot.photoCount || 0)
-                      })}
-                      title={`${hotspot.name}${hotspot.photoCount ? ` (${hotspot.photoCount} photos)` : ''}${hotspot.rating ? ` ★${hotspot.rating.toFixed(1)}` : ''}`}
-                      onClick={() => {
-                        setSelectedStop(null);
-                        setSelectedPhotoHotspot(hotspot);
-                      }}
-                    />
-                  ))}
-
-                  {/* Info window for selected photo hotspot */}
-                  {selectedPhotoHotspot && (
-                    <InfoWindow
-                      position={{ lat: selectedPhotoHotspot.lat, lng: selectedPhotoHotspot.lng }}
-                      onCloseClick={() => setSelectedPhotoHotspot(null)}
-                    >
-                      <div className="min-w-[200px]">
-                        {selectedPhotoHotspot.samplePhotoUrl && (
-                          <button
-                            onClick={() => setEnlargedPhoto({ url: selectedPhotoHotspot.samplePhotoUrl!, name: selectedPhotoHotspot.name })}
-                            className="w-full h-32 overflow-hidden rounded-t-lg cursor-pointer"
-                          >
-                            <img
-                              src={selectedPhotoHotspot.samplePhotoUrl}
-                              alt={selectedPhotoHotspot.name}
-                              className="w-full h-full object-cover hover:scale-105 transition-transform"
-                            />
-                          </button>
-                        )}
-                        <div className="p-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <h4 className="font-semibold text-gray-900 text-sm">
-                              {selectedPhotoHotspot.name}
-                            </h4>
-                            {selectedPhotoHotspot.source === 'google' ? (
-                              <a
-                                href={`https://www.google.com/maps/search/?api=1&query=${selectedPhotoHotspot.lat},${selectedPhotoHotspot.lng}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline flex-shrink-0"
-                              >
-                                <ArrowSquareOut className="w-3 h-3" />
-                                Maps
-                              </a>
-                            ) : (
-                              <a
-                                href={`https://www.flickr.com/map?fLat=${selectedPhotoHotspot.lat}&fLon=${selectedPhotoHotspot.lng}&zl=14`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs text-pink-600 hover:text-pink-700 hover:underline flex-shrink-0"
-                              >
-                                <ArrowSquareOut className="w-3 h-3" />
-                                Flickr
-                              </a>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            {selectedPhotoHotspot.rating && (
-                              <span className="flex items-center gap-0.5 text-xs text-amber-600">
-                                <Star weight="fill" className="w-3 h-3" />
-                                {selectedPhotoHotspot.rating.toFixed(1)}
-                              </span>
-                            )}
-                            {selectedPhotoHotspot.photoCount && (
-                              <span className="text-gray-500 text-xs">
-                                {selectedPhotoHotspot.photoCount.toLocaleString()} photos
-                              </span>
-                            )}
-                            <span className={`text-xs px-1.5 py-0.5 rounded ${
-                              selectedPhotoHotspot.source === 'merged'
-                                ? 'bg-purple-100 text-purple-700'
-                                : selectedPhotoHotspot.source === 'google'
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-pink-100 text-pink-700'
-                            }`}>
-                              {selectedPhotoHotspot.source === 'merged' ? 'Verified' :
-                               selectedPhotoHotspot.source === 'google' ? 'Google' : 'Flickr'}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => handleAddPhotoSpotToTrip(selectedPhotoHotspot)}
-                            className="w-full mt-3 px-3 py-1.5 bg-primary text-primary-foreground text-xs font-medium rounded-md hover:bg-primary/90 transition-colors"
-                          >
-                            Add to trip
-                          </button>
-                        </div>
-                      </div>
-                    </InfoWindow>
-                  )}
 
                   {/* Info window for selected stop */}
                   {selectedStop && (
@@ -2030,11 +1794,10 @@ const TripDetail = () => {
           </div>
 
           {/* Itinerary Panel */}
-          <div className="order-1 lg:order-2 space-y-4 p-6 lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
-            {/* Trip Summary */}
-            <div className="space-y-3">
-              {/* Trip Name */}
-              <div className="mb-1">
+          <div className="order-1 lg:order-2 space-y-4 lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
+            {/* Trip Header */}
+            <div className="bg-muted/40 border-b px-6 pt-6 pb-4 space-y-3">
+              <div>
                 <h1 className="text-3xl font-display font-bold text-foreground">
                   {tripConfig.name || 'My Trip'}
                 </h1>
@@ -2074,77 +1837,45 @@ const TripDetail = () => {
                 )}
               </div>
 
-              {/* Trip Overview Card */}
-              <Card className="bg-card">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Path className="w-4 h-4 text-terracotta" />
-                    <h3 className="font-semibold text-foreground text-sm">Trip Overview</h3>
-                  </div>
-                  <div className="grid grid-cols-4 gap-3 text-center">
-                    <div className="bg-muted rounded-lg p-2">
-                      <p className="text-xl font-bold text-foreground">
-                        {generatedTrip.totalDistance.replace(' mi', '')}
-                      </p>
-                      <p className="text-xs text-foreground/70">Miles</p>
-                    </div>
-                    <div className="bg-muted rounded-lg p-2">
-                      <p className="text-xl font-bold text-foreground">
-                        {generatedTrip.totalDrivingTime.split('h')[0]}h
-                      </p>
-                      <p className="text-xs text-foreground/70">Driving</p>
-                    </div>
-                    <div className="bg-muted rounded-lg p-2">
-                      <p className="text-xl font-bold text-foreground">{generatedTrip.days.length}</p>
-                      <p className="text-xs text-foreground/70">Days</p>
-                    </div>
-                    <div className="bg-muted rounded-lg p-2">
-                      <p className="text-xl font-bold text-foreground capitalize">
-                        {tripConfig.pacePreference || 'Mod'}
-                      </p>
-                      <p className="text-xs text-foreground/70">Pace</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Activities Card */}
-              <Card className="bg-card">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Boot className="w-4 h-4 text-pinesoft" />
-                    <h3 className="font-semibold text-foreground text-sm">Activities</h3>
-                  </div>
-                  {(() => {
-                    // Calculate hiking stats
-                    let totalHikingMinutes = 0;
-                    let hikeCount = 0;
-                    generatedTrip.days.forEach(day => {
-                      const estimate = estimateDayTime(day);
-                      totalHikingMinutes += estimate.hikingHours * 60;
-                      hikeCount += day.stops.filter(s => s.type === 'hike').length;
-                    });
-                    const hikingHours = Math.floor(totalHikingMinutes / 60);
-                    const hikingMiles = Math.round((totalHikingMinutes / 60) * 1.8);
-
-                    return (
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-pinesoft/20">
-                          <Boot className="w-5 h-5 text-pinesoft" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-foreground">Hiking</p>
-                          <p className="text-sm text-muted-foreground">
-                            {hikeCount} {hikeCount === 1 ? 'hike' : 'hikes'} • {hikingHours > 0 ? `~${hikingHours}h` : '0h'} • {hikingMiles > 0 ? `~${hikingMiles} mi` : '0 mi'}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </CardContent>
-              </Card>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <Path className="w-3.5 h-3.5 text-terracotta" />
+                  {generatedTrip.totalDistance}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" />
+                  {generatedTrip.totalDrivingTime}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-primary" />
+                  {generatedTrip.days.length} days
+                </span>
+                <span className="flex items-center gap-1.5 capitalize">
+                  <Gauge className="w-3.5 h-3.5" />
+                  {tripConfig.pacePreference || 'Moderate'}
+                </span>
+                {(() => {
+                  let totalHikingMinutes = 0;
+                  let hikeCount = 0;
+                  generatedTrip.days.forEach(day => {
+                    const estimate = estimateDayTime(day);
+                    totalHikingMinutes += estimate.hikingHours * 60;
+                    hikeCount += day.stops.filter(s => s.type === 'hike').length;
+                  });
+                  const hikingHours = Math.floor(totalHikingMinutes / 60);
+                  const hikingMiles = Math.round((totalHikingMinutes / 60) * 1.8);
+                  if (hikeCount === 0) return null;
+                  return (
+                    <span className="flex items-center gap-1.5">
+                      <Boot className="w-3.5 h-3.5 text-pinesoft" />
+                      {hikeCount} {hikeCount === 1 ? 'hike' : 'hikes'} • ~{hikingHours}h • ~{hikingMiles} mi
+                    </span>
+                  );
+                })()}
+              </div>
             </div>
 
+           <div className="px-6 space-y-4">
             {/* Photography Conditions - shows when a stop is selected */}
             {selectedStop && (
               <PhotoWeatherCard
@@ -2153,128 +1884,6 @@ const TripDetail = () => {
                 error={stopWeatherError}
                 locationName={selectedStop.name}
               />
-            )}
-
-            {/* Photo Hotspots */}
-            {(photoHotspots.length > 0 || loadingPhotoHotspots) && (
-              <Card>
-                <CardContent className="p-4">
-                  <button
-                    onClick={() => setPhotoHotspotsExpanded(!photoHotspotsExpanded)}
-                    className="w-full flex items-center justify-between"
-                    disabled={loadingPhotoHotspots}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Camera className="w-5 h-5 text-blushorchid" />
-                      <h3 className="font-semibold text-foreground">Photo Hotspots</h3>
-                      {loadingPhotoHotspots ? (
-                        <CircleNotch className="w-4 h-4 text-muted-foreground animate-spin" />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">({photoHotspots.length})</span>
-                      )}
-                    </div>
-                    {!loadingPhotoHotspots && (
-                      photoHotspotsExpanded ? (
-                        <CaretUp className="w-5 h-5 text-muted-foreground" />
-                      ) : (
-                        <CaretDown className="w-5 h-5 text-muted-foreground" />
-                      )
-                    )}
-                  </button>
-
-                  {photoHotspotsExpanded && (
-                    <div className="mt-4 space-y-3">
-                      {loadingPhotoHotspots ? (
-                        <div className="flex items-center justify-center py-6">
-                          <CircleNotch className="w-6 h-6 text-blushorchid animate-spin" />
-                          <span className="ml-2 text-sm text-muted-foreground">Finding photo spots...</span>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-muted-foreground">via Flickr & Google</span>
-                            <div className="flex items-center gap-2">
-                              <Label htmlFor="show-hotspots" className="text-sm text-muted-foreground">
-                                Show on map
-                              </Label>
-                              <Switch
-                                id="show-hotspots"
-                                checked={showPhotoHotspots}
-                                onCheckedChange={setShowPhotoHotspots}
-                              />
-                            </div>
-                          </div>
-                          <div className="space-y-2">
-                        {photoHotspots.slice(0, 5).map((hotspot) => (
-                          <div
-                            key={hotspot.id}
-                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-[hsl(var(--accent-blushorchid)/0.1)] transition-colors"
-                          >
-                            {hotspot.samplePhotoUrl ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEnlargedPhoto({ url: hotspot.samplePhotoUrl!, name: hotspot.name });
-                                }}
-                                className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-[hsl(var(--accent-blushorchid))] transition-all"
-                              >
-                                <img
-                                  src={hotspot.samplePhotoUrl}
-                                  alt={hotspot.name}
-                                  className="w-full h-full object-cover"
-                                />
-                              </button>
-                            ) : (
-                              <div className="w-10 h-10 rounded-lg bg-blushorchid/20 flex items-center justify-center flex-shrink-0">
-                                <Camera className="w-5 h-5 text-blushorchid" />
-                              </div>
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedStop(null);
-                                setSelectedPhotoHotspot(hotspot);
-                                setShowPhotoHotspots(true);
-                              }}
-                              className="flex-1 min-w-0 text-left"
-                            >
-                              <p className="font-medium text-foreground text-sm truncate">
-                                {hotspot.name}
-                              </p>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                {hotspot.rating && (
-                                  <span className="flex items-center gap-0.5 text-amber-600">
-                                    <Star weight="fill" className="w-3 h-3" />
-                                    {hotspot.rating.toFixed(1)}
-                                  </span>
-                                )}
-                                {hotspot.photoCount && (
-                                  <span className="flex items-center gap-1">
-                                    <Camera className="w-3 h-3" />
-                                    {hotspot.photoCount.toLocaleString()}
-                                  </span>
-                                )}
-                                <span className={`px-1 py-0.5 rounded text-[10px] ${
-                                  hotspot.source === 'merged'
-                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
-                                    : hotspot.source === 'google'
-                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                                    : 'bg-pink-100 text-pink-700 dark:bg-pink-900 dark:text-pink-300'
-                                }`}>
-                                  {hotspot.source === 'merged' ? 'Verified' :
-                                   hotspot.source === 'google' ? 'Google' : 'Flickr'}
-                                </span>
-                              </div>
-                            </button>
-                          </div>
-                        ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
             )}
 
             {/* Day-by-Day Itinerary */}
@@ -2316,6 +1925,7 @@ const TripDetail = () => {
                 </Button>
               </Link>
             </div>
+           </div>
           </div>
         </div>
       </main>
@@ -2502,34 +2112,6 @@ const TripDetail = () => {
       {/* Regenerating Loading Overlay */}
       {regenerating && <RegeneratingLoader />}
 
-      {/* Photo Lightbox */}
-      {enlargedPhoto && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setEnlargedPhoto(null)}
-        >
-          <button
-            className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors"
-            onClick={() => setEnlargedPhoto(null)}
-          >
-            <X className="w-8 h-8" />
-          </button>
-          <div className="max-w-4xl max-h-[90vh] relative" onClick={(e) => e.stopPropagation()}>
-            <img
-              src={enlargedPhoto.url}
-              alt={enlargedPhoto.name}
-              className="max-w-full max-h-[85vh] object-contain rounded-lg"
-            />
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 rounded-b-lg">
-              <p className="text-white font-medium">{enlargedPhoto.name}</p>
-              <p className="text-white/70 text-sm flex items-center gap-1">
-                <Camera className="w-3 h-3" />
-                Photo Hotspot via Flickr
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

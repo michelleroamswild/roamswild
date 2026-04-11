@@ -1343,7 +1343,10 @@ export function useTripGenerator() {
         const isFinalDay = day === numDays;
         const skipActivitiesForTravel = config.travelOnlyFinalDay && isFinalDay;
 
-        if (shouldHikeToday && !skipActivitiesForTravel) {
+        // Skip activities on the starting day (day 1) — user is traveling to the base location
+        const isStartingDay = day === 1;
+
+        if (shouldHikeToday && !skipActivitiesForTravel && !isStartingDay) {
           // Get unique hikes for this day
           const availableHikes = allNearbyHikes.filter(h => !usedHikeIds.has(h.placeId || h.id));
           console.log(`[generateLocationBasedTrip] Day ${day}: ${availableHikes.length} available hikes`);
@@ -1752,7 +1755,10 @@ export function useTripGenerator() {
           const isFinalActivityDay = destIdx === numDestinations - 1 && isLastDayAtDest;
           const skipActivitiesForTravel = config.travelOnlyFinalDay && isFinalActivityDay;
 
-          if (shouldHikeToday && availableHikes.length > 0 && !skipActivitiesForTravel) {
+          // Skip activities if driving time already exceeds 5 hours (arrival/long travel days)
+          const skipActivitiesForLongDrive = dayDrivingMinutes >= 300;
+
+          if (shouldHikeToday && availableHikes.length > 0 && !skipActivitiesForTravel && !skipActivitiesForLongDrive) {
             for (const h of availableHikes) {
               const hikeKey = h.placeId || h.id;
               if (!usedHikeIds.has(hikeKey)) {
