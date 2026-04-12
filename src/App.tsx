@@ -8,6 +8,8 @@ import { SavedLocationsProvider } from "@/context/SavedLocationsContext";
 import { TripProvider } from "@/context/TripContext";
 import { CampsitesProvider } from "@/context/CampsitesContext";
 import { FriendsProvider } from "@/context/FriendsContext";
+import { ChatProvider } from "@/context/ChatContext";
+import { ChatAssistant } from "@/components/ChatAssistant";
 import { GoogleMapsProvider } from "@/components/GoogleMapsProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { FeatureGate } from "@/components/FeatureGate";
@@ -65,6 +67,7 @@ const App = () => (
           <CampsitesProvider>
           <FriendsProvider>
           <TripProvider>
+          <ChatProvider>
             <TooltipProvider>
               <Toaster />
               <Sonner />
@@ -119,7 +122,9 @@ const App = () => (
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </BrowserRouter>
+              <ChatAssistant />
             </TooltipProvider>
+          </ChatProvider>
           </TripProvider>
           </FriendsProvider>
           </CampsitesProvider>
