@@ -8,6 +8,8 @@ import { SavedLocationsProvider } from "@/context/SavedLocationsContext";
 import { TripProvider } from "@/context/TripContext";
 import { CampsitesProvider } from "@/context/CampsitesContext";
 import { FriendsProvider } from "@/context/FriendsContext";
+import { ChatProvider } from "@/context/ChatContext";
+import { ChatAssistant } from "@/components/ChatAssistant";
 import { GoogleMapsProvider } from "@/components/GoogleMapsProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { FeatureGate } from "@/components/FeatureGate";
@@ -30,6 +32,7 @@ import NotFound from "./pages/NotFound";
 import Campsites from "./pages/Campsites";
 import CampsiteDetail from "./pages/CampsiteDetail";
 import DispersedExplorer from "./pages/DispersedExplorer";
+import MapPreview from "./pages/MapPreview";
 import StyleGuide from "./pages/StyleGuide";
 import PhotoWeatherTest from "./pages/PhotoWeatherTest";
 import TerrainValidation from "./pages/TerrainValidation";
@@ -65,6 +68,7 @@ const App = () => (
           <CampsitesProvider>
           <FriendsProvider>
           <TripProvider>
+          <ChatProvider>
             <TooltipProvider>
               <Toaster />
               <Sonner />
@@ -105,6 +109,7 @@ const App = () => (
                     </FeatureGate>
                   } />
                   <Route path="/style-guide" element={<StyleGuide />} />
+                  <Route path="/map-preview" element={<MapPreview />} />
                   <Route path="/photo-weather-test" element={
                     <FeatureGate feature="photoWeatherTest"><PhotoWeatherTest /></FeatureGate>
                   } />
@@ -118,8 +123,10 @@ const App = () => (
                   {/* Catch-all */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
+                <ChatAssistant />
               </BrowserRouter>
             </TooltipProvider>
+          </ChatProvider>
           </TripProvider>
           </FriendsProvider>
           </CampsitesProvider>
