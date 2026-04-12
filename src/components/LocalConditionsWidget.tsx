@@ -2,11 +2,7 @@ import { useState, useEffect } from 'react';
 import { Thermometer, Wind, SunHorizon, Snowflake, MapPin, SpinnerGap } from '@phosphor-icons/react';
 import { usePhotoWeather } from '@/hooks/use-photo-weather';
 import { getSunTimes, formatTime } from '@/utils/sunCalc';
-
-interface UserLocation {
-  lat: number;
-  lng: number;
-}
+import { getUserLocation, type UserLocation } from '@/utils/getUserLocation';
 
 export function LocalConditionsWidget() {
   const [location, setLocation] = useState<UserLocation | null>(null);
@@ -15,26 +11,15 @@ export function LocalConditionsWidget() {
 
   // Get user's location
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setLocationError('Geolocation not supported');
-      setGettingLocation(false);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        });
+    getUserLocation()
+      .then((loc) => {
+        setLocation(loc);
         setGettingLocation(false);
-      },
-      (error) => {
+      })
+      .catch(() => {
         setLocationError('Location unavailable');
         setGettingLocation(false);
-      },
-      { timeout: 10000, enableHighAccuracy: false }
-    );
+      });
   }, []);
 
   const { forecast, loading } = usePhotoWeather(
