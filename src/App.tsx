@@ -32,6 +32,7 @@ import NotFound from "./pages/NotFound";
 import Campsites from "./pages/Campsites";
 import CampsiteDetail from "./pages/CampsiteDetail";
 import DispersedExplorer from "./pages/DispersedExplorer";
+import MapPreview from "./pages/MapPreview";
 import StyleGuide from "./pages/StyleGuide";
 import PhotoWeatherTest from "./pages/PhotoWeatherTest";
 import TerrainValidation from "./pages/TerrainValidation";
@@ -108,6 +109,7 @@ const App = () => (
                     </FeatureGate>
                   } />
                   <Route path="/style-guide" element={<StyleGuide />} />
+                  <Route path="/map-preview" element={<MapPreview />} />
                   <Route path="/photo-weather-test" element={
                     <FeatureGate feature="photoWeatherTest"><PhotoWeatherTest /></FeatureGate>
                   } />
