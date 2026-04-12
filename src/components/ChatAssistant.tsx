@@ -1,9 +1,14 @@
-import { useRef, useEffect, useState, KeyboardEvent } from 'react';
+import { useRef, useEffect, useState, useCallback, KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useChatContext } from '@/context/ChatContext';
+import { useTrip } from '@/context/TripContext';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useTripGenerator } from '@/hooks/use-trip-generator';
 import type { ChatMessage, TripSuggestion } from '@/hooks/use-chat';
+import type { TripDestination, TripConfig, ActivityType, LodgingType, PacePreference } from '@/types/trip';
+import { getTripUrl } from '@/utils/slugify';
+import { toast } from 'sonner';
 import {
   ChatCircle,
   PaperPlaneRight,
@@ -64,33 +69,115 @@ function FormattedText({ text }: { text: string }) {
   );
 }
 
+async function geocodePlace(query: string): Promise<TripDestination | null> {
+  if (!window.google?.maps?.places) return null;
+
+  return new Promise((resolve) => {
+    const service = new google.maps.places.PlacesService(document.createElement('div'));
+    service.findPlaceFromQuery(
+      { query, fields: ['place_id', 'name', 'formatted_address', 'geometry'] },
+      (results, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && results?.[0]) {
+          const place = results[0];
+          resolve({
+            id: place.place_id || `place-${Date.now()}`,
+            placeId: place.place_id || '',
+            name: place.name || query,
+            address: place.formatted_address || query,
+            coordinates: {
+              lat: place.geometry!.location!.lat(),
+              lng: place.geometry!.location!.lng(),
+            },
+          });
+        } else {
+          resolve(null);
+        }
+      }
+    );
+  });
+}
+
 function TripActionButton({ suggestion }: { suggestion: TripSuggestion }) {
   const navigate = useNavigate();
   const { setIsOpen } = useChatContext();
+  const { setGeneratedTrip } = useTrip();
+  const { generateTrip } = useTripGenerator();
+  const [generating, setGenerating] = useState(false);
 
-  const handleClick = () => {
-    const params = new URLSearchParams();
-    params.set('name', suggestion.name);
-    params.set('duration', String(suggestion.duration));
-    params.set('destinations', JSON.stringify(suggestion.destinations));
-    if (suggestion.activities?.length)
-      params.set('activities', JSON.stringify(suggestion.activities));
-    if (suggestion.lodgingPreference)
-      params.set('lodging', suggestion.lodgingPreference);
-    if (suggestion.pacePreference)
-      params.set('pace', suggestion.pacePreference);
+  const handleClick = useCallback(async () => {
+    setGenerating(true);
+    toast.loading('Generating your trip...', { id: 'chat-trip' });
 
-    setIsOpen(false);
-    navigate(`/create-trip?${params.toString()}`);
-  };
+    try {
+      const geocoded = await Promise.all(
+        suggestion.destinations.map((name) => geocodePlace(name))
+      );
+      const destinations = geocoded.filter((d): d is TripDestination => d !== null);
+
+      if (destinations.length === 0) {
+        toast.error("Couldn't find those destinations", { id: 'chat-trip' });
+        setGenerating(false);
+        return;
+      }
+
+      const startDest = destinations[0];
+      const tripDestinations = destinations.slice(1).length > 0
+        ? destinations.slice(1)
+        : destinations;
+
+      const config: TripConfig = {
+        name: suggestion.name,
+        duration: suggestion.duration,
+        startLocation: {
+          id: startDest.id,
+          placeId: startDest.placeId,
+          name: startDest.name,
+          address: startDest.address,
+          coordinates: startDest.coordinates,
+        },
+        destinations: tripDestinations,
+        returnToStart: false,
+        activities: (suggestion.activities as ActivityType[]) ?? [],
+        lodgingPreference: (suggestion.lodgingPreference as LodgingType) ?? 'dispersed',
+        pacePreference: (suggestion.pacePreference as PacePreference) ?? 'moderate',
+        hikingPreference: suggestion.activities?.includes('hiking') ? 'daily' : 'none',
+      };
+
+      const trip = await generateTrip(config);
+
+      if (trip) {
+        setGeneratedTrip(trip);
+        toast.success('Trip created!', { id: 'chat-trip', description: suggestion.name });
+        setIsOpen(false);
+        navigate(getTripUrl(trip.config.name));
+      } else {
+        toast.error('Trip generation failed', { id: 'chat-trip' });
+      }
+    } catch (err) {
+      console.error('Chat trip generation error:', err);
+      toast.error('Something went wrong', { id: 'chat-trip' });
+    } finally {
+      setGenerating(false);
+    }
+  }, [suggestion, generateTrip, setGeneratedTrip, setIsOpen, navigate]);
 
   return (
     <button
       onClick={handleClick}
-      className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
+      disabled={generating}
+      className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-70"
     >
-      <RocketLaunch className="w-4 h-4" weight="fill" />
-      Let's go!
+      {generating ? (
+        <>
+          <SpinnerGap className="w-4 h-4 animate-spin" />
+          Generating trip...
+        </>
+      ) : (
+        <>
+          <RocketLaunch className="w-4 h-4" weight="fill" />
+          Let's go!
+        </>
+      )}
     </button>
   );
 }

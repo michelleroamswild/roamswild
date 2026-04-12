@@ -44,7 +44,11 @@ Once you have enough info to build a trip, include a tripSuggestion object:
   }
 }
 
-RULES:
+CRITICAL RULES:
+- Your ENTIRE response must be a single valid JSON object — nothing before or after it
+- NEVER wrap the JSON in markdown code fences or backticks
+- NEVER include the JSON as text inside the message field
+- The message field contains ONLY the human-readable text the user will see
 - Only include tripSuggestion when you have at least destinations and duration
 - Destination names should be specific enough to search on Google Maps (include state/region)
 - For general questions (hike recommendations, gear advice, etc.) set tripSuggestion to null
@@ -123,8 +127,11 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const rawText =
+    let rawText =
       data.content?.[0]?.text ?? '{"message": "Sorry, I couldn\'t generate a response."}';
+
+    // Strip markdown code fences if Claude wrapped the JSON
+    rawText = rawText.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
 
     // Parse Claude's JSON response
     let message = rawText;
@@ -135,7 +142,9 @@ serve(async (req) => {
       message = parsed.message ?? rawText;
       tripSuggestion = parsed.tripSuggestion ?? null;
     } catch {
-      // If Claude didn't return valid JSON, use raw text as message
+      // If Claude didn't return valid JSON, strip any embedded JSON blocks from the display text
+      message = rawText.replace(/```(?:json)?[\s\S]*?```/g, '').replace(/\{[\s\S]*"tripSuggestion"[\s\S]*\}/g, '').trim();
+      if (!message) message = "I've got your trip details! Try asking me again.";
     }
 
     return new Response(

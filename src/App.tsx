@@ -123,8 +123,8 @@ const App = () => (
                   {/* Catch-all */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
+                <ChatAssistant />
               </BrowserRouter>
-              <ChatAssistant />
             </TooltipProvider>
           </ChatProvider>
           </TripProvider>
