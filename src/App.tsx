@@ -110,7 +110,7 @@ const App = () => (
                   } />
                   <Route path="/style-guide" element={<StyleGuide />} />
                   <Route path="/map-preview" element={<MapPreview />} />
-                  <Route path="/photo-weather-test" element={
+                  <Route path="/light-report" element={
                     <FeatureGate feature="photoWeatherTest"><PhotoWeatherTest /></FeatureGate>
                   } />
                   <Route path="/terrain-validation" element={

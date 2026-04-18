@@ -59,7 +59,7 @@ serve(async (req) => {
   </noscript>
   <![endif]-->
 </head>
-<body style="margin: 0; padding: 0; font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #e9e5d4;">
+<body style="margin: 0; padding: 0; font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #e9e5d4;">
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #e9e5d4;">
     <tr>
       <td style="padding: 40px 20px;">

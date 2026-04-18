@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Jeep, List, SignOut, Tent, Compass, Heart, Moon, Sun, MapTrifold, Users, Camera, Lock } from "@phosphor-icons/react";
+import { Jeep, List, SignOut, Tent, Compass, Heart, Moon, Sun, MapTrifold, Users, Camera, Lock, User, CaretDown } from "@phosphor-icons/react";
 import { useFriends } from "@/context/FriendsContext";
 import { Button } from "./ui/button";
 import { Link, useLocation } from "react-router-dom";
@@ -65,13 +65,13 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
 
   return (
     <header className={cn("sticky top-0 z-50 w-full border-b", showBorder ? "border-border/50" : "border-transparent")}>
-      <div className="container flex items-center justify-between h-12 md:h-20 px-3 md:px-6">
+      <div className="container grid grid-cols-3 items-center h-12 md:h-20 px-3 md:px-6">
         <Link to="/" className="flex items-center gap-1.5 md:gap-2">
           <Jeep className="w-5 h-5 md:w-6 md:h-6 text-primary" weight="regular" />
           <span className="text-base md:text-xl font-display font-bold text-foreground">RoamsWild</span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-2">
+        <nav className="hidden md:flex items-center justify-center gap-2">
           <Link
             to="/dispersed"
             className={cn(
@@ -105,13 +105,39 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
           >
             Favorites
           </Link>
-        </nav>
 
-        <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="hidden md:flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors">
-                {initials}
+              <button className={cn(
+                "flex items-center gap-1 text-base font-bold transition-colors px-3 py-1.5 rounded-full",
+                (isActive('/light-report') || isActive('/terrain-validation') || isActive('/photo-scout'))
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              )}>
+                Beta
+                <CaretDown className="w-3.5 h-3.5" weight="bold" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center" className="w-48">
+              <DropdownMenuItem asChild>
+                <Link to="/light-report" className="flex items-center cursor-pointer">
+                  The Light Report
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/terrain-validation" className="flex items-center cursor-pointer">
+                  Terrain Analysis
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </nav>
+
+        <div className="flex items-center gap-2 justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="hidden md:flex items-center justify-center w-9 h-9 text-primary hover:text-primary/70 transition-colors">
+                <User className="w-5 h-5" weight="fill" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
