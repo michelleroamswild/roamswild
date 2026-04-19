@@ -333,6 +333,9 @@ export function ChatAssistant() {
 
   if (!user) return null;
 
+  // Hide on preview pages
+  if (window.location.pathname.includes('-preview')) return null;
+
   return (
     <>
       {/* Floating button */}

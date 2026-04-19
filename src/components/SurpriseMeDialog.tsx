@@ -209,8 +209,8 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md" className="max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-none max-sm:h-[100dvh] max-sm:flex max-sm:flex-col max-sm:rounded-none max-sm:border-0" onInteractOutside={(e) => { if (showLocationFallback) e.preventDefault(); }}>
-        <DialogHeader className="text-left">
+      <DialogContent size="md" className="max-w-lg sm:max-h-[85vh] flex flex-col max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-none max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-0" onInteractOutside={(e) => { if (showLocationFallback) e.preventDefault(); }}>
+        <DialogHeader className="text-left shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Shuffle className="w-5 h-5 text-primary" weight="bold" />
             Surprise Me
@@ -224,7 +224,7 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4 max-sm:flex-1 max-sm:overflow-y-auto">
+        <div className="py-4 flex-1 overflow-y-auto">
           {/* Loading State */}
           {(loading || gettingLocation) && (
             <div className="flex flex-col items-center justify-center py-8">
@@ -299,7 +299,7 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
           )}
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2 max-sm:mt-auto">
+        <DialogFooter className="flex-col sm:flex-row gap-2 shrink-0">
           {result && !loading && (
             <>
               <Button variant="outline" onClick={handleTryAgain} className="w-full sm:w-auto">
