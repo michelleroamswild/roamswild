@@ -92,6 +92,19 @@ export interface DispersedRoadsResult {
   error: string | null;
 }
 
+// In-memory cache so data persists across navigations
+interface CachedData {
+  mvumRoads: MVUMRoad[];
+  blmRoads: BLMRoad[];
+  osmTracks: OSMTrack[];
+  potentialSpots: PotentialSpot[];
+  establishedCampgrounds: EstablishedCampground[];
+}
+const dataCache = new Map<string, CachedData>();
+function getCacheKey(lat: number, lng: number, radius: number): string {
+  return `${lat.toFixed(3)},${lng.toFixed(3)},${radius}`;
+}
+
 const USFS_MVUM_API = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_MVUM_01/MapServer/1/query';
 
 // BLM road data endpoints by state
@@ -1847,6 +1860,17 @@ export function useDispersedRoads(
       return;
     }
 
+    const cacheKey = getCacheKey(lat, lng, radiusMiles);
+    const cached = dataCache.get(cacheKey);
+    if (cached) {
+      setMvumRoads(cached.mvumRoads);
+      setBlmRoads(cached.blmRoads);
+      setOsmTracks(cached.osmTracks);
+      setPotentialSpots(cached.potentialSpots);
+      setEstablishedCampgrounds(cached.establishedCampgrounds);
+      return;
+    }
+
     const fetchRoads = async () => {
       setLoading(true);
       setError(null);
@@ -2159,6 +2183,15 @@ export function useDispersedRoads(
         spotsWithinRadius.sort((a, b) => b.score - a.score);
 
         setPotentialSpots(spotsWithinRadius);
+
+        // Save to in-memory cache
+        dataCache.set(cacheKey, {
+          mvumRoads: mvum,
+          blmRoads: blm,
+          osmTracks: osm,
+          potentialSpots: spotsWithinRadius,
+          establishedCampgrounds: allCampgrounds,
+        });
       } catch (err) {
         console.error('Dispersed roads fetch error:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch roads');
