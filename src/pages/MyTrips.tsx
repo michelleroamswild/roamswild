@@ -220,11 +220,11 @@ const MyTrips = () => {
     <div className="min-h-screen bg-background">
       <Header />
 
-      <main className="container px-4 md:px-6 py-8 max-w-4xl mx-auto">
+      <main className="container px-3 sm:px-4 md:px-6 py-6 sm:py-8 max-w-4xl mx-auto">
         {/* Page Title */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-display font-bold text-foreground">My Trips</h1>
-          <p className="text-muted-foreground mt-1">
+        <div className="mb-4 sm:mb-6">
+          <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground">My Trips</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             {allTripsRaw.length} {allTripsRaw.length === 1 ? 'trip' : 'trips'} saved
           </p>
         </div>
@@ -240,11 +240,11 @@ const MyTrips = () => {
               <CardContent className="p-0">
                 <div className="flex items-stretch">
                   <div className="w-1.5 bg-amber-500" />
-                  <div className="flex-1 p-5">
-                    <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 p-3 sm:p-5">
+                    <div className="flex items-start justify-between gap-2 sm:gap-4">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-display font-semibold text-foreground group-hover:text-amber-600 transition-colors">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-base sm:text-lg font-display font-semibold text-foreground group-hover:text-amber-600 transition-colors truncate">
                             {draft.wizard_state.tripName || 'Untitled Trip'}
                           </h3>
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/20 text-amber-600 rounded-full text-xs font-medium flex-shrink-0">
@@ -412,20 +412,20 @@ const MyTrips = () => {
 
         {/* Tabs and Sort */}
         {!isLoading && allTripsRaw.length > 0 && (
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-2 sm:gap-4 mb-4 sm:mb-6">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <button
                 onClick={() => setActiveTab('upcoming')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+                className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-medium text-xs sm:text-sm transition-all ${
                   activeTab === 'upcoming'
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
               >
-                <CalendarCheck className="w-4 h-4" />
+                <CalendarCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 Upcoming
                 {upcomingTrips.length > 0 && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs ${
                     activeTab === 'upcoming' ? 'bg-primary-foreground/20' : 'bg-muted-foreground/20'
                   }`}>
                     {upcomingTrips.length}
@@ -434,16 +434,16 @@ const MyTrips = () => {
               </button>
               <button
                 onClick={() => setActiveTab('past')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+                className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-medium text-xs sm:text-sm transition-all ${
                   activeTab === 'past'
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
               >
-                <ClockCounterClockwise className="w-4 h-4" />
-                Past Trips
+                <ClockCounterClockwise className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                Past
                 {pastTrips.length > 0 && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs ${
                     activeTab === 'past' ? 'bg-primary-foreground/20' : 'bg-muted-foreground/20'
                   }`}>
                     {pastTrips.length}
@@ -452,9 +452,9 @@ const MyTrips = () => {
               </button>
             </div>
             <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
-              <SelectTrigger className="w-[160px] h-9 text-sm">
+              <SelectTrigger className="w-[140px] sm:w-[160px] h-8 sm:h-9 text-xs sm:text-sm">
                 <div className="flex items-center gap-2">
-                  <SortAscending className="w-4 h-4 text-muted-foreground" />
+                  <SortAscending className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
                   <SelectValue />
                 </div>
               </SelectTrigger>
@@ -543,34 +543,35 @@ const MyTrips = () => {
                           : 'bg-primary'
                     }`} />
 
-                    <div className="flex-1 p-5">
-                      <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 p-3 sm:p-5">
+                      <div className="flex items-start justify-between gap-2 sm:gap-4">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-lg font-display font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-base sm:text-lg font-display font-semibold text-foreground group-hover:text-primary transition-colors truncate">
                               {trip.config.name || 'Untitled Trip'}
                             </h3>
                             {trip.isShared ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 text-blue-600 rounded-full text-xs font-medium flex-shrink-0">
+                              <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-blue-500/10 text-blue-600 rounded-full text-[10px] sm:text-xs font-medium flex-shrink-0">
                                 <Users className="w-3 h-3" />
-                                Shared with you
+                                <span className="hidden sm:inline">Shared with you</span>
+                                <span className="sm:hidden">Shared</span>
                               </span>
                             ) : (trip.collaboratorCount && trip.collaboratorCount > 0) ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 text-emerald-600 rounded-full text-xs font-medium flex-shrink-0">
+                              <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-emerald-500/10 text-emerald-600 rounded-full text-[10px] sm:text-xs font-medium flex-shrink-0">
                                 <ShareNetwork className="w-3 h-3" />
                                 Sharing
                               </span>
                             ) : trip.config.completedAt ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted text-muted-foreground rounded-full text-xs font-medium flex-shrink-0">
+                              <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-muted text-muted-foreground rounded-full text-[10px] sm:text-xs font-medium flex-shrink-0">
                                 <CheckCircle className="w-3 h-3" weight="fill" />
-                                Completed
+                                Done
                               </span>
                             ) : null}
                           </div>
 
                           {/* Start/Base location */}
-                          <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
-                            <MapPinArea className="w-4 h-4 flex-shrink-0" />
+                          <div className="flex items-center gap-2 mt-1.5 sm:mt-2 text-xs sm:text-sm text-muted-foreground">
+                            <MapPinArea className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                             <span className="truncate">
                               {trip.config.baseLocation
                                 ? `Exploring ${trip.config.baseLocation.name}`
@@ -595,23 +596,22 @@ const MyTrips = () => {
                           )}
 
                           {/* Stats */}
-                          <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mt-3 text-sm">
+                          <div className="flex items-center flex-wrap gap-x-3 sm:gap-x-4 gap-y-1.5 mt-2 sm:mt-3 text-xs sm:text-sm">
                             {trip.config.startDate && (
-                              <span className="flex items-center gap-1.5 text-foreground font-medium">
-                                <Calendar className="w-4 h-4 text-primary" />
+                              <span className="flex items-center gap-1 sm:gap-1.5 text-foreground font-medium">
+                                <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                                 {new Date(trip.config.startDate).toLocaleDateString('en-US', {
                                   month: 'short',
                                   day: 'numeric',
-                                  year: 'numeric'
                                 })}
                               </span>
                             )}
-                            <span className="flex items-center gap-1.5 text-foreground font-medium">
-                              <Clock className="w-4 h-4 text-muted-foreground" />
+                            <span className="flex items-center gap-1 sm:gap-1.5 text-foreground font-medium">
+                              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
                               {trip.days.length} {trip.days.length === 1 ? 'day' : 'days'}
                             </span>
-                            <span className="flex items-center gap-1.5 text-foreground font-medium">
-                              <Path className="w-4 h-4 text-terracotta" />
+                            <span className="flex items-center gap-1 sm:gap-1.5 text-foreground font-medium">
+                              <Path className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-terracotta" />
                               {trip.totalDistance}
                             </span>
                           </div>
