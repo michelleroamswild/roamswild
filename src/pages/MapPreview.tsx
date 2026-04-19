@@ -9,7 +9,7 @@ import { X, SpinnerGap, MapPin, Path, Tent, Crosshair, TreeEvergreen, Warning, L
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 
-const MOAB = { lat: 38.550744, lng: -109.683791 };
+const MOAB = { lat: 38.641439, lng: -109.829551 };
 const RADIUS_MILES = 10;
 
 interface CampsiteAnalysis {
@@ -78,7 +78,7 @@ const getSpotTypeLabel = (type: string) => {
 };
 
 const MapPreview = () => {
-  const { mvumRoads, osmTracks, potentialSpots, establishedCampgrounds } = useDispersedRoads(
+  const { mvumRoads, osmTracks, potentialSpots, establishedCampgrounds, loading } = useDispersedRoads(
     MOAB.lat,
     MOAB.lng,
     RADIUS_MILES
@@ -147,9 +147,15 @@ const MapPreview = () => {
 
   return (
     <div className="w-screen h-screen relative">
+      {loading && (
+        <div className="absolute top-3 left-3 z-20 flex items-center gap-2 bg-background/90 border border-border rounded-lg px-3 py-2 shadow-md">
+          <SpinnerGap className="w-4 h-4 animate-spin text-primary" />
+          <span className="text-xs font-medium text-muted-foreground">Loading spots...</span>
+        </div>
+      )}
       <GoogleMap
         center={MOAB}
-        zoom={13}
+        zoom={14}
         className="w-full h-full"
         options={{
           mapTypeId: 'hybrid',
