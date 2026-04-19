@@ -1233,22 +1233,22 @@ const TripDetail = () => {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="container px-4 md:px-6 py-4">
+        <div className="container px-3 sm:px-4 md:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={handleExitClick}>
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+              <Button variant="ghost" size="icon" className="rounded-full shrink-0" onClick={handleExitClick}>
                 <X className="w-5 h-5" weight="bold" />
               </Button>
-              <div>
-                <h1 className="text-xl font-display font-bold text-foreground">
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-xl font-display font-bold text-foreground truncate">
                   {tripConfig.name || 'My Trip'}
                 </h1>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   {generatedTrip.days.length} days • {generatedTrip.totalDistance}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
               {collaborators.length > 1 && (
                 <CollaboratorAvatars collaborators={collaborators} size="sm" maxDisplay={4} />
               )}
@@ -1274,18 +1274,18 @@ const TripDetail = () => {
               {isSaved ? (
                 <button
                   onClick={handleUnsaveTrip}
-                  className="flex items-center justify-center gap-1.5 w-[110px] py-2 text-sm font-semibold text-white bg-earth border-2 border-earth rounded-md hover:bg-earth/90 transition-colors"
+                  className="flex items-center justify-center gap-1.5 w-9 h-9 sm:w-[110px] sm:h-auto sm:py-2 text-sm font-semibold text-white bg-earth border-2 border-earth rounded-md hover:bg-earth/90 transition-colors"
                 >
                   <CheckCircle className="w-4 h-4" weight="fill" />
-                  Saved
+                  <span className="hidden sm:inline">Saved</span>
                 </button>
               ) : (
                 <button
                   onClick={handleSaveTrip}
-                  className="flex items-center justify-center gap-1.5 w-[110px] py-2 text-sm font-semibold text-earth bg-earth-light border-2 border-earth rounded-md hover:bg-earth-light/80 transition-colors"
+                  className="flex items-center justify-center gap-1.5 w-9 h-9 sm:w-[110px] sm:h-auto sm:py-2 text-sm font-semibold text-earth bg-earth-light border-2 border-earth rounded-md hover:bg-earth-light/80 transition-colors"
                 >
                   <Heart className="w-4 h-4" weight="bold" />
-                  Save Trip
+                  <span className="hidden sm:inline">Save Trip</span>
                 </button>
               )}
             </div>
@@ -1550,13 +1550,14 @@ const TripDetail = () => {
       <main className="w-full">
         <div className="grid lg:grid-cols-2">
           {/* Map Section */}
-          <div className="order-2 lg:order-1 h-[400px] lg:h-[calc(100vh-120px)] lg:sticky lg:top-[120px]">
+          <div className="order-2 lg:order-1 h-[280px] sm:h-[400px] lg:h-[calc(100vh-120px)] lg:sticky lg:top-[120px]">
               <div className="relative w-full h-full">
                 <GoogleMap
                   center={mapCenter}
                   zoom={8}
                   className="w-full h-full"
                   onLoad={handleMapLoad}
+                  options={{ mapTypeId: 'satellite' }}
                 >
                   {/* Route directions - show day route if day selected, otherwise full trip */}
                   {activeDay !== null && dayDirections ? (
@@ -1725,18 +1726,18 @@ const TripDetail = () => {
                 </GoogleMap>
 
                 {/* Route info overlay */}
-                <div className="absolute bottom-4 left-4 right-4 z-10">
-                  <div className="bg-card/95 backdrop-blur-sm rounded-xl border border-border p-4 shadow-lg">
+                <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 right-2 sm:right-4 z-10">
+                  <div className="bg-card/95 backdrop-blur-sm rounded-xl border border-border p-2.5 sm:p-4 shadow-lg">
                     {activeDay ? (
                       // Day-specific info
-                      <div className="flex items-center justify-between flex-wrap gap-4">
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center justify-center w-10 h-10 bg-emerald-500/10 rounded-full">
+                      <div className="flex items-center justify-between flex-wrap gap-2 sm:gap-4">
+                        <div className="flex items-center gap-2 sm:gap-4">
+                          <div className="hidden sm:flex items-center justify-center w-10 h-10 bg-emerald-500/10 rounded-full">
                             <span className="text-lg font-bold text-emerald-600">{activeDay}</span>
                           </div>
                           <div>
-                            <p className="font-semibold text-foreground">Day {activeDay}</p>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <p className="font-semibold text-foreground text-sm sm:text-base">Day {activeDay}</p>
+                            <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
                               <span className="flex items-center gap-1">
                                 <Path className="w-3 h-3" />
                                 {generatedTrip.days.find(d => d.day === activeDay)?.drivingDistance}
@@ -1745,46 +1746,48 @@ const TripDetail = () => {
                                 <Clock className="w-3 h-3" />
                                 {generatedTrip.days.find(d => d.day === activeDay)?.drivingTime}
                               </span>
-                              <span className="flex items-center gap-1">
+                              <span className="hidden sm:flex items-center gap-1">
                                 <MapPin className="w-3 h-3" />
                                 {generatedTrip.days.find(d => d.day === activeDay)?.stops.length} stops
                               </span>
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm" onClick={handleExitDayMode}>
-                            <X className="w-4 h-4 mr-1" />
-                            Exit Day
+                        <div className="flex items-center gap-1.5 sm:gap-2">
+                          <Button variant="outline" size="sm" className="text-xs sm:text-sm h-8" onClick={handleExitDayMode}>
+                            <X className="w-3.5 h-3.5 sm:mr-1" />
+                            <span className="hidden sm:inline">Exit Day</span>
                           </Button>
-                          <Button variant="primary" size="sm" onClick={handleNavigateDay}>
-                            <NavigationArrow className="w-4 h-4 mr-2" />
-                            Navigate Day {activeDay}
+                          <Button variant="primary" size="sm" className="text-xs sm:text-sm h-8" onClick={handleNavigateDay}>
+                            <NavigationArrow className="w-3.5 h-3.5 sm:mr-2" />
+                            <span className="hidden sm:inline">Navigate Day {activeDay}</span>
+                            <span className="sm:hidden">Navigate</span>
                           </Button>
                         </div>
                       </div>
                     ) : (
                       // Full trip info
-                      <div className="flex items-center justify-between flex-wrap gap-4">
-                        <div className="flex items-center gap-6">
-                          <div className="flex items-center gap-2">
-                            <Path className="w-4 h-4 text-terracotta" />
+                      <div className="flex items-center justify-between flex-wrap gap-2 sm:gap-4">
+                        <div className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm">
+                          <div className="flex items-center gap-1.5">
+                            <Path className="w-3.5 h-3.5 text-terracotta" />
                             <span className="font-semibold text-foreground">
                               {generatedTrip.totalDistance}
                             </span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-muted-foreground" />
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-muted-foreground" />
                             <span className="text-foreground">{generatedTrip.totalDrivingTime}</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-primary" />
+                          <div className="hidden sm:flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-primary" />
                             <span className="text-foreground">{generatedTrip.days.length} days</span>
                           </div>
                         </div>
-                        <Button variant="primary" size="sm" onClick={handleStartNavigation}>
-                          <NavigationArrow className="w-4 h-4 mr-2" />
-                          Start Navigation
+                        <Button variant="primary" size="sm" className="text-xs sm:text-sm h-8" onClick={handleStartNavigation}>
+                          <NavigationArrow className="w-3.5 h-3.5 sm:mr-2" />
+                          <span className="hidden sm:inline">Start Navigation</span>
+                          <span className="sm:hidden">Navigate</span>
                         </Button>
                       </div>
                     )}
@@ -1796,9 +1799,9 @@ const TripDetail = () => {
           {/* Itinerary Panel */}
           <div className="order-1 lg:order-2 space-y-4 lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
             {/* Trip Header */}
-            <div className="bg-muted/40 border-b px-6 pt-6 pb-4 space-y-3">
+            <div className="bg-muted/40 border-b px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 space-y-2 sm:space-y-3">
               <div>
-                <h1 className="text-3xl font-display font-bold text-foreground">
+                <h1 className="text-xl sm:text-3xl font-display font-bold text-foreground">
                   {tripConfig.name || 'My Trip'}
                 </h1>
                 {tripConfig.startDate ? (
@@ -1875,7 +1878,7 @@ const TripDetail = () => {
               </div>
             </div>
 
-           <div className="px-6 space-y-4">
+           <div className="px-4 sm:px-6 space-y-4">
             {/* Photography Conditions - shows when a stop is selected */}
             {selectedStop && (
               <PhotoWeatherCard
@@ -1914,13 +1917,13 @@ const TripDetail = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex gap-3 pt-4">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 pb-4 sm:pb-0">
               <Button variant="primary" size="lg" className="flex-1" onClick={handleStartNavigation}>
                 <NavigationArrow className="w-4 h-4 mr-2" />
                 Start Trip
               </Button>
-              <Link to="/create-trip">
-                <Button variant="outline" size="lg">
+              <Link to="/create-trip" className="sm:w-auto">
+                <Button variant="outline" size="lg" className="w-full sm:w-auto">
                   Edit Trip
                 </Button>
               </Link>
