@@ -137,25 +137,11 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
 
   const handleGetSurprise = async () => {
     setShowLocationFallback(false);
-    setGettingLocation(true);
-
-    try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
-          timeout: 10000,
-          maximumAge: 300000, // Cache for 5 minutes
-        });
-      });
-
-      setGettingLocation(false);
-      const coords = { lat: position.coords.latitude, lng: position.coords.longitude };
-      setLastUsedCoords(coords);
-      await getSurprise(coords.lat, coords.lng);
-    } catch (err) {
-      setGettingLocation(false);
-      setShowLocationFallback(true);
-    }
+    setGettingLocation(false);
+    // Skip geolocation — go straight to "anywhere" mode
+    const overrides = { maxDistanceMiles: 2000 };
+    setLastUsedCoords({ lat: 39.83, lng: -98.58, overrides });
+    await getSurprise(39.83, -98.58, overrides);
   };
 
   const handleExplore = () => {
@@ -390,7 +376,7 @@ function ResultDisplay({ result, nearestLocation }: { result: SurpriseMeSuccessR
       </div>
 
       {/* Scenic Anchor */}
-      {result.anchor && (
+      {result.anchor ? (
         <button
           onClick={() => {
             window.open(
@@ -398,7 +384,7 @@ function ResultDisplay({ result, nearestLocation }: { result: SurpriseMeSuccessR
               '_blank'
             );
           }}
-          className="w-full p-4 rounded-xl bg-card border border-border shadow-sm hover:shadow-md hover:border-primary/30 transition-all text-left"
+          className="w-full p-4 rounded-xl bg-card border border-border shadow-sm hover:shadow-md hover:border-primary/30 transition-all text-left animate-in fade-in duration-300"
         >
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -421,15 +407,33 @@ function ResultDisplay({ result, nearestLocation }: { result: SurpriseMeSuccessR
             </p>
           )}
         </button>
+      ) : (
+        <div className="w-full p-4 rounded-xl bg-card border border-border shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-5 h-5 rounded bg-muted animate-pulse" />
+            <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+          </div>
+          <div className="h-3.5 w-48 rounded bg-muted animate-pulse" />
+          <div className="h-3 w-20 rounded bg-muted animate-pulse mt-2" />
+        </div>
       )}
 
       {/* Nearby Highlights */}
-      {result.anchorHighlights && result.anchorHighlights.length > 0 && (
-        <div className="space-y-2">
+      {result.anchorHighlights && result.anchorHighlights.length > 0 ? (
+        <div className="space-y-2 animate-in fade-in duration-300">
           <p className="text-xs font-semibold text-foreground/60 uppercase tracking-wide">Nearby Highlights</p>
           <div className="grid grid-cols-2 gap-2">
             {result.anchorHighlights.slice(0, 4).map((highlight, i) => (
               <HighlightChip key={i} highlight={highlight} />
+            ))}
+          </div>
+        </div>
+      ) : !result.anchor && (
+        <div className="space-y-2">
+          <div className="h-3 w-28 rounded bg-muted animate-pulse" />
+          <div className="grid grid-cols-2 gap-2">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-9 rounded-lg bg-muted animate-pulse" />
             ))}
           </div>
         </div>

@@ -183,14 +183,22 @@ export function useSurpriseMe(options: UseSurpriseMeOptions = {}): UseSurpriseMe
         const response = data as SurpriseMeResponse;
 
         if (isSurpriseMeSuccess(response)) {
-          // Fetch scenic anchor for the region
-          const enrichedResponse = await enrichWithAnchor(response);
-          setResult(enrichedResponse);
+          // Show result immediately without anchor
+          setResult(response);
           // Store history ID for tracking clicks
-          if (enrichedResponse.meta && 'historyId' in enrichedResponse.meta) {
-            setHistoryId((enrichedResponse.meta as { historyId?: string }).historyId ?? null);
+          if (response.meta && 'historyId' in response.meta) {
+            setHistoryId((response.meta as { historyId?: string }).historyId ?? null);
           }
-          return enrichedResponse;
+
+          // Enrich with scenic anchor in the background (progressive loading)
+          enrichWithAnchor(response).then((enrichedResponse) => {
+            console.log('[SurpriseMe] Anchor enrichment complete:', enrichedResponse.anchor ? 'found' : 'none', enrichedResponse.anchorHighlights?.length || 0, 'highlights');
+            setResult(enrichedResponse);
+          }).catch((err) => {
+            console.error('[SurpriseMe] Anchor enrichment failed:', err);
+          });
+
+          return response;
         } else {
           setError(response.message);
         }

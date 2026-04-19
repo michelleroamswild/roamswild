@@ -32,7 +32,7 @@ export function RecentSearchesWidget() {
       </div>
 
       <Link
-        to={`/location/${mostRecent.placeId}`}
+        to={`/dispersed`}
         state={{
           placeId: mostRecent.placeId,
           name: mostRecent.name,

@@ -50,9 +50,15 @@ const Index = () => {
   const [campsLocationOpen, setCampsLocationOpen] = useState(false);
   const [campsManualLocation, setCampsManualLocation] = useState<SelectedLocation | null>(null);
 
+  const MOAB_FALLBACK = { lat: 38.5733, lng: -109.5498, name: 'Moab, UT' };
+
+  const navigateToExplore = (lat: number, lng: number, name: string) => {
+    navigate('/dispersed', { state: { lat, lng, name } });
+  };
+
   const handleFindCampsNearMe = () => {
     if (!navigator.geolocation) {
-      setCampsLocationOpen(true);
+      navigateToExplore(MOAB_FALLBACK.lat, MOAB_FALLBACK.lng, MOAB_FALLBACK.name);
       return;
     }
 
@@ -61,11 +67,11 @@ const Index = () => {
       (position) => {
         const { latitude, longitude } = position.coords;
         setIsGettingLocation(false);
-        navigate(`/dispersed?lat=${latitude}&lng=${longitude}&name=My%20Location`);
+        navigateToExplore(latitude, longitude, 'My Location');
       },
       () => {
         setIsGettingLocation(false);
-        setCampsLocationOpen(true);
+        navigateToExplore(MOAB_FALLBACK.lat, MOAB_FALLBACK.lng, MOAB_FALLBACK.name);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
@@ -151,7 +157,10 @@ const Index = () => {
                   <Shuffle className="w-4 h-4" weight="bold" />
                   Surprise me
                 </button>
-                <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/80 transition-colors shadow-sm">
+                <button
+                  onClick={() => navigate('/light-report')}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/80 transition-colors shadow-sm"
+                >
                   <SunHorizon className="w-4 h-4" weight="fill" />
                   Sunset conditions
                 </button>
