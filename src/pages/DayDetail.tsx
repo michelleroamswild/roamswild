@@ -523,6 +523,7 @@ const DayDetail = () => {
                 zoom={10}
                 className="w-full h-full"
                 onLoad={() => setMapsLoaded(true)}
+                options={{ mapTypeId: 'satellite' }}
               >
                 {directions && (
                   <DirectionsRenderer
