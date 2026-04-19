@@ -7,6 +7,7 @@
 
 import { useState, useCallback } from "react";
 import { scoreHikesToday, ScoredHike, Hike, WeatherNow, SunInfo } from "@/scoring";
+import { getUserLocation } from "@/utils/getUserLocation";
 
 export interface BestHikesResult {
   scoredHikes: ScoredHike[];
@@ -267,17 +268,10 @@ export function useBestHikesToday() {
         userLat = manualCoords.lat;
         userLng = manualCoords.lng;
       } else {
-        // Step 1: Get user's location
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: false,
-            timeout: 10000,
-            maximumAge: 300000, // Cache for 5 minutes
-          });
-        });
-
-        userLat = position.coords.latitude;
-        userLng = position.coords.longitude;
+        // Step 1: Get user's location (dev falls back to Moab on failure)
+        const loc = await getUserLocation();
+        userLat = loc.lat;
+        userLng = loc.lng;
       }
       setUserLocation({ lat: userLat, lng: userLng });
 

@@ -7,6 +7,7 @@ import { LocalConditionsWidget } from "@/components/LocalConditionsWidget";
 import { RecentSearchesWidget } from "@/components/RecentSearchesWidget";
 import { SurpriseMeDialog } from "@/components/SurpriseMeDialog";
 import { BestHikesTodayDialog } from "@/components/BestHikesTodayDialog";
+import { SunsetConditionsDialog } from "@/components/SunsetConditionsDialog";
 import { LocationSelector, SelectedLocation } from "@/components/LocationSelector";
 import { useTrip } from "@/context/TripContext";
 import { Path, Calendar, MapPinArea, CaretRight, Boot, ArrowRight, Users, Mountains, Tent, SunHorizon, Shuffle, Compass, SpinnerGap, MapPin } from "@phosphor-icons/react";
@@ -23,6 +24,7 @@ import { getTripUrl } from "@/utils/slugify";
 import { GoogleMap } from "@/components/GoogleMap";
 import { Marker } from "@react-google-maps/api";
 import { createMarkerIcon, createSimpleMarkerIcon } from "@/utils/mapMarkers";
+import { getUserLocation } from "@/utils/getUserLocation";
 
 // Example points of interest for Zion National Park (empty state preview)
 const ZION_EXAMPLE_POIS = {
@@ -46,35 +48,22 @@ const Index = () => {
   const navigate = useNavigate();
   const [surpriseMeOpen, setSurpriseMeOpen] = useState(false);
   const [bestHikesOpen, setBestHikesOpen] = useState(false);
+  const [sunsetOpen, setSunsetOpen] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [campsLocationOpen, setCampsLocationOpen] = useState(false);
   const [campsManualLocation, setCampsManualLocation] = useState<SelectedLocation | null>(null);
 
-  const MOAB_FALLBACK = { lat: 38.5733, lng: -109.5498, name: 'Moab, UT' };
-
-  const navigateToExplore = (lat: number, lng: number, name: string) => {
-    navigate('/dispersed', { state: { lat, lng, name } });
-  };
-
-  const handleFindCampsNearMe = () => {
-    if (!navigator.geolocation) {
-      navigateToExplore(MOAB_FALLBACK.lat, MOAB_FALLBACK.lng, MOAB_FALLBACK.name);
-      return;
-    }
-
+  const handleFindCampsNearMe = async () => {
     setIsGettingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        setIsGettingLocation(false);
-        navigateToExplore(latitude, longitude, 'My Location');
-      },
-      () => {
-        setIsGettingLocation(false);
-        navigateToExplore(MOAB_FALLBACK.lat, MOAB_FALLBACK.lng, MOAB_FALLBACK.name);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
+    try {
+      const loc = await getUserLocation({ enableHighAccuracy: true, maximumAgeMs: 60000 });
+      setIsGettingLocation(false);
+      const name = loc.name ?? "My Location";
+      navigate(`/dispersed?lat=${loc.lat}&lng=${loc.lng}&name=${encodeURIComponent(name)}`);
+    } catch {
+      setIsGettingLocation(false);
+      setCampsLocationOpen(true);
+    }
   };
 
   const handleCampsManualLocation = () => {
@@ -158,7 +147,7 @@ const Index = () => {
                   Surprise me
                 </button>
                 <button
-                  onClick={() => navigate('/light-report')}
+                  onClick={() => setSunsetOpen(true)}
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/80 transition-colors shadow-sm"
                 >
                   <SunHorizon className="w-4 h-4" weight="fill" />
@@ -496,6 +485,9 @@ const Index = () => {
 
       {/* Best Hikes Today Dialog */}
       <BestHikesTodayDialog open={bestHikesOpen} onOpenChange={setBestHikesOpen} />
+
+      {/* Sunset Conditions Dialog */}
+      <SunsetConditionsDialog open={sunsetOpen} onOpenChange={setSunsetOpen} />
 
       {/* Campsites Location Fallback Dialog */}
       <Dialog open={campsLocationOpen} onOpenChange={(open) => { setCampsLocationOpen(open); if (!open) setCampsManualLocation(null); }}>
