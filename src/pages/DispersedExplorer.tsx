@@ -1496,13 +1496,14 @@ const DispersedExplorer = () => {
                 } else {
                   setAiAnalysis(null);
                   // Query DB cache directly (fast, no Gemini call)
-                  const latKey = Math.round(spot.lat * 100000) / 100000;
-                  const lngKey = Math.round(spot.lng * 100000) / 100000;
+                  const eps = 0.00001;
                   supabase
                     .from('spot_analyses')
                     .select('analysis')
-                    .eq('lat_key', latKey)
-                    .eq('lng_key', lngKey)
+                    .gte('lat', spot.lat - eps)
+                    .lte('lat', spot.lat + eps)
+                    .gte('lng', spot.lng - eps)
+                    .lte('lng', spot.lng + eps)
                     .order('created_at', { ascending: false })
                     .limit(1)
                     .maybeSingle()
@@ -1645,7 +1646,7 @@ const DispersedExplorer = () => {
             )}
           </GoogleMap>
 
-          {/* Floating Spot Detail Overlay */}
+          {/* Floating Spot Detail Card */}
           {selectedSpot && (
             <div className="absolute top-3 right-3 w-80 max-h-[calc(100%-1.5rem)] overflow-y-auto bg-background border border-border rounded-xl shadow-2xl z-20">
               {/* Header */}
@@ -1666,97 +1667,45 @@ const DispersedExplorer = () => {
                       {selectedSpot.type === 'camp-site' ? 'Known Campsite' :
                        selectedSpot.type === 'dead-end' ? 'Road Terminus' : 'Road Junction'}
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      Score: {selectedSpot.score}/50
-                    </span>
+                    <span className="text-xs text-muted-foreground">Score: {selectedSpot.score}/50</span>
                   </div>
                 </div>
-                <button
-                  onClick={() => { setSelectedSpot(null); setAiAnalysis(null); setAiError(null); }}
-                  className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                >
+                <button onClick={() => { setSelectedSpot(null); setAiAnalysis(null); setAiError(null); }} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Spot Info */}
               <div className="px-3 py-2.5 space-y-2.5 border-b">
-                {/* Coordinates */}
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono text-muted-foreground">
-                    {selectedSpot.lat.toFixed(5)}, {selectedSpot.lng.toFixed(5)}
-                  </span>
+                  <span className="text-xs font-mono text-muted-foreground">{selectedSpot.lat.toFixed(5)}, {selectedSpot.lng.toFixed(5)}</span>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${selectedSpot.lat},${selectedSpot.lng}`, '_blank')}
-                      className="text-muted-foreground hover:text-foreground transition-colors"
-                      title="Open in Google Maps"
-                    >
+                    <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${selectedSpot.lat},${selectedSpot.lng}`, '_blank')} className="text-muted-foreground hover:text-foreground transition-colors" title="Open in Google Maps">
                       <MapPin className="w-3.5 h-3.5" weight="fill" />
                     </button>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(`${selectedSpot.lat.toFixed(5)}, ${selectedSpot.lng.toFixed(5)}`);
-                        setCopiedCoords(true);
-                        setTimeout(() => setCopiedCoords(false), 2000);
-                      }}
-                      className="text-muted-foreground hover:text-foreground transition-colors"
-                      title="Copy coordinates"
-                    >
+                    <button onClick={() => { navigator.clipboard.writeText(`${selectedSpot.lat.toFixed(5)}, ${selectedSpot.lng.toFixed(5)}`); setCopiedCoords(true); setTimeout(() => setCopiedCoords(false), 2000); }} className="text-muted-foreground hover:text-foreground transition-colors" title="Copy coordinates">
                       {copiedCoords ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                   </div>
                 </div>
-
-                {/* Source & Access badges */}
                 <div className="flex flex-wrap gap-1">
-                  {selectedSpot.isOnMVUMRoad && (
-                    <span className="px-2 py-0.5 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full text-[10px] font-medium">USFS MVUM</span>
-                  )}
-                  {selectedSpot.isOnBLMRoad && (
-                    <span className="px-2 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded-full text-[10px] font-medium">BLM</span>
-                  )}
-                  {selectedSpot.isOnPublicLand && !selectedSpot.isOnMVUMRoad && !selectedSpot.isOnBLMRoad && (
-                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 rounded-full text-[10px] font-medium">Public Land</span>
-                  )}
-                  {selectedSpot.passengerReachable && (
-                    <span className="px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 rounded-full text-[10px] font-medium flex items-center gap-0.5">
-                      <Car className="w-3 h-3" /> Passenger
-                    </span>
-                  )}
-                  {selectedSpot.highClearanceReachable && !selectedSpot.passengerReachable && (
-                    <span className="px-2 py-0.5 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full text-[10px] font-medium flex items-center gap-0.5">
-                      <Jeep className="w-3 h-3" /> High Clearance
-                    </span>
-                  )}
-                  {selectedSpot.roadName && (
-                    <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded-full text-[10px]">{selectedSpot.roadName}</span>
-                  )}
+                  {selectedSpot.isOnMVUMRoad && <span className="px-2 py-0.5 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full text-[10px] font-medium">USFS MVUM</span>}
+                  {selectedSpot.isOnBLMRoad && <span className="px-2 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded-full text-[10px] font-medium">BLM</span>}
+                  {selectedSpot.isOnPublicLand && !selectedSpot.isOnMVUMRoad && !selectedSpot.isOnBLMRoad && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 rounded-full text-[10px] font-medium">Public Land</span>}
+                  {selectedSpot.passengerReachable && <span className="px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 rounded-full text-[10px] font-medium flex items-center gap-0.5"><Car className="w-3 h-3" /> Passenger</span>}
+                  {selectedSpot.highClearanceReachable && !selectedSpot.passengerReachable && <span className="px-2 py-0.5 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full text-[10px] font-medium flex items-center gap-0.5"><Jeep className="w-3 h-3" /> High Clearance</span>}
+                  {selectedSpot.roadName && <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded-full text-[10px]">{selectedSpot.roadName}</span>}
                 </div>
-
-                {/* Reasons */}
                 {selectedSpot.reasons.length > 0 && (
                   <div className="flex flex-wrap gap-1">
-                    {selectedSpot.reasons.map((reason, i) => (
-                      <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                        {reason}
-                      </span>
-                    ))}
+                    {selectedSpot.reasons.map((reason, i) => <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{reason}</span>)}
                   </div>
                 )}
-
-                {/* Confirmation Status */}
                 {existingCampsiteForSpot && (
                   <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
                     <Users className="w-3.5 h-3.5" />
-                    <span className="text-xs font-medium">
-                      {existingCampsiteForSpot.confirmationCount} confirmed
-                    </span>
-                    {existingCampsiteForSpot.isConfirmed && (
-                      <span className="flex items-center gap-0.5 text-[10px]">
-                        <CheckCircle className="w-3 h-3" /> Verified
-                      </span>
-                    )}
+                    <span className="text-xs font-medium">{existingCampsiteForSpot.confirmationCount} confirmed</span>
+                    {existingCampsiteForSpot.isConfirmed && <span className="flex items-center gap-0.5 text-[10px]"><CheckCircle className="w-3 h-3" /> Verified</span>}
                   </div>
                 )}
               </div>
@@ -1764,43 +1713,20 @@ const DispersedExplorer = () => {
               {/* Actions */}
               <div className="px-3 py-2 border-b">
                 <div className="flex gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 text-xs"
-                    disabled={aiAnalyzing}
-                    onClick={async () => {
-                      if (aiAnalysis) return;
-                      setAiAnalyzing(true);
-                      setAiError(null);
-                      try {
-                        const { data, error } = await supabase.functions.invoke('analyze-campsite', {
-                          body: {
-                            lat: selectedSpot.lat, lng: selectedSpot.lng, name: selectedSpot.name,
-                            type: selectedSpot.type, score: selectedSpot.score, reasons: selectedSpot.reasons,
-                            source: selectedSpot.source, roadName: selectedSpot.roadName, isOnPublicLand: selectedSpot.isOnPublicLand, passengerReachable: selectedSpot.passengerReachable, highClearanceReachable: selectedSpot.highClearanceReachable, highClearance: selectedSpot.highClearance,
-                          },
-                        });
-                        if (error) throw error;
-                        setAiAnalysis(data.analysis);
-                        analysisCache.current.set(`${selectedSpot.lat.toFixed(5)},${selectedSpot.lng.toFixed(5)}`, data.analysis);
-                      } catch (err: unknown) {
-                        setAiError(err instanceof Error ? err.message : 'Analysis failed');
-                      } finally {
-                        setAiAnalyzing(false);
-                      }
-                    }}
-                  >
-                    {aiAnalyzing ? <SpinnerGap className="w-3.5 h-3.5 animate-spin mr-1" /> : <Lightning className="w-3.5 h-3.5 mr-1" weight="fill" />}
+                  <Button variant="outline" size="sm" className="flex-1 text-[10px] h-7" disabled={aiAnalyzing} onClick={async () => {
+                    if (aiAnalysis) return;
+                    setAiAnalyzing(true); setAiError(null);
+                    try {
+                      const { data, error } = await supabase.functions.invoke('analyze-campsite', { body: { lat: selectedSpot.lat, lng: selectedSpot.lng, name: selectedSpot.name, type: selectedSpot.type, score: selectedSpot.score, reasons: selectedSpot.reasons, source: selectedSpot.source, roadName: selectedSpot.roadName, isOnPublicLand: selectedSpot.isOnPublicLand, passengerReachable: selectedSpot.passengerReachable, highClearanceReachable: selectedSpot.highClearanceReachable, highClearance: selectedSpot.highClearance, } });
+                      if (error) throw error;
+                      setAiAnalysis(data.analysis); analysisCache.current.set(`${selectedSpot.lat.toFixed(5)},${selectedSpot.lng.toFixed(5)}`, data.analysis);
+                    } catch (err: unknown) { setAiError(err instanceof Error ? err.message : 'Analysis failed'); } finally { setAiAnalyzing(false); }
+                  }}>
+                    {aiAnalyzing ? <SpinnerGap className="w-3 h-3 animate-spin mr-1" /> : <Lightning className="w-3 h-3 mr-1" weight="fill" />}
                     {aiAnalysis ? 'Analyzed' : aiAnalyzing ? 'Analyzing...' : 'Analyze'}
                   </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="flex-1 text-xs"
-                    onClick={() => setConfirmDialogOpen(true)}
-                  >
-                    <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                  <Button variant="default" size="sm" className="flex-1 text-[10px] h-7" onClick={() => setConfirmDialogOpen(true)}>
+                    <CheckCircle className="w-3 h-3 mr-1" />
                     {existingCampsiteForSpot ? 'Confirmed' : 'Confirm'}
                   </Button>
                 </div>
@@ -1808,27 +1734,21 @@ const DispersedExplorer = () => {
 
               {/* AI Analysis Results */}
               <div className="px-3 py-2.5">
-                {!aiAnalysis && !aiAnalyzing && !aiError && (
-                  <p className="text-[10px] text-muted-foreground text-center">Tap Analyze to get an AI assessment of this spot</p>
-                )}
-
+                {!aiAnalysis && !aiAnalyzing && !aiError && <p className="text-[10px] text-muted-foreground text-center">Tap Analyze to get an AI assessment of this spot</p>}
                 {aiAnalyzing && !aiAnalysis && (
                   <div className="flex flex-col items-center py-3 text-muted-foreground">
                     <SpinnerGap className="w-5 h-5 animate-spin mb-1.5" />
                     <span className="text-xs font-medium">Analyzing satellite imagery...</span>
                   </div>
                 )}
-
                 {aiError && (
                   <div className="space-y-1.5">
                     <p className="text-xs text-destructive">{aiError}</p>
                     <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setAiError(null)}>Retry</Button>
                   </div>
                 )}
-
                 {aiAnalysis && (
                   <div className="space-y-2.5">
-                    {/* Score Card */}
                     <div className={`p-3 rounded-xl border-2 ${
                       aiAnalysis.campabilityScore >= 70 ? 'border-green-300 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 dark:border-green-700' :
                       aiAnalysis.campabilityScore >= 50 ? 'border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 dark:border-amber-700' :
@@ -1837,27 +1757,15 @@ const DispersedExplorer = () => {
                     }`}>
                       <div className="flex items-center gap-3">
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0 ${
-                          aiAnalysis.campabilityScore >= 70 ? 'bg-green-500' :
-                          aiAnalysis.campabilityScore >= 50 ? 'bg-amber-500' :
-                          aiAnalysis.campabilityScore >= 30 ? 'bg-orange-500' : 'bg-red-500'
-                        }`}>
-                          {aiAnalysis.campabilityScore}
-                        </div>
+                          aiAnalysis.campabilityScore >= 70 ? 'bg-green-500' : aiAnalysis.campabilityScore >= 50 ? 'bg-amber-500' : aiAnalysis.campabilityScore >= 30 ? 'bg-orange-500' : 'bg-red-500'
+                        }`}>{aiAnalysis.campabilityScore}</div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold">
-                            {aiAnalysis.campabilityScore >= 70 ? 'Great Campsite' :
-                             aiAnalysis.campabilityScore >= 50 ? 'Decent Spot' :
-                             aiAnalysis.campabilityScore >= 30 ? 'Marginal' : 'Not Recommended'}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            AI Assessment • {aiAnalysis.confidence} confidence
-                          </p>
+                          <p className="text-xs font-bold">{aiAnalysis.campabilityScore >= 70 ? 'Great Campsite' : aiAnalysis.campabilityScore >= 50 ? 'Decent Spot' : aiAnalysis.campabilityScore >= 30 ? 'Marginal' : 'Not Recommended'}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">AI Assessment • {aiAnalysis.confidence} confidence</p>
                         </div>
                       </div>
                       <p className="text-xs leading-relaxed mt-2">{aiAnalysis.summary}</p>
                     </div>
-
-                    {/* Factor Grid */}
                     <div className="grid grid-cols-2 gap-1.5">
                       {[
                         { label: 'Ground', icon: <Crosshair className="w-3 h-3" />, data: aiAnalysis.ground },
@@ -1871,16 +1779,11 @@ const DispersedExplorer = () => {
                           data.rating === 'poor' || data.rating === 'moderate' || data.rating === 'significant' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300' :
                           'bg-muted text-muted-foreground'
                         }`}>
-                          <div className="flex items-center gap-1 mb-0.5">
-                            {icon}
-                            <span className="text-[10px] font-semibold uppercase">{label}</span>
-                          </div>
+                          <div className="flex items-center gap-1 mb-0.5">{icon}<span className="text-[10px] font-semibold uppercase">{label}</span></div>
                           <p className="text-[10px] leading-snug">{data.detail}</p>
                         </div>
                       ))}
                     </div>
-
-                    {/* Trail/Road Info */}
                     {aiAnalysis.trail && (
                       <div className={`p-2 rounded-lg ${
                         aiAnalysis.trail.rating === 'easy' ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' :
@@ -1888,44 +1791,81 @@ const DispersedExplorer = () => {
                         aiAnalysis.trail.rating === 'difficult' || aiAnalysis.trail.rating === 'extreme' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300' :
                         'bg-muted text-muted-foreground'
                       }`}>
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <Path className="w-3 h-3" />
-                          <span className="text-[10px] font-semibold uppercase">Trail</span>
-                          <span className="text-[10px] font-medium ml-auto capitalize">{aiAnalysis.trail.rating}</span>
-                        </div>
+                        <div className="flex items-center gap-1 mb-0.5"><Path className="w-3 h-3" /><span className="text-[10px] font-semibold uppercase">Trail</span><span className="text-[10px] font-medium ml-auto capitalize">{aiAnalysis.trail.rating}</span></div>
                         <p className="text-[10px] leading-snug">{aiAnalysis.trail.detail}</p>
                       </div>
                     )}
-
-                    {/* Best Use */}
                     <div className="flex items-center gap-2 px-2 py-1.5 bg-primary/5 rounded-lg">
                       <Tent className="w-3.5 h-3.5 text-primary shrink-0" />
                       <p className="text-xs font-medium">{aiAnalysis.bestUse}</p>
                     </div>
-
                     <Button variant="ghost" size="sm" className="w-full text-[10px] h-6" onClick={async () => {
-                      setAiAnalysis(null);
-                      setAiError(null);
-                      setAiAnalyzing(true);
+                      setAiAnalysis(null); setAiError(null); setAiAnalyzing(true);
                       try {
-                        const { data, error } = await supabase.functions.invoke('analyze-campsite', {
-                          body: { lat: selectedSpot.lat, lng: selectedSpot.lng, name: selectedSpot.name, type: selectedSpot.type, score: selectedSpot.score, reasons: selectedSpot.reasons, source: selectedSpot.source, roadName: selectedSpot.roadName, isOnPublicLand: selectedSpot.isOnPublicLand, passengerReachable: selectedSpot.passengerReachable, highClearanceReachable: selectedSpot.highClearanceReachable, highClearance: selectedSpot.highClearance, force: true },
-                        });
+                        const { data, error } = await supabase.functions.invoke('analyze-campsite', { body: { lat: selectedSpot.lat, lng: selectedSpot.lng, name: selectedSpot.name, type: selectedSpot.type, score: selectedSpot.score, reasons: selectedSpot.reasons, source: selectedSpot.source, roadName: selectedSpot.roadName, isOnPublicLand: selectedSpot.isOnPublicLand, passengerReachable: selectedSpot.passengerReachable, highClearanceReachable: selectedSpot.highClearanceReachable, highClearance: selectedSpot.highClearance, force: true } });
                         if (error) throw error;
-                        setAiAnalysis(data.analysis);
-                        analysisCache.current.set(`${selectedSpot.lat.toFixed(5)},${selectedSpot.lng.toFixed(5)}`, data.analysis);
-                      } catch (err: unknown) {
-                        setAiError(err instanceof Error ? err.message : 'Analysis failed');
-                      } finally {
-                        setAiAnalyzing(false);
-                      }
-                    }}>
-                      Re-analyze
-                    </Button>
+                        setAiAnalysis(data.analysis); analysisCache.current.set(`${selectedSpot.lat.toFixed(5)},${selectedSpot.lng.toFixed(5)}`, data.analysis);
+                      } catch (err: unknown) { setAiError(err instanceof Error ? err.message : 'Analysis failed'); } finally { setAiAnalyzing(false); }
+                    }}>Re-analyze</Button>
                   </div>
                 )}
               </div>
+            </div>
+          )}
 
+          {/* Floating Campground Detail Card */}
+          {selectedCampground && (
+            <div className="absolute top-3 right-3 w-80 bg-background border border-border rounded-xl shadow-2xl z-20">
+              <div className="px-3 py-2.5 flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-sm truncate">{selectedCampground.name}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 font-medium">{selectedCampground.facilityType}</span>
+                    {selectedCampground.agencyName && <span className="text-xs text-muted-foreground">{selectedCampground.agencyName}</span>}
+                  </div>
+                </div>
+                <button onClick={() => setSelectedCampground(null)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="px-3 pb-2.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono text-muted-foreground">{selectedCampground.lat.toFixed(5)}, {selectedCampground.lng.toFixed(5)}</span>
+                  <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${selectedCampground.lat},${selectedCampground.lng}`, '_blank')} className="text-muted-foreground hover:text-foreground transition-colors" title="Open in Google Maps">
+                    <MapPin className="w-3.5 h-3.5" weight="fill" />
+                  </button>
+                </div>
+                {selectedCampground.reservable && selectedCampground.url && (
+                  <Button variant="default" size="sm" className="w-full text-[10px] h-7 cursor-pointer" onClick={() => window.open(selectedCampground.url, '_blank')}>Reserve</Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Floating User Campsite Detail Card */}
+          {selectedCampsite && (
+            <div className="absolute top-3 right-3 w-80 bg-background border border-border rounded-xl shadow-2xl z-20">
+              <div className="px-3 py-2.5 flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Tent className="w-4 h-4 text-wildviolet shrink-0" />
+                    <h3 className="font-bold text-sm truncate">{selectedCampsite.name}</h3>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium mt-1 inline-block">{selectedCampsite.campsiteType || 'Campsite'}</span>
+                </div>
+                <button onClick={() => setSelectedCampsite(null)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="px-3 pb-2.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono text-muted-foreground">{selectedCampsite.lat.toFixed(5)}, {selectedCampsite.lng.toFixed(5)}</span>
+                  <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${selectedCampsite.lat},${selectedCampsite.lng}`, '_blank')} className="text-muted-foreground hover:text-foreground transition-colors" title="Open in Google Maps">
+                    <MapPin className="w-3.5 h-3.5" weight="fill" />
+                  </button>
+                </div>
+                <Button variant="outline" size="sm" className="w-full text-[10px] h-7" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${selectedCampsite.lat},${selectedCampsite.lng}`, '_blank')}>Google Maps</Button>
+              </div>
             </div>
           )}
 
@@ -2357,13 +2297,14 @@ const DispersedExplorer = () => {
                             const ca = analysisCache.current.get(ck);
                             if (ca) { setAiAnalysis(ca); } else {
                               setAiAnalysis(null);
-                              const latKey = Math.round(s.lat * 100000) / 100000;
-                              const lngKey = Math.round(s.lng * 100000) / 100000;
+                              const eps2 = 0.00001;
                               supabase
                                 .from('spot_analyses')
                                 .select('analysis')
-                                .eq('lat_key', latKey)
-                                .eq('lng_key', lngKey)
+                                .gte('lat', s.lat - eps2)
+                                .lte('lat', s.lat + eps2)
+                                .gte('lng', s.lng - eps2)
+                                .lte('lng', s.lng + eps2)
                                 .order('created_at', { ascending: false })
                                 .limit(1)
                                 .maybeSingle()
