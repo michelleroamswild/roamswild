@@ -1232,8 +1232,8 @@ const TripDetail = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="container px-3 sm:px-4 md:px-6 py-3 sm:py-4">
+      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        <div className="container px-3 sm:px-4 md:px-6 pt-4 pb-2.5 sm:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0">
               <Button variant="ghost" size="icon" className="rounded-full shrink-0" onClick={handleExitClick}>
@@ -1295,8 +1295,8 @@ const TripDetail = () => {
 
       {/* Trip Timeline Overview */}
       {(tripConfig.startLocation || tripConfig.baseLocation) && (
-        <div className="sticky top-[73px] z-40 bg-muted/80 backdrop-blur-sm border-b border-border">
-          <div className="px-4 md:px-6 py-3">
+        <div className="sticky top-[52px] sm:top-[73px] z-40 bg-muted/80 backdrop-blur-sm border-b border-border">
+          <div className="px-3 sm:px-4 md:px-6 py-2 sm:py-3">
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
               {/* Start Location */}
               {tripConfig.startLocation && (
@@ -2192,7 +2192,7 @@ const DayCard = ({ day, tripName, tripStartDate, expanded, isActive, isFirstDay,
             <Button
               variant="secondary"
               size="sm"
-              className="text-xs sm:text-sm h-7 sm:h-8 px-2 sm:px-3"
+              className="text-xs sm:text-sm h-7 w-7 sm:w-auto sm:h-8 px-0 sm:px-3"
               onClick={(e) => {
                 e.stopPropagation();
                 if (isActive) {
