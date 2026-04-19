@@ -65,7 +65,7 @@ export const Header = ({ showBorder = false }: HeaderProps) => {
 
   return (
     <header className={cn("sticky top-0 z-50 w-full border-b", showBorder ? "border-border/50" : "border-transparent")}>
-      <div className="container grid grid-cols-3 items-center h-12 md:h-20 px-3 md:px-6">
+      <div className="container flex md:grid md:grid-cols-3 items-center justify-between h-12 md:h-20 px-3 md:px-6">
         <Link to="/" className="flex items-center gap-1.5 md:gap-2">
           <Jeep className="w-5 h-5 md:w-6 md:h-6 text-primary" weight="regular" />
           <span className="text-base md:text-xl font-display font-bold text-foreground">RoamsWild</span>
