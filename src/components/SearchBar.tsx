@@ -31,8 +31,8 @@ export const SearchBar = () => {
           lng: place.geometry.location.lng(),
         });
 
-        // Navigate to location detail with place data in state
-        navigate(`/location/${place.place_id}`, {
+        // Navigate to explore page centered on the searched location
+        navigate(`/dispersed`, {
           state: {
             placeId: place.place_id,
             name: place.name || "",

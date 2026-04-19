@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import { MapPin, MagnifyingGlass, Path, SpinnerGap, TreeEvergreen, Warning, Crosshair, Tent, Drop, MapPinLine, Eye, EyeSlash, Info, Star, NavigationArrow, Car, Jeep, Copy, Check, MapTrifold, CheckCircle, Users, Funnel, ListBullets, Lightning, X } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -158,9 +158,16 @@ function isFalseDeadEnd(
 const DispersedExplorer = () => {
   const { isLoaded } = useGoogleMaps();
   const [searchParams] = useSearchParams();
-  const [searchLocation, setSearchLocation] = useState<SelectedLocation | null>({ lat: 38.5733, lng: -109.5498, name: 'Moab, UT' });
+  const routerLocation = useLocation();
+  const navState = routerLocation.state as { lat?: number; lng?: number; name?: string } | null;
+
+  const initialLocation = navState?.lat && navState?.lng
+    ? { lat: navState.lat, lng: navState.lng, name: navState.name || 'Search Result' }
+    : { lat: 38.5733, lng: -109.5498, name: 'Moab, UT' };
+
+  const [searchLocation, setSearchLocation] = useState<SelectedLocation | null>(initialLocation);
   const [initialLocationLoaded, setInitialLocationLoaded] = useState(false);
-  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: 38.5733, lng: -109.5498 });
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: initialLocation.lat, lng: initialLocation.lng });
   const [mapZoom, setMapZoom] = useState(12);
   const [selectedRoad, setSelectedRoad] = useState<MVUMRoad | OSMTrack | null>(null);
   const [selectedSpot, setSelectedSpot] = useState<PotentialSpot | null>(null);
