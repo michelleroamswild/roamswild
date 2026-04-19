@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { LocationSelector, SelectedLocation } from '@/components/LocationSelector';
 import { Header } from '@/components/Header';
+import { GoogleMap } from '@/components/GoogleMap';
+import { Marker } from '@react-google-maps/api';
 import { formatTime, getSunTimes, formatAzimuth, SunTimes } from '@/utils/sunCalc';
 import { analyzeHorizonProfile, getElevation, HorizonProfile } from '@/utils/terrainVisibility';
 import { analyzePhotoConditions, PhotoForecast, OpenMeteoHourly } from '@/utils/photoConditionsAnalyzer';
@@ -591,22 +593,34 @@ export default function PhotoWeatherTest() {
     };
   }, [selectedSunTimes, photoForecast, horizonProfile, activeTab]);
 
+  const mapCenter = useMemo(() => (
+    location ? { lat: location.lat, lng: location.lng } : { lat: 38.5, lng: -109.5 }
+  ), [location]);
+
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
+      <Header showBorder />
 
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <h1 className="text-2xl font-display font-bold mb-6 flex items-center gap-2">
-          <Camera className="w-6 h-6 text-primary" />
-          Photo Weather Test
-        </h1>
+      <div className="flex-1 flex overflow-hidden">
+        {/* Map — left half (desktop only) */}
+        <div className="hidden lg:block lg:w-1/2 relative">
+          <GoogleMap
+            center={mapCenter}
+            zoom={location ? 10 : 6}
+            className="w-full h-full"
+            options={{ mapTypeId: 'satellite' }}
+          >
+            {location && (
+              <Marker position={{ lat: location.lat, lng: location.lng }} title={location.name} />
+            )}
+          </GoogleMap>
+        </div>
 
-        {/* Location Search */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base">Location</CardTitle>
-          </CardHeader>
-          <CardContent>
+        {/* Content — right half */}
+        <div className="flex-1 lg:w-1/2 overflow-y-auto">
+          {/* Sticky search header */}
+          <div className="sticky top-0 z-10 bg-background border-b px-6 py-5">
+            <h1 className="text-2xl font-display font-bold mb-4">The Light Report</h1>
             <LocationSelector
               value={location}
               onChange={setLocation}
@@ -614,15 +628,12 @@ export default function PhotoWeatherTest() {
               showMyLocation={true}
               showSavedLocations={true}
               showCoordinates={true}
+              compact={true}
+              coordinatesDisplay={location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : undefined}
             />
-            {location && (
-              <p className="text-sm text-muted-foreground mt-3">
-                {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+          </div>
 
+          <main className="px-4 py-4 space-y-4">
         {/* Sunrise/Sunset Tabs */}
         {location && (
           <div className="mb-6">
@@ -1857,7 +1868,9 @@ export default function PhotoWeatherTest() {
               )}
           </div>
         )}
-      </main>
+          </main>
+        </div>
+      </div>
     </div>
   );
 }

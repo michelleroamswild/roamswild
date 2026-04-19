@@ -22,6 +22,7 @@ import {
 } from '@phosphor-icons/react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -267,44 +268,55 @@ export function LocationSelector({
       <div className="flex items-center gap-1.5 sm:gap-2">
         {/* Mode toggle (search vs coordinates) */}
         {showCoordinates && (
-          <Button
-            variant="outline"
-            size={buttonSize}
-            onClick={toggleMode}
-            className={`px-2`}
-            title={mode === 'search' ? 'Switch to coordinates' : 'Switch to search'}
-          >
-            {mode === 'search' ? (
-              <Crosshair className={iconSize} />
-            ) : (
-              <MagnifyingGlass className={iconSize} />
-            )}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size={buttonSize}
+                onClick={toggleMode}
+                className={`px-2`}
+              >
+                {mode === 'search' ? (
+                  <Crosshair className={iconSize} />
+                ) : (
+                  <MagnifyingGlass className={iconSize} />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {mode === 'search' ? 'Enter coordinates' : 'Search by name'}
+            </TooltipContent>
+          </Tooltip>
         )}
 
         {/* My location button */}
         {showMyLocation && (
-          <Button
-            variant="outline"
-            size={buttonSize}
-            onClick={handleMyLocation}
-            disabled={isGettingLocation}
-            className={`px-2`}
-            title="Use my location"
-          >
-            <NavigationArrow className={`${iconSize} ${isGettingLocation ? 'animate-pulse' : ''}`} />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size={buttonSize}
+                onClick={handleMyLocation}
+                disabled={isGettingLocation}
+                className={`px-2`}
+              >
+                <NavigationArrow className={`${iconSize} ${isGettingLocation ? 'animate-pulse' : ''}`} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Use my location</TooltipContent>
+          </Tooltip>
         )}
 
         {/* Saved locations dropdown */}
         {showSavedLocations && user && savedLocations.length > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
                 size={buttonSize}
                 className={`px-2`}
-                title="Saved locations"
               >
                 <BookmarkSimple className={iconSize} />
                 <CaretDown className="w-3 h-3 ml-0.5" />
@@ -330,6 +342,9 @@ export function LocationSelector({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+            </TooltipTrigger>
+            <TooltipContent>Saved locations</TooltipContent>
+          </Tooltip>
         )}
 
         {/* Coordinate submit button (only in coordinates mode) */}

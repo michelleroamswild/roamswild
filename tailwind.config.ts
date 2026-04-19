@@ -15,7 +15,7 @@ export default {
   	extend: {
   		fontFamily: {
   			sans: [
-  				'DM Sans',
+  				'Manrope',
   				'ui-sans-serif',
   				'system-ui',
   				'sans-serif',
@@ -25,7 +25,7 @@ export default {
   				'Noto Color Emoji'
   			],
   			display: [
-  				'DM Sans',
+  				'Manrope',
   				'sans-serif'
   			],
   			serif: [
