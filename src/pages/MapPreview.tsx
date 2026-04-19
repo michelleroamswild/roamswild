@@ -5,12 +5,13 @@ import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot } from '@/hooks/us
 import { usePublicLands } from '@/hooks/use-public-lands';
 import { useCampsites } from '@/context/CampsitesContext';
 import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
+import { useGoogleMaps } from '@/components/GoogleMapsProvider';
 import { X, SpinnerGap, MapPin, Path, Tent, Crosshair, TreeEvergreen, Warning, Lightning, Copy, Check } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 
 const MOAB = { lat: 38.641439, lng: -109.829551 };
-const RADIUS_MILES = 10;
+const RADIUS_MILES = 5;
 
 interface CampsiteAnalysis {
   campabilityScore: number;
@@ -78,6 +79,7 @@ const getSpotTypeLabel = (type: string) => {
 };
 
 const MapPreview = () => {
+  const { isLoaded } = useGoogleMaps();
   const { mvumRoads, osmTracks, potentialSpots, establishedCampgrounds, loading } = useDispersedRoads(
     MOAB.lat,
     MOAB.lng,
@@ -93,6 +95,14 @@ const MapPreview = () => {
   const [copiedCoords, setCopiedCoords] = useState(false);
 
   const displayableTracks = useMemo(() => osmTracks.filter((t) => !t.isPaved), [osmTracks]);
+
+  if (!isLoaded) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-background">
+        <SpinnerGap className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const handleSpotClick = useCallback((spot: PotentialSpot) => {
     setSelectedSpot(spot);

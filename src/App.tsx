@@ -34,6 +34,7 @@ import CampsiteDetail from "./pages/CampsiteDetail";
 import DispersedExplorer from "./pages/DispersedExplorer";
 import MapPreview from "./pages/MapPreview";
 import LightReportPreview from "./pages/LightReportPreview";
+import SurpriseMePreview from "./pages/SurpriseMePreview";
 import StyleGuide from "./pages/StyleGuide";
 import PhotoWeatherTest from "./pages/PhotoWeatherTest";
 import TerrainValidation from "./pages/TerrainValidation";
@@ -112,6 +113,7 @@ const App = () => (
                   <Route path="/style-guide" element={<StyleGuide />} />
                   <Route path="/map-preview" element={<MapPreview />} />
                   <Route path="/light-preview" element={<LightReportPreview />} />
+                  <Route path="/surprise-preview" element={<SurpriseMePreview />} />
                   <Route path="/light-report" element={
                     <FeatureGate feature="photoWeatherTest"><PhotoWeatherTest /></FeatureGate>
                   } />
