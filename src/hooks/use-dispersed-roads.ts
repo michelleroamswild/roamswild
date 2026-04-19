@@ -101,6 +101,7 @@ interface CachedData {
   establishedCampgrounds: EstablishedCampground[];
 }
 const dataCache = new Map<string, CachedData>();
+
 function getCacheKey(lat: number, lng: number, radius: number): string {
   return `${lat.toFixed(3)},${lng.toFixed(3)},${radius}`;
 }

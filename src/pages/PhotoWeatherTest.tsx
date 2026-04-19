@@ -128,8 +128,13 @@ function getQualityColor(overall: string | undefined): string {
   }
 }
 
-export default function PhotoWeatherTest() {
-  const [location, setLocation] = useState<SelectedLocation | null>(null);
+interface PhotoWeatherTestProps {
+  previewMode?: boolean;
+  initialLocation?: SelectedLocation | null;
+}
+
+export default function PhotoWeatherTest({ previewMode = false, initialLocation = null }: PhotoWeatherTestProps) {
+  const [location, setLocation] = useState<SelectedLocation | null>(initialLocation);
   const [openMeteoData, setOpenMeteoData] = useState<OpenMeteoResponse | null>(null);
   const [openMeteoLoading, setOpenMeteoLoading] = useState(false);
   const [openMeteoError, setOpenMeteoError] = useState<string | null>(null);
@@ -598,82 +603,90 @@ export default function PhotoWeatherTest() {
   ), [location]);
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <Header showBorder />
+    <div className={previewMode ? "min-h-screen bg-background" : "h-screen bg-background flex flex-col overflow-hidden"}>
+      {!previewMode && <Header showBorder />}
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Map — left half (desktop only) */}
-        <div className="hidden lg:block lg:w-1/2 relative">
-          <GoogleMap
-            center={mapCenter}
-            zoom={location ? 10 : 6}
-            className="w-full h-full"
-            options={{ mapTypeId: 'satellite' }}
-          >
-            {location && (
-              <Marker position={{ lat: location.lat, lng: location.lng }} title={location.name} />
-            )}
-          </GoogleMap>
-        </div>
-
-        {/* Content — right half */}
-        <div className="flex-1 lg:w-1/2 overflow-y-auto">
-          {/* Sticky search header */}
-          <div className="sticky top-0 z-10 bg-background border-b px-6 py-5">
-            <h1 className="text-2xl font-display font-bold mb-4">The Light Report</h1>
-            <LocationSelector
-              value={location}
-              onChange={setLocation}
-              placeholder="Search for a location..."
-              showMyLocation={true}
-              showSavedLocations={true}
-              showCoordinates={true}
-              compact={true}
-              coordinatesDisplay={location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : undefined}
-            />
+      <div className={previewMode ? "" : "flex-1 flex overflow-hidden"}>
+        {/* Map — left half (desktop only, hidden in preview) */}
+        {!previewMode && (
+          <div className="hidden lg:block lg:w-1/2 relative">
+            <GoogleMap
+              center={mapCenter}
+              zoom={location ? 10 : 6}
+              className="w-full h-full"
+              options={{ mapTypeId: 'satellite' }}
+            >
+              {location && (
+                <Marker position={{ lat: location.lat, lng: location.lng }} title={location.name} />
+              )}
+            </GoogleMap>
           </div>
+        )}
+
+        {/* Content */}
+        <div className={previewMode ? "max-w-xl mx-auto" : "flex-1 lg:w-1/2 overflow-y-auto"}>
+          {/* Search header */}
+          {!previewMode ? (
+            <div className="sticky top-0 z-10 bg-background border-b px-6 py-5">
+              <h1 className="text-2xl font-display font-bold mb-4">The Light Report</h1>
+              <LocationSelector
+                value={location}
+                onChange={setLocation}
+                placeholder="Search for a location..."
+                showMyLocation={true}
+                showSavedLocations={true}
+                showCoordinates={true}
+                compact={true}
+                coordinatesDisplay={location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : undefined}
+              />
+            </div>
+          ) : (
+            <div className="px-4 pt-8 pb-4">
+              <h1 className="text-2xl font-display font-bold">The Light Report</h1>
+              <p className="text-sm text-muted-foreground mt-1">{location?.name}</p>
+            </div>
+          )}
 
           <main className="px-4 py-4 space-y-4">
         {/* Sunrise/Sunset Tabs */}
         {location && (
           <div className="mb-6">
             {/* Tab Buttons */}
-            <div className="flex gap-2 mb-4">
+            <div className="flex gap-1 p-1 bg-muted rounded-lg mb-4">
               <button
                 onClick={() => { setActiveTab('sunrise'); setSelectedDayIndex(0); }}
-                className={`flex-1 py-3 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-all ${
+                className={`flex-1 py-2.5 px-4 rounded-md font-medium flex items-center justify-center gap-2 transition-all text-sm ${
                   activeTab === 'sunrise'
-                    ? 'bg-gradient-to-r from-orange-400 to-amber-400 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-foreground text-background shadow-sm'
+                    : 'text-muted-foreground'
                 }`}
               >
-                <SunDim className="w-5 h-5" />
+                <SunDim className="w-4 h-4" />
                 Sunrise
               </button>
               <button
                 onClick={() => { setActiveTab('sunset'); setSelectedDayIndex(0); }}
-                className={`flex-1 py-3 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-all ${
+                className={`flex-1 py-2.5 px-4 rounded-md font-medium flex items-center justify-center gap-2 transition-all text-sm ${
                   activeTab === 'sunset'
-                    ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-foreground text-background shadow-sm'
+                    : 'text-muted-foreground'
                 }`}
               >
-                <SunHorizon className="w-5 h-5" />
+                <SunHorizon className="w-4 h-4" />
                 Sunset
               </button>
             </div>
 
             {/* Multi-Day Forecast Bar */}
             {multiDayForecast.length > 0 && (
-              <div className="bg-white rounded-lg border p-3">
-                <div className="text-xs text-muted-foreground mb-2 font-medium">
-                  7-Day {activeTab === 'sunrise' ? 'Sunrise' : 'Sunset'} Forecast
+              <div>
+                <div className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">
+                  7-Day Forecast
                 </div>
                 <div className="grid grid-cols-7 gap-1">
                   {multiDayForecast.map((day, index) => {
                     const forecast = activeTab === 'sunrise' ? day.sunriseForecast : day.sunsetForecast;
                     const isSelected = index === getEffectiveDayIndex;
-                    // Only disable if more than 3 hours past the event
                     const hoursAfterToKeepShowing = 3;
                     const eventTime = activeTab === 'sunrise' ? day.sunTimes.sunrise : day.sunTimes.sunset;
                     const cutoffTime = new Date(eventTime.getTime() + hoursAfterToKeepShowing * 60 * 60 * 1000);
@@ -686,32 +699,21 @@ export default function PhotoWeatherTest() {
                         disabled={isPast}
                         className={`p-2 rounded-lg text-center transition-all ${
                           isSelected
-                            ? 'bg-primary text-white ring-2 ring-primary ring-offset-1'
+                            ? 'bg-foreground text-background'
                             : isPast
-                            ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
-                            : 'bg-gray-50 hover:bg-gray-100 cursor-pointer'
+                            ? 'opacity-30 cursor-not-allowed'
+                            : 'hover:bg-muted cursor-pointer'
                         }`}
                       >
-                        <div className="text-xs font-medium truncate">
+                        <div className="text-[10px] font-medium truncate">
                           {day.dateLabel}
                         </div>
                         <div className="flex justify-center my-1">
-                          {getQualityIcon(forecast, 20)}
+                          {getQualityIcon(forecast, 18)}
                         </div>
-                        <div className={`text-xs ${isSelected ? 'text-white/80' : 'text-muted-foreground'}`}>
+                        <div className={`text-[10px] ${isSelected ? 'text-background/80' : 'text-muted-foreground'}`}>
                           {formatTime(activeTab === 'sunrise' ? day.sunTimes.sunrise : day.sunTimes.sunset)}
                         </div>
-                        {forecast && (
-                          <div className={`text-[10px] font-medium mt-0.5 ${
-                            isSelected ? 'text-white/90' :
-                            forecast.rating === 'excellent' ? 'text-green-600' :
-                            forecast.rating === 'good' ? 'text-blue-600' :
-                            forecast.rating === 'fair' ? 'text-amber-600' :
-                            'text-gray-500'
-                          }`}>
-                            {forecast.rating}
-                          </div>
-                        )}
                       </button>
                     );
                   })}
@@ -721,51 +723,28 @@ export default function PhotoWeatherTest() {
           </div>
         )}
 
-        {/* PHOTOGRAPHY FORECAST - Main Card */}
+        {/* PHOTOGRAPHY FORECAST */}
         {photoForecast && selectedSunTimes && (
-          <Card className={`mb-6 border-2 ${
-            photoForecast.rating === 'excellent' ? 'border-green-400 bg-gradient-to-br from-green-50 to-emerald-50' :
-            photoForecast.rating === 'good' ? 'border-blue-400 bg-gradient-to-br from-blue-50 to-sky-50' :
-            photoForecast.rating === 'fair' ? 'border-amber-400 bg-gradient-to-br from-amber-50 to-yellow-50' :
-            'border-gray-400 bg-gradient-to-br from-gray-50 to-slate-50'
-          }`}>
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    {activeTab === 'sunrise' ? (
-                      <SunDim className="w-6 h-6 text-orange-500" />
-                    ) : (
-                      <SunHorizon className="w-6 h-6 text-orange-600" />
-                    )}
-                    {activeTab === 'sunrise' ? 'Sunrise' : 'Sunset'} Photography Forecast
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {selectedDayForecast?.dateLabel || 'Today'} •{' '}
-                    {formatTime(activeTab === 'sunrise' ? selectedSunTimes.sunrise : selectedSunTimes.sunset)} •{' '}
-                    {formatAzimuth(activeTab === 'sunrise' ? selectedSunTimes.sunriseAzimuth : selectedSunTimes.sunsetAzimuth)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <div className={`px-4 py-2 rounded-full text-white font-bold ${
-                    photoForecast.rating === 'excellent' ? 'bg-green-500' :
-                    photoForecast.rating === 'good' ? 'bg-blue-500' :
-                    photoForecast.rating === 'fair' ? 'bg-amber-500' :
-                    'bg-gray-500'
-                  }`}>
-                    {photoForecast.score}/100
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {photoForecast.rating.toUpperCase()}
-                  </div>
-                </div>
+          <div className="mb-6 space-y-4">
+            {/* Score + Headline */}
+            <div className="flex items-center gap-4">
+              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl shrink-0 ${
+                photoForecast.rating === 'excellent' ? 'bg-accentdark' :
+                photoForecast.rating === 'good' ? 'bg-primary' :
+                photoForecast.rating === 'fair' ? 'bg-amber-500' :
+                'bg-muted-foreground'
+              }`}>
+                {photoForecast.score}
               </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Headline */}
-              <div className="text-lg font-medium">
-                {photoForecast.headline}
+              <div>
+                <p className="font-display font-bold text-lg">{photoForecast.headline}</p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedDayForecast?.dateLabel || 'Today'} • {formatTime(activeTab === 'sunrise' ? selectedSunTimes.sunrise : selectedSunTimes.sunset)} • {formatAzimuth(activeTab === 'sunrise' ? selectedSunTimes.sunriseAzimuth : selectedSunTimes.sunsetAzimuth)}
+                </p>
               </div>
+            </div>
+
+            <div className="space-y-4">
 
               {/* Shoot Window Recommendation */}
               {getShootWindow && (
@@ -832,25 +811,19 @@ export default function PhotoWeatherTest() {
               )}
 
               {/* Score Breakdown */}
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Score Breakdown</div>
+              <div className="space-y-2.5">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Score Breakdown</div>
                 {photoForecast.insights.map((insight, i) => (
                   <div key={i} className="flex items-center gap-3">
-                    <div className="w-24 text-xs text-muted-foreground">{insight.factor}</div>
-                    <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="w-20 text-xs text-muted-foreground">{insight.factor}</div>
+                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${
-                          insight.score >= 75 ? 'bg-green-500' :
-                          insight.score >= 50 ? 'bg-blue-500' :
-                          insight.score >= 30 ? 'bg-amber-500' :
-                          'bg-red-400'
-                        }`}
+                        className="h-full rounded-full bg-accentdark"
                         style={{ width: `${insight.score}%` }}
                       />
                     </div>
-                    <div className="w-12 text-xs text-right font-medium">
+                    <div className="w-8 text-xs text-right font-mono text-muted-foreground">
                       {insight.score}
-                      <span className="text-muted-foreground">/{insight.weight}w</span>
                     </div>
                   </div>
                 ))}
@@ -861,16 +834,11 @@ export default function PhotoWeatherTest() {
                 {photoForecast.insights.map((insight, i) => (
                   <div
                     key={i}
-                    className={`p-2 rounded-lg border-l-4 ${
-                      insight.score >= 75 ? 'bg-green-50 border-green-500' :
-                      insight.score >= 50 ? 'bg-blue-50 border-blue-400' :
-                      insight.score >= 30 ? 'bg-amber-50 border-amber-400' :
-                      'bg-red-50 border-red-400'
-                    }`}
+                    className="p-2.5 rounded-lg bg-muted/50"
                   >
                     <div className="flex justify-between items-center">
-                      <span className="font-medium">{insight.factor}</span>
-                      <span className="text-xs">{insight.value}</span>
+                      <span className="font-medium text-foreground">{insight.factor}</span>
+                      <span className="text-xs text-muted-foreground">{insight.value}</span>
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5">
                       {insight.description}
@@ -879,40 +847,43 @@ export default function PhotoWeatherTest() {
                 ))}
               </div>
 
-              {/* Cloud Layers Quick View */}
-              <div className="grid grid-cols-4 gap-2 text-center">
-                <div className="p-2 bg-white/60 rounded-lg">
-                  <div className="text-xs text-muted-foreground">High</div>
-                  <div className={`text-xl font-bold ${
-                    photoForecast.clouds.high >= 20 && photoForecast.clouds.high <= 60
-                      ? 'text-green-600' : 'text-gray-600'
-                  }`}>
-                    {Math.round(photoForecast.clouds.high)}%
+              {/* Cloud Layers */}
+              <div>
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Cloud Layers</div>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div className="p-2.5 rounded-lg bg-muted/50">
+                    <div className="text-[10px] text-muted-foreground uppercase">High</div>
+                    <div className={`text-lg font-bold ${
+                      photoForecast.clouds.high >= 20 && photoForecast.clouds.high <= 60
+                        ? 'text-accentdark' : 'text-foreground'
+                    }`}>
+                      {Math.round(photoForecast.clouds.high)}%
+                    </div>
                   </div>
-                </div>
-                <div className="p-2 bg-white/60 rounded-lg">
-                  <div className="text-xs text-muted-foreground">Mid</div>
-                  <div className={`text-xl font-bold ${
-                    photoForecast.clouds.mid >= 20 && photoForecast.clouds.mid <= 50
-                      ? 'text-blue-600' : 'text-gray-600'
-                  }`}>
-                    {Math.round(photoForecast.clouds.mid)}%
+                  <div className="p-2.5 rounded-lg bg-muted/50">
+                    <div className="text-[10px] text-muted-foreground uppercase">Mid</div>
+                    <div className={`text-lg font-bold ${
+                      photoForecast.clouds.mid >= 20 && photoForecast.clouds.mid <= 50
+                        ? 'text-accentdark' : 'text-foreground'
+                    }`}>
+                      {Math.round(photoForecast.clouds.mid)}%
+                    </div>
                   </div>
-                </div>
-                <div className="p-2 bg-white/60 rounded-lg">
-                  <div className="text-xs text-muted-foreground">Low</div>
-                  <div className={`text-xl font-bold ${
-                    photoForecast.clouds.low < 30 ? 'text-green-600' :
-                    photoForecast.clouds.low < 50 ? 'text-amber-600' :
-                    'text-red-600'
-                  }`}>
-                    {Math.round(photoForecast.clouds.low)}%
+                  <div className="p-2.5 rounded-lg bg-muted/50">
+                    <div className="text-[10px] text-muted-foreground uppercase">Low</div>
+                    <div className={`text-lg font-bold ${
+                      photoForecast.clouds.low < 30 ? 'text-accentdark' :
+                      photoForecast.clouds.low < 50 ? 'text-amber-600' :
+                      'text-red-500'
+                    }`}>
+                      {Math.round(photoForecast.clouds.low)}%
+                    </div>
                   </div>
-                </div>
-                <div className="p-2 bg-white/60 rounded-lg">
-                  <div className="text-xs text-muted-foreground">Total</div>
-                  <div className="text-xl font-bold text-gray-600">
-                    {Math.round(photoForecast.clouds.total)}%
+                  <div className="p-2.5 rounded-lg bg-muted/50">
+                    <div className="text-[10px] text-muted-foreground uppercase">Total</div>
+                    <div className="text-lg font-bold text-foreground">
+                      {Math.round(photoForecast.clouds.total)}%
+                    </div>
                   </div>
                 </div>
               </div>
@@ -926,83 +897,24 @@ export default function PhotoWeatherTest() {
               )}
 
               {/* Atmospheric Conditions */}
-              <div className="pt-3 border-t">
-                <div className="text-sm font-medium mb-2">Atmospheric Conditions</div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                  {/* Visibility */}
-                  <div className="p-2 bg-white/60 rounded-lg">
-                    <div className="text-muted-foreground mb-1">Visibility</div>
-                    <div className="font-bold text-lg">
-                      {photoForecast.atmosphere.visibility.toFixed(0)} km
-                    </div>
-                    <div className={`text-xs ${
-                      photoForecast.atmosphere.visibility > 20 ? 'text-green-600' :
-                      photoForecast.atmosphere.visibility > 10 ? 'text-blue-600' :
-                      'text-amber-600'
-                    }`}>
-                      {photoForecast.atmosphere.visibility > 20 ? '✨ Crystal clear' :
-                       photoForecast.atmosphere.visibility > 10 ? '🌫️ Soft atmosphere' :
-                       '😶‍🌫️ Hazy'}
-                    </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Atmosphere</div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
+                    <span className="text-muted-foreground">Visibility</span>
+                    <span className="font-bold text-sm">{photoForecast.atmosphere.visibility.toFixed(0)} km</span>
                   </div>
-
-                  {/* Humidity */}
-                  <div className="p-2 bg-white/60 rounded-lg">
-                    <div className="text-muted-foreground mb-1">Humidity</div>
-                    <div className="font-bold text-lg">
-                      {Math.round(photoForecast.atmosphere.humidity)}%
-                    </div>
-                    <div className={`text-xs ${
-                      photoForecast.atmosphere.humidity < 40 ? 'text-green-600' :
-                      photoForecast.atmosphere.humidity > 80 ? 'text-amber-600' :
-                      'text-gray-600'
-                    }`}>
-                      {photoForecast.atmosphere.humidity < 40 ? 'Vibrant colors' :
-                       photoForecast.atmosphere.humidity > 80 ? 'Soft colors' :
-                       'Good saturation'}
-                    </div>
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
+                    <span className="text-muted-foreground">Humidity</span>
+                    <span className="font-bold text-sm">{Math.round(photoForecast.atmosphere.humidity)}%</span>
                   </div>
-
-                  {/* AOD / Aerosols */}
-                  <div className="p-2 bg-white/60 rounded-lg">
-                    <div className="text-muted-foreground mb-1">Aerosols</div>
-                    <div className="font-bold text-lg">
-                      {photoForecast.atmosphere.aod !== null
-                        ? photoForecast.atmosphere.aod.toFixed(2)
-                        : 'N/A'}
-                    </div>
-                    <div className={`text-xs ${
-                      photoForecast.atmosphere.aod !== null && photoForecast.atmosphere.aod >= 0.1 && photoForecast.atmosphere.aod <= 0.3
-                        ? 'text-green-600'
-                        : photoForecast.atmosphere.aod !== null && photoForecast.atmosphere.aod > 0.5
-                        ? 'text-amber-600'
-                        : 'text-gray-600'
-                    }`}>
-                      {photoForecast.atmosphere.aod !== null
-                        ? (photoForecast.atmosphere.aod >= 0.1 && photoForecast.atmosphere.aod <= 0.3
-                            ? '✨ Ideal for color'
-                            : photoForecast.atmosphere.aod > 0.5
-                            ? '🌫️ Hazy'
-                            : 'Clean air')
-                        : 'Data unavailable'}
-                    </div>
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
+                    <span className="text-muted-foreground">Aerosols</span>
+                    <span className="font-bold text-sm">{photoForecast.atmosphere.aod !== null ? photoForecast.atmosphere.aod.toFixed(2) : 'N/A'}</span>
                   </div>
-
-                  {/* Precipitation */}
-                  <div className="p-2 bg-white/60 rounded-lg">
-                    <div className="text-muted-foreground mb-1">Precipitation</div>
-                    <div className="font-bold text-lg">
-                      {photoForecast.conditions.precipitation}%
-                    </div>
-                    <div className="text-xs">
-                      {photoForecast.conditions.isClearing ? (
-                        <span className="text-green-600">🌤️ Clearing</span>
-                      ) : photoForecast.conditions.precipitation > 50 ? (
-                        <span className="text-amber-600">☔ Rain likely</span>
-                      ) : (
-                        <span className="text-gray-600">Dry conditions</span>
-                      )}
-                    </div>
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
+                    <span className="text-muted-foreground">Precipitation</span>
+                    <span className="font-bold text-sm">{photoForecast.conditions.precipitation}%</span>
                   </div>
                 </div>
 
@@ -1014,14 +926,14 @@ export default function PhotoWeatherTest() {
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
-        {/* Recommended Photo Spots */}
-        {location && selectedSunTimes && (
+        {/* Recommended Photo Spots - hidden */}
+        {false && location && selectedSunTimes && (
           <Card className="mb-6 border-purple-200">
-            <CardHeader className="pb-2 bg-purple-50">
+            <CardHeader className="pb-2 bg-muted/30">
               <CardTitle className="text-base flex items-center gap-2">
                 <Camera className="w-5 h-5 text-purple-600" />
                 Recommended Photo Spots
@@ -1173,8 +1085,8 @@ export default function PhotoWeatherTest() {
 
         {/* Terrain-Based Photo Spots */}
         {location && selectedSunTimes && (
-          <Card className="mb-6 border-orange-200">
-            <CardHeader className="pb-2 bg-orange-50">
+          <Card className="mb-6">
+            <CardHeader className="pb-2 bg-muted/30">
               <CardTitle className="text-base flex items-center gap-2">
                 <Mountains className="w-5 h-5 text-orange-600" />
                 Terrain Analysis
@@ -1293,10 +1205,10 @@ export default function PhotoWeatherTest() {
           </Card>
         )}
 
-        {/* Google Places Photo Spots */}
-        {location && (
-          <Card className="mb-6 border-blue-200">
-            <CardHeader className="pb-2 bg-blue-50">
+        {/* Google Places Photo Spots - hidden */}
+        {false && location && (
+          <Card className="mb-6">
+            <CardHeader className="pb-2 bg-muted/30">
               <CardTitle className="text-base flex items-center gap-2">
                 <Compass className="w-5 h-5 text-blue-600" />
                 Scenic Viewpoints
@@ -1409,8 +1321,8 @@ export default function PhotoWeatherTest() {
 
         {/* Sun Position & Twilight Card - Full Width */}
         {location && selectedSunTimes && (
-          <Card className="mb-6 border-amber-200">
-            <CardHeader className="pb-2 bg-amber-50">
+          <Card className="mb-6">
+            <CardHeader className="pb-2 bg-muted/30">
               <CardTitle className="text-base flex items-center gap-2">
                 <Sun className="w-5 h-5 text-amber-500" />
                 Sun Position & Twilight
@@ -1538,8 +1450,8 @@ export default function PhotoWeatherTest() {
 
         {/* Terrain Visibility Card */}
         {location && selectedSunTimes && (
-          <Card className="mb-6 border-green-200">
-            <CardHeader className="pb-2 bg-green-50">
+          <Card className="mb-6">
+            <CardHeader className="pb-2 bg-muted/30">
               <CardTitle className="text-base flex items-center gap-2">
                 <Mountains className="w-5 h-5 text-green-600" />
                 {activeTab === 'sunrise' ? 'Sunrise' : 'Sunset'} Terrain Visibility
@@ -1690,8 +1602,8 @@ export default function PhotoWeatherTest() {
           </Card>
         )}
 
-        {/* Open-Meteo Data */}
-        {location && !openMeteoLoading && (
+        {/* Open-Meteo Data - hidden (duplicate of above) */}
+        {false && location && !openMeteoLoading && (
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-blue-600 flex items-center gap-2">
               <CloudSun className="w-5 h-5" />
@@ -1757,7 +1669,7 @@ export default function PhotoWeatherTest() {
                   {/* Cloud Layers - THE KEY DATA */}
                   {openMeteoData.hourly && selectedEventIndex !== null && selectedEventIndex >= 0 && (
                     <Card className="border-blue-200">
-                      <CardHeader className="pb-2 bg-blue-50">
+                      <CardHeader className="pb-2 bg-muted/30">
                         <CardTitle className="text-sm flex items-center gap-2">
                           {activeTab === 'sunrise' ? (
                             <SunDim className="w-4 h-4 text-orange-500" />
