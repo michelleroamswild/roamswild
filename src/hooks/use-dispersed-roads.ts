@@ -1862,7 +1862,7 @@ export function useDispersedRoads(
 
     const cacheKey = getCacheKey(lat, lng, radiusMiles);
     const cached = dataCache.get(cacheKey);
-    if (cached) {
+    if (cached && (cached.potentialSpots.length > 0 || cached.establishedCampgrounds.length > 0)) {
       setMvumRoads(cached.mvumRoads);
       setBlmRoads(cached.blmRoads);
       setOsmTracks(cached.osmTracks);
