@@ -165,7 +165,7 @@ function TripActionButton({ suggestion }: { suggestion: TripSuggestion }) {
     <button
       onClick={handleClick}
       disabled={generating}
-      className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-70"
+      className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-70"
     >
       {generating ? (
         <>
@@ -249,7 +249,7 @@ function StarterPrompts() {
           <button
             key={prompt.label}
             onClick={() => sendMessage(prompt.label)}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-card hover:bg-muted/50 transition-colors text-left"
+            className="w-full flex items-center gap-3 px-4 py-3 min-h-[44px] rounded-xl border border-border bg-card hover:bg-muted/50 transition-colors text-left"
           >
             <prompt.icon className="w-5 h-5 text-primary flex-shrink-0" />
             <span className="text-sm text-foreground">{prompt.label}</span>
@@ -288,7 +288,7 @@ function ChatInput() {
   };
 
   return (
-    <div className="border-t border-border px-3 py-3">
+    <div className="border-t border-border px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <div className="flex items-end gap-2">
         <textarea
           ref={textareaRef}
@@ -300,12 +300,12 @@ function ChatInput() {
           onKeyDown={handleKeyDown}
           placeholder="Ask me anything..."
           rows={1}
-          className="flex-1 resize-none bg-muted rounded-xl px-3.5 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="flex-1 resize-none bg-muted rounded-xl px-3.5 py-2.5 text-sm min-h-[40px] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
         <button
           onClick={handleSend}
           disabled={!input.trim() || isLoading}
-          className="flex-shrink-0 w-9 h-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-40 transition-opacity hover:bg-primary/90"
+          className="flex-shrink-0 w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-40 transition-opacity hover:bg-primary/90"
         >
           <PaperPlaneRight className="w-4 h-4" weight="fill" />
         </button>
@@ -339,7 +339,7 @@ export function ChatAssistant() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center"
+          className="fixed bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.5rem))] right-4 sm:right-6 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center"
           aria-label="Open chat assistant"
         >
           <ChatCircle className="w-7 h-7" weight="fill" />
@@ -348,7 +348,7 @@ export function ChatAssistant() {
 
       {/* Desktop panel */}
       {!isMobile && isOpen && (
-        <div className="fixed bottom-6 right-6 z-40 w-96 h-[calc(100vh-3rem)] rounded-2xl shadow-2xl bg-background border border-border flex flex-col overflow-hidden">
+        <div className="fixed bottom-6 right-6 z-40 w-96 max-h-[600px] h-[calc(100vh-8rem)] rounded-2xl shadow-2xl bg-background border border-border flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
             <div className="flex items-center gap-2">
@@ -359,7 +359,7 @@ export function ChatAssistant() {
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+              className="p-2 rounded-lg hover:bg-muted transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
             >
               <X className="w-4 h-4 text-muted-foreground" />
             </button>
@@ -371,11 +371,13 @@ export function ChatAssistant() {
       {/* Mobile drawer */}
       {isMobile && (
         <Drawer open={isOpen} onOpenChange={setIsOpen}>
-          <DrawerContent className="h-[85dvh]">
+          <DrawerContent className="h-[85dvh] max-h-[85dvh]">
             <DrawerHeader className="sr-only">
               <DrawerTitle>Basecamp Chat</DrawerTitle>
             </DrawerHeader>
-            <ChatPanel />
+            <div className="flex-1 flex flex-col overflow-hidden pb-safe">
+              <ChatPanel />
+            </div>
           </DrawerContent>
         </Drawer>
       )}

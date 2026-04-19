@@ -1840,20 +1840,20 @@ const TripDetail = () => {
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <Path className="w-3.5 h-3.5 text-terracotta" />
+              <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-muted-foreground">
+                <span className="flex items-center gap-1 sm:gap-1.5">
+                  <Path className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-terracotta" />
                   {generatedTrip.totalDistance}
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5" />
+                <span className="flex items-center gap-1 sm:gap-1.5">
+                  <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   {generatedTrip.totalDrivingTime}
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-primary" />
+                <span className="flex items-center gap-1 sm:gap-1.5">
+                  <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />
                   {generatedTrip.days.length} days
                 </span>
-                <span className="flex items-center gap-1.5 capitalize">
+                <span className="hidden sm:flex items-center gap-1.5 capitalize">
                   <Gauge className="w-3.5 h-3.5" />
                   {tripConfig.pacePreference || 'Moderate'}
                 </span>
@@ -2151,63 +2151,68 @@ const DayCard = ({ day, tripName, tripStartDate, expanded, isActive, isFirstDay,
   return (
     <Card className={`overflow-hidden ${isActive ? 'ring-2 ring-primary border-primary' : ''}`}>
       {/* Day Header */}
-      <div className="flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors">
-        <button
-          onClick={onToggle}
-          className="flex items-center gap-3 flex-1"
-        >
-          <div className={`flex items-center justify-center w-10 h-10 rounded-full ${isActive ? 'bg-primary text-primary-foreground' : 'bg-primary/10'}`}>
-            <span className={`text-lg font-bold ${isActive ? '' : 'text-primary'}`}>{day.day}</span>
-          </div>
-          <div className="text-left">
-            <p className="font-medium text-foreground">
-              Day {day.day}
-              {dayDate && <span className="ml-2 text-sm font-normal text-muted-foreground">{dayDate}</span>}
-              {isActive && <span className="ml-2 text-xs text-primary font-normal">(Previewing)</span>}
-            </p>
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Path className="w-3 h-3" />
-                {day.drivingDistance}
-              </span>
-              <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {day.drivingTime}
-              </span>
-            </div>
-          </div>
-        </button>
-        <div className="flex items-center gap-2">
-          {timeEstimate.warningMessage && (
-            <Warning
-              className={`w-4 h-4 ${timeEstimate.isOverloaded ? 'text-amber-500' : 'text-blue-500'}`}
-              title={timeEstimate.warningMessage}
-            />
-          )}
-          {day.hike && <Boot className="w-4 h-4 text-pinesoft" />}
-          {day.campsite && <Tent className="w-4 h-4 text-wildviolet" />}
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isActive) {
-                onExitDay();
-              } else {
-                onStartDay();
-              }
-            }}
+      <div className="p-3 sm:p-4 hover:bg-secondary/50 transition-colors">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={onToggle}
+            className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0"
           >
-            <NavigationArrow className="w-3 h-3 mr-1" />
-            {isActive ? 'Exit Preview' : 'Preview'}
-          </Button>
-          <button onClick={onToggle}>
-            {expanded ? (
-              <CaretUp className="w-5 h-5 text-muted-foreground" />
-            ) : (
-              <CaretDown className="w-5 h-5 text-muted-foreground" />
-            )}
+            <div className={`flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full shrink-0 ${isActive ? 'bg-primary text-primary-foreground' : 'bg-primary/10'}`}>
+              <span className={`text-sm sm:text-lg font-bold ${isActive ? '' : 'text-primary'}`}>{day.day}</span>
+            </div>
+            <div className="text-left min-w-0">
+              <p className="font-medium text-foreground text-sm sm:text-base truncate">
+                Day {day.day}
+                {dayDate && <span className="ml-1.5 sm:ml-2 text-xs sm:text-sm font-normal text-muted-foreground">{dayDate}</span>}
+                {isActive && <span className="ml-1.5 text-[10px] sm:text-xs text-primary font-normal">(Previewing)</span>}
+              </p>
+              <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Path className="w-3 h-3" />
+                  {day.drivingDistance}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {day.drivingTime}
+                </span>
+              </div>
+            </div>
           </button>
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            {timeEstimate.warningMessage && (
+              <Warning
+                className={`w-4 h-4 hidden sm:block ${timeEstimate.isOverloaded ? 'text-amber-500' : 'text-blue-500'}`}
+                title={timeEstimate.warningMessage}
+              />
+            )}
+            <div className="hidden sm:flex items-center gap-1">
+              {day.hike && <Boot className="w-4 h-4 text-pinesoft" />}
+              {day.campsite && <Tent className="w-4 h-4 text-wildviolet" />}
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-xs sm:text-sm h-7 sm:h-8 px-2 sm:px-3"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isActive) {
+                  onExitDay();
+                } else {
+                  onStartDay();
+                }
+              }}
+            >
+              <NavigationArrow className="w-3 h-3 sm:mr-1" />
+              <span className="hidden sm:inline">{isActive ? 'Exit Preview' : 'Preview'}</span>
+            </Button>
+            <button onClick={onToggle}>
+              {expanded ? (
+                <CaretUp className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
+              ) : (
+                <CaretDown className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
