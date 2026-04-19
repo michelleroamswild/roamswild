@@ -995,25 +995,25 @@ const DispersedExplorer = () => {
   // Helper to get icon for unified spot based on category and type
   const getUnifiedSpotIcon = (spot: UnifiedSpot) => {
     if (spot.category === 'campground') {
-      return <div className="w-4 h-4 rounded-full bg-blue-500 flex-shrink-0" />;
+      return <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />;
     }
     if (spot.category === 'mine') {
-      return <Tent className="w-4 h-4 text-wildviolet flex-shrink-0" weight="fill" />;
+      return <Tent className="w-3.5 h-3.5 text-wildviolet flex-shrink-0" weight="fill" />;
     }
     if (spot.category === 'friend') {
-      return <Users className="w-4 h-4 text-emerald-500 flex-shrink-0" weight="fill" />;
+      return <Users className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" weight="fill" />;
     }
     // Derived spots - color based on confidence
     if (spot.spotType === 'camp-site') {
-      return <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: '#3d7a40' }} />;
+      return <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#3d7a40' }} />;
     }
     if (spot.score && spot.score >= 35) {
-      return <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: '#eab308' }} />;
+      return <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#eab308' }} />;
     }
     if (spot.score && spot.score >= 25) {
-      return <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: '#f97316' }} />;
+      return <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#f97316' }} />;
     }
-    return <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: '#e83a3a' }} />;
+    return <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#e83a3a' }} />;
   };
 
   // Fetch actual driving distances from OSRM for top recommendations
@@ -1207,9 +1207,9 @@ const DispersedExplorer = () => {
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 35) return 'text-softamber bg-softamber/20';
-    if (score >= 25) return 'text-orange-600 bg-orange-100';
-    return 'text-coralred bg-coralred/20';
+    if (score >= 35) return 'text-amber-800 bg-amber-100 dark:text-amber-300 dark:bg-amber-900/30';
+    if (score >= 25) return 'text-orange-800 bg-orange-100 dark:text-orange-300 dark:bg-orange-900/30';
+    return 'text-red-800 bg-red-100 dark:text-red-300 dark:bg-red-900/30';
   };
 
   const totalRoads = mvumRoads.length + osmTracks.length;
@@ -1241,21 +1241,16 @@ const DispersedExplorer = () => {
 
       {/* Mobile: Search + toggle above content */}
       <div className="lg:hidden shrink-0 p-3 pb-0 space-y-2">
-        <Card>
-          <CardContent className="p-3">
             <LocationSelector
               value={searchLocation}
               onChange={handleLocationChange}
               placeholder="Search location..."
-              showMyLocation={true}
-              showSavedLocations={true}
-              showCoordinates={true}
-              onMapClickHint={true}
+              showMyLocation={false}
+              showSavedLocations={false}
+              showCoordinates={false}
+              onMapClickHint={false}
               compact={true}
-              coordinatesDisplay={searchLocation ? `${searchLocation.lat.toFixed(4)}, ${searchLocation.lng.toFixed(4)}` : undefined}
             />
-          </CardContent>
-        </Card>
         <div className="flex border-b border-border">
           <button
             onClick={() => setMobileView('list')}
@@ -2079,22 +2074,19 @@ const DispersedExplorer = () => {
 
         {/* Sidebar - Right side on desktop, toggled on mobile */}
         <div className={`order-1 lg:order-2 space-y-3 sm:space-y-5 p-3 sm:p-4 md:p-6 min-h-0 overflow-y-auto ${mobileView === 'list' ? 'flex-1' : 'hidden lg:block'}`}>
-            {/* Search Card - desktop only (mobile has it above the toggle) */}
-            <Card className="hidden lg:block">
-              <CardContent className="p-4">
+            {/* Search - desktop only (mobile has it above the toggle) */}
+            <div className="hidden lg:block">
                 <LocationSelector
                   value={searchLocation}
                   onChange={handleLocationChange}
                   placeholder="Search location..."
-                  showMyLocation={true}
-                  showSavedLocations={true}
-                  showCoordinates={true}
-                  onMapClickHint={true}
+                  showMyLocation={false}
+                  showSavedLocations={false}
+                  showCoordinates={false}
+                  onMapClickHint={false}
                   compact={true}
-                  coordinatesDisplay={searchLocation ? `${searchLocation.lat.toFixed(4)}, ${searchLocation.lng.toFixed(4)}` : undefined}
                 />
-              </CardContent>
-            </Card>
+            </div>
 
             {/* Loading state */}
             {loading && (
