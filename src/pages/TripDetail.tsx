@@ -1295,7 +1295,7 @@ const TripDetail = () => {
 
       {/* Trip Timeline Overview */}
       {(tripConfig.startLocation || tripConfig.baseLocation) && (
-        <div className="sticky top-[52px] sm:top-[73px] z-40 bg-muted/80 backdrop-blur-sm border-b border-border">
+        <div className="bg-muted/80 border-b border-border">
           <div className="px-3 sm:px-4 md:px-6 py-2 sm:py-3">
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
               {/* Start Location */}
