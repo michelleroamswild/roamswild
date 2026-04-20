@@ -96,14 +96,6 @@ const MapPreview = () => {
 
   const displayableTracks = useMemo(() => osmTracks.filter((t) => !t.isPaved), [osmTracks]);
 
-  if (!isLoaded) {
-    return (
-      <div className="w-screen h-screen flex items-center justify-center bg-background">
-        <SpinnerGap className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   const handleSpotClick = useCallback((spot: PotentialSpot) => {
     setSelectedSpot(spot);
     setAnalysis(null);
@@ -154,6 +146,14 @@ const MapPreview = () => {
       setAnalyzing(false);
     }
   }, [selectedSpot]);
+
+  if (!isLoaded) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-background">
+        <SpinnerGap className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="w-screen h-screen relative">
