@@ -222,11 +222,19 @@ const MyTrips = () => {
 
       <main className="container px-3 sm:px-4 md:px-6 py-6 sm:py-8 max-w-4xl mx-auto">
         {/* Page Title */}
-        <div className="mb-4 sm:mb-6">
-          <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground">My Trips</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {allTripsRaw.length} {allTripsRaw.length === 1 ? 'trip' : 'trips'} saved
-          </p>
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground">My Trips</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {allTripsRaw.length} {allTripsRaw.length === 1 ? 'trip' : 'trips'} saved
+            </p>
+          </div>
+          <Link to="/create-trip">
+            <Button variant="default" size="sm">
+              <Plus className="w-4 h-4 mr-1.5" />
+              New Trip
+            </Button>
+          </Link>
         </div>
 
         {/* Draft In Progress Banner */}

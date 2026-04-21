@@ -1,148 +1,26 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import {
-  X,
-  Path,
-  Clock,
-  Mountains,
-  Tent,
-  GasPump,
-  MapPin,
-  MapPinArea,
-  NavigationArrow,
-  ShareNetwork,
-  Heart,
-  CheckCircle,
-  Star,
-  Calendar,
-  CaretDown,
-  CaretUp,
-  CaretRight,
-  ArrowSquareOut,
-  Boot,
-  Trash,
-  ArrowsClockwise,
-  Camera,
-  Warning,
-  Gauge,
-  PencilSimple,
-  CircleNotch,
-  Plus,
-  SlidersHorizontal,
-} from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useTrip, Collaborator } from '@/context/TripContext';
-import { GoogleMap } from '@/components/GoogleMap';
-import { Marker, InfoWindow, DirectionsRenderer } from '@react-google-maps/api';
-import { TripStop, TripDay } from '@/types/trip';
+import { TripStop, TripDestination, PacePreference } from '@/types/trip';
 import { toast } from 'sonner';
 import { AlternativeHikesModal } from '@/components/AlternativeHikesModal';
 import { AlternativeCampsitesModal } from '@/components/AlternativeCampsitesModal';
-import { Label } from '@/components/ui/label';
-import { DatePicker } from '@/components/ui/date-picker';
-import { createMarkerIcon, createSimpleMarkerIcon, getTypeStyles } from '@/utils/mapMarkers';
-import { estimateDayTime } from '@/utils/tripValidation';
-import { getAllTrailsUrl, estimateTrailLength } from '@/utils/hikeUtils';
 import { ShareTripModal } from '@/components/ShareTripModal';
-import { CollaboratorAvatars } from '@/components/CollaboratorAvatars';
-import { getTripSlug, getDayUrl } from '@/utils/slugify';
-import { PlaceSearch } from '@/components/PlaceSearch';
+import { getTripSlug } from '@/utils/slugify';
 import { useTripGenerator } from '@/hooks/use-trip-generator';
 import { useTheme } from '@/hooks/use-theme';
 import { usePhotoWeather } from '@/hooks/use-photo-weather';
-import { PhotoWeatherCard } from '@/components/PhotoWeatherCard';
 import { EntryPointSelector, checkIfDrivable } from '@/components/EntryPointSelector';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { TripDestination, PacePreference } from '@/types/trip';
 import { ActivityEditorModal } from '@/components/ActivityEditorModal';
-
-const getIcon = (type: string) => {
-  switch (type) {
-    case 'hike':
-      return Boot;
-    case 'gas':
-      return GasPump;
-    case 'camp':
-      return Tent;
-    case 'photo':
-      return Camera;
-    case 'start':
-    case 'end':
-      return MapPin;
-    default:
-      return MapPinArea;
-  }
-};
-
-const loaderStates = [
-  { icon: MapPin, color: '#34b5a5', bg: 'bg-aquateal/20', label: 'Finding locations...' },
-  { icon: MapPinArea, color: '#6b5ce6', bg: 'bg-lavenderslate/20', label: 'Planning destinations...' },
-  { icon: Boot, color: '#3c8a79', bg: 'bg-pinesoft/20', label: 'Discovering hikes...' },
-  { icon: Tent, color: '#a855f7', bg: 'bg-wildviolet/20', label: 'Finding campsites...' },
-];
-
-const RegeneratingLoader = () => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % loaderStates.length);
-    }, 800);
-    return () => clearInterval(interval);
-  }, []);
-
-  const current = loaderStates[currentIndex];
-  const Icon = current.icon;
-
-  return (
-    <div className="fixed inset-0 z-[60] bg-background/80 backdrop-blur-sm flex items-center justify-center">
-      <div className="bg-card border border-border rounded-xl p-8 shadow-lg flex flex-col items-center gap-5">
-        <div className="relative">
-          <svg className="w-20 h-20 animate-spin" viewBox="0 0 50 50">
-            <circle
-              cx="25"
-              cy="25"
-              r="20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeDasharray="80, 200"
-              className="opacity-20"
-            />
-            <circle
-              cx="25"
-              cy="25"
-              r="20"
-              fill="none"
-              stroke={current.color}
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeDasharray="40, 200"
-              className="transition-all duration-500"
-            />
-          </svg>
-          <div className={`absolute inset-0 flex items-center justify-center`}>
-            <div className={`w-12 h-12 rounded-full ${current.bg} flex items-center justify-center transition-all duration-500`}>
-              <Icon className="w-6 h-6 transition-all duration-500" style={{ color: current.color }} />
-            </div>
-          </div>
-        </div>
-        <div className="text-center">
-          <p className="font-semibold text-foreground text-lg">Regenerating Trip</p>
-          <p className="text-sm text-muted-foreground transition-all duration-300">{current.label}</p>
-        </div>
-      </div>
-    </div>
-  );
-};
+import { RegeneratingLoader } from '@/components/RegeneratingLoader';
+import { ExitConfirmModal } from '@/components/trip-detail/ExitConfirmModal';
+import { EditDatesModal } from '@/components/trip-detail/EditDatesModal';
+import { EditLocationModal } from '@/components/trip-detail/EditLocationModal';
+import { AddDestinationModal } from '@/components/trip-detail/AddDestinationModal';
+import { TripDetailHeader } from '@/components/trip-detail/TripDetailHeader';
+import { TripTimelineStrip } from '@/components/trip-detail/TripTimelineStrip';
+import { TripMapView } from '@/components/trip-detail/TripMapView';
+import { ItineraryPanel } from '@/components/trip-detail/ItineraryPanel';
 
 const TripDetail = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -1232,241 +1110,52 @@ const TripDetail = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-        <div className="container px-3 sm:px-4 md:px-6 pt-4 pb-2.5 sm:py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-              <Button variant="ghost" size="icon" className="rounded-full shrink-0" onClick={handleExitClick}>
-                <X className="w-5 h-5" weight="bold" />
-              </Button>
-              <div className="min-w-0">
-                <h1 className="text-base sm:text-xl font-display font-bold text-foreground truncate">
-                  {tripConfig.name || 'My Trip'}
-                </h1>
-                <p className="text-xs sm:text-sm text-muted-foreground">
-                  {generatedTrip.days.length} days • {generatedTrip.totalDistance}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-              {collaborators.length > 1 && (
-                <CollaboratorAvatars collaborators={collaborators} size="sm" maxDisplay={4} />
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-full"
-                onClick={() => setActivityEditorOpen(true)}
-                title="Edit Activities"
-              >
-                <SlidersHorizontal className="w-5 h-5" weight="bold" />
-              </Button>
-              {isSaved && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full"
-                  onClick={() => setShareModalOpen(true)}
-                >
-                  <ShareNetwork className="w-5 h-5" weight="bold" />
-                </Button>
-              )}
-              {isSaved ? (
-                <button
-                  onClick={handleUnsaveTrip}
-                  className="flex items-center justify-center gap-1.5 w-9 h-9 sm:w-[110px] sm:h-auto sm:py-2 text-sm font-semibold text-white bg-earth border-2 border-earth rounded-md hover:bg-earth/90 transition-colors"
-                >
-                  <CheckCircle className="w-4 h-4" weight="fill" />
-                  <span className="hidden sm:inline">Saved</span>
-                </button>
-              ) : (
-                <button
-                  onClick={handleSaveTrip}
-                  className="flex items-center justify-center gap-1.5 w-9 h-9 sm:w-[110px] sm:h-auto sm:py-2 text-sm font-semibold text-earth bg-earth-light border-2 border-earth rounded-md hover:bg-earth-light/80 transition-colors"
-                >
-                  <Heart className="w-4 h-4" weight="bold" />
-                  <span className="hidden sm:inline">Save Trip</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+      <TripDetailHeader
+        tripName={tripConfig.name}
+        totalDays={generatedTrip.days.length}
+        totalDistance={generatedTrip.totalDistance}
+        collaborators={collaborators}
+        isSaved={isSaved}
+        onExitClick={handleExitClick}
+        onOpenActivityEditor={() => setActivityEditorOpen(true)}
+        onOpenShare={() => setShareModalOpen(true)}
+        onUnsave={handleUnsaveTrip}
+        onSave={handleSaveTrip}
+      />
 
       {/* Trip Timeline Overview */}
-      {(tripConfig.startLocation || tripConfig.baseLocation) && (
-        <div className="bg-muted/80 border-b border-border">
-          <div className="px-3 sm:px-4 md:px-6 py-2 sm:py-3">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-              {/* Start Location */}
-              {tripConfig.startLocation && (
-                <>
-                  <button
-                    onClick={() => setEditLocationModal({
-                      isOpen: true,
-                      type: 'start',
-                      currentName: tripConfig.startLocation?.name || '',
-                    })}
-                    className="flex items-center gap-1.5 flex-shrink-0 group hover:bg-white/50 rounded-full px-2 py-1 -mx-2 -my-1 transition-colors"
-                  >
-                    <div className="w-2 h-2 rounded-full bg-[#34b5a5]" />
-                    <span className="text-sm font-medium text-foreground whitespace-nowrap">
-                      {tripConfig.startLocation.name.split(',')[0]}
-                    </span>
-                    <PencilSimple className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </button>
-                  {tripConfig.destinations.length > 0 && (
-                    <CaretRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  )}
-                </>
-              )}
-
-              {/* Base Location Mode */}
-              {tripConfig.baseLocation && !tripConfig.startLocation && (
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <div className="w-2 h-2 rounded-full bg-primary" />
-                  <span className="text-sm font-medium text-foreground whitespace-nowrap">
-                    Exploring {tripConfig.baseLocation.name.split(',')[0]}
-                  </span>
-                </div>
-              )}
-
-              {/* Destinations */}
-              {tripConfig.destinations.map((dest, index) => {
-                const isLastDestination = index === tripConfig.destinations.length - 1;
-                const isEndLocation = isLastDestination && !tripConfig.returnToStart;
-
-                return (
-                  <div key={dest.id} className="flex items-center gap-2 flex-shrink-0">
-                    <button
-                      onClick={() => setEditLocationModal({
-                        isOpen: true,
-                        type: isEndLocation ? 'end' : 'destination',
-                        index,
-                        currentName: dest.name,
-                      })}
-                      className="flex items-center gap-1.5 group hover:bg-white/50 rounded-full px-2 py-1 -mx-2 -my-1 transition-colors"
-                    >
-                      <div className={`w-2 h-2 rounded-full ${isEndLocation ? 'bg-[#34b5a5]' : 'bg-primary'}`} />
-                      <span className="text-sm font-medium text-foreground whitespace-nowrap">
-                        {dest.name.split(',')[0]}
-                      </span>
-                      <PencilSimple className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                    {!isEndLocation && (
-                      <CaretRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* Add Destination Button - only show if returning to start or no destinations */}
-              {(tripConfig.returnToStart || tripConfig.destinations.length === 0) && (
-                <>
-                  <button
-                    onClick={() => setAddDestinationModal(true)}
-                    className="flex items-center gap-1.5 flex-shrink-0 group hover:bg-white/50 rounded-full px-2 py-1 -mx-2 -my-1 transition-colors"
-                  >
-                    <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">Add location</span>
-                    <Plus className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors" />
-                  </button>
-
-                  {tripConfig.returnToStart && (
-                    <CaretRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  )}
-                </>
-              )}
-
-              {/* Return to Start / End Location */}
-              {tripConfig.returnToStart && tripConfig.startLocation && (
-                <button
-                  onClick={() => setEditLocationModal({
-                    isOpen: true,
-                    type: 'end',
-                    currentName: tripConfig.startLocation?.name || '',
-                  })}
-                  className="flex items-center gap-1.5 flex-shrink-0 group hover:bg-white/50 rounded-full px-2 py-1 -mx-2 -my-1 transition-colors"
-                >
-                  <div className="w-2 h-2 rounded-full bg-[#34b5a5]" />
-                  <span className="text-sm font-medium text-foreground whitespace-nowrap">
-                    {tripConfig.startLocation.name.split(',')[0]}
-                  </span>
-                  <PencilSimple className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <TripTimelineStrip
+        tripConfig={tripConfig}
+        onEditStart={() => setEditLocationModal({
+          isOpen: true,
+          type: 'start',
+          currentName: tripConfig.startLocation?.name || '',
+        })}
+        onEditDestination={(index, currentName, isEndLocation) => setEditLocationModal({
+          isOpen: true,
+          type: isEndLocation ? 'end' : 'destination',
+          index,
+          currentName,
+        })}
+        onEditEnd={() => setEditLocationModal({
+          isOpen: true,
+          type: 'end',
+          currentName: tripConfig.startLocation?.name || '',
+        })}
+        onAddDestination={() => setAddDestinationModal(true)}
+      />
 
       {/* Edit Location Modal */}
-      <Dialog open={editLocationModal.isOpen} onOpenChange={(open) => !open && handleCloseEditModal()}>
-        <DialogContent
-          className="sm:max-w-md"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-          onInteractOutside={(e) => {
-            // Prevent closing when clicking on Google Autocomplete dropdown
-            const target = e.target as HTMLElement;
-            if (target.closest('.pac-container') || target.closest('.pac-item')) {
-              e.preventDefault();
-            }
-          }}
-          onPointerDownOutside={(e) => {
-            // Prevent closing when clicking on Google Autocomplete dropdown
-            const target = e.target as HTMLElement;
-            if (target.closest('.pac-container') || target.closest('.pac-item')) {
-              e.preventDefault();
-            }
-          }}
-          onFocusOutside={(e) => {
-            // Prevent focus issues with autocomplete
-            e.preventDefault();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {editLocationModal.type === 'start' || editLocationModal.type === 'end' ? (
-                <MapPin className="w-5 h-5 text-aquateal" />
-              ) : (
-                <MapPinArea className="w-5 h-5 text-lavenderslate" />
-              )}
-              {editLocationModal.type === 'start'
-                ? 'Change Start Location'
-                : editLocationModal.type === 'end'
-                ? 'Change End Location'
-                : 'Change Destination'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Current: <span className="font-medium text-foreground">{editLocationModal.currentName}</span>
-            </p>
-            <PlaceSearch
-              onPlaceSelect={handleLocationSelect}
-              placeholder="Search for a new location..."
-            />
-            {pendingLocationChange && (
-              <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                <p className="text-sm text-muted-foreground">New location:</p>
-                <p className="font-medium text-foreground">{pendingLocationChange.name || pendingLocationChange.formatted_address}</p>
-              </div>
-            )}
-            <div className="flex gap-3 pt-2">
-              <Button variant="outline" onClick={handleCloseEditModal} className="flex-1">
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleLocationUpdate}
-                disabled={!pendingLocationChange || regenerating}
-                className="flex-1"
-              >
-                {regenerating ? 'Updating...' : 'Change Location'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <EditLocationModal
+        isOpen={editLocationModal.isOpen}
+        type={editLocationModal.type}
+        currentName={editLocationModal.currentName}
+        pendingLocation={pendingLocationChange}
+        regenerating={regenerating}
+        onPlaceSelect={handleLocationSelect}
+        onConfirm={handleLocationUpdate}
+        onClose={handleCloseEditModal}
+      />
 
       {/* Entry Point Selector Modal */}
       {entryPointModal.place && (
@@ -1487,449 +1176,58 @@ const TripDetail = () => {
       )}
 
       {/* Add Destination Modal */}
-      <Dialog open={addDestinationModal} onOpenChange={(open) => {
-        if (!open) {
+      <AddDestinationModal
+        isOpen={addDestinationModal}
+        pendingDestination={pendingNewDestination}
+        regenerating={regenerating}
+        onPlaceSelect={handleNewDestinationSelect}
+        onAdd={handleAddDestination}
+        onClose={() => {
           setAddDestinationModal(false);
           setPendingNewDestination(null);
-        }
-      }}>
-        <DialogContent
-          className="sm:max-w-md"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-          onInteractOutside={(e) => {
-            const target = e.target as HTMLElement;
-            if (target.closest('.pac-container') || target.closest('.pac-item')) {
-              e.preventDefault();
-            }
-          }}
-          onPointerDownOutside={(e) => {
-            const target = e.target as HTMLElement;
-            if (target.closest('.pac-container') || target.closest('.pac-item')) {
-              e.preventDefault();
-            }
-          }}
-          onFocusOutside={(e) => e.preventDefault()}
-        >
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MapPinArea className="w-5 h-5 text-lavenderslate" />
-              Add Destination
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <PlaceSearch
-              onPlaceSelect={handleNewDestinationSelect}
-              placeholder="Search for a destination..."
-            />
-            {pendingNewDestination && (
-              <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                <p className="text-sm text-muted-foreground">New destination:</p>
-                <p className="font-medium text-foreground">{pendingNewDestination.name || pendingNewDestination.formatted_address}</p>
-              </div>
-            )}
-            <div className="flex gap-3 pt-2">
-              <Button variant="outline" onClick={() => {
-                setAddDestinationModal(false);
-                setPendingNewDestination(null);
-              }} className="flex-1">
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleAddDestination}
-                disabled={!pendingNewDestination || regenerating}
-                className="flex-1"
-              >
-                {regenerating ? 'Adding...' : 'Add Destination'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+        }}
+      />
 
       <main className="w-full">
         <div className="grid lg:grid-cols-2">
           {/* Map Section */}
-          <div className="order-2 lg:order-1 h-[280px] sm:h-[400px] lg:h-[calc(100vh-120px)] lg:sticky lg:top-[120px]">
-              <div className="relative w-full h-full">
-                <GoogleMap
-                  center={mapCenter}
-                  zoom={8}
-                  className="w-full h-full"
-                  onLoad={handleMapLoad}
-                  options={{ mapTypeId: 'satellite' }}
-                >
-                  {/* Route directions - show day route if day selected, otherwise full trip */}
-                  {activeDay !== null && dayDirections ? (
-                    <DirectionsRenderer
-                      key={`day-${activeDay}-route`}
-                      directions={dayDirections}
-                      options={{
-                        suppressMarkers: true,
-                        polylineOptions: {
-                          strokeColor: isDark ? '#d9d0c3' : '#2d5a3d',
-                          strokeWeight: 5,
-                          strokeOpacity: 1,
-                        },
-                      }}
-                    />
-                  ) : directions ? (
-                    <DirectionsRenderer
-                      key="full-trip-route"
-                      directions={directions}
-                      options={{
-                        suppressMarkers: true,
-                        polylineOptions: {
-                          strokeColor: isDark ? '#d9d0c3' : '#2d5a3d',
-                          strokeWeight: 5,
-                          strokeOpacity: 1,
-                        },
-                      }}
-                    />
-                  ) : null}
-
-                  {/* Start/Base marker (only shown when viewing full trip) */}
-                  {!activeDay && (tripConfig.startLocation || tripConfig.baseLocation) && (
-                    <Marker
-                      position={(tripConfig.startLocation || tripConfig.baseLocation)!.coordinates}
-                      icon={createMarkerIcon('start', { size: 36 })}
-                      title={tripConfig.startLocation
-                        ? `Start: ${tripConfig.startLocation.name}`
-                        : `Base: ${tripConfig.baseLocation!.name}`
-                      }
-                    />
-                  )}
-
-                  {/* Show origin marker for day preview (previous night's camp or start location) */}
-                  {activeDay && (() => {
-                    if (activeDay === 1) {
-                      // Day 1: show start location as origin
-                      const startLoc = tripConfig.startLocation || tripConfig.baseLocation;
-                      if (startLoc) {
-                        return (
-                          <Marker
-                            key="day-origin-start"
-                            position={startLoc.coordinates}
-                            icon={createMarkerIcon('start', { isActive: true, size: 36 })}
-                            title={`Start: ${startLoc.name}`}
-                          />
-                        );
-                      }
-                    } else {
-                      // Other days: show most recent campsite as origin (look back through all previous days)
-                      for (let d = activeDay - 1; d >= 1; d--) {
-                        const prevDay = generatedTrip.days.find(day => day.day === d);
-                        const campsite = prevDay?.stops.find(s => s.type === 'camp');
-                        if (campsite) {
-                          return (
-                            <Marker
-                              key="day-origin-camp"
-                              position={campsite.coordinates}
-                              icon={createSimpleMarkerIcon('camp', { isActive: true, size: 8 })}
-                              title={`From: ${campsite.name}`}
-                            />
-                          );
-                        }
-                      }
-                    }
-                    return null;
-                  })()}
-
-                  {/* Show destination marker for last day preview when returning to start */}
-                  {activeDay && activeDay === generatedTrip.days.length && tripConfig.returnToStart && (tripConfig.startLocation || tripConfig.baseLocation) && (
-                    <Marker
-                      key="day-destination-end"
-                      position={(tripConfig.startLocation || tripConfig.baseLocation)!.coordinates}
-                      icon={createMarkerIcon('end', { isActive: true, size: 36 })}
-                      title={`End: ${(tripConfig.startLocation || tripConfig.baseLocation)!.name}`}
-                    />
-                  )}
-
-                  {/* Show end marker when trip doesn't return to start (end is at last destination) */}
-                  {!activeDay && !tripConfig.returnToStart && (() => {
-                    const endStop = allStops.find(s => s.type === 'end');
-                    if (endStop) {
-                      return (
-                        <Marker
-                          key="trip-end-marker"
-                          position={endStop.coordinates}
-                          icon={createMarkerIcon('end', { size: 36 })}
-                          title={`End: ${endStop.name}`}
-                        />
-                      );
-                    }
-                    return null;
-                  })()}
-
-                  {/* Show end marker for last day preview when NOT returning to start */}
-                  {activeDay && activeDay === generatedTrip.days.length && !tripConfig.returnToStart && (() => {
-                    const dayStops = generatedTrip.days.find(d => d.day === activeDay)?.stops || [];
-                    const endStop = dayStops.find(s => s.type === 'end');
-                    if (endStop) {
-                      return (
-                        <Marker
-                          key="day-end-marker"
-                          position={endStop.coordinates}
-                          icon={createMarkerIcon('end', { isActive: true, size: 36 })}
-                          title={`End: ${endStop.name}`}
-                        />
-                      );
-                    }
-                    return null;
-                  })()}
-
-                  {/* Show only active day's stops when day is selected, otherwise all stops */}
-                  {/* Filter out 'end' type stops since we have dedicated start/end markers */}
-                  {(activeDay ? generatedTrip.days.find(d => d.day === activeDay)?.stops || [] : allStops)
-                    .filter(stop => stop.type !== 'end')
-                    .map((stop) => (
-                    <Marker
-                      key={stop.id}
-                      position={stop.coordinates}
-                      icon={createMarkerIcon(stop.type, { isActive: !!activeDay, size: 36 })}
-                      title={stop.name}
-                      onClick={() => setSelectedStop(stop)}
-                    />
-                  ))}
-
-
-                  {/* Info window for selected stop */}
-                  {selectedStop && (
-                    <InfoWindow
-                      position={selectedStop.coordinates}
-                      onCloseClick={() => setSelectedStop(null)}
-                    >
-                      <div className="p-1 min-w-[200px]">
-                        <h4 className="font-semibold text-gray-900 text-base mb-1">
-                          {selectedStop.name}
-                        </h4>
-                        <p className="text-gray-600 text-sm mb-2">{selectedStop.description}</p>
-                        <div className="flex items-center gap-2 text-gray-500 text-sm mb-3">
-                          <span>Day {selectedStop.day}</span>
-                          <span>•</span>
-                          <span>{selectedStop.duration}</span>
-                        </div>
-                        <button
-                          onClick={() => {
-                            window.open(
-                              `https://www.google.com/maps/dir/?api=1&destination=${selectedStop.coordinates.lat},${selectedStop.coordinates.lng}`,
-                              '_blank'
-                            );
-                          }}
-                          className="w-full px-3 py-1.5 bg-emerald-600 text-white text-sm rounded hover:bg-emerald-700 transition-colors"
-                        >
-                          Get Directions
-                        </button>
-                      </div>
-                    </InfoWindow>
-                  )}
-                </GoogleMap>
-
-                {/* Route info overlay */}
-                <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 right-2 sm:right-4 z-10">
-                  <div className="bg-card/95 backdrop-blur-sm rounded-xl border border-border p-2.5 sm:p-4 shadow-lg">
-                    {activeDay ? (
-                      // Day-specific info
-                      <div className="flex items-center justify-between flex-wrap gap-2 sm:gap-4">
-                        <div className="flex items-center gap-2 sm:gap-4">
-                          <div className="hidden sm:flex items-center justify-center w-10 h-10 bg-emerald-500/10 rounded-full">
-                            <span className="text-lg font-bold text-emerald-600">{activeDay}</span>
-                          </div>
-                          <div>
-                            <p className="font-semibold text-foreground text-sm sm:text-base">Day {activeDay}</p>
-                            <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                <Path className="w-3 h-3" />
-                                {generatedTrip.days.find(d => d.day === activeDay)?.drivingDistance}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {generatedTrip.days.find(d => d.day === activeDay)?.drivingTime}
-                              </span>
-                              <span className="hidden sm:flex items-center gap-1">
-                                <MapPin className="w-3 h-3" />
-                                {generatedTrip.days.find(d => d.day === activeDay)?.stops.length} stops
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                          <Button variant="outline" size="sm" className="text-xs sm:text-sm h-8" onClick={handleExitDayMode}>
-                            <X className="w-3.5 h-3.5 sm:mr-1" />
-                            <span className="hidden sm:inline">Exit Day</span>
-                          </Button>
-                          <Button variant="primary" size="sm" className="text-xs sm:text-sm h-8" onClick={handleNavigateDay}>
-                            <NavigationArrow className="w-3.5 h-3.5 sm:mr-2" />
-                            <span className="hidden sm:inline">Navigate Day {activeDay}</span>
-                            <span className="sm:hidden">Navigate</span>
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      // Full trip info
-                      <div className="flex items-center justify-between flex-wrap gap-2 sm:gap-4">
-                        <div className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm">
-                          <div className="flex items-center gap-1.5">
-                            <Path className="w-3.5 h-3.5 text-terracotta" />
-                            <span className="font-semibold text-foreground">
-                              {generatedTrip.totalDistance}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                            <span className="text-foreground">{generatedTrip.totalDrivingTime}</span>
-                          </div>
-                          <div className="hidden sm:flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-primary" />
-                            <span className="text-foreground">{generatedTrip.days.length} days</span>
-                          </div>
-                        </div>
-                        <Button variant="primary" size="sm" className="text-xs sm:text-sm h-8" onClick={handleStartNavigation}>
-                          <NavigationArrow className="w-3.5 h-3.5 sm:mr-2" />
-                          <span className="hidden sm:inline">Start Navigation</span>
-                          <span className="sm:hidden">Navigate</span>
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-          </div>
+          <TripMapView
+            tripConfig={tripConfig}
+            generatedTrip={generatedTrip}
+            allStops={allStops}
+            mapCenter={mapCenter}
+            isDark={isDark}
+            activeDay={activeDay}
+            directions={directions}
+            dayDirections={dayDirections}
+            selectedStop={selectedStop}
+            onMapLoad={handleMapLoad}
+            onSelectStop={setSelectedStop}
+            onExitDayMode={handleExitDayMode}
+            onNavigateDay={handleNavigateDay}
+            onStartNavigation={handleStartNavigation}
+          />
 
           {/* Itinerary Panel */}
-          <div className="order-1 lg:order-2 space-y-4 lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
-            {/* Trip Header */}
-            <div className="bg-muted/40 border-b px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 space-y-2 sm:space-y-3">
-              <div>
-                <h1 className="text-xl sm:text-3xl font-display font-bold text-foreground">
-                  {tripConfig.name || 'My Trip'}
-                </h1>
-                {tripConfig.startDate ? (
-                  <button
-                    onClick={handleOpenDateEdit}
-                    className="flex items-center gap-2 mt-1 text-sm group hover:bg-secondary/50 rounded-lg px-2 py-1 -mx-2 transition-colors"
-                  >
-                    <Calendar className="w-4 h-4 text-primary" />
-                    <span className="text-muted-foreground">
-                      {new Date(tripConfig.startDate).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                      {' – '}
-                      {(() => {
-                        const startDate = new Date(tripConfig.startDate!);
-                        const endDate = new Date(startDate);
-                        endDate.setDate(startDate.getDate() + generatedTrip.days.length - 1);
-                        return endDate.toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        });
-                      })()}
-                    </span>
-                    <PencilSimple className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleOpenDateEdit}
-                    className="flex items-center gap-2 mt-1 text-sm text-primary hover:underline"
-                  >
-                    <Calendar className="w-4 h-4" />
-                    <span>Add trip dates</span>
-                  </button>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-muted-foreground">
-                <span className="flex items-center gap-1 sm:gap-1.5">
-                  <Path className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-terracotta" />
-                  {generatedTrip.totalDistance}
-                </span>
-                <span className="flex items-center gap-1 sm:gap-1.5">
-                  <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  {generatedTrip.totalDrivingTime}
-                </span>
-                <span className="flex items-center gap-1 sm:gap-1.5">
-                  <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />
-                  {generatedTrip.days.length} days
-                </span>
-                <span className="hidden sm:flex items-center gap-1.5 capitalize">
-                  <Gauge className="w-3.5 h-3.5" />
-                  {tripConfig.pacePreference || 'Moderate'}
-                </span>
-                {(() => {
-                  let totalHikingMinutes = 0;
-                  let hikeCount = 0;
-                  generatedTrip.days.forEach(day => {
-                    const estimate = estimateDayTime(day);
-                    totalHikingMinutes += estimate.hikingHours * 60;
-                    hikeCount += day.stops.filter(s => s.type === 'hike').length;
-                  });
-                  const hikingHours = Math.floor(totalHikingMinutes / 60);
-                  const hikingMiles = Math.round((totalHikingMinutes / 60) * 1.8);
-                  if (hikeCount === 0) return null;
-                  return (
-                    <span className="flex items-center gap-1.5">
-                      <Boot className="w-3.5 h-3.5 text-pinesoft" />
-                      {hikeCount} {hikeCount === 1 ? 'hike' : 'hikes'} • ~{hikingHours}h • ~{hikingMiles} mi
-                    </span>
-                  );
-                })()}
-              </div>
-            </div>
-
-           <div className="px-4 sm:px-6 space-y-4">
-            {/* Photography Conditions - shows when a stop is selected */}
-            {selectedStop && (
-              <PhotoWeatherCard
-                forecast={selectedStopWeather}
-                loading={loadingStopWeather}
-                error={stopWeatherError}
-                locationName={selectedStop.name}
-              />
-            )}
-
-            {/* Day-by-Day Itinerary */}
-            <div className="space-y-3">
-              <h2 className="text-lg font-display font-semibold text-foreground">Itinerary</h2>
-
-              {generatedTrip.days.map((day) => (
-                <DayCard
-                  key={day.day}
-                  day={day}
-                  tripName={tripConfig.name}
-                  tripStartDate={tripConfig.startDate}
-                  expanded={expandedDays.includes(day.day)}
-                  isActive={activeDay === day.day}
-                  isFirstDay={day.day === 1}
-                  isLastDay={day.day === generatedTrip.days.length}
-                  startLocation={tripConfig.startLocation}
-                  returnToStart={tripConfig.returnToStart}
-                  onToggle={() => toggleDay(day.day)}
-                  onStartDay={() => handleStartDay(day.day)}
-                  onExitDay={handleExitDayMode}
-                  onStopClick={setSelectedStop}
-                  onSwapHike={handleOpenHikeSwap}
-                  onSwapCampsite={handleOpenCampsiteSwap}
-                  onRemoveStop={handleRemoveStop}
-                />
-              ))}
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 pb-4 sm:pb-0">
-              <Button variant="primary" size="lg" className="flex-1" onClick={handleStartNavigation}>
-                <NavigationArrow className="w-4 h-4 mr-2" />
-                Start Trip
-              </Button>
-              <Link to="/create-trip" className="sm:w-auto">
-                <Button variant="outline" size="lg" className="w-full sm:w-auto">
-                  Edit Trip
-                </Button>
-              </Link>
-            </div>
-           </div>
-          </div>
+          <ItineraryPanel
+            tripConfig={tripConfig}
+            generatedTrip={generatedTrip}
+            expandedDays={expandedDays}
+            activeDay={activeDay}
+            selectedStop={selectedStop}
+            selectedStopWeather={selectedStopWeather}
+            loadingStopWeather={loadingStopWeather}
+            stopWeatherError={stopWeatherError}
+            onOpenDateEdit={handleOpenDateEdit}
+            onToggleDay={toggleDay}
+            onStartDay={handleStartDay}
+            onExitDay={handleExitDayMode}
+            onStopClick={setSelectedStop}
+            onSwapHike={handleOpenHikeSwap}
+            onSwapCampsite={handleOpenCampsiteSwap}
+            onRemoveStop={handleRemoveStop}
+            onStartNavigation={handleStartNavigation}
+          />
         </div>
       </main>
 
@@ -1977,87 +1275,19 @@ const TripDetail = () => {
       )}
 
       {/* Edit Dates Modal */}
-      <Dialog open={dateEditModal} onOpenChange={setDateEditModal}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-primary" />
-              {tripConfig.startDate ? 'Edit Trip Dates' : 'Set Trip Dates'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Start Date</Label>
-                <DatePicker
-                  value={editingStartDate}
-                  onChange={(date) => {
-                    setEditingStartDate(date);
-                    // Auto-adjust end date if start is after end
-                    if (date && editingEndDate && date > editingEndDate) {
-                      setEditingEndDate(date);
-                    }
-                  }}
-                  placeholder="Select start date"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>End Date</Label>
-                <DatePicker
-                  value={editingEndDate}
-                  onChange={setEditingEndDate}
-                  placeholder="Select end date"
-                />
-              </div>
-            </div>
-            {editingStartDate && editingEndDate && generatedTrip && (
-              <div className="p-3 bg-secondary/50 rounded-lg space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">{getEditingDuration()} days</span>
-                  {' '}from{' '}
-                  <span className="font-medium text-foreground">
-                    {editingStartDate.toLocaleDateString('en-US', {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </span>
-                  {' '}to{' '}
-                  <span className="font-medium text-foreground">
-                    {editingEndDate.toLocaleDateString('en-US', {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </span>
-                </p>
-                {getEditingDuration() !== generatedTrip.days.length && (
-                  <p className="text-sm">
-                    {getEditingDuration() > generatedTrip.days.length ? (
-                      <span className="text-primary">
-                        +{getEditingDuration() - generatedTrip.days.length} day(s) will be added
-                      </span>
-                    ) : (
-                      <span className="text-amber-600">
-                        {generatedTrip.days.length - getEditingDuration()} day(s) will be removed
-                      </span>
-                    )}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDateEditModal(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleUpdateDates} disabled={!editingStartDate || !editingEndDate}>
-              Save Dates
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditDatesModal
+        isOpen={dateEditModal}
+        onOpenChange={setDateEditModal}
+        hasExistingStartDate={!!tripConfig.startDate}
+        startDate={editingStartDate}
+        endDate={editingEndDate}
+        onStartDateChange={setEditingStartDate}
+        onEndDateChange={setEditingEndDate}
+        currentTripDays={generatedTrip.days.length}
+        getEditingDuration={getEditingDuration}
+        onSave={handleUpdateDates}
+        onCancel={() => setDateEditModal(false)}
+      />
 
       {/* Share Trip Modal */}
       {generatedTrip && (
@@ -2084,33 +1314,13 @@ const TripDetail = () => {
       />
 
       {/* Exit Confirmation Modal */}
-      <Dialog open={exitConfirmModal} onOpenChange={setExitConfirmModal}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Warning className="w-5 h-5 text-amber-500" weight="fill" />
-              Unsaved Trip
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-muted-foreground">
-              This trip hasn't been saved yet. If you leave now, you'll lose all your trip details.
-            </p>
-            <div className="flex flex-col gap-2">
-              <Button variant="primary" onClick={handleSaveAndExit}>
-                <Heart className="w-4 h-4 mr-2" weight="bold" />
-                Save & Exit
-              </Button>
-              <Button variant="outline" onClick={handleExitWithoutSaving}>
-                Exit Without Saving
-              </Button>
-              <Button variant="ghost" onClick={() => setExitConfirmModal(false)}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ExitConfirmModal
+        isOpen={exitConfirmModal}
+        onOpenChange={setExitConfirmModal}
+        onSaveAndExit={handleSaveAndExit}
+        onExitWithoutSaving={handleExitWithoutSaving}
+        onCancel={() => setExitConfirmModal(false)}
+      />
 
       {/* Regenerating Loading Overlay */}
       {regenerating && <RegeneratingLoader />}
@@ -2119,347 +1329,5 @@ const TripDetail = () => {
   );
 };
 
-interface DayCardProps {
-  day: TripDay;
-  tripName?: string;
-  tripStartDate?: string; // ISO date string (YYYY-MM-DD)
-  expanded: boolean;
-  isActive: boolean;
-  isFirstDay: boolean;
-  isLastDay: boolean;
-  startLocation?: { name: string; coordinates: { lat: number; lng: number } };
-  returnToStart?: boolean;
-  onToggle: () => void;
-  onStartDay: () => void;
-  onExitDay: () => void;
-  onStopClick: (stop: TripStop) => void;
-  onSwapHike: (hike: TripStop) => void;
-  onSwapCampsite: (campsite: TripStop) => void;
-  onRemoveStop: (dayNumber: number, stop: TripStop) => void;
-}
-
-const DayCard = ({ day, tripName, tripStartDate, expanded, isActive, isFirstDay, isLastDay, startLocation, returnToStart, onToggle, onStartDay, onExitDay, onStopClick, onSwapHike, onSwapCampsite, onRemoveStop }: DayCardProps) => {
-  const timeEstimate = estimateDayTime(day);
-
-  // Calculate the date for this day
-  const dayDate = tripStartDate ? (() => {
-    const [year, month, dayNum] = tripStartDate.split('-').map(Number);
-    const date = new Date(year, month - 1, dayNum + day.day - 1);
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  })() : null;
-
-  return (
-    <Card className={`overflow-hidden ${isActive ? 'ring-2 ring-primary border-primary' : ''}`}>
-      {/* Day Header */}
-      <div className="p-3 sm:p-4 hover:bg-secondary/50 transition-colors">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={onToggle}
-            className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0"
-          >
-            <div className={`flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full shrink-0 ${isActive ? 'bg-primary text-primary-foreground' : 'bg-primary/10'}`}>
-              <span className={`text-sm sm:text-lg font-bold ${isActive ? '' : 'text-primary'}`}>{day.day}</span>
-            </div>
-            <div className="text-left min-w-0">
-              <p className="font-medium text-foreground text-sm sm:text-base truncate">
-                Day {day.day}
-                {dayDate && <span className="ml-1.5 sm:ml-2 text-xs sm:text-sm font-normal text-muted-foreground">{dayDate}</span>}
-                {isActive && <span className="ml-1.5 text-[10px] sm:text-xs text-primary font-normal">(Previewing)</span>}
-              </p>
-              <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Path className="w-3 h-3" />
-                  {day.drivingDistance}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {day.drivingTime}
-                </span>
-              </div>
-            </div>
-          </button>
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-            {timeEstimate.warningMessage && (
-              <Warning
-                className={`w-4 h-4 hidden sm:block ${timeEstimate.isOverloaded ? 'text-amber-500' : 'text-blue-500'}`}
-                title={timeEstimate.warningMessage}
-              />
-            )}
-            <div className="hidden sm:flex items-center gap-1">
-              {day.hike && <Boot className="w-4 h-4 text-pinesoft" />}
-              {day.campsite && <Tent className="w-4 h-4 text-wildviolet" />}
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="text-xs sm:text-sm h-7 w-7 sm:w-auto sm:h-8 px-0 sm:px-3"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (isActive) {
-                  onExitDay();
-                } else {
-                  onStartDay();
-                }
-              }}
-            >
-              <NavigationArrow className="w-3 h-3 sm:mr-1" />
-              <span className="hidden sm:inline">{isActive ? 'Exit Preview' : 'Preview'}</span>
-            </Button>
-            <button onClick={onToggle}>
-              {expanded ? (
-                <CaretUp className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
-              ) : (
-                <CaretDown className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Day Stops */}
-      {expanded && (
-        <div className="border-t border-border">
-          {/* Starting location on day 1 */}
-          {isFirstDay && startLocation && (
-            <div className="p-4 bg-aquateal/5 border-b border-border">
-              <div className="flex items-start gap-3">
-                <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-aquateal/30 bg-aquateal/20">
-                  <MapPin className="w-4 h-4 text-aquateal" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-medium text-foreground">Start: {startLocation.name}</h4>
-                  <p className="text-sm text-muted-foreground mt-0.5">Trip starting point</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {day.stops.map((stop, index) => {
-            const Icon = getIcon(stop.type);
-            const typeStyles = getTypeStyles(stop.type);
-
-            // Special handling for "no dispersed sites found" marker
-            if (stop.id === 'no-dispersed-found' || stop.note === 'NO_DISPERSED_SITES_FOUND') {
-              return (
-                <div
-                  key={stop.id}
-                  className="p-4 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-100 dark:bg-amber-800/30">
-                      <Warning className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-medium text-amber-800 dark:text-amber-200">No dispersed campsites found</h4>
-                      <p className="text-sm text-amber-700 dark:text-amber-300 mt-0.5">
-                        There are no known dispersed camping spots in this area.
-                      </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-3 border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-300 dark:hover:bg-amber-800/30"
-                        onClick={() => onSwapCampsite(stop)}
-                      >
-                        <Tent className="w-4 h-4 mr-2" />
-                        Search for established campgrounds instead
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-
-            return (
-              <div
-                key={stop.id}
-                className="p-4 hover:bg-secondary/30 transition-colors border-b border-border last:border-b-0 group"
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`flex items-center justify-center w-9 h-9 rounded-lg border ${typeStyles}`}
-                  >
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div
-                        className="cursor-pointer flex-1"
-                        onClick={() => onStopClick(stop)}
-                      >
-                        <h4 className="font-medium text-foreground">{stop.name}</h4>
-                        <p className="text-sm text-muted-foreground mt-0.5">{stop.description}</p>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {stop.type === 'hike' && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSwapHike(stop);
-                            }}
-                            className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
-                            title="Choose different hike"
-                          >
-                            <ArrowsClockwise className="w-4 h-4" weight="bold" />
-                          </button>
-                        )}
-                        {stop.type === 'camp' && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSwapCampsite(stop);
-                            }}
-                            className="p-1.5 rounded-lg hover:bg-wildviolet/10 text-wildviolet transition-colors"
-                            title="Choose different campsite"
-                          >
-                            <ArrowsClockwise className="w-4 h-4" weight="bold" />
-                          </button>
-                        )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onRemoveStop(day.day, stop);
-                          }}
-                          className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
-                          title="Remove stop"
-                        >
-                          <Trash className="w-4 h-4" weight="bold" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {stop.duration}
-                      </span>
-                      {stop.type === 'hike' && estimateTrailLength(stop.duration) && (
-                        <span className="flex items-center gap-1">
-                          <Mountains className="w-3 h-3" />
-                          {estimateTrailLength(stop.duration)}
-                        </span>
-                      )}
-                      {stop.distance && (
-                        <span className="flex items-center gap-1">
-                          <Path className="w-3 h-3" />
-                          {stop.distance}
-                        </span>
-                      )}
-                      {stop.drivingTime && (
-                        <span className="flex items-center gap-1 text-primary">
-                          <NavigationArrow className="w-3 h-3" />
-                          {stop.drivingTime}
-                        </span>
-                      )}
-                      {stop.rating && (
-                        <span className="flex items-center gap-1">
-                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                          {stop.rating.toFixed(1)}
-                        </span>
-                      )}
-                      {stop.type === 'hike' && (
-                        <a
-                          href={getAllTrailsUrl(stop.name, stop.coordinates.lat, stop.coordinates.lng)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 hover:underline"
-                        >
-                          <ArrowSquareOut className="w-3 h-3" />
-                          AllTrails
-                        </a>
-                      )}
-                      {stop.type === 'camp' && stop.bookingUrl && (
-                        <a
-                          href={stop.bookingUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex items-center gap-1 text-wildviolet hover:text-wildviolet/80 hover:underline"
-                        >
-                          <ArrowSquareOut className="w-3 h-3" />
-                          Book Site
-                        </a>
-                      )}
-                      {stop.type === 'camp' && (
-                        <span className="flex items-center gap-1 text-muted-foreground/70">
-                          {stop.id.startsWith('ridb-') ? (
-                            <a
-                              href={`https://www.recreation.gov/camping/campgrounds/${stop.id.replace('ridb-', '')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="hover:text-primary hover:underline"
-                            >
-                              Recreation.gov
-                            </a>
-                          ) : stop.id.startsWith('usfs-') ? (
-                            <a
-                              href={`https://www.google.com/search?q=${encodeURIComponent(stop.name + ' USFS campground')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="hover:text-primary hover:underline"
-                            >
-                              USFS
-                            </a>
-                          ) : stop.id.startsWith('osm-') ? (
-                            <a
-                              href={`https://www.openstreetmap.org/${stop.id.replace('osm-', '')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="hover:text-primary hover:underline"
-                            >
-                              OpenStreetMap
-                            </a>
-                          ) : stop.placeId ? (
-                            <a
-                              href={`https://www.google.com/maps/place/?q=place_id:${stop.placeId}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="hover:text-primary hover:underline"
-                            >
-                              Google Maps
-                            </a>
-                          ) : 'source unknown'}
-                          <span className="text-[10px] opacity-70">
-                            ({stop.coordinates.lat.toFixed(4)}, {stop.coordinates.lng.toFixed(4)})
-                          </span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Ending location on last day if returning to start */}
-          {isLastDay && returnToStart && startLocation && (
-            <div className="p-4 bg-aquateal/5 border-b border-border">
-              <div className="flex items-start gap-3">
-                <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-aquateal/30 bg-aquateal/20">
-                  <MapPin className="w-4 h-4 text-aquateal" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-medium text-foreground">End: {startLocation.name}</h4>
-                  <p className="text-sm text-muted-foreground mt-0.5">Return to starting point</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* View Day Details Link */}
-          <Link
-            to={getDayUrl(tripName, day.day)}
-            className="block p-3 text-center text-sm font-medium text-primary hover:bg-primary/5 transition-colors"
-          >
-            View Day Details →
-          </Link>
-        </div>
-      )}
-    </Card>
-  );
-};
 
 export default TripDetail;
