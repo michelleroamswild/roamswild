@@ -1,13 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
-import { MapPin, MagnifyingGlass, Path, SpinnerGap, TreeEvergreen, Warning, Crosshair, Tent, Drop, MapPinLine, Eye, EyeSlash, Info, Star, NavigationArrow, Car, Jeep, Copy, Check, MapTrifold, CheckCircle, Users, Funnel, ListBullets, Lightning, X } from '@phosphor-icons/react';
+import { MapPin, MagnifyingGlass, Path, SpinnerGap, Tent, Drop, MapPinLine } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Card, CardContent } from '@/components/ui/card';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { GoogleMap } from '@/components/GoogleMap';
-import { Polyline, Marker, Polygon, InfoWindow } from '@react-google-maps/api';
 import { LocationSelector, SelectedLocation } from '@/components/LocationSelector';
 import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
 import { usePublicLands } from '@/hooks/use-public-lands';
@@ -19,141 +13,20 @@ import { useGoogleMaps } from '@/components/GoogleMapsProvider';
 import { Header } from '@/components/Header';
 import { ConfirmSpotDialog } from '@/components/ConfirmSpotDialog';
 import { AddCampsiteModal } from '@/components/AddCampsiteModal';
-import { SpotClusterer } from '@/components/SpotClusterer';
 import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
 import type { Campsite } from '@/types/campsite';
+import { isPointInPolygon, isWithinAnyPublicLand, findContainingLand, isFalseDeadEnd } from '@/utils/dispersedExplorer';
+import { FloatingLegend } from '@/components/dispersed-explorer/FloatingLegend';
+import { MobileViewTabs } from '@/components/dispersed-explorer/MobileViewTabs';
+import { ResultsStatsRow } from '@/components/dispersed-explorer/ResultsStatsRow';
+import { SpotFiltersPanel } from '@/components/dispersed-explorer/SpotFiltersPanel';
+import { SpotResultsList } from '@/components/dispersed-explorer/SpotResultsList';
+import { SpotDetailPanel } from '@/components/dispersed-explorer/SpotDetailPanel';
+import { CampgroundDetailPanel } from '@/components/dispersed-explorer/CampgroundDetailPanel';
+import { UserCampsiteDetailPanel } from '@/components/dispersed-explorer/UserCampsiteDetailPanel';
+import { DispersedMap } from '@/components/dispersed-explorer/DispersedMap';
+import type { UnifiedSpot } from '@/components/dispersed-explorer/types';
 
-// Using SelectedLocation from LocationSelector
-
-// Unified spot type for the combined list
-interface UnifiedSpot {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-  category: 'derived' | 'campground' | 'mine' | 'friend';
-  // For friend's campsites
-  sharedBy?: string;
-  // For derived spots
-  score?: number;
-  spotType?: 'dead-end' | 'camp-site' | 'intersection';
-  reasons?: string[];
-  // For campgrounds
-  reservable?: boolean;
-  facilityType?: string;
-  url?: string;
-  agencyName?: string;
-  // For user campsites
-  campsiteType?: string;
-  // Computed for sorting
-  distance?: number;
-  recScore?: number;
-  isRecommended?: boolean;
-  // Original data reference
-  originalSpot?: PotentialSpot;
-  originalCampground?: EstablishedCampground;
-  originalCampsite?: Campsite;
-}
-
-/**
- * Ray-casting algorithm to check if a point is inside a polygon
- */
-function isPointInPolygon(
-  point: { lat: number; lng: number },
-  polygon: { lat: number; lng: number }[]
-): boolean {
-  if (!polygon || polygon.length < 3) return false;
-
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].lng;
-    const yi = polygon[i].lat;
-    const xj = polygon[j].lng;
-    const yj = polygon[j].lat;
-
-    const intersect =
-      yi > point.lat !== yj > point.lat &&
-      point.lng < ((xj - xi) * (point.lat - yi)) / (yj - yi) + xi;
-
-    if (intersect) inside = !inside;
-  }
-  return inside;
-}
-
-/**
- * Check if a point is within any of the public land polygons
- */
-function isWithinAnyPublicLand(
-  lat: number,
-  lng: number,
-  publicLands: { polygon?: { lat: number; lng: number }[] }[]
-): boolean {
-  return publicLands.some(
-    (land) => land.polygon && isPointInPolygon({ lat, lng }, land.polygon)
-  );
-}
-
-/**
- * Find which public land a point is within and return its name
- */
-function findContainingLand(
-  lat: number,
-  lng: number,
-  publicLands: { name?: string; unitName?: string; managingAgency?: string; polygon?: { lat: number; lng: number }[] }[]
-): { name: string; agency: string } | null {
-  for (const land of publicLands) {
-    if (land.polygon && isPointInPolygon({ lat, lng }, land.polygon)) {
-      // Prefer unitName (e.g., "Manti-La Sal National Forest") over generic name
-      const name = land.unitName || land.name || '';
-      return { name, agency: land.managingAgency || '' };
-    }
-  }
-  return null;
-}
-
-/**
- * Check if a dead-end spot is actually near the interior of another road (false dead-end).
- * This happens when OSM tracks are split into segments that don't share exact coordinates.
- * Matches the logic in use-dispersed-roads.ts findDeadEnds() filter.
- */
-function isFalseDeadEnd(
-  spot: { lat: number; lng: number; type: string },
-  roads: { geometry?: { type: string; coordinates: [number, number][] } }[]
-): boolean {
-  if (spot.type !== 'dead-end') return false;
-
-  // Use the same threshold as client-side: ~12 meters
-  const INTERSECTION_THRESHOLD = 0.00012;
-
-  for (const road of roads) {
-    if (!road.geometry?.coordinates?.length) continue;
-    const coords = road.geometry.coordinates;
-
-    // Skip roads with fewer than 5 points (too short to reliably detect "interior")
-    if (coords.length < 5) continue;
-
-    // Check if spot is near road's endpoints (which would be a legitimate junction)
-    const startPt = { lng: coords[0][0], lat: coords[0][1] };
-    const endPt = { lng: coords[coords.length - 1][0], lat: coords[coords.length - 1][1] };
-
-    const distToStart = Math.abs(spot.lat - startPt.lat) + Math.abs(spot.lng - startPt.lng);
-    if (distToStart < INTERSECTION_THRESHOLD * 2) continue; // Near start endpoint - legitimate
-
-    const distToEnd = Math.abs(spot.lat - endPt.lat) + Math.abs(spot.lng - endPt.lng);
-    if (distToEnd < INTERSECTION_THRESHOLD * 2) continue; // Near end endpoint - legitimate
-
-    // Check interior points only (skip first 2 and last 2 points to avoid endpoint proximity)
-    for (let i = 2; i < coords.length - 2; i++) {
-      const pt = { lng: coords[i][0], lat: coords[i][1] };
-      const latDiff = Math.abs(spot.lat - pt.lat);
-      const lngDiff = Math.abs(spot.lng - pt.lng);
-      if (latDiff < INTERSECTION_THRESHOLD && lngDiff < INTERSECTION_THRESHOLD) {
-        return true; // This dead-end is near the interior of another road - it's a false dead-end
-      }
-    }
-  }
-  return false;
-}
 
 const DispersedExplorer = () => {
   const { isLoaded } = useGoogleMaps();
@@ -193,6 +66,7 @@ const DispersedExplorer = () => {
     confidenceNote?: string;
   } | null>(null);
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [aiCheckingCache, setAiCheckingCache] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const analysisCache = useRef<Map<string, typeof aiAnalysis>>(new Map());
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -345,6 +219,52 @@ const DispersedExplorer = () => {
       setExistingCampsiteForSpot(null);
     }
   }, [selectedSpot, findExistingExplorerSpot]);
+
+  // Load cached AI analysis when a spot is selected
+  useEffect(() => {
+    if (!selectedSpot) {
+      setAiAnalysis(null);
+      setAiError(null);
+      setAiCheckingCache(false);
+      return;
+    }
+
+    const cacheKey = `${selectedSpot.lat.toFixed(5)},${selectedSpot.lng.toFixed(5)}`;
+    const cached = analysisCache.current.get(cacheKey);
+    if (cached) {
+      setAiAnalysis(cached);
+      setAiError(null);
+      setAiCheckingCache(false);
+      return;
+    }
+
+    setAiAnalysis(null);
+    setAiError(null);
+    setAiCheckingCache(true);
+
+    let cancelled = false;
+    const eps = 0.00001;
+    supabase
+      .from('spot_analyses')
+      .select('analysis')
+      .gte('lat', selectedSpot.lat - eps)
+      .lte('lat', selectedSpot.lat + eps)
+      .gte('lng', selectedSpot.lng - eps)
+      .lte('lng', selectedSpot.lng + eps)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (data?.analysis) {
+          setAiAnalysis(data.analysis);
+          analysisCache.current.set(cacheKey, data.analysis);
+        }
+        setAiCheckingCache(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [selectedSpot]);
 
   // Helper to check if a point is within a restricted area
   // Restricted: National Parks, State Parks, Tribal Lands
@@ -1000,28 +920,6 @@ const DispersedExplorer = () => {
   }, [filteredPotentialSpots, allEstablishedCampgrounds, campsites, friendsCampsites, showCampgroundsFiltered, showMyCampsites, showMyCampsitesFiltered, showFriendsCampsites, getFriendById, searchLocation, topRecommendations, sortBy]);
 
   // Helper to get icon for unified spot based on category and type
-  const getUnifiedSpotIcon = (spot: UnifiedSpot) => {
-    if (spot.category === 'campground') {
-      return <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />;
-    }
-    if (spot.category === 'mine') {
-      return <Tent className="w-3.5 h-3.5 text-wildviolet flex-shrink-0" weight="fill" />;
-    }
-    if (spot.category === 'friend') {
-      return <Users className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" weight="fill" />;
-    }
-    // Derived spots - color based on confidence
-    if (spot.spotType === 'camp-site') {
-      return <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#3d7a40' }} />;
-    }
-    if (spot.score && spot.score >= 35) {
-      return <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#eab308' }} />;
-    }
-    if (spot.score && spot.score >= 25) {
-      return <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#f97316' }} />;
-    }
-    return <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#e83a3a' }} />;
-  };
 
   // Fetch actual driving distances from OSRM for top recommendations
   useEffect(() => {
@@ -1095,6 +993,17 @@ const DispersedExplorer = () => {
   }, []);
 
   const onMapClick = useCallback((e: google.maps.MapMouseEvent) => {
+    // If a pin is currently selected, treat a map click as "dismiss selection"
+    // and don't trigger a new search.
+    if (selectedSpot || selectedCampground || selectedCampsite) {
+      setSelectedSpot(null);
+      setSelectedCampground(null);
+      setSelectedCampsite(null);
+      setAiAnalysis(null);
+      setAiError(null);
+      setSelectedRoad(null);
+      return;
+    }
     if (e.latLng) {
       const lat = e.latLng.lat();
       const lng = e.latLng.lng();
@@ -1106,11 +1015,8 @@ const DispersedExplorer = () => {
       });
       setRecommendationPage(0); // Reset recommendations on new search
       setSelectedRoad(null);
-      setSelectedSpot(null);
-      setSelectedCampground(null);
-      setSelectedCampsite(null);
     }
-  }, []);
+  }, [selectedSpot, selectedCampground, selectedCampsite]);
 
   // Color coding for road types
   const getMVUMColor = (road: MVUMRoad) => {
@@ -1213,13 +1119,90 @@ const DispersedExplorer = () => {
     }
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 35) return 'text-amber-800 bg-amber-100 dark:text-amber-300 dark:bg-amber-900/30';
-    if (score >= 25) return 'text-orange-800 bg-orange-100 dark:text-orange-300 dark:bg-orange-900/30';
-    return 'text-red-800 bg-red-100 dark:text-red-300 dark:bg-red-900/30';
-  };
 
   const totalRoads = mvumRoads.length + osmTracks.length;
+
+  const runSpotAnalysis = async (force: boolean = false) => {
+    if (!selectedSpot) return;
+    if (aiAnalysis && !force) return;
+    if (force) {
+      setAiAnalysis(null);
+      setAiError(null);
+    }
+    setAiAnalyzing(true);
+    setAiError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-campsite', {
+        body: {
+          lat: selectedSpot.lat,
+          lng: selectedSpot.lng,
+          name: selectedSpot.name,
+          type: selectedSpot.type,
+          score: selectedSpot.score,
+          reasons: selectedSpot.reasons,
+          source: selectedSpot.source,
+          roadName: selectedSpot.roadName,
+          isOnPublicLand: selectedSpot.isOnPublicLand,
+          passengerReachable: selectedSpot.passengerReachable,
+          highClearanceReachable: selectedSpot.highClearanceReachable,
+          highClearance: selectedSpot.highClearance,
+          ...(force && { force: true }),
+        },
+      });
+      if (error) throw error;
+      setAiAnalysis(data.analysis);
+      analysisCache.current.set(`${selectedSpot.lat.toFixed(5)},${selectedSpot.lng.toFixed(5)}`, data.analysis);
+    } catch (err: unknown) {
+      setAiError(err instanceof Error ? err.message : 'Analysis failed');
+    } finally {
+      setAiAnalyzing(false);
+    }
+  };
+
+  const copySpotCoords = () => {
+    if (!selectedSpot) return;
+    navigator.clipboard.writeText(`${selectedSpot.lat.toFixed(5)}, ${selectedSpot.lng.toFixed(5)}`);
+    setCopiedCoords(true);
+    setTimeout(() => setCopiedCoords(false), 2000);
+  };
+
+  const clearAllSelections = () => {
+    setSelectedSpot(null);
+    setSelectedCampground(null);
+    setSelectedCampsite(null);
+    setAiAnalysis(null);
+    setAiError(null);
+  };
+
+  useEffect(() => {
+    if (selectedSpot || selectedCampground || selectedCampsite) {
+      setMobileView('list');
+    }
+  }, [selectedSpot, selectedCampground, selectedCampsite]);
+
+  const handleUnifiedSpotClick = (spot: UnifiedSpot) => {
+    if (spot.category === 'derived' && spot.originalSpot) {
+      setSelectedSpot(spot.originalSpot);
+      setSelectedCampground(null);
+      setSelectedCampsite(null);
+      // Cache lookup handled by useEffect on selectedSpot change
+    } else if (spot.category === 'campground' && spot.originalCampground) {
+      setSelectedCampground(spot.originalCampground);
+      setSelectedSpot(null);
+      setSelectedCampsite(null);
+    } else if (spot.category === 'mine' && spot.originalCampsite) {
+      setSelectedCampsite(spot.originalCampsite);
+      setSelectedSpot(null);
+      setSelectedCampground(null);
+    } else if (spot.category === 'friend' && spot.originalCampsite) {
+      setSelectedCampsite(spot.originalCampsite);
+      setSelectedSpot(null);
+      setSelectedCampground(null);
+    }
+    setSelectedRoad(null);
+    setMapCenter({ lat: spot.lat, lng: spot.lng });
+    setMapZoom(15);
+  };
 
   // Helper to safely convert coordinates to LatLng, filtering out invalid ones
   const toLatLngPath = (coordinates: any[]): google.maps.LatLngLiteral[] => {
@@ -1258,1538 +1241,157 @@ const DispersedExplorer = () => {
               onMapClickHint={false}
               compact={true}
             />
-        <div className="flex border-b border-border">
-          <button
-            onClick={() => setMobileView('list')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-sm font-medium transition-colors ${
-              mobileView === 'list'
-                ? 'text-foreground border-b-2 border-primary'
-                : 'text-muted-foreground'
-            }`}
-          >
-            <ListBullets className="w-4 h-4" />
-            List
-          </button>
-          <button
-            onClick={() => setMobileView('map')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-sm font-medium transition-colors ${
-              mobileView === 'map'
-                ? 'text-foreground border-b-2 border-primary'
-                : 'text-muted-foreground'
-            }`}
-          >
-            <MapTrifold className="w-4 h-4" />
-            Map
-          </button>
-        </div>
+        <MobileViewTabs mobileView={mobileView} onChange={setMobileView} />
       </div>
 
-      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-2 overflow-hidden">
+      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[13fr_7fr] overflow-hidden">
         {/* Map - Left side on desktop, toggled on mobile */}
         <div className={`order-2 lg:order-1 lg:h-full relative ${mobileView === 'map' ? 'flex-1' : 'hidden lg:block'}`}>
-          <GoogleMap
-            center={mapCenter}
-            zoom={mapZoom}
-            className="w-full h-full"
-            onLoad={onMapLoad}
-            onClick={onMapClick}
-            options={{
-              mapTypeId: 'hybrid',
-              mapTypeControl: true,
-              mapTypeControlOptions: {
-                position: typeof google !== 'undefined' ? google.maps.ControlPosition?.TOP_RIGHT : undefined,
-              },
+          <DispersedMap
+            mapRef={mapRef}
+            mapCenter={mapCenter}
+            mapZoom={mapZoom}
+            onMapLoad={onMapLoad}
+            onMapClick={onMapClick}
+            searchLocation={searchLocation}
+            showPublicLands={showPublicLands}
+            publicLands={publicLands}
+            filteredMvumRoads={filteredMvumRoads}
+            filteredOsmTracks={filteredOsmTracks}
+            selectedRoad={selectedRoad}
+            onSelectRoad={setSelectedRoad}
+            filteredPotentialSpots={filteredPotentialSpots}
+            selectedSpot={selectedSpot}
+            onSpotClusterClick={(spot) => {
+              setSelectedSpot(spot);
+              setSelectedRoad(null);
+              setSelectedCampground(null);
+              setSelectedCampsite(null);
+              setCopiedCoords(false);
+              // Cache lookup handled by useEffect on selectedSpot change
             }}
-          >
-            {/* Search location marker */}
-            {searchLocation && (
-              <Marker
-                position={{ lat: searchLocation.lat, lng: searchLocation.lng }}
-                title={searchLocation.name}
-              />
-            )}
+            getSpotMarkerIcon={getSpotMarkerIcon}
+            showCampgroundsFiltered={showCampgroundsFiltered}
+            allEstablishedCampgrounds={allEstablishedCampgrounds}
+            selectedCampground={selectedCampground}
+            onSelectCampground={(cg) => {
+              setSelectedCampground(cg);
+              setSelectedSpot(null);
+              setSelectedRoad(null);
+              setSelectedCampsite(null);
+            }}
+            showMyCampsites={showMyCampsites}
+            showMyCampsitesFiltered={showMyCampsitesFiltered}
+            campsites={campsites}
+            selectedCampsite={selectedCampsite}
+            onSelectCampsite={(cs) => {
+              setSelectedCampsite(cs);
+              setSelectedSpot(null);
+              setSelectedRoad(null);
+              setSelectedCampground(null);
+            }}
+            onCloseSelection={clearAllSelections}
+            mapTapPoint={mapTapPoint}
+            onDismissMapTap={() => setMapTapPoint(null)}
+            onOpenSaveFromMap={() => setSaveFromMapOpen(true)}
+          />
 
-            {/* Public Lands Overlay (BLM, USFS, etc.) */}
-            {/* Note: Large polygons (renderOnMap=false) are skipped for rendering but still used for filtering */}
-            {showPublicLands && publicLands.map((land) => {
-              if (!land.polygon) return null;
-              // Skip very large polygons to avoid performance issues
-              // These are still used for point-in-polygon filtering
-              if (!land.renderOnMap) return null;
-
-              // Different colors for different agencies
-              const isBLM = land.managingAgency === 'BLM';
-              const isNPS = land.managingAgency === 'NPS';
-              const isState = land.managingAgency === 'STATE';
-              // State trust lands (SDOL=State Dept of Lands, SFW=State Fish & Wildlife, etc.)
-              const isStateTrust = ['SDOL', 'SFW', 'SPR', 'SDNR'].includes(land.managingAgency);
-              // Land trusts (NGO = Mojave Desert Land Trust, etc.)
-              const isLandTrust = land.managingAgency === 'NGO';
-              // orange for BLM, purple for NPS, blue for State Parks, cyan for State Trust, pink for Land Trust, green for USFS
-              const fillColor = isBLM ? '#d97706' : isNPS ? '#7c3aed' : isState ? '#3b82f6' : isStateTrust ? '#06b6d4' : isLandTrust ? '#ec4899' : '#10b981';
-              const strokeColor = isBLM ? '#b45309' : isNPS ? '#6d28d9' : isState ? '#2563eb' : isStateTrust ? '#0891b2' : isLandTrust ? '#db2777' : '#059669';
-
-              return (
-                <Polygon
-                  key={land.id}
-                  paths={land.polygon}
-                  options={{
-                    fillColor,
-                    fillOpacity: 0.25,
-                    strokeColor,
-                    strokeOpacity: 0.7,
-                    strokeWeight: 2,
-                    clickable: false,
-                    zIndex: 1,
-                  }}
-                />
-              );
-            })}
-
-            {/* MVUM Roads */}
-            {filteredMvumRoads.map((road) => {
-              const path = toLatLngPath(road.geometry?.coordinates);
-              if (path.length < 2) return null;
-              return (
-                <Polyline
-                  key={`mvum-${road.id}`}
-                  path={path}
-                  options={{
-                    strokeColor: getMVUMColor(road),
-                    strokeOpacity: selectedRoad === road ? 1 : 0.7,
-                    strokeWeight: selectedRoad === road ? 4 : 2,
-                    clickable: true,
-                    zIndex: selectedRoad === road ? 100 : 10,
-                  }}
-                  onClick={() => setSelectedRoad(road)}
-                />
-              );
-            })}
-
-            {/* OSM Tracks */}
-            {filteredOsmTracks.map((track, index) => {
-              const path = toLatLngPath(track.geometry?.coordinates);
-              if (path.length < 2) return null;
-              return (
-                <Polyline
-                  key={`osm-${track.id}-${index}`}
-                  path={path}
-                  options={{
-                    strokeColor: getOSMColor(track),
-                    strokeOpacity: selectedRoad === track ? 1 : 0.7,
-                    strokeWeight: selectedRoad === track ? 4 : 2,
-                    clickable: true,
-                    zIndex: selectedRoad === track ? 100 : 10,
-                  }}
-                  onClick={() => setSelectedRoad(track)}
-                />
-              );
-            })}
-
-            {/* Road Info Window */}
-            {selectedRoad && (() => {
-              const path = toLatLngPath(selectedRoad.geometry?.coordinates);
-              if (path.length === 0) return null;
-              // Get center point of the road
-              const centerIndex = Math.floor(path.length / 2);
-              const centerPoint = path[centerIndex];
-              const isMVUM = 'highClearanceVehicle' in selectedRoad;
-
-              return (
-                <InfoWindow
-                  position={centerPoint}
-                  onCloseClick={() => setSelectedRoad(null)}
-                >
-                  <div className="p-1 min-w-[200px] max-w-[280px]">
-                    {isMVUM ? (
-                      <>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="font-semibold text-sm">{selectedRoad.name}</span>
-                          <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium">USFS</span>
-                        </div>
-                        <div className="space-y-1 text-xs text-gray-600">
-                          <p><span className="font-medium">Surface:</span> {selectedRoad.surfaceType}</p>
-                          <p><span className="font-medium">Maintenance:</span> {selectedRoad.operationalMaintLevel}</p>
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {selectedRoad.passengerVehicle && (
-                              <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">Passenger</span>
-                            )}
-                            {selectedRoad.highClearanceVehicle && (
-                              <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px]">High Clearance</span>
-                            )}
-                            {selectedRoad.atv && (
-                              <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-[10px]">ATV</span>
-                            )}
-                            {selectedRoad.motorcycle && (
-                              <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-[10px]">Motorcycle</span>
-                            )}
-                          </div>
-                          {selectedRoad.seasonal && (
-                            <p className="text-[10px] text-gray-500 mt-1">Seasonal: {selectedRoad.seasonal}</p>
-                          )}
-                        </div>
-                        <p className="text-[9px] text-gray-400 mt-2 pt-1 border-t border-gray-200">
-                          Source: USFS Motor Vehicle Use Map
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="font-semibold text-sm">{selectedRoad.name || 'Unnamed Track'}</span>
-                          <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">OSM</span>
-                        </div>
-                        <div className="space-y-1 text-xs text-gray-600">
-                          <p><span className="font-medium">Type:</span> {selectedRoad.highway}</p>
-                          {selectedRoad.surface && (
-                            <p><span className="font-medium">Surface:</span> {selectedRoad.surface}</p>
-                          )}
-                          {selectedRoad.tracktype && (
-                            <p><span className="font-medium">Grade:</span> {selectedRoad.tracktype}
-                              <span className="text-gray-500 ml-1">
-                                ({selectedRoad.tracktype === 'grade1' ? 'paved' :
-                                  selectedRoad.tracktype === 'grade2' ? 'gravel' :
-                                  selectedRoad.tracktype === 'grade3' ? 'high clearance' :
-                                  selectedRoad.tracktype === 'grade4' ? '4WD likely' :
-                                  selectedRoad.tracktype === 'grade5' ? '4WD required' : ''})
-                              </span>
-                            </p>
-                          )}
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {selectedRoad.fourWdOnly && (
-                              <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-[10px]">4WD Only</span>
-                            )}
-                            {selectedRoad.access && (
-                              <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-[10px]">{selectedRoad.access}</span>
-                            )}
-                          </div>
-                        </div>
-                        <p className="text-[9px] text-gray-400 mt-2 pt-1 border-t border-gray-200">
-                          <a href={`https://www.openstreetmap.org/way/${selectedRoad.id}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                            View on OSM
-                          </a>
-                          <span className="mx-1">•</span>
-                          Verify conditions before travel
-                        </p>
-                      </>
-                    )}
-                  </div>
-                </InfoWindow>
-              );
-            })()}
-
-            {/* Potential Camp Spots with Clustering */}
-            <SpotClusterer
-              map={mapRef.current}
-              spots={filteredPotentialSpots}
-              onSpotClick={(spot) => {
-                setSelectedSpot(spot);
-                setSelectedRoad(null);
-                setSelectedCampground(null);
-                setSelectedCampsite(null);
-                setCopiedCoords(false);
-                setAiError(null);
-                // Check local cache first, then DB
-                const cacheKey = `${spot.lat.toFixed(5)},${spot.lng.toFixed(5)}`;
-                const cached = analysisCache.current.get(cacheKey);
-                if (cached) {
-                  setAiAnalysis(cached);
-                } else {
-                  setAiAnalysis(null);
-                  // Query DB cache directly (fast, no Gemini call)
-                  const eps = 0.00001;
-                  supabase
-                    .from('spot_analyses')
-                    .select('analysis')
-                    .gte('lat', spot.lat - eps)
-                    .lte('lat', spot.lat + eps)
-                    .gte('lng', spot.lng - eps)
-                    .lte('lng', spot.lng + eps)
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .maybeSingle()
-                    .then(({ data }) => {
-                      if (data?.analysis) {
-                        setAiAnalysis(data.analysis);
-                        analysisCache.current.set(cacheKey, data.analysis);
-                      }
-                    });
-                }
-              }}
-              selectedSpot={selectedSpot}
-              getMarkerIcon={getSpotMarkerIcon}
-            />
-
-
-            {/* Established Campgrounds */}
-            {showCampgroundsFiltered && allEstablishedCampgrounds
-              .filter((cg) => isFinite(cg.lat) && isFinite(cg.lng))
-              .map((cg) => (
-              <Marker
-                key={cg.id}
-                position={{ lat: cg.lat, lng: cg.lng }}
-                title={cg.name}
-                icon={{
-                  path: google.maps.SymbolPath.CIRCLE,
-                  fillColor: '#3b82f6', // blue-500
-                  fillOpacity: 1,
-                  strokeColor: selectedCampground === cg ? '#1e3a8a' : '#ffffff',
-                  strokeWeight: selectedCampground === cg ? 2 : 1,
-                  scale: selectedCampground === cg ? 10 : 8,
-                }}
-                onClick={() => {
-                  setSelectedCampground(cg);
-                  setSelectedSpot(null);
-                  setSelectedRoad(null);
-                  setSelectedCampsite(null);
-                }}
-                zIndex={selectedCampground === cg ? 1001 : 500}
-              />
-            ))}
-
-            {/* User's Saved Campsites */}
-            {showMyCampsites && showMyCampsitesFiltered && campsites
-              .filter((cs) => isFinite(cs.lat) && isFinite(cs.lng))
-              .map((cs) => (
-              <Marker
-                key={`my-${cs.id}`}
-                position={{ lat: cs.lat, lng: cs.lng }}
-                title={cs.name}
-                icon={createSimpleMarkerIcon('camp', {
-                  isActive: selectedCampsite?.id === cs.id,
-                  size: selectedCampsite?.id === cs.id ? 10 : 8
-                })}
-                onClick={() => {
-                  setSelectedCampsite(cs);
-                  setSelectedSpot(null);
-                  setSelectedRoad(null);
-                  setSelectedCampground(null);
-                }}
-                zIndex={selectedCampsite?.id === cs.id ? 1002 : 600}
-              />
-            ))}
-
-            {/* Info window for selected user campsite */}
-            {selectedCampsite && (
-              <InfoWindow
-                position={{ lat: selectedCampsite.lat, lng: selectedCampsite.lng }}
-                onCloseClick={() => setSelectedCampsite(null)}
-                options={{ pixelOffset: new google.maps.Size(0, -32) }}
-              >
-                <div className="min-w-[200px] max-w-[260px]">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <h4 className="font-semibold text-gray-900 text-sm leading-tight">
-                      {selectedCampsite.name}
-                    </h4>
-                    <span className="flex-shrink-0 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium">
-                      My Spot
-                    </span>
-                  </div>
-                  {selectedCampsite.description && (
-                    <p className="text-gray-600 text-xs mb-2 line-clamp-2">{selectedCampsite.description}</p>
-                  )}
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {selectedCampsite.roadAccess && (
-                      <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px] font-medium">
-                        {selectedCampsite.roadAccess === '2wd' ? '2WD OK' : selectedCampsite.roadAccess.toUpperCase()}
-                      </span>
-                    )}
-                    {selectedCampsite.waterAvailable && (
-                      <span className="px-1.5 py-0.5 bg-cyan-100 text-cyan-700 rounded text-[10px] font-medium">Water</span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => {
-                      window.open(
-                        `https://www.google.com/maps/search/?api=1&query=${selectedCampsite.lat},${selectedCampsite.lng}`,
-                        '_blank'
-                      );
-                    }}
-                    className="w-full px-2 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
-                  >
-                    Open Map
-                  </button>
-                </div>
-              </InfoWindow>
-            )}
-
-            {/* Info window for map tap - save any location */}
-            {mapTapPoint && !selectedSpot && !selectedRoad && !selectedCampground && !selectedCampsite && (
-              <InfoWindow
-                position={mapTapPoint}
-                onCloseClick={() => setMapTapPoint(null)}
-              >
-                <div className="min-w-[180px]">
-                  <p className="text-xs text-gray-500 mb-2 font-mono">
-                    {mapTapPoint.lat.toFixed(5)}, {mapTapPoint.lng.toFixed(5)}
-                  </p>
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => setSaveFromMapOpen(true)}
-                      className="flex-1 px-2 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded hover:bg-emerald-700 transition-colors"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => {
-                        window.open(
-                          `https://www.google.com/maps/search/?api=1&query=${mapTapPoint.lat},${mapTapPoint.lng}`,
-                          '_blank'
-                        );
-                      }}
-                      className="flex-1 px-2 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
-                    >
-                      Open Map
-                    </button>
-                  </div>
-                </div>
-              </InfoWindow>
-            )}
-          </GoogleMap>
-
-          {/* Floating Spot Detail Card */}
-          {selectedSpot && (
-            <div className="absolute top-3 right-3 w-80 max-h-[calc(100%-1.5rem)] overflow-y-auto bg-background border border-border rounded-xl shadow-2xl z-20">
-              {/* Header */}
-              <div className="sticky top-0 bg-background border-b px-3 py-2.5 flex items-start justify-between rounded-t-xl">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    {selectedSpot.type === 'camp-site' ? (
-                      <Tent className="w-4 h-4 text-wildviolet shrink-0" />
-                    ) : selectedSpot.type === 'dead-end' ? (
-                      <MapPinLine className="w-4 h-4 text-orange-600 shrink-0" weight="fill" />
-                    ) : (
-                      <Path className="w-4 h-4 text-blue-600 shrink-0" />
-                    )}
-                    <h3 className="font-bold text-sm truncate">{selectedSpot.name || 'Unnamed Spot'}</h3>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
-                      {selectedSpot.type === 'camp-site' ? 'Known Campsite' :
-                       selectedSpot.type === 'dead-end' ? 'Road Terminus' : 'Road Junction'}
-                    </span>
-                    <span className="text-xs text-muted-foreground">Score: {selectedSpot.score}/50</span>
-                  </div>
-                </div>
-                <button onClick={() => { setSelectedSpot(null); setAiAnalysis(null); setAiError(null); }} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Spot Info */}
-              <div className="px-3 py-2.5 space-y-2.5 border-b">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono text-muted-foreground">{selectedSpot.lat.toFixed(5)}, {selectedSpot.lng.toFixed(5)}</span>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${selectedSpot.lat},${selectedSpot.lng}`, '_blank')} className="text-muted-foreground hover:text-foreground transition-colors" title="Open in Google Maps">
-                      <MapPin className="w-3.5 h-3.5" weight="fill" />
-                    </button>
-                    <button onClick={() => { navigator.clipboard.writeText(`${selectedSpot.lat.toFixed(5)}, ${selectedSpot.lng.toFixed(5)}`); setCopiedCoords(true); setTimeout(() => setCopiedCoords(false), 2000); }} className="text-muted-foreground hover:text-foreground transition-colors" title="Copy coordinates">
-                      {copiedCoords ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {selectedSpot.isOnMVUMRoad && <span className="px-2 py-0.5 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full text-[10px] font-medium">USFS MVUM</span>}
-                  {selectedSpot.isOnBLMRoad && <span className="px-2 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded-full text-[10px] font-medium">BLM</span>}
-                  {selectedSpot.isOnPublicLand && !selectedSpot.isOnMVUMRoad && !selectedSpot.isOnBLMRoad && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 rounded-full text-[10px] font-medium">Public Land</span>}
-                  {selectedSpot.passengerReachable && <span className="px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 rounded-full text-[10px] font-medium flex items-center gap-0.5"><Car className="w-3 h-3" /> Passenger</span>}
-                  {selectedSpot.highClearanceReachable && !selectedSpot.passengerReachable && <span className="px-2 py-0.5 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full text-[10px] font-medium flex items-center gap-0.5"><Jeep className="w-3 h-3" /> High Clearance</span>}
-                  {selectedSpot.roadName && <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded-full text-[10px]">{selectedSpot.roadName}</span>}
-                </div>
-                {selectedSpot.reasons.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {selectedSpot.reasons.map((reason, i) => <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{reason}</span>)}
-                  </div>
-                )}
-                {existingCampsiteForSpot && (
-                  <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
-                    <Users className="w-3.5 h-3.5" />
-                    <span className="text-xs font-medium">{existingCampsiteForSpot.confirmationCount} confirmed</span>
-                    {existingCampsiteForSpot.isConfirmed && <span className="flex items-center gap-0.5 text-[10px]"><CheckCircle className="w-3 h-3" /> Verified</span>}
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="px-3 py-2 border-b">
-                <div className="flex gap-1.5">
-                  <Button variant="outline" size="sm" className="flex-1 text-[10px] h-7" disabled={aiAnalyzing} onClick={async () => {
-                    if (aiAnalysis) return;
-                    setAiAnalyzing(true); setAiError(null);
-                    try {
-                      const { data, error } = await supabase.functions.invoke('analyze-campsite', { body: { lat: selectedSpot.lat, lng: selectedSpot.lng, name: selectedSpot.name, type: selectedSpot.type, score: selectedSpot.score, reasons: selectedSpot.reasons, source: selectedSpot.source, roadName: selectedSpot.roadName, isOnPublicLand: selectedSpot.isOnPublicLand, passengerReachable: selectedSpot.passengerReachable, highClearanceReachable: selectedSpot.highClearanceReachable, highClearance: selectedSpot.highClearance, } });
-                      if (error) throw error;
-                      setAiAnalysis(data.analysis); analysisCache.current.set(`${selectedSpot.lat.toFixed(5)},${selectedSpot.lng.toFixed(5)}`, data.analysis);
-                    } catch (err: unknown) { setAiError(err instanceof Error ? err.message : 'Analysis failed'); } finally { setAiAnalyzing(false); }
-                  }}>
-                    {aiAnalyzing ? <SpinnerGap className="w-3 h-3 animate-spin mr-1" /> : <Lightning className="w-3 h-3 mr-1" weight="fill" />}
-                    {aiAnalysis ? 'Analyzed' : aiAnalyzing ? 'Analyzing...' : 'Analyze'}
-                  </Button>
-                  <Button variant="default" size="sm" className="flex-1 text-[10px] h-7" onClick={() => setConfirmDialogOpen(true)}>
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                    {existingCampsiteForSpot ? 'Confirmed' : 'Confirm'}
-                  </Button>
-                </div>
-              </div>
-
-              {/* AI Analysis Results */}
-              <div className="px-3 py-2.5">
-                {!aiAnalysis && !aiAnalyzing && !aiError && <p className="text-[10px] text-muted-foreground text-center">Tap Analyze to get an AI assessment of this spot</p>}
-                {aiAnalyzing && !aiAnalysis && (
-                  <div className="flex flex-col items-center py-3 text-muted-foreground">
-                    <SpinnerGap className="w-5 h-5 animate-spin mb-1.5" />
-                    <span className="text-xs font-medium">Analyzing satellite imagery...</span>
-                  </div>
-                )}
-                {aiError && (
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-destructive">{aiError}</p>
-                    <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setAiError(null)}>Retry</Button>
-                  </div>
-                )}
-                {aiAnalysis && (
-                  <div className="space-y-2.5">
-                    <div className={`p-3 rounded-xl border-2 ${
-                      aiAnalysis.campabilityScore >= 70 ? 'border-green-300 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 dark:border-green-700' :
-                      aiAnalysis.campabilityScore >= 50 ? 'border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 dark:border-amber-700' :
-                      aiAnalysis.campabilityScore >= 30 ? 'border-orange-300 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 dark:border-orange-700' :
-                      'border-red-300 bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 dark:border-red-700'
-                    }`}>
-                      <div className="flex items-center gap-3">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0 ${
-                          aiAnalysis.campabilityScore >= 70 ? 'bg-green-500' : aiAnalysis.campabilityScore >= 50 ? 'bg-amber-500' : aiAnalysis.campabilityScore >= 30 ? 'bg-orange-500' : 'bg-red-500'
-                        }`}>{aiAnalysis.campabilityScore}</div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold">{aiAnalysis.campabilityScore >= 70 ? 'Great Campsite' : aiAnalysis.campabilityScore >= 50 ? 'Decent Spot' : aiAnalysis.campabilityScore >= 30 ? 'Marginal' : 'Not Recommended'}</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">AI Assessment • {aiAnalysis.confidence} confidence</p>
-                        </div>
-                      </div>
-                      <p className="text-xs leading-relaxed mt-2">{aiAnalysis.summary}</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {[
-                        { label: 'Ground', icon: <Crosshair className="w-3 h-3" />, data: aiAnalysis.ground },
-                        { label: 'Access', icon: <Path className="w-3 h-3" />, data: aiAnalysis.access },
-                        { label: 'Cover', icon: <TreeEvergreen className="w-3 h-3" />, data: aiAnalysis.cover },
-                        { label: 'Hazards', icon: <Warning className="w-3 h-3" />, data: aiAnalysis.hazards },
-                      ].map(({ label, icon, data }) => (
-                        <div key={label} className={`p-2 rounded-lg ${
-                          data.rating === 'good' || data.rating === 'none' ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' :
-                          data.rating === 'fair' || data.rating === 'minor' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' :
-                          data.rating === 'poor' || data.rating === 'moderate' || data.rating === 'significant' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300' :
-                          'bg-muted text-muted-foreground'
-                        }`}>
-                          <div className="flex items-center gap-1 mb-0.5">{icon}<span className="text-[10px] font-semibold uppercase">{label}</span></div>
-                          <p className="text-[10px] leading-snug">{data.detail}</p>
-                        </div>
-                      ))}
-                    </div>
-                    {aiAnalysis.trail && (
-                      <div className={`p-2 rounded-lg ${
-                        aiAnalysis.trail.rating === 'easy' ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' :
-                        aiAnalysis.trail.rating === 'moderate' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' :
-                        aiAnalysis.trail.rating === 'difficult' || aiAnalysis.trail.rating === 'extreme' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300' :
-                        'bg-muted text-muted-foreground'
-                      }`}>
-                        <div className="flex items-center gap-1 mb-0.5"><Path className="w-3 h-3" /><span className="text-[10px] font-semibold uppercase">Trail</span><span className="text-[10px] font-medium ml-auto capitalize">{aiAnalysis.trail.rating}</span></div>
-                        <p className="text-[10px] leading-snug">{aiAnalysis.trail.detail}</p>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 px-2 py-1.5 bg-primary/5 rounded-lg">
-                      <Tent className="w-3.5 h-3.5 text-primary shrink-0" />
-                      <p className="text-xs font-medium">{aiAnalysis.bestUse}</p>
-                    </div>
-                    <Button variant="ghost" size="sm" className="w-full text-[10px] h-6" onClick={async () => {
-                      setAiAnalysis(null); setAiError(null); setAiAnalyzing(true);
-                      try {
-                        const { data, error } = await supabase.functions.invoke('analyze-campsite', { body: { lat: selectedSpot.lat, lng: selectedSpot.lng, name: selectedSpot.name, type: selectedSpot.type, score: selectedSpot.score, reasons: selectedSpot.reasons, source: selectedSpot.source, roadName: selectedSpot.roadName, isOnPublicLand: selectedSpot.isOnPublicLand, passengerReachable: selectedSpot.passengerReachable, highClearanceReachable: selectedSpot.highClearanceReachable, highClearance: selectedSpot.highClearance, force: true } });
-                        if (error) throw error;
-                        setAiAnalysis(data.analysis); analysisCache.current.set(`${selectedSpot.lat.toFixed(5)},${selectedSpot.lng.toFixed(5)}`, data.analysis);
-                      } catch (err: unknown) { setAiError(err instanceof Error ? err.message : 'Analysis failed'); } finally { setAiAnalyzing(false); }
-                    }}>Re-analyze</Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Floating Campground Detail Card */}
-          {selectedCampground && (
-            <div className="absolute top-3 right-3 w-80 bg-background border border-border rounded-xl shadow-2xl z-20">
-              <div className="px-3 py-2.5 flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-sm truncate">{selectedCampground.name}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 font-medium">{selectedCampground.facilityType}</span>
-                    {selectedCampground.agencyName && <span className="text-xs text-muted-foreground">{selectedCampground.agencyName}</span>}
-                  </div>
-                </div>
-                <button onClick={() => setSelectedCampground(null)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="px-3 pb-2.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono text-muted-foreground">{selectedCampground.lat.toFixed(5)}, {selectedCampground.lng.toFixed(5)}</span>
-                  <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${selectedCampground.lat},${selectedCampground.lng}`, '_blank')} className="text-muted-foreground hover:text-foreground transition-colors" title="Open in Google Maps">
-                    <MapPin className="w-3.5 h-3.5" weight="fill" />
-                  </button>
-                </div>
-                {selectedCampground.reservable && selectedCampground.url && (
-                  <Button variant="default" size="sm" className="w-full text-[10px] h-7 cursor-pointer" onClick={() => window.open(selectedCampground.url, '_blank')}>Reserve</Button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Floating User Campsite Detail Card */}
-          {selectedCampsite && (
-            <div className="absolute top-3 right-3 w-80 bg-background border border-border rounded-xl shadow-2xl z-20">
-              <div className="px-3 py-2.5 flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <Tent className="w-4 h-4 text-wildviolet shrink-0" />
-                    <h3 className="font-bold text-sm truncate">{selectedCampsite.name}</h3>
-                  </div>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium mt-1 inline-block">{selectedCampsite.campsiteType || 'Campsite'}</span>
-                </div>
-                <button onClick={() => setSelectedCampsite(null)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="px-3 pb-2.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono text-muted-foreground">{selectedCampsite.lat.toFixed(5)}, {selectedCampsite.lng.toFixed(5)}</span>
-                  <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${selectedCampsite.lat},${selectedCampsite.lng}`, '_blank')} className="text-muted-foreground hover:text-foreground transition-colors" title="Open in Google Maps">
-                    <MapPin className="w-3.5 h-3.5" weight="fill" />
-                  </button>
-                </div>
-                <Button variant="outline" size="sm" className="w-full text-[10px] h-7" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${selectedCampsite.lat},${selectedCampsite.lng}`, '_blank')}>Google Maps</Button>
-              </div>
-            </div>
-          )}
-
-          {/* Floating Legend Button */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                className="absolute bottom-4 left-4 z-10 w-12 h-12 rounded-full bg-background border border-border shadow-lg flex items-center justify-center hover:bg-secondary transition-colors"
-                aria-label="Show legend"
-              >
-                <MapTrifold className="w-5 h-5 text-foreground" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent
-              side="top"
-              align="start"
-              className="w-72 p-4"
-              sideOffset={8}
-            >
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <MapTrifold className="w-4 h-4" />
-                  Map Legend
-                </h3>
-
-                {/* Land Overlays */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Land Overlays</p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-5 w-5 p-0"
-                      onClick={() => setShowPublicLands(!showPublicLands)}
-                    >
-                      {showPublicLands ? (
-                        <Eye className="w-3.5 h-3.5" />
-                      ) : (
-                        <EyeSlash className="w-3.5 h-3.5" />
-                      )}
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-emerald-500/30 border border-emerald-600 rounded" />
-                      <span>USFS</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-amber-500/30 border border-amber-600 rounded" />
-                      <span>BLM</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-violet-500/30 border border-violet-600 rounded" />
-                      <span>NPS</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-blue-500/30 border border-blue-600 rounded" />
-                      <span>State Park</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-cyan-500/30 border border-cyan-600 rounded" />
-                      <span>State Trust</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-pink-500/30 border border-pink-600 rounded" />
-                      <span>Land Trust</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Spot Markers */}
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Spot Markers</p>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#3d7a40' }} />
-                      <span>Known Campsite</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#eab308' }} />
-                      <span>High Confidence</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#f97316' }} />
-                      <span>Moderate</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-blue-500 rounded-full" />
-                      <span>Campground</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Tent className="w-3 h-3 text-wildviolet" weight="fill" />
-                      <span>My Campsite</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Road Colors */}
-                <div className="space-y-1.5">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Road Access</p>
-                  <div className="grid grid-cols-2 gap-1.5 text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-4 h-0.5 bg-blue-500 rounded" />
-                      <span>Paved</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-4 h-0.5 bg-green-500 rounded" />
-                      <span>Passenger</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-4 h-0.5 bg-orange-500 rounded" />
-                      <span>High Clearance</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-4 h-0.5 bg-red-500 rounded" />
-                      <span>4WD</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Data Source Toggle - Hidden while database ingestion is paused
-                <div className="space-y-2 pt-2 border-t border-border">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Data Source</p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={useDatabase ? "default" : "outline"}
-                      size="sm"
-                      className="flex-1 h-7 text-xs"
-                      onClick={() => setUseDatabase(true)}
-                    >
-                      Fast Mode
-                    </Button>
-                    <Button
-                      variant={!useDatabase ? "default" : "outline"}
-                      size="sm"
-                      className="flex-1 h-7 text-xs"
-                      onClick={() => setUseDatabase(false)}
-                    >
-                      Full Mode
-                    </Button>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    {useDatabase
-                      ? "Using pre-computed spots (faster)"
-                      : "Computing from road network (shows roads)"}
-                  </p>
-                </div>
-                */}
-              </div>
-            </PopoverContent>
-          </Popover>
+          <FloatingLegend
+            showPublicLands={showPublicLands}
+            onTogglePublicLands={() => setShowPublicLands(!showPublicLands)}
+          />
         </div>
 
         {/* Sidebar - Right side on desktop, toggled on mobile */}
-        <div className={`order-1 lg:order-2 space-y-3 sm:space-y-5 p-3 sm:p-4 md:p-6 min-h-0 overflow-y-auto ${mobileView === 'list' ? 'flex-1' : 'hidden lg:block'}`}>
-            {/* Search - desktop only (mobile has it above the toggle) */}
-            <div className="hidden lg:block">
-                <LocationSelector
-                  value={searchLocation}
-                  onChange={handleLocationChange}
-                  placeholder="Search location..."
-                  showMyLocation={false}
-                  showSavedLocations={false}
-                  showCoordinates={false}
-                  onMapClickHint={false}
-                  compact={true}
-                />
-            </div>
-
-            {/* Loading state */}
-            {loading && (
-              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                <SpinnerGap className="w-10 h-10 animate-spin mb-4" />
-                <p className="text-base">Discovering campsites...</p>
-              </div>
-            )}
-
-            {/* Search prompt before search */}
-            {!searchLocation && !loading && (
-              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                <MagnifyingGlass className="w-12 h-12 mb-4 opacity-50" />
-                <p className="text-lg text-center font-medium">Search for a location to discover campsites</p>
-                <p className="text-sm mt-2 opacity-75">Or click anywhere on the map</p>
-              </div>
-            )}
-
-            {/* Results: Stats, Filters, Campsites */}
-            {searchLocation && !loading && (
-              <>
-                {/* Stats row - 5 across, desktop only */}
-                <div className="hidden sm:grid grid-cols-5 gap-2 mb-5">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="p-2 bg-mossgreen/10 dark:bg-mossgreen/20 rounded-lg border border-mossgreen/30 text-center cursor-pointer">
-                        <p className="text-xl font-bold text-mossgreen">{filteredPotentialSpots.filter(s => s.type === 'camp-site').length}</p>
-                        <p className="text-xs font-medium text-mossgreen">Known</p>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="font-medium">Known Campsites</p>
-                      <p className="text-xs text-muted-foreground">Campsites tagged by the OSM community</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="p-2 bg-softamber/10 dark:bg-softamber/20 rounded-lg border border-softamber/30 text-center cursor-pointer">
-                        <p className="text-xl font-bold text-softamber">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 35).length}</p>
-                        <p className="text-xs font-medium text-softamber">High</p>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="font-medium">High Confidence (35+)</p>
-                      <p className="text-xs text-muted-foreground">Official roads (MVUM/BLM), named roads, or good access</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800 text-center cursor-pointer">
-                        <p className="text-xl font-bold text-orange-600 dark:text-orange-400">{filteredPotentialSpots.filter(s => s.type !== 'camp-site' && s.score >= 25 && s.score < 35).length}</p>
-                        <p className="text-xs font-medium text-orange-600 dark:text-orange-400">Moderate</p>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="font-medium">Moderate Confidence (25-34)</p>
-                      <p className="text-xs text-muted-foreground">Unnamed tracks on public land</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-center cursor-pointer">
-                        <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{allEstablishedCampgrounds.length}</p>
-                        <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Campgrounds</p>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="font-medium">Established Campgrounds</p>
-                      <p className="text-xs text-muted-foreground">USFS/BLM campgrounds from Recreation.gov</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="p-2 bg-violet-50 dark:bg-violet-900/20 rounded-lg border border-violet-200 dark:border-violet-800 text-center cursor-pointer">
-                        <p className="text-xl font-bold text-violet-600 dark:text-violet-400">{campsites.length}</p>
-                        <p className="text-xs font-medium text-violet-600 dark:text-violet-400">My Sites</p>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="font-medium">Your Saved Campsites</p>
-                      <p className="text-xs text-muted-foreground">Campsites you've saved to your account</p>
-                    </TooltipContent>
-                  </Tooltip>
+        <div className={`order-1 lg:order-2 min-h-0 flex flex-col ${mobileView === 'list' ? 'flex-1' : 'hidden lg:block'}`}>
+            {selectedSpot ? (
+              <SpotDetailPanel
+                selectedSpot={selectedSpot}
+                existingCampsiteForSpot={existingCampsiteForSpot}
+                aiAnalysis={aiAnalysis}
+                aiAnalyzing={aiAnalyzing}
+                aiCheckingCache={aiCheckingCache}
+                aiError={aiError}
+                copiedCoords={copiedCoords}
+                onBack={clearAllSelections}
+                onCopyCoords={copySpotCoords}
+                onAnalyze={() => runSpotAnalysis(false)}
+                onReanalyze={() => runSpotAnalysis(true)}
+                onDismissError={() => setAiError(null)}
+                onConfirm={() => setConfirmDialogOpen(true)}
+              />
+            ) : selectedCampground ? (
+              <CampgroundDetailPanel campground={selectedCampground} onBack={clearAllSelections} />
+            ) : selectedCampsite ? (
+              <UserCampsiteDetailPanel campsite={selectedCampsite} onBack={clearAllSelections} />
+            ) : (
+              <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-3 sm:space-y-5">
+                {/* Search - desktop only (mobile has it above the toggle) */}
+                <div className="hidden lg:block">
+                  <LocationSelector
+                    value={searchLocation}
+                    onChange={handleLocationChange}
+                    placeholder="Search location..."
+                    showMyLocation={false}
+                    showSavedLocations={false}
+                    showCoordinates={false}
+                    onMapClickHint={false}
+                    compact={true}
+                  />
                 </div>
 
-                {/* Filters section */}
-                <div className="space-y-4 mb-5">
-                  {/* Spot Type Filter */}
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => toggleFilter('campgrounds')}
-                      className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
-                        spotFilters.has('campgrounds')
-                          ? 'text-white border-blue-500'
-                          : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                      }`}
-                      style={spotFilters.has('campgrounds') ? { backgroundColor: '#3b82f6' } : {}}
-                    >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#3b82f6' }} />
-                      Campgrounds
-                    </button>
-                    <button
-                      onClick={() => toggleFilter('mine')}
-                      className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
-                        spotFilters.has('mine')
-                          ? 'text-white border-violet-500'
-                          : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                      }`}
-                      style={spotFilters.has('mine') ? { backgroundColor: '#8b5cf6' } : {}}
-                    >
-                      <Tent className="w-3 h-3" weight="fill" />
-                      Mine
-                    </button>
-                    <button
-                      onClick={() => toggleFilter('known')}
-                      className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
-                        spotFilters.has('known')
-                          ? 'text-white border-mossgreen'
-                          : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                      }`}
-                      style={spotFilters.has('known') ? { backgroundColor: '#3d7a40' } : {}}
-                    >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#3d7a40' }} />
-                      Known
-                    </button>
-                    <button
-                      onClick={() => toggleFilter('high')}
-                      className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
-                        spotFilters.has('high')
-                          ? 'text-white border-softamber'
-                          : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                      }`}
-                      style={spotFilters.has('high') ? { backgroundColor: '#eab308' } : {}}
-                    >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#eab308' }} />
-                      High
-                    </button>
-                    <button
-                      onClick={() => toggleFilter('medium')}
-                      className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
-                        spotFilters.has('medium')
-                          ? 'text-white border-orange-500'
-                          : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                      }`}
-                      style={spotFilters.has('medium') ? { backgroundColor: '#f97316' } : {}}
-                    >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#f97316' }} />
-                      Moderate
-                    </button>
-                    {spotFilters.size > 0 && (
-                      <button
-                        onClick={() => setSpotFilters(new Set())}
-                        className="px-3 py-1 text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        Clear
-                      </button>
-                    )}
+                {/* Loading state */}
+                {loading && (
+                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                    <SpinnerGap className="w-10 h-10 animate-spin mb-4" />
+                    <p className="text-base">Discovering campsites...</p>
                   </div>
-
-                  {/* Vehicle Access + Sort row */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-wrap gap-1.5">
-                      <button
-                        onClick={() => setRoadFilter('all')}
-                        className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                          roadFilter === 'all'
-                            ? 'bg-foreground text-background border-foreground'
-                            : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                        }`}
-                      >
-                        All
-                      </button>
-                      <button
-                        onClick={() => setRoadFilter('passenger')}
-                        className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                          roadFilter === 'passenger'
-                            ? 'text-white border-[#3b82f6]'
-                            : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                        }`}
-                        style={roadFilter === 'passenger' ? { backgroundColor: '#3b82f6' } : {}}
-                      >
-                        2WD
-                      </button>
-                      <button
-                        onClick={() => setRoadFilter('high-clearance')}
-                        className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                          roadFilter === 'high-clearance'
-                            ? 'text-white border-[#f97316]'
-                            : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                        }`}
-                        style={roadFilter === 'high-clearance' ? { backgroundColor: '#f97316' } : {}}
-                      >
-                        HC
-                      </button>
-                      <button
-                        onClick={() => setRoadFilter('4wd')}
-                        className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                          roadFilter === '4wd'
-                            ? 'text-white border-[#ef4444]'
-                            : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                        }`}
-                        style={roadFilter === '4wd' ? { backgroundColor: '#ef4444' } : {}}
-                      >
-                        4WD
-                      </button>
-                    </div>
-                    <select
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as 'distance' | 'rating' | 'recommended')}
-                      className="text-xs bg-muted/50 border border-border rounded px-2.5 py-1 text-foreground"
-                    >
-                      <option value="recommended">Recommended</option>
-                      <option value="distance">Distance</option>
-                      <option value="rating">Rating</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Campsites as individual cards */}
-                {unifiedSpotList.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                    <Funnel className="w-10 h-10 mb-3 opacity-50" />
-                    <p className="text-base text-center font-medium">No campsites match your filters</p>
-                    <p className="text-sm mt-1.5 opacity-75">Try adjusting your filters above</p>
-                    {spotFilters.size > 0 && (
-                      <button
-                        onClick={() => setSpotFilters(new Set())}
-                        className="mt-3 text-sm text-primary hover:underline font-medium"
-                      >
-                        Clear all filters
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                <div className="space-y-3">
-                  {unifiedSpotList.slice(0, spotsToShow).map((spot) => {
-                    const isSelected =
-                      (spot.category === 'derived' && selectedSpot?.id === spot.originalSpot?.id) ||
-                      (spot.category === 'campground' && selectedCampground?.id === spot.originalCampground?.id) ||
-                      (spot.category === 'mine' && selectedCampsite?.id === spot.originalCampsite?.id) ||
-                      (spot.category === 'friend' && selectedCampsite?.id === spot.originalCampsite?.id);
-
-                    return (
-                      <Card
-                        key={spot.id}
-                        className={`cursor-pointer transition-all hover:shadow-md ${
-                          isSelected
-                            ? 'ring-2 ring-primary shadow-md'
-                            : spot.isRecommended
-                              ? 'border-primary/30 bg-primary/5'
-                              : ''
-                        }`}
-                        onClick={() => {
-                          if (spot.category === 'derived' && spot.originalSpot) {
-                            const s = spot.originalSpot;
-                            setSelectedSpot(s);
-                            setSelectedCampground(null);
-                            setSelectedCampsite(null);
-                            setAiError(null);
-                            const ck = `${s.lat.toFixed(5)},${s.lng.toFixed(5)}`;
-                            const ca = analysisCache.current.get(ck);
-                            if (ca) { setAiAnalysis(ca); } else {
-                              setAiAnalysis(null);
-                              const eps2 = 0.00001;
-                              supabase
-                                .from('spot_analyses')
-                                .select('analysis')
-                                .gte('lat', s.lat - eps2)
-                                .lte('lat', s.lat + eps2)
-                                .gte('lng', s.lng - eps2)
-                                .lte('lng', s.lng + eps2)
-                                .order('created_at', { ascending: false })
-                                .limit(1)
-                                .maybeSingle()
-                                .then(({ data }) => {
-                                  if (data?.analysis) { setAiAnalysis(data.analysis); analysisCache.current.set(ck, data.analysis); }
-                                });
-                            }
-                          } else if (spot.category === 'campground' && spot.originalCampground) {
-                            setSelectedCampground(spot.originalCampground);
-                            setSelectedSpot(null);
-                            setSelectedCampsite(null);
-                          } else if (spot.category === 'mine' && spot.originalCampsite) {
-                            setSelectedCampsite(spot.originalCampsite);
-                            setSelectedSpot(null);
-                            setSelectedCampground(null);
-                          } else if (spot.category === 'friend' && spot.originalCampsite) {
-                            setSelectedCampsite(spot.originalCampsite);
-                            setSelectedSpot(null);
-                            setSelectedCampground(null);
-                          }
-                          setSelectedRoad(null);
-                          setMapCenter({ lat: spot.lat, lng: spot.lng });
-                          setMapZoom(15);
-                        }}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-center gap-2.5">
-                            {getUnifiedSpotIcon(spot)}
-                            <span className="text-base font-medium text-foreground truncate flex-1">{spot.name}</span>
-                            {spot.isRecommended && (
-                              <Star className="w-4 h-4 text-primary flex-shrink-0" weight="fill" />
-                            )}
-                            {spot.category === 'derived' && spot.score !== undefined && (
-                              <span className={`text-sm px-2 py-0.5 rounded font-medium ${getScoreColor(spot.score)}`}>
-                                {spot.score}
-                              </span>
-                            )}
-                            {spot.category === 'campground' && spot.reservable && (
-                              <span className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">Reserve</span>
-                            )}
-                          </div>
-                          <div className="mt-2 flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
-                            {spot.distance !== undefined && spot.distance < 100 && (
-                              <span className="flex items-center gap-1">
-                                <NavigationArrow className="w-3.5 h-3.5" />
-                                {spot.distance.toFixed(1)} mi
-                              </span>
-                            )}
-                            {spot.category === 'derived' && spot.reasons && spot.reasons.slice(0, 2).map((reason, i) => (
-                              <span key={i} className="bg-muted px-2 py-0.5 rounded">{reason}</span>
-                            ))}
-                            {spot.category === 'campground' && spot.facilityType && (
-                              <span>{spot.facilityType}</span>
-                            )}
-                            {spot.category === 'mine' && spot.campsiteType && (
-                              <span>{spot.campsiteType}</span>
-                            )}
-                            {spot.category === 'friend' && spot.sharedBy && (
-                              <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded">
-                                Shared by {spot.sharedBy}
-                              </span>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
                 )}
 
-                {/* Show More / Show Less controls */}
-                {unifiedSpotList.length > 30 && (
-                  <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">
-                      Showing {Math.min(spotsToShow, unifiedSpotList.length)} of {unifiedSpotList.length}
-                    </p>
-                    <div className="flex gap-2">
-                      {spotsToShow < unifiedSpotList.length && (
-                        <button
-                          onClick={() => setSpotsToShow(prev => Math.min(prev + 50, unifiedSpotList.length))}
-                          className="text-sm text-primary hover:underline font-medium"
-                        >
-                          Show More
-                        </button>
-                      )}
-                      {spotsToShow > 30 && (
-                        <button
-                          onClick={() => setSpotsToShow(30)}
-                          className="text-sm text-muted-foreground hover:underline"
-                        >
-                          Show Less
-                        </button>
-                      )}
-                    </div>
+                {/* Search prompt before search */}
+                {!searchLocation && !loading && (
+                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                    <MagnifyingGlass className="w-12 h-12 mb-4 opacity-50" />
+                    <p className="text-lg text-center font-medium">Search for a location to discover campsites</p>
+                    <p className="text-sm mt-2 opacity-75">Or click anywhere on the map</p>
                   </div>
                 )}
-              </>
+
+                {/* Results: Stats, Filters, Campsites */}
+                {searchLocation && !loading && (
+                  <>
+                    <ResultsStatsRow
+                      filteredPotentialSpots={filteredPotentialSpots}
+                      allEstablishedCampgrounds={allEstablishedCampgrounds}
+                      campsites={campsites}
+                    />
+
+                    <SpotFiltersPanel
+                      spotFilters={spotFilters}
+                      onToggleFilter={toggleFilter}
+                      onClearFilters={() => setSpotFilters(new Set())}
+                      roadFilter={roadFilter}
+                      onChangeRoadFilter={setRoadFilter}
+                      sortBy={sortBy}
+                      onChangeSortBy={setSortBy}
+                    />
+
+                    <SpotResultsList
+                      unifiedSpotList={unifiedSpotList}
+                      spotsToShow={spotsToShow}
+                      selectedSpot={selectedSpot}
+                      selectedCampground={selectedCampground}
+                      selectedCampsite={selectedCampsite}
+                      hasFilters={spotFilters.size > 0}
+                      onClickSpot={handleUnifiedSpotClick}
+                      onClearFilters={() => setSpotFilters(new Set())}
+                      onShowMore={() => setSpotsToShow(prev => Math.min(prev + 50, unifiedSpotList.length))}
+                      onShowLess={() => setSpotsToShow(30)}
+                    />
+                  </>
+                )}
+              </div>
             )}
-
-            {/* Selected Campground Details */}
-            {selectedCampground && (
-              <Card>
-                <CardContent className="p-4">
-                  <h3 className="font-medium text-foreground mb-3 flex items-center gap-2">
-                    <TreeEvergreen className="w-4 h-4 text-blue-600" />
-                    Campground Details
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <p><span className="text-muted-foreground">Name:</span> {selectedCampground.name}</p>
-                    <p><span className="text-muted-foreground">Type:</span> {selectedCampground.facilityType}</p>
-                    <p><span className="text-muted-foreground">Coordinates:</span> {selectedCampground.lat.toFixed(5)}, {selectedCampground.lng.toFixed(5)}</p>
-                    {selectedCampground.reservable && (
-                      <p className="flex items-center gap-1">
-                        <span className="text-muted-foreground">Reservable:</span>
-                        <span className="text-green-600">Yes</span>
-                      </p>
-                    )}
-                    {selectedCampground.description && (
-                      <p className="text-xs text-muted-foreground mt-2">{selectedCampground.description}</p>
-                    )}
-                    {selectedCampground.url && (
-                      <a
-                        href={selectedCampground.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-2"
-                      >
-                        View on Recreation.gov →
-                      </a>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Selected Spot Details - now shown as floating overlay on map */}
-            {false && selectedSpot && (
-              <Card className="border-primary/30">
-                <CardContent className="p-4">
-                  <h3 className="font-medium text-foreground mb-3 flex items-center gap-2">
-                    {selectedSpot.type === 'camp-site' ? (
-                      <Tent className="w-5 h-5 text-wildviolet" />
-                    ) : selectedSpot.type === 'dead-end' ? (
-                      <MapPinLine className="w-5 h-5 text-orange-600" />
-                    ) : (
-                      <Path className="w-5 h-5 text-blue-600" />
-                    )}
-                    {selectedSpot.name || 'Unnamed Spot'}
-                  </h3>
-
-                  <div className="space-y-4">
-                    {/* Confidence Score */}
-                    <div className="flex items-center justify-between p-2.5 bg-muted/50 rounded-lg">
-                      <span className="text-sm font-medium">
-                        {selectedSpot.type === 'camp-site' ? 'Type' : 'Confidence'}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full ${
-                          selectedSpot.type === 'camp-site' ? 'bg-mossgreen' :
-                          selectedSpot.score >= 35 ? 'bg-softamber' :
-                          selectedSpot.score >= 25 ? 'bg-orange-500' : 'bg-coralred'
-                        }`} />
-                        <span className="text-sm font-medium">
-                          {selectedSpot.type === 'camp-site' ? 'Known Campsite' :
-                           selectedSpot.score >= 35 ? 'High' : 'Moderate'}
-                        </span>
-                        {selectedSpot.type !== 'camp-site' && (
-                          <span className="text-xs text-muted-foreground">({selectedSpot.score} pts)</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Data Source */}
-                    <div className="space-y-1.5">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Data Source</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {selectedSpot.isOnMVUMRoad && (
-                          <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full text-xs font-medium flex items-center gap-1">
-                            <TreeEvergreen className="w-3 h-3" />
-                            USFS MVUM
-                          </span>
-                        )}
-                        {selectedSpot.isOnBLMRoad && (
-                          <span className="px-2 py-1 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded-full text-xs font-medium">
-                            BLM Road
-                          </span>
-                        )}
-                        {selectedSpot.source === 'osm' && (
-                          <span className="px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 rounded-full text-xs font-medium flex items-center gap-1">
-                            <MapTrifold className="w-3 h-3" />
-                            OpenStreetMap
-                          </span>
-                        )}
-                        {selectedSpot.source === 'derived' && !selectedSpot.isOnMVUMRoad && !selectedSpot.isOnBLMRoad && (
-                          <span className="px-2 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 rounded-full text-xs font-medium">
-                            OSM Track Analysis
-                          </span>
-                        )}
-                        {selectedSpot.isOnPublicLand && !selectedSpot.isOnMVUMRoad && !selectedSpot.isOnBLMRoad && (
-                          <span className="px-2 py-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 rounded-full text-xs font-medium">
-                            On Public Land
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Vehicle Access */}
-                    <div className="space-y-1.5">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Vehicle Access</p>
-                      <div className="flex items-center gap-2">
-                        <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
-                          selectedSpot.passengerReachable
-                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                            : 'bg-muted text-muted-foreground'
-                        }`}>
-                          <Car className="w-3.5 h-3.5" />
-                          Passenger
-                          {selectedSpot.passengerReachable && ' ✓'}
-                        </div>
-                        <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
-                          selectedSpot.highClearanceReachable
-                            ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
-                            : 'bg-muted text-muted-foreground'
-                        }`}>
-                          <Jeep className="w-3.5 h-3.5" />
-                          High Clearance
-                          {selectedSpot.highClearanceReachable && ' ✓'}
-                        </div>
-                      </div>
-                      {!selectedSpot.passengerReachable && !selectedSpot.highClearanceReachable && (
-                        <p className="text-xs text-muted-foreground">4WD may be required to reach this spot</p>
-                      )}
-                    </div>
-
-                    {/* Why it's promising */}
-                    {selectedSpot.reasons.length > 0 && (
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Why It's Promising</p>
-                        <div className="flex flex-wrap gap-1">
-                          {selectedSpot.reasons.map((reason, i) => (
-                            <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
-                              {reason}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Road Name */}
-                    {selectedSpot.roadName && (
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Road</p>
-                        <p className="text-sm">{selectedSpot.roadName}</p>
-                      </div>
-                    )}
-
-                    {/* Coordinates */}
-                    <div className="space-y-1.5">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Coordinates</p>
-                      <div className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2">
-                        <code className="text-xs font-mono">
-                          {selectedSpot.lat.toFixed(6)}, {selectedSpot.lng.toFixed(6)}
-                        </code>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2"
-                          onClick={() => {
-                            navigator.clipboard.writeText(`${selectedSpot.lat.toFixed(6)}, ${selectedSpot.lng.toFixed(6)}`);
-                            setCopiedCoords(true);
-                            setTimeout(() => setCopiedCoords(false), 2000);
-                          }}
-                        >
-                          {copiedCoords ? (
-                            <Check className="w-3.5 h-3.5 text-green-600" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Confirmation Status */}
-                    {existingCampsiteForSpot && (
-                      <div className="p-2.5 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                        <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
-                          <Users className="w-4 h-4" />
-                          <span className="text-sm font-medium">
-                            {existingCampsiteForSpot.confirmationCount} {existingCampsiteForSpot.confirmationCount === 1 ? 'user has' : 'users have'} confirmed
-                          </span>
-                        </div>
-                        {existingCampsiteForSpot.isConfirmed && (
-                          <div className="flex items-center gap-1 mt-1 text-green-600 dark:text-green-400">
-                            <CheckCircle className="w-3 h-3" />
-                            <span className="text-xs">Verified camping spot</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* AI Analysis */}
-                    <div className="space-y-2 pt-1 border-t">
-                      {!aiAnalysis && !aiAnalyzing && !aiError && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full"
-                          onClick={async () => {
-                            setAiAnalyzing(true);
-                            setAiError(null);
-                            try {
-                              const { data, error } = await supabase.functions.invoke('analyze-campsite', {
-                                body: {
-                                  lat: selectedSpot.lat,
-                                  lng: selectedSpot.lng,
-                                  name: selectedSpot.name,
-                                  type: selectedSpot.type,
-                                  score: selectedSpot.score,
-                                  reasons: selectedSpot.reasons,
-                                  source: selectedSpot.source,
-                                  roadName: selectedSpot.roadName,
-                                  isOnPublicLand: selectedSpot.isOnPublicLand,
-                                },
-                              });
-                              if (error) throw error;
-                              setAiAnalysis(data.analysis);
-                            } catch (err: unknown) {
-                              setAiError(err instanceof Error ? err.message : 'Analysis failed');
-                            } finally {
-                              setAiAnalyzing(false);
-                            }
-                          }}
-                        >
-                          <Lightning className="w-4 h-4 mr-1.5" weight="fill" />
-                          Analyze This Spot
-                        </Button>
-                      )}
-
-                      {aiAnalyzing && (
-                        <div className="flex flex-col items-center py-4 text-muted-foreground">
-                          <SpinnerGap className="w-5 h-5 animate-spin mb-1.5" />
-                          <span className="text-xs font-medium">Analyzing satellite imagery...</span>
-                        </div>
-                      )}
-
-                      {aiError && (
-                        <div className="space-y-1.5">
-                          <p className="text-xs text-destructive">{aiError}</p>
-                          <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => { setAiError(null); }}>
-                            Retry
-                          </Button>
-                        </div>
-                      )}
-
-                      {aiAnalysis && (
-                        <div className="space-y-2.5">
-                          {/* Score Card */}
-                          <div className={`p-3 rounded-xl border-2 ${
-                            aiAnalysis.campabilityScore >= 70 ? 'border-green-300 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 dark:border-green-700' :
-                            aiAnalysis.campabilityScore >= 50 ? 'border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 dark:border-amber-700' :
-                            aiAnalysis.campabilityScore >= 30 ? 'border-orange-300 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 dark:border-orange-700' :
-                            'border-red-300 bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 dark:border-red-700'
-                          }`}>
-                            <div className="flex items-center gap-3">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0 ${
-                                aiAnalysis.campabilityScore >= 70 ? 'bg-green-500' :
-                                aiAnalysis.campabilityScore >= 50 ? 'bg-amber-500' :
-                                aiAnalysis.campabilityScore >= 30 ? 'bg-orange-500' : 'bg-red-500'
-                              }`}>
-                                {aiAnalysis.campabilityScore}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-bold">
-                                  {aiAnalysis.campabilityScore >= 70 ? 'Great Campsite' :
-                                   aiAnalysis.campabilityScore >= 50 ? 'Decent Spot' :
-                                   aiAnalysis.campabilityScore >= 30 ? 'Marginal' : 'Not Recommended'}
-                                </p>
-                                <p className="text-[10px] text-muted-foreground mt-0.5">
-                                  AI Assessment • {aiAnalysis.confidence} confidence
-                                </p>
-                              </div>
-                            </div>
-                            <p className="text-xs leading-relaxed mt-2">{aiAnalysis.summary}</p>
-                          </div>
-
-                          {/* Factor Grid */}
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {[
-                              { label: 'Ground', icon: <Crosshair className="w-3 h-3" />, data: aiAnalysis.ground },
-                              { label: 'Access', icon: <Path className="w-3 h-3" />, data: aiAnalysis.access },
-                              { label: 'Cover', icon: <TreeEvergreen className="w-3 h-3" />, data: aiAnalysis.cover },
-                              { label: 'Hazards', icon: <Warning className="w-3 h-3" />, data: aiAnalysis.hazards },
-                            ].map(({ label, icon, data }) => (
-                              <div key={label} className={`p-2 rounded-lg ${
-                                data.rating === 'good' || data.rating === 'none' ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' :
-                                data.rating === 'fair' || data.rating === 'minor' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' :
-                                data.rating === 'poor' || data.rating === 'moderate' || data.rating === 'significant' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300' :
-                                'bg-muted text-muted-foreground'
-                              }`}>
-                                <div className="flex items-center gap-1 mb-0.5">
-                                  {icon}
-                                  <span className="text-[10px] font-semibold uppercase">{label}</span>
-                                </div>
-                                <p className="text-[10px] leading-snug">{data.detail}</p>
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Best Use */}
-                          <div className="flex items-center gap-2 px-2 py-1.5 bg-primary/5 rounded-lg">
-                            <Tent className="w-3.5 h-3.5 text-primary shrink-0" />
-                            <p className="text-xs font-medium">{aiAnalysis.bestUse}</p>
-                          </div>
-
-                          <Button variant="ghost" size="sm" className="w-full text-[10px] h-6" onClick={async () => {
-                            setAiAnalysis(null);
-                            setAiError(null);
-                            setAiAnalyzing(true);
-                            try {
-                              const { data, error } = await supabase.functions.invoke('analyze-campsite', {
-                                body: { lat: selectedSpot.lat, lng: selectedSpot.lng, name: selectedSpot.name, type: selectedSpot.type, score: selectedSpot.score, reasons: selectedSpot.reasons, source: selectedSpot.source, roadName: selectedSpot.roadName, isOnPublicLand: selectedSpot.isOnPublicLand, passengerReachable: selectedSpot.passengerReachable, highClearanceReachable: selectedSpot.highClearanceReachable, highClearance: selectedSpot.highClearance, force: true },
-                              });
-                              if (error) throw error;
-                              setAiAnalysis(data.analysis);
-                            } catch (err: unknown) {
-                              setAiError(err instanceof Error ? err.message : 'Analysis failed');
-                            } finally {
-                              setAiAnalyzing(false);
-                            }
-                          }}>
-                            Re-analyze
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="space-y-2 pt-1">
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => setConfirmDialogOpen(true)}
-                      >
-                        <CheckCircle className="w-4 h-4 mr-1.5" />
-                        {existingCampsiteForSpot ? 'Add My Confirmation' : 'Confirm This Spot'}
-                      </Button>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 text-xs"
-                          onClick={() => {
-                            window.open(
-                              `https://www.google.com/maps/search/?api=1&query=${selectedSpot.lat},${selectedSpot.lng}`,
-                              '_blank'
-                            );
-                          }}
-                        >
-                          Google Maps
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 text-xs"
-                          onClick={() => {
-                            window.open(
-                              `https://www.google.com/maps/@${selectedSpot.lat},${selectedSpot.lng},500m/data=!3m1!1e3`,
-                              '_blank'
-                            );
-                          }}
-                        >
-                          Satellite View
-                        </Button>
-                      </div>
-                    </div>
-
-                    <p className="text-[10px] text-muted-foreground text-center pt-1">
-                      Always verify on satellite imagery and check local regulations
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
         </div>
       </div>
 
