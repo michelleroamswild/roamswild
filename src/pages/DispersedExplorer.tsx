@@ -66,6 +66,7 @@ const DispersedExplorer = () => {
     confidenceNote?: string;
   } | null>(null);
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [aiCheckingCache, setAiCheckingCache] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const analysisCache = useRef<Map<string, typeof aiAnalysis>>(new Map());
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -218,6 +219,52 @@ const DispersedExplorer = () => {
       setExistingCampsiteForSpot(null);
     }
   }, [selectedSpot, findExistingExplorerSpot]);
+
+  // Load cached AI analysis when a spot is selected
+  useEffect(() => {
+    if (!selectedSpot) {
+      setAiAnalysis(null);
+      setAiError(null);
+      setAiCheckingCache(false);
+      return;
+    }
+
+    const cacheKey = `${selectedSpot.lat.toFixed(5)},${selectedSpot.lng.toFixed(5)}`;
+    const cached = analysisCache.current.get(cacheKey);
+    if (cached) {
+      setAiAnalysis(cached);
+      setAiError(null);
+      setAiCheckingCache(false);
+      return;
+    }
+
+    setAiAnalysis(null);
+    setAiError(null);
+    setAiCheckingCache(true);
+
+    let cancelled = false;
+    const eps = 0.00001;
+    supabase
+      .from('spot_analyses')
+      .select('analysis')
+      .gte('lat', selectedSpot.lat - eps)
+      .lte('lat', selectedSpot.lat + eps)
+      .gte('lng', selectedSpot.lng - eps)
+      .lte('lng', selectedSpot.lng + eps)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (data?.analysis) {
+          setAiAnalysis(data.analysis);
+          analysisCache.current.set(cacheKey, data.analysis);
+        }
+        setAiCheckingCache(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [selectedSpot]);
 
   // Helper to check if a point is within a restricted area
   // Restricted: National Parks, State Parks, Tribal Lands
@@ -1135,35 +1182,10 @@ const DispersedExplorer = () => {
 
   const handleUnifiedSpotClick = (spot: UnifiedSpot) => {
     if (spot.category === 'derived' && spot.originalSpot) {
-      const s = spot.originalSpot;
-      setSelectedSpot(s);
+      setSelectedSpot(spot.originalSpot);
       setSelectedCampground(null);
       setSelectedCampsite(null);
-      setAiError(null);
-      const ck = `${s.lat.toFixed(5)},${s.lng.toFixed(5)}`;
-      const ca = analysisCache.current.get(ck);
-      if (ca) {
-        setAiAnalysis(ca);
-      } else {
-        setAiAnalysis(null);
-        const eps2 = 0.00001;
-        supabase
-          .from('spot_analyses')
-          .select('analysis')
-          .gte('lat', s.lat - eps2)
-          .lte('lat', s.lat + eps2)
-          .gte('lng', s.lng - eps2)
-          .lte('lng', s.lng + eps2)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-          .then(({ data }) => {
-            if (data?.analysis) {
-              setAiAnalysis(data.analysis);
-              analysisCache.current.set(ck, data.analysis);
-            }
-          });
-      }
+      // Cache lookup handled by useEffect on selectedSpot change
     } else if (spot.category === 'campground' && spot.originalCampground) {
       setSelectedCampground(spot.originalCampground);
       setSelectedSpot(null);
@@ -1222,7 +1244,7 @@ const DispersedExplorer = () => {
         <MobileViewTabs mobileView={mobileView} onChange={setMobileView} />
       </div>
 
-      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[3fr_2fr] overflow-hidden">
+      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[13fr_7fr] overflow-hidden">
         {/* Map - Left side on desktop, toggled on mobile */}
         <div className={`order-2 lg:order-1 lg:h-full relative ${mobileView === 'map' ? 'flex-1' : 'hidden lg:block'}`}>
           <DispersedMap
@@ -1246,31 +1268,7 @@ const DispersedExplorer = () => {
               setSelectedCampground(null);
               setSelectedCampsite(null);
               setCopiedCoords(false);
-              setAiError(null);
-              const cacheKey = `${spot.lat.toFixed(5)},${spot.lng.toFixed(5)}`;
-              const cached = analysisCache.current.get(cacheKey);
-              if (cached) {
-                setAiAnalysis(cached);
-              } else {
-                setAiAnalysis(null);
-                const eps = 0.00001;
-                supabase
-                  .from('spot_analyses')
-                  .select('analysis')
-                  .gte('lat', spot.lat - eps)
-                  .lte('lat', spot.lat + eps)
-                  .gte('lng', spot.lng - eps)
-                  .lte('lng', spot.lng + eps)
-                  .order('created_at', { ascending: false })
-                  .limit(1)
-                  .maybeSingle()
-                  .then(({ data }) => {
-                    if (data?.analysis) {
-                      setAiAnalysis(data.analysis);
-                      analysisCache.current.set(cacheKey, data.analysis);
-                    }
-                  });
-              }
+              // Cache lookup handled by useEffect on selectedSpot change
             }}
             getSpotMarkerIcon={getSpotMarkerIcon}
             showCampgroundsFiltered={showCampgroundsFiltered}
@@ -1305,13 +1303,14 @@ const DispersedExplorer = () => {
         </div>
 
         {/* Sidebar - Right side on desktop, toggled on mobile */}
-        <div className={`order-1 lg:order-2 space-y-3 sm:space-y-5 p-3 sm:p-4 md:p-6 min-h-0 overflow-y-auto ${mobileView === 'list' ? 'flex-1' : 'hidden lg:block'}`}>
+        <div className={`order-1 lg:order-2 min-h-0 flex flex-col ${mobileView === 'list' ? 'flex-1' : 'hidden lg:block'}`}>
             {selectedSpot ? (
               <SpotDetailPanel
                 selectedSpot={selectedSpot}
                 existingCampsiteForSpot={existingCampsiteForSpot}
                 aiAnalysis={aiAnalysis}
                 aiAnalyzing={aiAnalyzing}
+                aiCheckingCache={aiCheckingCache}
                 aiError={aiError}
                 copiedCoords={copiedCoords}
                 onBack={clearAllSelections}
@@ -1326,7 +1325,7 @@ const DispersedExplorer = () => {
             ) : selectedCampsite ? (
               <UserCampsiteDetailPanel campsite={selectedCampsite} onBack={clearAllSelections} />
             ) : (
-              <>
+              <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-3 sm:space-y-5">
                 {/* Search - desktop only (mobile has it above the toggle) */}
                 <div className="hidden lg:block">
                   <LocationSelector
@@ -1391,7 +1390,7 @@ const DispersedExplorer = () => {
                     />
                   </>
                 )}
-              </>
+              </div>
             )}
         </div>
       </div>

@@ -18,7 +18,7 @@ export const UserCampsiteDetailPanel = ({ campsite, onBack }: UserCampsiteDetail
   };
 
   return (
-    <div className="space-y-5">
+    <div className="h-full overflow-y-auto p-3 sm:p-4 md:p-6 space-y-5">
       {/* Back nav */}
       <button
         onClick={onBack}
