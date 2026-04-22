@@ -1,3 +1,4 @@
+import { X } from '@phosphor-icons/react';
 import { InfoWindow, Marker, Polygon, Polyline } from '@react-google-maps/api';
 import { GoogleMap } from '@/components/GoogleMap';
 import { SpotClusterer } from '@/components/SpotClusterer';
@@ -81,7 +82,7 @@ interface DispersedMapProps {
   campsites: Campsite[];
   selectedCampsite: Campsite | null;
   onSelectCampsite: (cs: Campsite) => void;
-  onCloseCampsiteInfo: () => void;
+  onCloseSelection: () => void;
 
   mapTapPoint: { lat: number; lng: number } | null;
   onDismissMapTap: () => void;
@@ -114,7 +115,7 @@ export const DispersedMap = ({
   campsites,
   selectedCampsite,
   onSelectCampsite,
-  onCloseCampsiteInfo,
+  onCloseSelection,
   mapTapPoint,
   onDismissMapTap,
   onOpenSaveFromMap,
@@ -349,46 +350,89 @@ export const DispersedMap = ({
           />
         ))}
 
+      {/* Info window for selected potential spot */}
+      {selectedSpot && (
+        <InfoWindow
+          position={{ lat: selectedSpot.lat, lng: selectedSpot.lng }}
+          onCloseClick={onCloseSelection}
+          options={{ pixelOffset: new google.maps.Size(0, -28), disableAutoPan: true }}
+        >
+          <div className="compact-info-window min-w-[200px]">
+            <div className="flex items-start justify-between gap-2">
+              <h4 className="font-semibold text-gray-900 text-sm leading-tight flex-1 min-w-0">
+                {selectedSpot.name || 'Unnamed Spot'}
+              </h4>
+              <button
+                onClick={onCloseSelection}
+                className="shrink-0 p-0.5 -mr-0.5 -mt-0.5 text-gray-400 hover:text-gray-700 transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-3.5 h-3.5" weight="bold" />
+              </button>
+            </div>
+            <p className="text-gray-500 text-xs mt-0.5">
+              {selectedSpot.type === 'camp-site' ? 'Known Campsite' : selectedSpot.type === 'dead-end' ? 'Road Terminus' : 'Road Junction'}
+              <span className="mx-1">•</span>
+              Score {selectedSpot.score}
+            </p>
+          </div>
+        </InfoWindow>
+      )}
+
+      {/* Info window for selected campground */}
+      {selectedCampground && (
+        <InfoWindow
+          position={{ lat: selectedCampground.lat, lng: selectedCampground.lng }}
+          onCloseClick={onCloseSelection}
+          options={{ pixelOffset: new google.maps.Size(0, -28), disableAutoPan: true }}
+        >
+          <div className="compact-info-window min-w-[200px]">
+            <div className="flex items-start justify-between gap-2">
+              <h4 className="font-semibold text-gray-900 text-sm leading-tight flex-1 min-w-0">
+                {selectedCampground.name}
+              </h4>
+              <button
+                onClick={onCloseSelection}
+                className="shrink-0 p-0.5 -mr-0.5 -mt-0.5 text-gray-400 hover:text-gray-700 transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-3.5 h-3.5" weight="bold" />
+              </button>
+            </div>
+            <p className="text-gray-500 text-xs mt-0.5">
+              {selectedCampground.facilityType}
+              {selectedCampground.agencyName && (
+                <>
+                  <span className="mx-1">•</span>
+                  {selectedCampground.agencyName}
+                </>
+              )}
+            </p>
+          </div>
+        </InfoWindow>
+      )}
+
       {/* Info window for selected user campsite */}
       {selectedCampsite && (
         <InfoWindow
           position={{ lat: selectedCampsite.lat, lng: selectedCampsite.lng }}
-          onCloseClick={onCloseCampsiteInfo}
-          options={{ pixelOffset: new google.maps.Size(0, -32) }}
+          onCloseClick={onCloseSelection}
+          options={{ pixelOffset: new google.maps.Size(0, -28), disableAutoPan: true }}
         >
-          <div className="min-w-[200px] max-w-[260px]">
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <h4 className="font-semibold text-gray-900 text-sm leading-tight">
+          <div className="compact-info-window min-w-[200px]">
+            <div className="flex items-start justify-between gap-2">
+              <h4 className="font-semibold text-gray-900 text-sm leading-tight flex-1 min-w-0">
                 {selectedCampsite.name}
               </h4>
-              <span className="flex-shrink-0 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium">
-                My Spot
-              </span>
+              <button
+                onClick={onCloseSelection}
+                className="shrink-0 p-0.5 -mr-0.5 -mt-0.5 text-gray-400 hover:text-gray-700 transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-3.5 h-3.5" weight="bold" />
+              </button>
             </div>
-            {selectedCampsite.description && (
-              <p className="text-gray-600 text-xs mb-2 line-clamp-2">{selectedCampsite.description}</p>
-            )}
-            <div className="flex flex-wrap gap-1 mb-2">
-              {selectedCampsite.roadAccess && (
-                <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px] font-medium">
-                  {selectedCampsite.roadAccess === '2wd' ? '2WD OK' : selectedCampsite.roadAccess.toUpperCase()}
-                </span>
-              )}
-              {selectedCampsite.waterAvailable && (
-                <span className="px-1.5 py-0.5 bg-cyan-100 text-cyan-700 rounded text-[10px] font-medium">Water</span>
-              )}
-            </div>
-            <button
-              onClick={() => {
-                window.open(
-                  `https://www.google.com/maps/search/?api=1&query=${selectedCampsite.lat},${selectedCampsite.lng}`,
-                  '_blank'
-                );
-              }}
-              className="w-full px-2 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
-            >
-              Open Map
-            </button>
+            <p className="text-gray-500 text-xs mt-0.5">My Spot</p>
           </div>
         </InfoWindow>
       )}

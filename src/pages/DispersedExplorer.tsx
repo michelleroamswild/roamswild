@@ -16,15 +16,14 @@ import { AddCampsiteModal } from '@/components/AddCampsiteModal';
 import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
 import type { Campsite } from '@/types/campsite';
 import { isPointInPolygon, isWithinAnyPublicLand, findContainingLand, isFalseDeadEnd } from '@/utils/dispersedExplorer';
-import { FloatingSpotDetailCard } from '@/components/dispersed-explorer/FloatingSpotDetailCard';
-import { FloatingCampgroundDetailCard } from '@/components/dispersed-explorer/FloatingCampgroundDetailCard';
-import { FloatingUserCampsiteDetailCard } from '@/components/dispersed-explorer/FloatingUserCampsiteDetailCard';
 import { FloatingLegend } from '@/components/dispersed-explorer/FloatingLegend';
 import { MobileViewTabs } from '@/components/dispersed-explorer/MobileViewTabs';
 import { ResultsStatsRow } from '@/components/dispersed-explorer/ResultsStatsRow';
 import { SpotFiltersPanel } from '@/components/dispersed-explorer/SpotFiltersPanel';
 import { SpotResultsList } from '@/components/dispersed-explorer/SpotResultsList';
-import { SelectedCampgroundCard } from '@/components/dispersed-explorer/SelectedCampgroundCard';
+import { SpotDetailPanel } from '@/components/dispersed-explorer/SpotDetailPanel';
+import { CampgroundDetailPanel } from '@/components/dispersed-explorer/CampgroundDetailPanel';
+import { UserCampsiteDetailPanel } from '@/components/dispersed-explorer/UserCampsiteDetailPanel';
 import { DispersedMap } from '@/components/dispersed-explorer/DispersedMap';
 import type { UnifiedSpot } from '@/components/dispersed-explorer/types';
 
@@ -947,6 +946,17 @@ const DispersedExplorer = () => {
   }, []);
 
   const onMapClick = useCallback((e: google.maps.MapMouseEvent) => {
+    // If a pin is currently selected, treat a map click as "dismiss selection"
+    // and don't trigger a new search.
+    if (selectedSpot || selectedCampground || selectedCampsite) {
+      setSelectedSpot(null);
+      setSelectedCampground(null);
+      setSelectedCampsite(null);
+      setAiAnalysis(null);
+      setAiError(null);
+      setSelectedRoad(null);
+      return;
+    }
     if (e.latLng) {
       const lat = e.latLng.lat();
       const lng = e.latLng.lng();
@@ -958,11 +968,8 @@ const DispersedExplorer = () => {
       });
       setRecommendationPage(0); // Reset recommendations on new search
       setSelectedRoad(null);
-      setSelectedSpot(null);
-      setSelectedCampground(null);
-      setSelectedCampsite(null);
     }
-  }, []);
+  }, [selectedSpot, selectedCampground, selectedCampsite]);
 
   // Color coding for road types
   const getMVUMColor = (road: MVUMRoad) => {
@@ -1112,6 +1119,20 @@ const DispersedExplorer = () => {
     setTimeout(() => setCopiedCoords(false), 2000);
   };
 
+  const clearAllSelections = () => {
+    setSelectedSpot(null);
+    setSelectedCampground(null);
+    setSelectedCampsite(null);
+    setAiAnalysis(null);
+    setAiError(null);
+  };
+
+  useEffect(() => {
+    if (selectedSpot || selectedCampground || selectedCampsite) {
+      setMobileView('list');
+    }
+  }, [selectedSpot, selectedCampground, selectedCampsite]);
+
   const handleUnifiedSpotClick = (spot: UnifiedSpot) => {
     if (spot.category === 'derived' && spot.originalSpot) {
       const s = spot.originalSpot;
@@ -1201,7 +1222,7 @@ const DispersedExplorer = () => {
         <MobileViewTabs mobileView={mobileView} onChange={setMobileView} />
       </div>
 
-      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-2 overflow-hidden">
+      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[3fr_2fr] overflow-hidden">
         {/* Map - Left side on desktop, toggled on mobile */}
         <div className={`order-2 lg:order-1 lg:h-full relative ${mobileView === 'map' ? 'flex-1' : 'hidden lg:block'}`}>
           <DispersedMap
@@ -1271,42 +1292,11 @@ const DispersedExplorer = () => {
               setSelectedRoad(null);
               setSelectedCampground(null);
             }}
-            onCloseCampsiteInfo={() => setSelectedCampsite(null)}
+            onCloseSelection={clearAllSelections}
             mapTapPoint={mapTapPoint}
             onDismissMapTap={() => setMapTapPoint(null)}
             onOpenSaveFromMap={() => setSaveFromMapOpen(true)}
           />
-
-          {selectedSpot && (
-            <FloatingSpotDetailCard
-              selectedSpot={selectedSpot}
-              existingCampsiteForSpot={existingCampsiteForSpot}
-              aiAnalysis={aiAnalysis}
-              aiAnalyzing={aiAnalyzing}
-              aiError={aiError}
-              copiedCoords={copiedCoords}
-              onClose={() => { setSelectedSpot(null); setAiAnalysis(null); setAiError(null); }}
-              onCopyCoords={copySpotCoords}
-              onAnalyze={() => runSpotAnalysis(false)}
-              onReanalyze={() => runSpotAnalysis(true)}
-              onDismissError={() => setAiError(null)}
-              onConfirm={() => setConfirmDialogOpen(true)}
-            />
-          )}
-
-          {selectedCampground && (
-            <FloatingCampgroundDetailCard
-              campground={selectedCampground}
-              onClose={() => setSelectedCampground(null)}
-            />
-          )}
-
-          {selectedCampsite && (
-            <FloatingUserCampsiteDetailCard
-              campsite={selectedCampsite}
-              onClose={() => setSelectedCampsite(null)}
-            />
-          )}
 
           <FloatingLegend
             showPublicLands={showPublicLands}
@@ -1316,73 +1306,92 @@ const DispersedExplorer = () => {
 
         {/* Sidebar - Right side on desktop, toggled on mobile */}
         <div className={`order-1 lg:order-2 space-y-3 sm:space-y-5 p-3 sm:p-4 md:p-6 min-h-0 overflow-y-auto ${mobileView === 'list' ? 'flex-1' : 'hidden lg:block'}`}>
-            {/* Search - desktop only (mobile has it above the toggle) */}
-            <div className="hidden lg:block">
-                <LocationSelector
-                  value={searchLocation}
-                  onChange={handleLocationChange}
-                  placeholder="Search location..."
-                  showMyLocation={false}
-                  showSavedLocations={false}
-                  showCoordinates={false}
-                  onMapClickHint={false}
-                  compact={true}
-                />
-            </div>
-
-            {/* Loading state */}
-            {loading && (
-              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                <SpinnerGap className="w-10 h-10 animate-spin mb-4" />
-                <p className="text-base">Discovering campsites...</p>
-              </div>
-            )}
-
-            {/* Search prompt before search */}
-            {!searchLocation && !loading && (
-              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                <MagnifyingGlass className="w-12 h-12 mb-4 opacity-50" />
-                <p className="text-lg text-center font-medium">Search for a location to discover campsites</p>
-                <p className="text-sm mt-2 opacity-75">Or click anywhere on the map</p>
-              </div>
-            )}
-
-            {/* Results: Stats, Filters, Campsites */}
-            {searchLocation && !loading && (
+            {selectedSpot ? (
+              <SpotDetailPanel
+                selectedSpot={selectedSpot}
+                existingCampsiteForSpot={existingCampsiteForSpot}
+                aiAnalysis={aiAnalysis}
+                aiAnalyzing={aiAnalyzing}
+                aiError={aiError}
+                copiedCoords={copiedCoords}
+                onBack={clearAllSelections}
+                onCopyCoords={copySpotCoords}
+                onAnalyze={() => runSpotAnalysis(false)}
+                onReanalyze={() => runSpotAnalysis(true)}
+                onDismissError={() => setAiError(null)}
+                onConfirm={() => setConfirmDialogOpen(true)}
+              />
+            ) : selectedCampground ? (
+              <CampgroundDetailPanel campground={selectedCampground} onBack={clearAllSelections} />
+            ) : selectedCampsite ? (
+              <UserCampsiteDetailPanel campsite={selectedCampsite} onBack={clearAllSelections} />
+            ) : (
               <>
-                <ResultsStatsRow
-                  filteredPotentialSpots={filteredPotentialSpots}
-                  allEstablishedCampgrounds={allEstablishedCampgrounds}
-                  campsites={campsites}
-                />
+                {/* Search - desktop only (mobile has it above the toggle) */}
+                <div className="hidden lg:block">
+                  <LocationSelector
+                    value={searchLocation}
+                    onChange={handleLocationChange}
+                    placeholder="Search location..."
+                    showMyLocation={false}
+                    showSavedLocations={false}
+                    showCoordinates={false}
+                    onMapClickHint={false}
+                    compact={true}
+                  />
+                </div>
 
-                <SpotFiltersPanel
-                  spotFilters={spotFilters}
-                  onToggleFilter={toggleFilter}
-                  onClearFilters={() => setSpotFilters(new Set())}
-                  roadFilter={roadFilter}
-                  onChangeRoadFilter={setRoadFilter}
-                  sortBy={sortBy}
-                  onChangeSortBy={setSortBy}
-                />
+                {/* Loading state */}
+                {loading && (
+                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                    <SpinnerGap className="w-10 h-10 animate-spin mb-4" />
+                    <p className="text-base">Discovering campsites...</p>
+                  </div>
+                )}
 
-                <SpotResultsList
-                  unifiedSpotList={unifiedSpotList}
-                  spotsToShow={spotsToShow}
-                  selectedSpot={selectedSpot}
-                  selectedCampground={selectedCampground}
-                  selectedCampsite={selectedCampsite}
-                  hasFilters={spotFilters.size > 0}
-                  onClickSpot={handleUnifiedSpotClick}
-                  onClearFilters={() => setSpotFilters(new Set())}
-                  onShowMore={() => setSpotsToShow(prev => Math.min(prev + 50, unifiedSpotList.length))}
-                  onShowLess={() => setSpotsToShow(30)}
-                />
+                {/* Search prompt before search */}
+                {!searchLocation && !loading && (
+                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                    <MagnifyingGlass className="w-12 h-12 mb-4 opacity-50" />
+                    <p className="text-lg text-center font-medium">Search for a location to discover campsites</p>
+                    <p className="text-sm mt-2 opacity-75">Or click anywhere on the map</p>
+                  </div>
+                )}
+
+                {/* Results: Stats, Filters, Campsites */}
+                {searchLocation && !loading && (
+                  <>
+                    <ResultsStatsRow
+                      filteredPotentialSpots={filteredPotentialSpots}
+                      allEstablishedCampgrounds={allEstablishedCampgrounds}
+                      campsites={campsites}
+                    />
+
+                    <SpotFiltersPanel
+                      spotFilters={spotFilters}
+                      onToggleFilter={toggleFilter}
+                      onClearFilters={() => setSpotFilters(new Set())}
+                      roadFilter={roadFilter}
+                      onChangeRoadFilter={setRoadFilter}
+                      sortBy={sortBy}
+                      onChangeSortBy={setSortBy}
+                    />
+
+                    <SpotResultsList
+                      unifiedSpotList={unifiedSpotList}
+                      spotsToShow={spotsToShow}
+                      selectedSpot={selectedSpot}
+                      selectedCampground={selectedCampground}
+                      selectedCampsite={selectedCampsite}
+                      hasFilters={spotFilters.size > 0}
+                      onClickSpot={handleUnifiedSpotClick}
+                      onClearFilters={() => setSpotFilters(new Set())}
+                      onShowMore={() => setSpotsToShow(prev => Math.min(prev + 50, unifiedSpotList.length))}
+                      onShowLess={() => setSpotsToShow(30)}
+                    />
+                  </>
+                )}
               </>
-            )}
-
-            {selectedCampground && (
-              <SelectedCampgroundCard campground={selectedCampground} />
             )}
         </div>
       </div>

@@ -1,6 +1,19 @@
 import type { PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
 import type { Campsite } from '@/types/campsite';
 
+export interface SpotAIAnalysis {
+  campabilityScore: number;
+  summary: string;
+  ground: { rating: string; detail: string };
+  access: { rating: string; detail: string };
+  cover: { rating: string; detail: string };
+  hazards: { rating: string; detail: string };
+  trail: { rating: string; detail: string } | null;
+  bestUse: string;
+  confidence: string;
+  confidenceNote?: string;
+}
+
 export interface UnifiedSpot {
   id: string;
   name: string;
