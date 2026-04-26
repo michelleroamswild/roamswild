@@ -37,17 +37,29 @@ export function isWithinAnyPublicLand(
 }
 
 /**
- * Find which public land a point is within and return its name
+ * Find which public land a point is within and return its name + protection metadata
  */
 export function findContainingLand(
   lat: number,
   lng: number,
-  publicLands: { name?: string; unitName?: string; managingAgency?: string; polygon?: { lat: number; lng: number }[] }[]
-): { name: string; agency: string } | null {
+  publicLands: {
+    name?: string;
+    unitName?: string;
+    managingAgency?: string;
+    protectClass?: string;
+    protectionTitle?: string;
+    polygon?: { lat: number; lng: number }[];
+  }[]
+): { name: string; agency: string; protectClass?: string; protectionTitle?: string } | null {
   for (const land of publicLands) {
     if (land.polygon && isPointInPolygon({ lat, lng }, land.polygon)) {
       const name = land.unitName || land.name || '';
-      return { name, agency: land.managingAgency || '' };
+      return {
+        name,
+        agency: land.managingAgency || '',
+        protectClass: land.protectClass,
+        protectionTitle: land.protectionTitle,
+      };
     }
   }
   return null;

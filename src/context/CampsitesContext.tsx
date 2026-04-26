@@ -425,7 +425,7 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
         .gte('lng', lng - radiusDegrees)
         .lte('lng', lng + radiusDegrees)
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (error || !data) {
         return null;
@@ -498,9 +498,23 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
         user.id
       );
 
+      // Link to the canonical potential_spots row if one exists for this
+      // lat/lng. The region-cache pipeline populates potential_spots when an
+      // area is analysed, so this will usually find a match.
+      const eps = 0.0001;
+      const { data: matchingSpot } = await supabase
+        .from('potential_spots')
+        .select('id')
+        .gte('lat', spot.lat - eps)
+        .lte('lat', spot.lat + eps)
+        .gte('lng', spot.lng - eps)
+        .lte('lng', spot.lng + eps)
+        .limit(1)
+        .maybeSingle();
+
       const { data: newSpot, error: insertError } = await supabase
         .from('campsites')
-        .insert(rowData)
+        .insert({ ...rowData, potential_spot_id: matchingSpot?.id ?? null })
         .select()
         .single();
 

@@ -15,6 +15,13 @@ export interface PublicLand {
   renderOnMap: boolean;
   // Number of vertices in the polygon (for debugging)
   vertexCount?: number;
+  // IUCN protection class (1-6) when known. Comes from PAD-US (IUCN_Cat) and
+  // OSM (protect_class tag). Lets us logic-out dispersed-camping legality
+  // deterministically rather than name-matching.
+  protectClass?: string;
+  // Free-text protection title — e.g., "National Forest", "Wilderness Area",
+  // "National Recreation Area". From OSM (protection_title) or derived.
+  protectionTitle?: string;
 }
 
 // Haversine formula to calculate distance between two points in miles
@@ -327,6 +334,9 @@ export function usePublicLands(
                 OBJECTID: f.attributes.OBJECTID,
                 ADMIN_UNIT_NAME: f.attributes.Unit_Nm || agencyNames[f.attributes.Mang_Name] || (isTribal ? 'Tribal Land' : 'State Land'),
                 ADMIN_AGENCY_CODE: isTribal ? 'TRIB' : (f.attributes.Mang_Name || 'STATE'),
+                // PAD-US protection metadata when available
+                IUCN_CAT: f.attributes.IUCN_Cat,
+                PROTECTION_TITLE: f.attributes.Des_Tp,
               },
               geometry: f.geometry,
               source: isTribal ? 'tribal' : 'state',
@@ -388,6 +398,8 @@ export function usePublicLands(
                           OBJECTID: `${element.id}-${idx}`,
                           ADMIN_UNIT_NAME: parkName,
                           ADMIN_AGENCY_CODE: agencyCode,
+                          PROTECT_CLASS: element.tags?.protect_class,
+                          PROTECTION_TITLE: element.tags?.protection_title,
                         },
                         geometry: { rings: [ring] },
                         source: 'osm',
@@ -502,6 +514,8 @@ export function usePublicLands(
                   OBJECTID: element.id,
                   ADMIN_UNIT_NAME: element.tags?.name || 'State Park',
                   ADMIN_AGENCY_CODE: agencyCode,
+                  PROTECT_CLASS: element.tags?.protect_class,
+                  PROTECTION_TITLE: element.tags?.protection_title,
                 },
                 geometry: { rings: [ring] },
                 source: 'osm',
@@ -617,6 +631,10 @@ export function usePublicLands(
               polygon,
               renderOnMap,
               vertexCount,
+              // OSM and PAD-US sources surface protection metadata; ArcGIS
+              // federal lands generally don't, so these will be undefined there.
+              protectClass: f.attributes.PROTECT_CLASS || f.attributes.IUCN_CAT,
+              protectionTitle: f.attributes.PROTECTION_TITLE,
             });
             processedRings++;
           });

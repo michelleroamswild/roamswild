@@ -213,91 +213,37 @@ export const DispersedMap = ({
         );
       })}
 
-      {/* Road Info Window */}
+      {/* Road Info Window — slim popover; full details live in the sidebar panel */}
       {selectedRoad && (() => {
         const path = toLatLngPath(selectedRoad.geometry?.coordinates);
         if (path.length === 0) return null;
         const centerIndex = Math.floor(path.length / 2);
         const centerPoint = path[centerIndex];
         const isMVUM = 'highClearanceVehicle' in selectedRoad;
+        const sourceLabel = isMVUM ? 'USFS MVUM' : 'OSM Track';
+        const displayName =
+          selectedRoad.name || (isMVUM ? 'Unnamed road' : 'Unnamed track');
 
         return (
           <InfoWindow
             position={centerPoint}
             onCloseClick={() => onSelectRoad(null)}
+            options={{ pixelOffset: new google.maps.Size(0, -28), disableAutoPan: true }}
           >
-            <div className="p-1 min-w-[200px] max-w-[280px]">
-              {isMVUM ? (
-                <>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-semibold text-sm">{selectedRoad.name}</span>
-                    <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium">USFS</span>
-                  </div>
-                  <div className="space-y-1 text-xs text-gray-600">
-                    <p><span className="font-medium">Surface:</span> {selectedRoad.surfaceType}</p>
-                    <p><span className="font-medium">Maintenance:</span> {selectedRoad.operationalMaintLevel}</p>
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {selectedRoad.passengerVehicle && (
-                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">Passenger</span>
-                      )}
-                      {selectedRoad.highClearanceVehicle && (
-                        <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px]">High Clearance</span>
-                      )}
-                      {selectedRoad.atv && (
-                        <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-[10px]">ATV</span>
-                      )}
-                      {selectedRoad.motorcycle && (
-                        <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-[10px]">Motorcycle</span>
-                      )}
-                    </div>
-                    {selectedRoad.seasonal && (
-                      <p className="text-[10px] text-gray-500 mt-1">Seasonal: {selectedRoad.seasonal}</p>
-                    )}
-                  </div>
-                  <p className="text-[9px] text-gray-400 mt-2 pt-1 border-t border-gray-200">
-                    Source: USFS Motor Vehicle Use Map
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-semibold text-sm">{selectedRoad.name || 'Unnamed Track'}</span>
-                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">OSM</span>
-                  </div>
-                  <div className="space-y-1 text-xs text-gray-600">
-                    <p><span className="font-medium">Type:</span> {selectedRoad.highway}</p>
-                    {selectedRoad.surface && (
-                      <p><span className="font-medium">Surface:</span> {selectedRoad.surface}</p>
-                    )}
-                    {selectedRoad.tracktype && (
-                      <p><span className="font-medium">Grade:</span> {selectedRoad.tracktype}
-                        <span className="text-gray-500 ml-1">
-                          ({selectedRoad.tracktype === 'grade1' ? 'paved' :
-                            selectedRoad.tracktype === 'grade2' ? 'gravel' :
-                              selectedRoad.tracktype === 'grade3' ? 'high clearance' :
-                                selectedRoad.tracktype === 'grade4' ? '4WD likely' :
-                                  selectedRoad.tracktype === 'grade5' ? '4WD required' : ''})
-                        </span>
-                      </p>
-                    )}
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {selectedRoad.fourWdOnly && (
-                        <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-[10px]">4WD Only</span>
-                      )}
-                      {selectedRoad.access && (
-                        <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-[10px]">{selectedRoad.access}</span>
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-[9px] text-gray-400 mt-2 pt-1 border-t border-gray-200">
-                    <a href={`https://www.openstreetmap.org/way/${selectedRoad.id}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                      View on OSM
-                    </a>
-                    <span className="mx-1">•</span>
-                    Verify conditions before travel
-                  </p>
-                </>
-              )}
+            <div className="compact-info-window min-w-[200px]">
+              <div className="flex items-start justify-between gap-2">
+                <h4 className="font-semibold text-gray-900 text-sm leading-tight flex-1 min-w-0">
+                  {displayName}
+                </h4>
+                <button
+                  onClick={() => onSelectRoad(null)}
+                  className="shrink-0 p-0.5 -mr-0.5 -mt-0.5 text-gray-400 hover:text-gray-700 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-3.5 h-3.5" weight="bold" />
+                </button>
+              </div>
+              <p className="text-gray-500 text-xs mt-0.5">{sourceLabel}</p>
             </div>
           </InfoWindow>
         );
@@ -372,8 +318,6 @@ export const DispersedMap = ({
             </div>
             <p className="text-gray-500 text-xs mt-0.5">
               {selectedSpot.type === 'camp-site' ? 'Known Campsite' : selectedSpot.type === 'dead-end' ? 'Road Terminus' : 'Road Junction'}
-              <span className="mx-1">•</span>
-              Score {selectedSpot.score}
             </p>
           </div>
         </InfoWindow>

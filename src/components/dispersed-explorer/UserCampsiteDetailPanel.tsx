@@ -37,7 +37,7 @@ export const UserCampsiteDetailPanel = ({ campsite, onBack }: UserCampsiteDetail
           <h2 className="text-lg font-bold leading-tight text-foreground">{campsite.name}</h2>
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
-              {campsite.campsiteType || 'Campsite'}
+              {campsite.type || 'Campsite'}
             </span>
             <span className="text-xs text-muted-foreground">Your spot</span>
           </div>
