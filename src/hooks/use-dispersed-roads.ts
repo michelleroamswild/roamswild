@@ -44,6 +44,9 @@ export interface OSMTrack {
     type: 'LineString';
     coordinates: [number, number][];
   };
+  // Raw OSM tag bag (smoothness, motor_vehicle, ref, operator, oneway, etc.)
+  // Persisted to road_segments.osm_tags JSONB so the detail panel has it.
+  osmTags?: Record<string, string>;
 }
 
 // Potential dispersed camping spot
@@ -66,8 +69,17 @@ export interface PotentialSpot {
   highClearanceReachable?: boolean; // True if reachable via passenger + high-clearance roads (no 4WD required)
   // Classification flag for established campground vs dispersed site (from database)
   isEstablishedCampground?: boolean;
+  // True when this is a sub-site within a larger campground (e.g. "Site 12")
+  isIndividualSite?: boolean;
   // Road accessibility flag - is this camp site near a road? (for filtering backcountry/hike-in sites)
   isRoadAccessible?: boolean;
+  // Raw OSM tags for camp-site spots (e.g. drinking_water, capacity, fee).
+  // Persisted to potential_spots.osm_tags JSONB for the detail panel.
+  osmTags?: Record<string, string>;
+  // Resolved public-land entity at save time (denormalized for fast reads)
+  landName?: string;
+  landProtectClass?: string;
+  landProtectionTitle?: string;
 }
 
 // BLM Road from GTLF (Ground Transportation Linear Feature)
@@ -1632,6 +1644,8 @@ async function fetchAllOSMData(
           type: 'LineString' as const,
           coordinates: el.geometry.map((pt: any) => [pt.lon, pt.lat]),
         },
+        // Carry raw OSM tags through so the detail panel has them
+        osmTags: el.tags || {},
       };
     });
 
@@ -1766,6 +1780,9 @@ async function fetchAllOSMData(
         isEstablishedCampground,
         isBackcountry,
         isIndividualSite,
+        // Carry the raw OSM tags so the detail panel can show amenities,
+        // capacity, fees, operator, etc. Persisted to potential_spots.osm_tags.
+        osmTags: tags,
       };
     })
     .filter((s: any) => s.lat && s.lng);
@@ -1841,7 +1858,8 @@ async function fetchAllOSMData(
 export function useDispersedRoads(
   lat: number | null,
   lng: number | null,
-  radiusMiles: number = 10
+  radiusMiles: number = 10,
+  cacheBust: number = 0
 ): DispersedRoadsResult {
   const [mvumRoads, setMvumRoads] = useState<MVUMRoad[]>([]);
   const [blmRoads, setBlmRoads] = useState<BLMRoad[]>([]);
@@ -1861,7 +1879,7 @@ export function useDispersedRoads(
       return;
     }
 
-    const cacheKey = getCacheKey(lat, lng, radiusMiles);
+    const cacheKey = `${getCacheKey(lat, lng, radiusMiles)}:${cacheBust}`;
     const cached = dataCache.get(cacheKey);
     if (cached && (cached.potentialSpots.length > 0 || cached.establishedCampgrounds.length > 0)) {
       setMvumRoads(cached.mvumRoads);
@@ -2202,7 +2220,7 @@ export function useDispersedRoads(
     };
 
     fetchRoads();
-  }, [lat, lng, radiusMiles]);
+  }, [lat, lng, radiusMiles, cacheBust]);
 
   return { mvumRoads, blmRoads, osmTracks, potentialSpots, establishedCampgrounds, loading, error };
 }

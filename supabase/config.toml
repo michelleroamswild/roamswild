@@ -380,3 +380,29 @@ s3_region = "env(S3_REGION)"
 s3_access_key = "env(S3_ACCESS_KEY)"
 # Configures AWS_SECRET_ACCESS_KEY for S3 bucket
 s3_secret_key = "env(S3_SECRET_KEY)"
+
+# save-derived-spots uses the service role key internally to upsert cached
+# spots and loaded_regions rows. It doesn't need (and can't currently validate)
+# the caller's JWT because the project uses ES256 signing keys that the
+# function gateway's default JWT check doesn't understand. Disable the gate.
+[functions.save-derived-spots]
+verify_jwt = false
+
+# Read-only — uses the anon key internally for queries, doesn't need to
+# validate the caller's JWT (and can't, while the project is on ES256
+# signing keys).
+[functions.dispersed-spots]
+verify_jwt = false
+
+[functions.dispersed-campgrounds]
+verify_jwt = false
+
+[functions.dispersed-roads]
+verify_jwt = false
+
+[functions.dispersed-public-lands]
+verify_jwt = false
+
+# Proxies OSM /api/0.6/way/{id}/history.json + caches in osm_way_history
+[functions.osm-way-history]
+verify_jwt = false

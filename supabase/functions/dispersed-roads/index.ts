@@ -58,6 +58,9 @@ serve(async (req) => {
     // Transform to frontend format
     const roads = (data || []).map((row: any) => ({
       id: row.id,
+      // Source-specific external ID (OSM way ID, USFS OBJECTID, BLM id, etc.)
+      // — needed by the frontend to deep-link to the source system.
+      externalId: row.external_id || null,
       name: row.name || "Unnamed Road",
       sourceType: row.source_type,
       vehicleAccess: row.vehicle_access,
@@ -71,6 +74,11 @@ serve(async (req) => {
       tracktype: row.tracktype || null,
       access: row.access || null,
       fourWdOnly: row.four_wd_only || false,
+      // Raw OSM tag bag for the detail panel (smoothness, ref, operator, etc.)
+      osmTags: row.osm_tags || null,
+      // MVUM tag bag (passenger / high_clearance / atv / motorcycle / maint level)
+      mvumTags: row.mvum_tags || null,
+      seasonalClosure: row.seasonal_closure || null,
     }));
 
     return new Response(

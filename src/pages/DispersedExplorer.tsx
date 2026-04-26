@@ -6,6 +6,7 @@ import { LocationSelector, SelectedLocation } from '@/components/LocationSelecto
 import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
 import { usePublicLands } from '@/hooks/use-public-lands';
 import { useDispersedDatabase } from '@/hooks/use-dispersed-database';
+import { useRegionCache, type MapBounds } from '@/hooks/use-region-cache';
 import { useCampsites } from '@/context/CampsitesContext';
 import { useFriends } from '@/context/FriendsContext';
 import { useAuth } from '@/context/AuthContext';
@@ -24,6 +25,7 @@ import { SpotResultsList } from '@/components/dispersed-explorer/SpotResultsList
 import { SpotDetailPanel } from '@/components/dispersed-explorer/SpotDetailPanel';
 import { CampgroundDetailPanel } from '@/components/dispersed-explorer/CampgroundDetailPanel';
 import { UserCampsiteDetailPanel } from '@/components/dispersed-explorer/UserCampsiteDetailPanel';
+import { RoadDetailPanel } from '@/components/dispersed-explorer/RoadDetailPanel';
 import { DispersedMap } from '@/components/dispersed-explorer/DispersedMap';
 import type { UnifiedSpot } from '@/components/dispersed-explorer/types';
 
@@ -85,9 +87,35 @@ const DispersedExplorer = () => {
   const [saveFromMapOpen, setSaveFromMapOpen] = useState(false);
   const [selectedCampsite, setSelectedCampsite] = useState<Campsite | null>(null);
 
-  // Toggle between database (fast) and client-side (comprehensive with roads) data sources
-  // Currently defaulting to Full mode (client-side) while database ingestion is paused
+  // Toggle between database (fast) and client-side (comprehensive with roads) data sources.
+  // Flipped to true when a loaded_regions cache hit covers the search area.
   const [useDatabase, setUseDatabase] = useState(false);
+
+  // Region cache state
+  const [cacheChecked, setCacheChecked] = useState(false);
+  const [lastAnalysedAt, setLastAnalysedAt] = useState<Date | null>(null);
+  const [reanalyseBust, setReanalyseBust] = useState(0);
+  // True between Re-analyse click and save completion. While true, useDispersedRoads
+  // fires alongside DB mode so we can refresh data without going pin-less.
+  const [refreshing, setRefreshing] = useState(false);
+  // Bumped after a save to force useDispersedDatabase to refetch (so DB pins update).
+  const [dbRefreshKey, setDbRefreshKey] = useState(0);
+  const { checkRegionCache, saveRegionToCache } = useRegionCache();
+  const regionSavedRef = useRef<string | null>(null);
+
+  const RADIUS_MILES = 10;
+
+  // Convert search location + radius to a bbox (approx — 1° lat ≈ 69 mi).
+  const computeBounds = useCallback((lat: number, lng: number): MapBounds => {
+    const dLat = RADIUS_MILES / 69;
+    const dLng = RADIUS_MILES / (69 * Math.cos((lat * Math.PI) / 180));
+    return {
+      north: lat + dLat,
+      south: lat - dLat,
+      east: lng + dLng,
+      west: lng - dLng,
+    };
+  }, []);
 
 
   // Database hooks - fast pre-computed spots, campgrounds, and roads
@@ -101,7 +129,8 @@ const DispersedExplorer = () => {
   } = useDispersedDatabase(
     searchLocation?.lat ?? null,
     searchLocation?.lng ?? null,
-    10
+    10,
+    dbRefreshKey
   );
 
   // Always use client-side for public lands (database has fragmented polygons)
@@ -146,15 +175,19 @@ const DispersedExplorer = () => {
   // Client-side hooks for roads/spots - only fetch when not using database
   const {
     mvumRoads: clientMvumRoads,
+    blmRoads: clientBlmRoads,
     osmTracks: clientOsmTracks,
     potentialSpots: clientSpots,
     establishedCampgrounds: clientCampgrounds,
     loading: clientLoading,
     error: clientError,
   } = useDispersedRoads(
-    !useDatabase ? (searchLocation?.lat ?? null) : null,
-    !useDatabase ? (searchLocation?.lng ?? null) : null,
-    10
+    // Fire when in client mode OR mid-refresh (Re-analyse runs alongside DB mode
+    // so the user keeps seeing pins while we fetch fresh data in the background).
+    (!useDatabase || refreshing) ? (searchLocation?.lat ?? null) : null,
+    (!useDatabase || refreshing) ? (searchLocation?.lng ?? null) : null,
+    RADIUS_MILES,
+    reanalyseBust
   );
 
   // Hybrid approach: database for spots/campgrounds/roads, client-side for public lands
@@ -184,7 +217,7 @@ const DispersedExplorer = () => {
       const parsedLng = parseFloat(lng);
 
       if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
-        const location: SearchLocation = {
+        const location: SelectedLocation = {
           lat: parsedLat,
           lng: parsedLng,
           name: name || 'My Location',
@@ -196,6 +229,172 @@ const DispersedExplorer = () => {
     }
     setInitialLocationLoaded(true);
   }, [searchParams, initialLocationLoaded]);
+
+  // Region cache: check if this area has been analysed before.
+  // Hit → flip useDatabase=true so the database hook takes over.
+  // Miss → keep useDatabase=false so the client hook runs a fresh analysis.
+  useEffect(() => {
+    if (!searchLocation) {
+      setCacheChecked(false);
+      setLastAnalysedAt(null);
+      setUseDatabase(false);
+      setRefreshing(false);
+      regionSavedRef.current = null;
+      return;
+    }
+
+    // During Re-analyse refresh, keep the existing useDatabase state and skip
+    // the RPC — the user is already viewing cached data and we're just adding
+    // a background fetch + save. No need to re-check the cache mid-refresh.
+    if (refreshing) {
+      setCacheChecked(true);
+      return;
+    }
+
+    setCacheChecked(false);
+    let cancelled = false;
+    const bounds = computeBounds(searchLocation.lat, searchLocation.lng);
+
+    checkRegionCache(bounds).then((result) => {
+      if (cancelled) return;
+      if (result.cached) {
+        console.log('[RegionCache] → Switching to DATABASE mode (cache hit)');
+        setUseDatabase(true);
+        setLastAnalysedAt(result.analysedAt ?? null);
+      } else {
+        console.log('[RegionCache] → Staying in CLIENT mode (cache miss)');
+        setUseDatabase(false);
+        setLastAnalysedAt(null);
+      }
+      setCacheChecked(true);
+    });
+
+    return () => { cancelled = true; };
+    // reanalyseBust intentionally in deps — force re-check after Re-analyse.
+  }, [searchLocation, reanalyseBust, refreshing, checkRegionCache, computeBounds]);
+
+  // Background save: after a fresh client analysis completes, persist to the
+  // region cache so the next visitor in this area gets a cache hit.
+  useEffect(() => {
+    // Every run of this effect, log the conditions so it's visible why
+    // a save is or isn't firing.
+    const state = {
+      useDatabase,
+      hasSearchLocation: !!searchLocation,
+      cacheChecked,
+      clientLoading,
+      clientSpotsCount: clientSpots.length,
+      reanalyseBust,
+    };
+    console.log('[RegionCache][save-effect] state:', state);
+
+    if (useDatabase && !refreshing) {
+      console.log('[RegionCache][save-effect] ⏭  skip — in DATABASE mode, nothing to save');
+      return;
+    }
+    if (!searchLocation) {
+      console.log('[RegionCache][save-effect] ⏭  skip — no searchLocation');
+      return;
+    }
+    if (!cacheChecked) {
+      console.log('[RegionCache][save-effect] ⏭  skip — cache check not complete yet');
+      return;
+    }
+    if (clientLoading) {
+      console.log('[RegionCache][save-effect] ⏭  skip — client analysis still loading');
+      return;
+    }
+    if (clientSpots.length === 0 && clientCampgrounds.length === 0) {
+      console.log('[RegionCache][save-effect] ⏭  skip — nothing to save (client hook errored or returned nothing)');
+      return;
+    }
+
+    const bounds = computeBounds(searchLocation.lat, searchLocation.lng);
+
+    // Guard against stale spots during a location transition: when
+    // searchLocation changes (e.g. Moab → Silverton), React batches
+    // renders so this effect can fire with the NEW searchLocation but
+    // the OLD clientSpots array still from the previous area. Filter
+    // out anything outside current bounds — if nothing matches, the
+    // data is stale and we bail until the hook repopulates.
+    const spotsInBounds = clientSpots.filter(
+      (s) =>
+        s.lat >= bounds.south &&
+        s.lat <= bounds.north &&
+        s.lng >= bounds.west &&
+        s.lng <= bounds.east
+    );
+    const campgroundsInBounds = clientCampgrounds.filter(
+      (c) =>
+        c.lat >= bounds.south &&
+        c.lat <= bounds.north &&
+        c.lng >= bounds.west &&
+        c.lng <= bounds.east
+    );
+
+    if (spotsInBounds.length === 0 && campgroundsInBounds.length === 0) {
+      console.log('[RegionCache][save-effect] ⏭  skip — clientSpots belong to a different area (stale during transition)');
+      return;
+    }
+
+    const regionKey = `${searchLocation.lat.toFixed(3)},${searchLocation.lng.toFixed(3)}:${reanalyseBust}`;
+    if (regionSavedRef.current === regionKey) {
+      console.log('[RegionCache][save-effect] ⏭  skip — region already persisted this session:', regionKey);
+      return;
+    }
+    regionSavedRef.current = regionKey;
+
+    // Enrich each spot with the resolved public-land entity (best-effort —
+    // if publicLands hasn't loaded, fields stay undefined and the save
+    // function persists null).
+    const enrichedSpots = spotsInBounds.map((spot) => {
+      const land = findContainingLand(spot.lat, spot.lng, publicLands);
+      if (!land) return spot;
+      return {
+        ...spot,
+        landName: land.name || undefined,
+        landProtectClass: land.protectClass,
+        landProtectionTitle: land.protectionTitle,
+      };
+    });
+    const enrichedCount = enrichedSpots.filter((s) => s.landName).length;
+
+    const totalRoads =
+      clientMvumRoads.length + clientOsmTracks.length + clientBlmRoads.length;
+    console.log(
+      '[RegionCache][save-effect] ▶️  firing save of',
+      enrichedSpots.length,
+      'spots (',
+      enrichedCount,
+      'with land entity) +',
+      campgroundsInBounds.length,
+      'campgrounds +',
+      totalRoads,
+      'roads for regionKey',
+      regionKey,
+      clientSpots.length !== spotsInBounds.length
+        ? `(filtered ${clientSpots.length - spotsInBounds.length} stale spots outside bounds)`
+        : ''
+    );
+    saveRegionToCache(
+      enrichedSpots,
+      campgroundsInBounds,
+      {
+        mvumRoads: clientMvumRoads,
+        osmTracks: clientOsmTracks,
+        blmRoads: clientBlmRoads,
+      },
+      bounds
+    ).then(() => {
+      setLastAnalysedAt(new Date());
+      // If this was a Re-analyse cycle, exit refreshing state and force the
+      // DB hook to refetch so newly saved spots become visible immediately.
+      if (refreshing) {
+        setRefreshing(false);
+        setDbRefreshKey((k) => k + 1);
+      }
+    });
+  }, [useDatabase, searchLocation, cacheChecked, clientLoading, clientSpots, clientCampgrounds, clientMvumRoads, clientOsmTracks, clientBlmRoads, publicLands, reanalyseBust, refreshing, computeBounds, saveRegionToCache]);
 
   // Fetch confirmed explorer spots from database when search location changes
   useEffect(() => {
@@ -257,8 +456,9 @@ const DispersedExplorer = () => {
       .then(({ data }) => {
         if (cancelled) return;
         if (data?.analysis) {
-          setAiAnalysis(data.analysis);
-          analysisCache.current.set(cacheKey, data.analysis);
+          const analysis = data.analysis as NonNullable<typeof aiAnalysis>;
+          setAiAnalysis(analysis);
+          analysisCache.current.set(cacheKey, analysis);
         }
         setAiCheckingCache(false);
       });
@@ -410,6 +610,31 @@ const DispersedExplorer = () => {
     return combined;
   }, [useDatabase, establishedCampgrounds, additionalCampgrounds]);
 
+  // Restrict the user's saved campsites and friends' shared campsites to the
+  // current search radius so the "My Sites" / friends stats match the other
+  // tiles (which are already radius-bounded by their fetch hooks).
+  const campsitesInRadius = useMemo(() => {
+    if (!searchLocation) return [];
+    const dLat = RADIUS_MILES / 69;
+    const dLng = RADIUS_MILES / (69 * Math.cos((searchLocation.lat * Math.PI) / 180));
+    return campsites.filter(
+      (cs) =>
+        Math.abs(cs.lat - searchLocation.lat) <= dLat &&
+        Math.abs(cs.lng - searchLocation.lng) <= dLng
+    );
+  }, [campsites, searchLocation]);
+
+  const friendsCampsitesInRadius = useMemo(() => {
+    if (!searchLocation) return [];
+    const dLat = RADIUS_MILES / 69;
+    const dLng = RADIUS_MILES / (69 * Math.cos((searchLocation.lat * Math.PI) / 180));
+    return friendsCampsites.filter(
+      (cs) =>
+        Math.abs(cs.lat - searchLocation.lat) <= dLat &&
+        Math.abs(cs.lng - searchLocation.lng) <= dLng
+    );
+  }, [friendsCampsites, searchLocation]);
+
   // Filter potential spots with smart rules:
   // - OSM camp sites: Always show (they're verified camping locations)
   // - MVUM-derived spots: Always show (MVUM roads are definitely on National Forest)
@@ -450,6 +675,8 @@ const DispersedExplorer = () => {
       // - Exclude "Host" sites (camp host sites at established campgrounds)
       // - Exclude camps too close to established campgrounds
       // - Exclude camps too close to each other (deduplication)
+      const hasRoadData = mvumRoads.length > 0 || osmTracks.length > 0;
+
       campSites = campSites
         .filter((spot) => {
           const name = spot.name || '';
@@ -457,10 +684,16 @@ const DispersedExplorer = () => {
           // Filter out established campgrounds (they're added to campgrounds list above)
           if (isLikelyEstablishedCampground(spot)) return false;
 
-          // Filter out backcountry/hike-in camps that aren't near any road
-          // Use real-time check against loaded roads to match Full mode behavior
-          // (database flag may not be backfilled, so we check against actual road data)
-          if (!isNearAnyRoad(spot.lat, spot.lng, 0.25)) return false;
+          // Filter out backcountry/hike-in camps that aren't near any road.
+          // When road data is loaded (admin import ran for this area), check
+          // real-time proximity — it's more accurate. When we have no road
+          // data (region was saved by browser but no admin import yet),
+          // fall back to the is_road_accessible flag we persisted at save time.
+          if (hasRoadData) {
+            if (!isNearAnyRoad(spot.lat, spot.lng, 0.25)) return false;
+          } else {
+            if (spot.isRoadAccessible === false) return false;
+          }
 
           // NOTE: Private road filtering is handled at database import time
           // Spots near private roads should not be in the database
@@ -537,18 +770,25 @@ const DispersedExplorer = () => {
       // BLM roads are definitely on public land (BLM) - always include
       if (spot.isOnBLMRoad) return true;
 
-      // For ALL other spots (including those claiming isOnPublicLand from OSM heuristics),
-      // validate against polygon data if available - this is the authoritative check
+      // For ALL other spots, validate against polygon data if available.
+      // In Full mode (client-side) this is the authoritative check because
+      // the isOnPublicLand heuristic is loose (bbox-based). In Fast mode
+      // (database) the flag was set at save time when client polygons were
+      // loaded, so it's more trustworthy than a potentially sparse polygon
+      // re-check at load time — trust it.
       if (publicLands.length > 0) {
         const withinPublicLand = isWithinAnyPublicLand(spot.lat, spot.lng, publicLands);
         if (withinPublicLand) return true;
 
-        // Spot is NOT within any public land polygon - reject as likely private land
-        // This overrides the isOnPublicLand heuristic from OSM road characteristics
+        // Not in any loaded polygon. In DB mode, the flag is still reliable —
+        // trust it rather than rejecting (polygon coverage may be fragmented).
+        if (useDatabase && spot.isOnPublicLand) return true;
+
+        // Full mode: polygon check overrides heuristic, reject.
         return false;
       }
 
-      // No polygon coverage - fall back to isOnPublicLand heuristic or MVUM presence
+      // No polygon coverage yet — fall back to isOnPublicLand heuristic or MVUM presence
       if (spot.isOnPublicLand) return true;
       return hasMVUMRoads;
     });
@@ -1114,7 +1354,6 @@ const DispersedExplorer = () => {
       case 'camp-site': return <Tent className="w-4 h-4 text-mossgreen" />;
       case 'dead-end': return <MapPinLine className="w-4 h-4 text-orange-600" />;
       case 'intersection': return <Path className="w-4 h-4 text-blue-600" />;
-      case 'water-access': return <Drop className="w-4 h-4 text-cyan-600" />;
       default: return <MapPin className="w-4 h-4 text-gray-600" />;
     }
   };
@@ -1170,15 +1409,16 @@ const DispersedExplorer = () => {
     setSelectedSpot(null);
     setSelectedCampground(null);
     setSelectedCampsite(null);
+    setSelectedRoad(null);
     setAiAnalysis(null);
     setAiError(null);
   };
 
   useEffect(() => {
-    if (selectedSpot || selectedCampground || selectedCampsite) {
+    if (selectedSpot || selectedCampground || selectedCampsite || selectedRoad) {
       setMobileView('list');
     }
-  }, [selectedSpot, selectedCampground, selectedCampsite]);
+  }, [selectedSpot, selectedCampground, selectedCampsite, selectedRoad]);
 
   const handleUnifiedSpotClick = (spot: UnifiedSpot) => {
     if (spot.category === 'derived' && spot.originalSpot) {
@@ -1313,6 +1553,7 @@ const DispersedExplorer = () => {
                 aiCheckingCache={aiCheckingCache}
                 aiError={aiError}
                 copiedCoords={copiedCoords}
+                fromDatabase={useDatabase}
                 onBack={clearAllSelections}
                 onCopyCoords={copySpotCoords}
                 onAnalyze={() => runSpotAnalysis(false)}
@@ -1324,6 +1565,12 @@ const DispersedExplorer = () => {
               <CampgroundDetailPanel campground={selectedCampground} onBack={clearAllSelections} />
             ) : selectedCampsite ? (
               <UserCampsiteDetailPanel campsite={selectedCampsite} onBack={clearAllSelections} />
+            ) : selectedRoad ? (
+              <RoadDetailPanel
+                road={selectedRoad}
+                fromDatabase={useDatabase}
+                onBack={clearAllSelections}
+              />
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-3 sm:space-y-5">
                 {/* Search - desktop only (mobile has it above the toggle) */}
@@ -1360,10 +1607,52 @@ const DispersedExplorer = () => {
                 {/* Results: Stats, Filters, Campsites */}
                 {searchLocation && !loading && (
                   <>
+                    <div className="flex items-center justify-between gap-2 text-xs px-2.5 py-1.5 rounded-md bg-muted/50 border border-border">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {useDatabase ? (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                            <span className="font-medium text-foreground">Database cache</span>
+                            {lastAnalysedAt && (
+                              <span className="text-muted-foreground truncate">
+                                · analysed {lastAnalysedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
+                            <span className="font-medium text-foreground">Fresh client analysis</span>
+                            {lastAnalysedAt && (
+                              <span className="text-muted-foreground truncate">
+                                · saved {lastAnalysedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      {lastAnalysedAt && (
+                        <button
+                          onClick={() => {
+                            // Don't clear lastAnalysedAt or flip useDatabase —
+                            // we want DB pins to keep showing while the
+                            // background refresh runs.
+                            regionSavedRef.current = null;
+                            setRefreshing(true);
+                            setReanalyseBust((n) => n + 1);
+                          }}
+                          disabled={refreshing}
+                          className="text-primary hover:underline font-medium shrink-0 disabled:opacity-50 disabled:no-underline"
+                        >
+                          {refreshing ? 'Refreshing…' : 'Re-analyse'}
+                        </button>
+                      )}
+                    </div>
+
                     <ResultsStatsRow
                       filteredPotentialSpots={filteredPotentialSpots}
                       allEstablishedCampgrounds={allEstablishedCampgrounds}
-                      campsites={campsites}
+                      campsites={campsitesInRadius}
                     />
 
                     <SpotFiltersPanel

@@ -6,6 +6,7 @@ import {
   CheckCircle,
   Copy,
   Crosshair,
+  Database,
   Jeep,
   Lightning,
   MapPinLine,
@@ -29,6 +30,7 @@ interface SpotDetailPanelProps {
   aiCheckingCache: boolean;
   aiError: string | null;
   copiedCoords: boolean;
+  fromDatabase: boolean;
   onBack: () => void;
   onCopyCoords: () => void;
   onAnalyze: () => void;
@@ -51,6 +53,7 @@ export const SpotDetailPanel = ({
   aiCheckingCache,
   aiError,
   copiedCoords,
+  fromDatabase,
   onBack,
   onCopyCoords,
   onAnalyze,
@@ -116,6 +119,14 @@ export const SpotDetailPanel = ({
                   <span className="text-xs text-muted-foreground">
                     {typeLabel(selectedSpot.type)}
                   </span>
+                  {fromDatabase && (
+                    <span
+                      title="Loaded from database cache"
+                      className="inline-flex items-center text-muted-foreground"
+                    >
+                      <Database className="w-3.5 h-3.5" weight="fill" />
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="shrink-0 flex items-center gap-2">
@@ -160,6 +171,26 @@ export const SpotDetailPanel = ({
             ))}
           </div>
         )}
+
+        {/* Public-land entity */}
+        {selectedSpot.landName && (
+          <div className="flex items-start gap-2.5 px-3 py-2.5 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
+            <TreeEvergreen className="w-4 h-4 text-emerald-700 dark:text-emerald-300 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground leading-tight">{selectedSpot.landName}</p>
+              {(selectedSpot.landProtectionTitle || selectedSpot.landProtectClass) && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {selectedSpot.landProtectionTitle}
+                  {selectedSpot.landProtectionTitle && selectedSpot.landProtectClass && ' · '}
+                  {selectedSpot.landProtectClass && `IUCN ${selectedSpot.landProtectClass}`}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* OSM tag details */}
+        {selectedSpot.osmTags && <OsmTagDetails tags={selectedSpot.osmTags} />}
 
         {/* AI Analysis */}
         <div className="pt-3 border-t border-border">
@@ -293,3 +324,150 @@ export const SpotDetailPanel = ({
     </div>
   );
 };
+
+// OSM tag details — surfaces every useful key from potential_spots.osm_tags
+// for camp-sites that came from OSM tourism=camp_site/camp_pitch/caravan_site.
+// Designed verbose so we can see what's actually present in the data and
+// curate the UX later.
+const AMENITY_LABELS: { key: string; label: string; activeIf?: (v: string) => boolean }[] = [
+  { key: 'drinking_water', label: 'Drinking water' },
+  { key: 'toilets', label: 'Toilets' },
+  { key: 'shower', label: 'Showers' },
+  { key: 'fire_pit', label: 'Fire pit' },
+  { key: 'bbq', label: 'BBQ' },
+  { key: 'electric_hookup', label: 'Power' },
+  { key: 'internet_access', label: 'WiFi', activeIf: (v) => v !== 'no' },
+];
+
+const SUITABILITY_LABELS: { key: string; label: string }[] = [
+  { key: 'tents', label: 'Tents' },
+  { key: 'caravans', label: 'RVs' },
+  { key: 'dogs', label: 'Dogs' },
+  { key: 'wheelchair', label: 'Accessible' },
+];
+
+const isYes = (v?: string) => v === 'yes' || v === 'designated';
+
+interface OsmTagDetailsProps {
+  tags: Record<string, string>;
+}
+
+const OsmTagDetails = ({ tags }: OsmTagDetailsProps) => {
+  const amenities = AMENITY_LABELS.filter((a) => {
+    const v = tags[a.key];
+    if (!v) return false;
+    return a.activeIf ? a.activeIf(v) : isYes(v);
+  });
+  const suitability = SUITABILITY_LABELS.filter((s) => isYes(tags[s.key]));
+
+  const wikipediaHref = tags.wikipedia
+    ? (() => {
+        const m = tags.wikipedia.match(/^([a-z]{2}):(.+)$/);
+        if (m) return `https://${m[1]}.wikipedia.org/wiki/${encodeURIComponent(m[2])}`;
+        return `https://en.wikipedia.org/wiki/${encodeURIComponent(tags.wikipedia)}`;
+      })()
+    : null;
+
+  const hasAnything =
+    amenities.length > 0 ||
+    suitability.length > 0 ||
+    tags.capacity ||
+    tags.fee ||
+    tags.reservation ||
+    tags.opening_hours ||
+    tags.operator ||
+    tags.phone ||
+    tags.website ||
+    wikipediaHref ||
+    tags.description ||
+    tags.ele;
+
+  if (!hasAnything) return null;
+
+  return (
+    <div className="pt-3 border-t border-border space-y-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">From OSM</p>
+
+      {amenities.length > 0 && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-1.5">Amenities</p>
+          <div className="flex flex-wrap gap-1.5">
+            {amenities.map((a) => (
+              <span key={a.key} className="px-2 py-1 rounded-md text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
+                {a.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {suitability.length > 0 && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-1.5">Allowed</p>
+          <div className="flex flex-wrap gap-1.5">
+            {suitability.map((s) => (
+              <span key={s.key} className="px-2 py-1 rounded-md text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                {s.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-1 text-sm">
+        {tags.capacity && (
+          <DetailRow label="Capacity" value={`${tags.capacity} sites`} />
+        )}
+        {tags.fee && (
+          <DetailRow
+            label="Fee"
+            value={tags.fee === 'yes' ? (tags['fee:amount'] || 'Yes') : 'Free'}
+          />
+        )}
+        {tags.reservation && <DetailRow label="Reservation" value={tags.reservation} />}
+        {tags.opening_hours && <DetailRow label="Hours" value={tags.opening_hours} />}
+        {tags.seasonal && <DetailRow label="Seasonal" value={tags.seasonal} />}
+        {tags.operator && <DetailRow label="Operator" value={tags.operator} />}
+        {tags.ele && <DetailRow label="Elevation" value={`${tags.ele}m`} />}
+      </div>
+
+      {(tags.phone || tags.website || wikipediaHref) && (
+        <div className="flex flex-wrap gap-3 text-xs">
+          {tags.phone && (
+            <a href={`tel:${tags.phone}`} className="text-primary hover:underline">
+              {tags.phone}
+            </a>
+          )}
+          {tags.website && (
+            <a href={tags.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+              Website
+            </a>
+          )}
+          {wikipediaHref && (
+            <a href={wikipediaHref} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+              Wikipedia
+            </a>
+          )}
+        </div>
+      )}
+
+      {tags.description && (
+        <p className="text-sm text-muted-foreground leading-relaxed border-l-2 border-border pl-3">
+          {tags.description}
+        </p>
+      )}
+    </div>
+  );
+};
+
+interface DetailRowProps {
+  label: string;
+  value: string;
+}
+
+const DetailRow = ({ label, value }: DetailRowProps) => (
+  <div className="flex justify-between gap-3">
+    <span className="text-muted-foreground">{label}</span>
+    <span className="text-foreground text-right">{value}</span>
+  </div>
+);

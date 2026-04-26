@@ -72,7 +72,10 @@ serve(async (req) => {
         type: mapSpotType(row.spot_type),
         score: parseFloat(row.confidence_score) || 0,
         reasons: row.derivation_reasons || [],
-        source: "derived" as const,
+        // 'osm' = actual OSM-tagged camp_site/camp_pitch entity (a "known" site).
+        // 'derived' = computed from road-network analysis (dead-ends, intersections).
+        // potential_spots.spot_type already encodes this distinction.
+        source: row.spot_type === "camp_site" ? "osm" : "derived",
         roadName: row.road_name,
         highClearance: row.vehicle_access !== "passenger",
         isOnMVUMRoad: isUSFS, // USFS spots come from MVUM roads
@@ -90,8 +93,12 @@ serve(async (req) => {
         isRoadAccessible: row.is_road_accessible !== false, // default true for backwards compat
         // Public land flag (for filtering spots not on public land)
         isOnPublicLand: row.is_on_public_land !== false, // default true for backwards compat
-        // Raw OSM tags for future use
+        // Raw OSM tags (drinking_water, capacity, fee, etc.) for the detail panel
         osmTags: row.osm_tags || null,
+        // Resolved public-land entity at save time
+        landName: row.land_unit_name || null,
+        landProtectClass: row.land_protect_class || null,
+        landProtectionTitle: row.land_protection_title || null,
       };
     });
 

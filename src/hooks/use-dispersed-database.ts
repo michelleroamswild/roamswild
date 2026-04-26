@@ -62,6 +62,7 @@ interface DatabasePublicLand {
 
 interface DatabaseRoad {
   id: string;
+  externalId?: string | null;
   name: string;
   sourceType: string;
   vehicleAccess: string;
@@ -74,6 +75,16 @@ interface DatabaseRoad {
   tracktype?: string;
   access?: string;
   fourWdOnly?: boolean;
+  osmTags?: Record<string, string>;
+  // MVUM-specific tags (per-vehicle-class flags, maintenance level)
+  mvumTags?: {
+    passenger?: boolean;
+    high_clearance?: boolean;
+    atv?: boolean;
+    motorcycle?: boolean;
+    operational_maint_level?: string | null;
+  };
+  seasonalClosure?: string;
 }
 
 export interface DispersedDatabaseResult {
@@ -105,7 +116,8 @@ export interface PublicLandsDatabaseResult {
 export function useDispersedDatabase(
   lat: number | null,
   lng: number | null,
-  radiusMiles: number = 10
+  radiusMiles: number = 10,
+  refreshKey: number = 0
 ): DispersedDatabaseResult {
   const [potentialSpots, setPotentialSpots] = useState<PotentialSpot[]>([]);
   const [establishedCampgrounds, setEstablishedCampgrounds] = useState<EstablishedCampground[]>([]);
@@ -206,15 +218,21 @@ export function useDispersedDatabase(
         const transformedMvumRoads: MVUMRoad[] = dbRoads
           .filter((r: DatabaseRoad) => r.sourceType === 'mvum')
           .map((r: DatabaseRoad) => ({
-            id: r.id,
+            // Use external_id (USFS OBJECTID) when present so dedup/identity
+            // matches the live MVUM API; fall back to row UUID.
+            id: r.externalId || r.id,
             name: r.name,
-            surfaceType: 'Unknown',
-            highClearanceVehicle: r.vehicleAccess !== 'passenger',
-            passengerVehicle: r.vehicleAccess === 'passenger',
-            atv: false,
-            motorcycle: false,
-            seasonal: '',
-            operationalMaintLevel: '',
+            surfaceType: r.surface || '',
+            // Prefer mvum_tags when present (richer); fall back to inferring
+            // from vehicle_access enum for older rows that predate the JSONB.
+            highClearanceVehicle:
+              r.mvumTags?.high_clearance ?? (r.vehicleAccess !== 'passenger'),
+            passengerVehicle:
+              r.mvumTags?.passenger ?? (r.vehicleAccess === 'passenger'),
+            atv: r.mvumTags?.atv ?? false,
+            motorcycle: r.mvumTags?.motorcycle ?? false,
+            seasonal: r.seasonalClosure || '',
+            operationalMaintLevel: r.mvumTags?.operational_maint_level || '',
             geometry: {
               type: 'LineString' as const,
               coordinates: (r.coordinates || []).map(c => [c.lng, c.lat] as [number, number]),
@@ -224,7 +242,9 @@ export function useDispersedDatabase(
         const transformedOsmTracks: OSMTrack[] = dbRoads
           .filter((r: DatabaseRoad) => r.sourceType === 'osm')
           .map((r: DatabaseRoad) => ({
-            id: parseInt(r.id) || Math.random(),
+            // OSM way ID lives in external_id (the row's `id` is our UUID).
+            // Without this, /api/0.6/way/{id}/history would 404.
+            id: r.externalId ? parseInt(r.externalId, 10) : Math.random(),
             name: r.name,
             highway: r.highway || 'track',
             surface: r.surface,
@@ -235,6 +255,7 @@ export function useDispersedDatabase(
               type: 'LineString' as const,
               coordinates: (r.coordinates || []).map(c => [c.lng, c.lat] as [number, number]),
             },
+            osmTags: r.osmTags,
           }));
 
         setPotentialSpots(spots);
@@ -258,7 +279,7 @@ export function useDispersedDatabase(
     fetchData();
 
     return () => controller.abort();
-  }, [lat, lng, radiusMiles]);
+  }, [lat, lng, radiusMiles, refreshKey]);
 
   return {
     potentialSpots,
