@@ -41,6 +41,7 @@ import TerrainValidation from "./pages/TerrainValidation";
 import PhotoScout from "./pages/PhotoScout";
 import Admin from "./pages/Admin";
 import Friends from "./pages/Friends";
+import IoTest from "./pages/IoTest";
 
 // Smart home route - shows Landing for guests, Index for authenticated users
 const HomeRoute = () => {
@@ -82,6 +83,7 @@ const App = () => (
                   <Route path="/forgot-password" element={<ForgotPassword />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/landing" element={<Landing />} />
+                  <Route path="/iotest" element={<IoTest />} />
 
                   {/* Home - Landing for guests, Index for authenticated */}
                   <Route path="/" element={<HomeRoute />} />
