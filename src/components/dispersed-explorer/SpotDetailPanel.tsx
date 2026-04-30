@@ -1,27 +1,37 @@
+import { ReactNode } from 'react';
 import {
-  ArrowLeft,
   ArrowSquareOut,
   Car,
-  Check,
   CheckCircle,
-  Copy,
   Crosshair,
   Database,
   Jeep,
-  Lightning,
   MapPinLine,
   Path,
+  Sparkle,
   SpinnerGap,
   Tent,
   TreeEvergreen,
   Users,
   Warning,
 } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
 import { PotentialSpot } from '@/hooks/use-dispersed-roads';
 import { useSpotNaipImage } from '@/hooks/use-spot-naip-image';
 import type { Campsite } from '@/types/campsite';
 import type { SpotAIAnalysis } from './types';
+import { Mono, Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
+import {
+  DetailShell,
+  DetailBody,
+  DetailActions,
+  BackLink,
+  DetailHero,
+  CoordsStrip,
+  DetailSection,
+  DetailRow,
+  DetailTag,
+} from './DetailPanelChrome';
 
 interface SpotDetailPanelProps {
   selectedSpot: PotentialSpot;
@@ -41,9 +51,17 @@ interface SpotDetailPanelProps {
 }
 
 const typeLabel = (type: PotentialSpot['type']) => {
-  if (type === 'camp-site') return 'Known Campsite';
-  if (type === 'dead-end') return 'Road Terminus';
-  return 'Road Junction';
+  if (type === 'camp-site') return 'Known campsite';
+  if (type === 'dead-end') return 'Road terminus';
+  return 'Road junction';
+};
+
+// Map spot type → icon + accent. Keeps the hero block on each spot type
+// visually consistent with the rest of the redesign (sage/clay/water/pine).
+const typeStyle = (type: PotentialSpot['type']) => {
+  if (type === 'camp-site') return { Icon: Tent,        bg: 'bg-pin-safe/15',     text: 'text-pin-safe' };
+  if (type === 'dead-end')  return { Icon: MapPinLine,  bg: 'bg-pin-moderate/15', text: 'text-pin-moderate' };
+  return                            { Icon: Path,        bg: 'bg-pin-easy/15',     text: 'text-pin-easy' };
 };
 
 export const SpotDetailPanel = ({
@@ -62,334 +80,338 @@ export const SpotDetailPanel = ({
   onDismissError,
   onConfirm,
 }: SpotDetailPanelProps) => {
-  const TypeIcon = selectedSpot.type === 'camp-site' ? Tent : selectedSpot.type === 'dead-end' ? MapPinLine : Path;
-  const typeColor = selectedSpot.type === 'camp-site' ? 'text-wildviolet bg-wildviolet/10' : selectedSpot.type === 'dead-end' ? 'text-orange-600 bg-orange-500/10' : 'text-blue-600 bg-blue-500/10';
-
+  const { Icon, bg, text } = typeStyle(selectedSpot.type);
   const { image: naipImage, loading: naipLoading } = useSpotNaipImage(selectedSpot.lat, selectedSpot.lng);
   const naipYear = naipImage?.taken_at ? new Date(naipImage.taken_at).getFullYear() : null;
 
-  // Consolidated tags (site-type tag is rendered separately under the title)
-  const tags: { label: React.ReactNode; className: string; key: string }[] = [];
-  if (selectedSpot.isOnMVUMRoad) tags.push({ key: 'mvum', label: 'USFS MVUM', className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' });
-  if (selectedSpot.isOnBLMRoad) tags.push({ key: 'blm', label: 'BLM', className: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' });
+  // Consolidated tags (excluding the source/derived flag — that lives in the
+  // hero badge slot). Maps land/road flags to the redesign accent palette.
+  const tags: { key: string; label: ReactNode; variant: Parameters<typeof DetailTag>[0]['variant'] }[] = [];
+  if (selectedSpot.isOnMVUMRoad) tags.push({ key: 'mvum', variant: 'sage', label: 'USFS MVUM' });
+  if (selectedSpot.isOnBLMRoad)  tags.push({ key: 'blm', variant: 'clay', label: 'BLM' });
   if (selectedSpot.isOnPublicLand && !selectedSpot.isOnMVUMRoad && !selectedSpot.isOnBLMRoad) {
-    tags.push({ key: 'public', label: 'Public Land', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' });
+    tags.push({ key: 'public', variant: 'sage', label: 'Public land' });
   }
   if (selectedSpot.passengerReachable) {
-    tags.push({ key: 'pass', label: <><Car className="w-3 h-3" /> Passenger</>, className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' });
+    tags.push({ key: 'pass', variant: 'pine', label: <><Car className="w-3 h-3" weight="regular" /> Passenger</> });
   }
   if (selectedSpot.highClearanceReachable && !selectedSpot.passengerReachable) {
-    tags.push({ key: 'hc', label: <><Jeep className="w-3 h-3" /> High Clearance</>, className: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' });
+    tags.push({ key: 'hc', variant: 'clay', label: <><Jeep className="w-3 h-3" weight="regular" /> High clearance</> });
   }
-  if (selectedSpot.roadName) {
-    tags.push({ key: 'road', label: selectedSpot.roadName, className: 'bg-muted text-muted-foreground' });
-  }
+  if (selectedSpot.roadName) tags.push({ key: 'road', variant: 'ghost', label: selectedSpot.roadName });
   selectedSpot.reasons.forEach((reason, i) => {
-    // Skip reasons that duplicate the structured tags above
     if (reason.toLowerCase() === 'on public land') return;
-    tags.push({ key: `reason-${i}`, label: reason, className: 'bg-primary/10 text-primary' });
+    tags.push({ key: `reason-${i}`, variant: 'ghost', label: reason });
   });
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Scrollable content */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-5">
-        {/* Back nav */}
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to results
-        </button>
+    <DetailShell>
+      <DetailBody>
+        {/* Top bar — back link + cache indicator */}
+        <div className="px-[18px] py-3 border-b border-line flex items-center justify-between">
+          <BackLink onBack={onBack} />
+          {fromDatabase && (
+            <Mono className="text-ink-3 inline-flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5" weight="regular" />
+              Cached
+            </Mono>
+          )}
+        </div>
 
-        {/* NAIP aerial chip — only shown when we have one for this spot */}
+        {/* NAIP aerial — full-width hero strip when available */}
         {(naipLoading || naipImage) && (
-          <div className="-mx-3 sm:-mx-4 md:-mx-6">
-            <div className="relative aspect-[4/3] bg-muted overflow-hidden">
-              {naipLoading && !naipImage && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <SpinnerGap className="w-5 h-5 animate-spin text-muted-foreground" />
+          <div className="relative aspect-[4/3] bg-paper-2 overflow-hidden border-b border-line">
+            {naipLoading && !naipImage && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <SpinnerGap className="w-5 h-5 animate-spin text-ink-3" />
+              </div>
+            )}
+            {naipImage && (
+              <>
+                <img
+                  src={naipImage.storage_url}
+                  alt="Aerial view"
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+                <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-ink/80 text-cream text-[10px] font-mono uppercase tracking-[0.10em] font-semibold">
+                  NAIP{naipYear ? ` · ${naipYear}` : ''}
                 </div>
-              )}
-              {naipImage && (
-                <>
-                  <img
-                    src={naipImage.storage_url}
-                    alt="Aerial view"
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                  <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 text-white text-[10px] font-medium tracking-wide">
-                    NAIP{naipYear ? ` · ${naipYear}` : ''}
-                  </div>
-                </>
-              )}
-            </div>
+              </>
+            )}
           </div>
         )}
 
-        {/* Hero: icon + (name/type on left, coords/actions on right) */}
-        <div className="flex items-start gap-3">
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${typeColor}`}>
-            <TypeIcon className="w-6 h-6" weight={selectedSpot.type === 'dead-end' ? 'fill' : 'regular'} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-bold leading-tight text-foreground">
-                  {selectedSpot.name || 'Unnamed Spot'}
-                </h2>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  {selectedSpot.source === 'derived' && (
-                    <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
-                      Derived site
-                    </span>
-                  )}
-                  <span className="text-xs text-muted-foreground">
-                    {typeLabel(selectedSpot.type)}
-                  </span>
-                  {fromDatabase && (
-                    <span
-                      title="Loaded from database cache"
-                      className="inline-flex items-center text-muted-foreground"
-                    >
-                      <Database className="w-3.5 h-3.5" weight="fill" />
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="shrink-0 flex items-center gap-2">
-                <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
-                  {selectedSpot.lat.toFixed(4)}, {selectedSpot.lng.toFixed(4)}
-                </span>
-                <button
-                  onClick={onCopyCoords}
-                  className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                  title="Copy coordinates"
-                >
-                  {copiedCoords ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Hero — type-colored icon, eyebrow, name, source badge */}
+        <DetailSection title={typeLabel(selectedSpot.type)} first>
+          <DetailHero
+            Icon={Icon}
+            iconBg={bg}
+            iconText={text}
+            title={selectedSpot.name || 'Unnamed spot'}
+            badge={
+              selectedSpot.source === 'derived' ? (
+                <DetailTag variant="clay">Derived</DetailTag>
+              ) : undefined
+            }
+          />
+        </DetailSection>
 
-        {/* Access difficulty rating + the OSM tags that produced it */}
+        {/* Coords */}
+        <DetailSection title="Coordinates">
+          <CoordsStrip
+            lat={selectedSpot.lat}
+            lng={selectedSpot.lng}
+            copied={copiedCoords}
+            onCopy={onCopyCoords}
+          />
+        </DetailSection>
+
+        {/* Access difficulty + the OSM road tags that produced it */}
         {selectedSpot.accessDifficulty && selectedSpot.accessDifficulty !== 'unknown' && (() => {
           const d = selectedSpot.accessDifficulty;
           const r = selectedSpot.accessRoad;
-          const styles: Record<string, { bar: string; label: string; bg: string }> = {
-            extreme:  { bar: 'bg-black',     label: 'Extreme access',  bg: 'bg-black/5 border-black/30' },
-            hard:     { bar: 'bg-black',     label: 'Hard access',     bg: 'bg-black/5 border-black/30' },
-            moderate: { bar: 'bg-orange-500', label: 'Moderate access', bg: 'bg-orange-50 border-orange-300 dark:bg-orange-900/20 dark:border-orange-700' },
-            easy:     { bar: 'bg-yellow-500', label: 'Easy access',     bg: 'bg-yellow-50 border-yellow-300 dark:bg-yellow-900/20 dark:border-yellow-700' },
+          const styles: Record<string, { dot: string; bg: string; border: string; label: string; text: string }> = {
+            extreme:  { dot: 'bg-pin-hard',     bg: 'bg-pin-hard/8',     border: 'border-pin-hard/40',     text: 'text-pin-hard',     label: 'Extreme access' },
+            hard:     { dot: 'bg-pin-hard',     bg: 'bg-pin-hard/8',     border: 'border-pin-hard/40',     text: 'text-pin-hard',     label: 'Hard access' },
+            moderate: { dot: 'bg-pin-moderate', bg: 'bg-pin-moderate/8', border: 'border-pin-moderate/40', text: 'text-pin-moderate', label: 'Moderate access' },
+            easy:     { dot: 'bg-pin-easy',     bg: 'bg-pin-easy/8',     border: 'border-pin-easy/40',     text: 'text-pin-easy',     label: 'Easy access' },
           };
           const s = styles[d];
           if (!s) return null;
           return (
-            <div className={`px-3 py-2.5 rounded-lg border ${s.bg}`}>
-              <div className="flex items-center gap-2">
-                <span className={`inline-block w-2.5 h-2.5 rounded-full ${s.bar}`} />
-                <span className="text-sm font-semibold text-foreground">{s.label}</span>
-              </div>
-              {r && (r.road_name || r.tracktype || r.smoothness || r.surface) && (
-                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                  {r.road_name && <span><span className="font-medium text-foreground/80">Track</span> {r.road_name}</span>}
-                  {r.tracktype && <span><span className="font-medium text-foreground/80">Tracktype</span> {r.tracktype}</span>}
-                  {r.smoothness && <span><span className="font-medium text-foreground/80">Smoothness</span> {r.smoothness}</span>}
-                  {r.surface && <span><span className="font-medium text-foreground/80">Surface</span> {r.surface}</span>}
-                  {r.four_wd_only && <span className="font-medium text-foreground/80">4WD-only</span>}
+            <DetailSection title="Access difficulty">
+              <div className={cn('px-3 py-2.5 rounded-[10px] border', s.bg, s.border)}>
+                <div className="flex items-center gap-2">
+                  <span className={cn('w-2.5 h-2.5 rounded-full', s.dot)} />
+                  <span className={cn('text-[14px] font-sans font-semibold tracking-[-0.005em]', s.text)}>{s.label}</span>
                 </div>
-              )}
-            </div>
+                {r && (r.road_name || r.tracktype || r.smoothness || r.surface) && (
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-mono uppercase tracking-[0.08em] text-ink-3">
+                    {r.road_name   && <span><span className="text-ink-2 font-semibold">Track</span> {r.road_name}</span>}
+                    {r.tracktype   && <span><span className="text-ink-2 font-semibold">Tracktype</span> {r.tracktype}</span>}
+                    {r.smoothness  && <span><span className="text-ink-2 font-semibold">Smoothness</span> {r.smoothness}</span>}
+                    {r.surface     && <span><span className="text-ink-2 font-semibold">Surface</span> {r.surface}</span>}
+                    {r.four_wd_only && <span className="text-ink-2 font-semibold">4WD only</span>}
+                  </div>
+                )}
+              </div>
+            </DetailSection>
           );
         })()}
 
         {/* Community confirmations */}
         {existingCampsiteForSpot && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 text-green-700 dark:text-green-300 rounded-lg border border-green-500/20">
-            <Users className="w-4 h-4 shrink-0" />
-            <span className="text-sm font-medium">{existingCampsiteForSpot.confirmationCount} confirmed</span>
-            {existingCampsiteForSpot.isConfirmed && (
-              <span className="flex items-center gap-1 text-xs ml-auto">
-                <CheckCircle className="w-3.5 h-3.5" /> Verified
+          <DetailSection title="Community">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-[10px] border border-pine-6/30 bg-pine-6/[0.06] text-pine-6">
+              <Users className="w-4 h-4 flex-shrink-0" weight="regular" />
+              <span className="text-[13px] font-sans font-semibold">
+                {existingCampsiteForSpot.confirmationCount} confirmed
               </span>
-            )}
-          </div>
+              {existingCampsiteForSpot.isConfirmed && (
+                <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-mono uppercase tracking-[0.10em] font-semibold">
+                  <CheckCircle className="w-3.5 h-3.5" weight="fill" />
+                  Verified
+                </span>
+              )}
+            </div>
+          </DetailSection>
         )}
 
-        {/* Consolidated tags */}
+        {/* Tag cloud */}
         {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {tags.map((tag) => (
-              <span
-                key={tag.key}
-                className={`px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1 ${tag.className}`}
-              >
-                {tag.label}
-              </span>
-            ))}
-          </div>
+          <DetailSection title="Signals">
+            <div className="flex flex-wrap gap-1.5">
+              {tags.map((t) => (
+                <DetailTag key={t.key} variant={t.variant}>
+                  {t.label}
+                </DetailTag>
+              ))}
+            </div>
+          </DetailSection>
         )}
 
         {/* Public-land entity */}
         {selectedSpot.landName && (
-          <div className="flex items-start gap-2.5 px-3 py-2.5 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
-            <TreeEvergreen className="w-4 h-4 text-emerald-700 dark:text-emerald-300 shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground leading-tight">{selectedSpot.landName}</p>
-              {(selectedSpot.landProtectionTitle || selectedSpot.landProtectClass) && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {selectedSpot.landProtectionTitle}
-                  {selectedSpot.landProtectionTitle && selectedSpot.landProtectClass && ' · '}
-                  {selectedSpot.landProtectClass && `IUCN ${selectedSpot.landProtectClass}`}
+          <DetailSection title="Public land">
+            <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-[10px] border border-sage/30 bg-sage/[0.06]">
+              <TreeEvergreen className="w-4 h-4 text-sage flex-shrink-0 mt-0.5" weight="regular" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] font-sans font-semibold text-ink leading-tight">
+                  {selectedSpot.landName}
                 </p>
-              )}
+                {(selectedSpot.landProtectionTitle || selectedSpot.landProtectClass) && (
+                  <p className="text-[12px] text-ink-3 mt-0.5">
+                    {selectedSpot.landProtectionTitle}
+                    {selectedSpot.landProtectionTitle && selectedSpot.landProtectClass && ' · '}
+                    {selectedSpot.landProtectClass && `IUCN ${selectedSpot.landProtectClass}`}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
+          </DetailSection>
         )}
 
-        {/* OSM tag details */}
+        {/* OSM tag details (camp-site only) */}
         {selectedSpot.osmTags && <OsmTagDetails tags={selectedSpot.osmTags} />}
 
         {/* AI Analysis */}
-        <div className="pt-3 border-t border-border">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">AI Assessment</p>
-
+        <DetailSection title="AI assessment">
           {aiCheckingCache && !aiAnalysis && (
-            <div className="flex items-center gap-2 py-3 text-muted-foreground">
+            <div className="flex items-center gap-2 py-2 text-ink-3">
               <SpinnerGap className="w-4 h-4 animate-spin" />
-              <span className="text-sm">Checking for cached analysis...</span>
+              <span className="text-[13px]">Checking for cached analysis…</span>
             </div>
           )}
 
           {!aiCheckingCache && !aiAnalysis && !aiAnalyzing && !aiError && (
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">
+            <div className="space-y-3">
+              <p className="text-[13px] text-ink-3 leading-[1.55]">
                 Get an AI-powered assessment of this spot's campability from satellite imagery.
               </p>
-              <Button variant="outline" size="sm" className="w-full" onClick={onAnalyze}>
-                <Lightning className="w-4 h-4 mr-1.5" weight="fill" />
+              <Pill variant="solid-pine" mono={false} onClick={onAnalyze} className="!w-full !justify-center">
+                <Sparkle className="w-4 h-4" weight="fill" />
                 Analyze
-              </Button>
+              </Pill>
             </div>
           )}
 
           {aiAnalyzing && !aiAnalysis && (
-            <div className="flex flex-col items-center py-6 text-muted-foreground">
-              <SpinnerGap className="w-6 h-6 animate-spin mb-2" />
-              <span className="text-sm">Analyzing satellite imagery...</span>
+            <div className="flex flex-col items-center py-5 gap-2">
+              <SpinnerGap className="w-5 h-5 animate-spin text-pine-6" />
+              <Mono className="text-pine-6">Analyzing satellite imagery…</Mono>
             </div>
           )}
 
           {aiError && (
             <div className="space-y-2">
-              <p className="text-sm text-destructive">{aiError}</p>
-              <Button variant="outline" size="sm" className="w-full" onClick={onDismissError}>Retry</Button>
+              <p className="text-[13px] text-ember">{aiError}</p>
+              <Pill variant="ghost" sm mono={false} onClick={onDismissError} className="!w-full !justify-center">
+                Retry
+              </Pill>
             </div>
           )}
 
-            {aiAnalysis && (
-              <div className="space-y-3">
-                {/* Big score card */}
-                <div className={`p-4 rounded-xl border-2 ${
-                  aiAnalysis.campabilityScore >= 70 ? 'border-green-300 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 dark:border-green-700' :
-                    aiAnalysis.campabilityScore >= 50 ? 'border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 dark:border-amber-700' :
-                      aiAnalysis.campabilityScore >= 30 ? 'border-orange-300 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 dark:border-orange-700' :
-                        'border-red-300 bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 dark:border-red-700'
-                }`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-white font-bold text-2xl shrink-0 ${
-                      aiAnalysis.campabilityScore >= 70 ? 'bg-green-500' : aiAnalysis.campabilityScore >= 50 ? 'bg-amber-500' : aiAnalysis.campabilityScore >= 30 ? 'bg-orange-500' : 'bg-red-500'
-                    }`}>{aiAnalysis.campabilityScore}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold">
-                        {aiAnalysis.campabilityScore >= 70 ? 'Great Campsite' : aiAnalysis.campabilityScore >= 50 ? 'Decent Spot' : aiAnalysis.campabilityScore >= 30 ? 'Marginal' : 'Not Recommended'}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5 capitalize">{aiAnalysis.confidence} confidence</p>
-                    </div>
-                  </div>
-                  <p className="text-sm leading-relaxed mt-3">{aiAnalysis.summary}</p>
-                </div>
+          {aiAnalysis && (
+            <div className="space-y-3">
+              {/* Score card — accent based on overall campability */}
+              <AiScoreCard analysis={aiAnalysis} />
 
-                {/* Factor grid */}
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { label: 'Ground', icon: <Crosshair className="w-3.5 h-3.5" />, data: aiAnalysis.ground },
-                    { label: 'Access', icon: <Path className="w-3.5 h-3.5" />, data: aiAnalysis.access },
-                    { label: 'Cover', icon: <TreeEvergreen className="w-3.5 h-3.5" />, data: aiAnalysis.cover },
-                    { label: 'Hazards', icon: <Warning className="w-3.5 h-3.5" />, data: aiAnalysis.hazards },
-                  ].map(({ label, icon, data }) => (
-                    <div key={label} className={`p-2.5 rounded-lg ${
-                      data.rating === 'good' || data.rating === 'none' ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' :
-                        data.rating === 'fair' || data.rating === 'minor' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' :
-                          data.rating === 'poor' || data.rating === 'moderate' || data.rating === 'significant' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300' :
-                            'bg-muted text-muted-foreground'
-                    }`}>
-                      <div className="flex items-center gap-1 mb-1">
-                        {icon}
-                        <span className="text-xs font-semibold uppercase tracking-wide">{label}</span>
-                        <span className="text-[10px] font-medium ml-auto capitalize opacity-70">{data.rating}</span>
-                      </div>
-                      <p className="text-xs leading-snug">{data.detail}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Trail */}
-                {aiAnalysis.trail && (
-                  <div className={`p-2.5 rounded-lg ${
-                    aiAnalysis.trail.rating === 'easy' ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' :
-                      aiAnalysis.trail.rating === 'moderate' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' :
-                        aiAnalysis.trail.rating === 'difficult' || aiAnalysis.trail.rating === 'extreme' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300' :
-                          'bg-muted text-muted-foreground'
-                  }`}>
-                    <div className="flex items-center gap-1 mb-1">
-                      <Path className="w-3.5 h-3.5" />
-                      <span className="text-xs font-semibold uppercase tracking-wide">Trail</span>
-                      <span className="text-[10px] font-medium ml-auto capitalize opacity-70">{aiAnalysis.trail.rating}</span>
-                    </div>
-                    <p className="text-xs leading-snug">{aiAnalysis.trail.detail}</p>
-                  </div>
-                )}
-
-                {/* Best use */}
-                <div className="flex items-center gap-2.5 px-3 py-2.5 bg-primary/5 rounded-lg border border-primary/10">
-                  <Tent className="w-4 h-4 text-primary shrink-0" />
-                  <p className="text-sm font-medium">{aiAnalysis.bestUse}</p>
-                </div>
-
-                <Button variant="ghost" size="sm" className="w-full" onClick={onReanalyze}>Re-analyze</Button>
+              {/* Factor grid */}
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: 'Ground',  Icon: Crosshair,    data: aiAnalysis.ground },
+                  { label: 'Access',  Icon: Path,         data: aiAnalysis.access },
+                  { label: 'Cover',   Icon: TreeEvergreen, data: aiAnalysis.cover },
+                  { label: 'Hazards', Icon: Warning,      data: aiAnalysis.hazards },
+                ].map(({ label, Icon: FIcon, data }) => (
+                  <FactorTile key={label} label={label} Icon={FIcon} data={data} />
+                ))}
               </div>
-            )}
-          </div>
-      </div>
 
-      {/* Fixed bottom actions */}
-      <div className="shrink-0 border-t border-border bg-background p-3 sm:p-4 md:p-6 space-y-2">
-        <Button
-          variant="primary"
-          size="sm"
-          className="w-full"
-          onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${selectedSpot.lat},${selectedSpot.lng}`, '_blank')}
+              {/* Trail */}
+              {aiAnalysis.trail && (
+                <FactorTile label="Trail" Icon={Path} data={aiAnalysis.trail} />
+              )}
+
+              {/* Best use */}
+              <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] border border-pine-6/30 bg-pine-6/[0.06]">
+                <Tent className="w-4 h-4 text-pine-6 flex-shrink-0" weight="regular" />
+                <p className="text-[13px] font-sans font-semibold text-ink">{aiAnalysis.bestUse}</p>
+              </div>
+
+              <Pill variant="ghost" sm mono={false} onClick={onReanalyze} className="!w-full !justify-center">
+                Re-analyze
+              </Pill>
+            </div>
+          )}
+        </DetailSection>
+      </DetailBody>
+
+      {/* Sticky actions */}
+      <DetailActions>
+        <Pill
+          variant="solid-pine"
+          mono={false}
+          onClick={() =>
+            window.open(`https://www.google.com/maps/search/?api=1&query=${selectedSpot.lat},${selectedSpot.lng}`, '_blank')
+          }
+          className="!w-full !justify-center"
         >
-          <ArrowSquareOut className="w-4 h-4 mr-1.5" />
+          <ArrowSquareOut className="w-3.5 h-3.5" weight="regular" />
           Open in Maps
-        </Button>
-        <Button variant="outline" size="sm" className="w-full" onClick={onConfirm}>
-          <CheckCircle className="w-4 h-4 mr-1.5" />
-          {existingCampsiteForSpot ? 'Confirmed' : 'Confirm'}
-        </Button>
+        </Pill>
+        <Pill variant="ghost" mono={false} onClick={onConfirm} className="!w-full !justify-center">
+          <CheckCircle className="w-3.5 h-3.5" weight={existingCampsiteForSpot ? 'fill' : 'regular'} />
+          {existingCampsiteForSpot ? 'Confirmed' : 'Confirm spot'}
+        </Pill>
+      </DetailActions>
+    </DetailShell>
+  );
+};
+
+// === AI score card ========================================================
+const SCORE_TIERS = [
+  { min: 70, label: 'Great campsite',   bg: 'bg-pin-safe/[0.10]',     border: 'border-pin-safe/40',     pill: 'bg-pin-safe' },
+  { min: 50, label: 'Decent spot',      bg: 'bg-pin-easy/[0.10]',     border: 'border-pin-easy/40',     pill: 'bg-pin-easy' },
+  { min: 30, label: 'Marginal',         bg: 'bg-pin-moderate/[0.10]', border: 'border-pin-moderate/40', pill: 'bg-pin-moderate' },
+  { min: 0,  label: 'Not recommended',  bg: 'bg-ember/[0.08]',        border: 'border-ember/40',        pill: 'bg-ember' },
+];
+
+const AiScoreCard = ({ analysis }: { analysis: SpotAIAnalysis }) => {
+  const tier = SCORE_TIERS.find((t) => analysis.campabilityScore >= t.min) ?? SCORE_TIERS[SCORE_TIERS.length - 1];
+  return (
+    <div className={cn('p-4 rounded-[12px] border', tier.bg, tier.border)}>
+      <div className="flex items-center gap-3">
+        <div className={cn('w-14 h-14 rounded-[10px] flex items-center justify-center text-cream font-sans font-bold text-[22px] tracking-[-0.02em] flex-shrink-0', tier.pill)}>
+          {analysis.campabilityScore}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">{tier.label}</p>
+          <Mono className="text-ink-3 block mt-0.5">{analysis.confidence} confidence</Mono>
+        </div>
       </div>
+      <p className="text-[13px] text-ink leading-[1.55] mt-3">{analysis.summary}</p>
     </div>
   );
 };
 
-// OSM tag details — surfaces every useful key from potential_spots.osm_tags
-// for camp-sites that came from OSM tourism=camp_site/camp_pitch/caravan_site.
-// Designed verbose so we can see what's actually present in the data and
-// curate the UX later.
+// === Factor tile (Ground/Access/Cover/Hazards/Trail) =====================
+type FactorRating = string;
+type FactorData = { rating: FactorRating; detail: string };
+
+// Maps a rating string → an accent. Pine (good), clay (fair), ember (bad).
+const ratingAccent = (rating: FactorRating): { bg: string; text: string } => {
+  if (['good', 'none', 'easy'].includes(rating))                               return { bg: 'bg-pin-safe/15',     text: 'text-pin-safe' };
+  if (['fair', 'minor', 'moderate'].includes(rating))                          return { bg: 'bg-pin-easy/15',     text: 'text-pin-easy' };
+  if (['poor', 'significant', 'difficult'].includes(rating))                   return { bg: 'bg-pin-moderate/15', text: 'text-pin-moderate' };
+  if (['extreme'].includes(rating))                                            return { bg: 'bg-ember/15',        text: 'text-ember' };
+  return                                                                              { bg: 'bg-paper-2',         text: 'text-ink-3' };
+};
+
+const FactorTile = ({
+  label,
+  Icon,
+  data,
+}: {
+  label: string;
+  Icon: typeof Path;
+  data: FactorData;
+}) => {
+  const { bg, text } = ratingAccent(data.rating);
+  return (
+    <div className={cn('p-2.5 rounded-[10px]', bg)}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <Icon className={cn('w-3.5 h-3.5', text)} weight="regular" />
+        <Mono className={text}>{label}</Mono>
+        <Mono className={cn('ml-auto opacity-70', text)}>{data.rating}</Mono>
+      </div>
+      <p className={cn('text-[12px] leading-snug', text)}>{data.detail}</p>
+    </div>
+  );
+};
+
+// === OSM tag details (camp-site spots only) ==============================
 const AMENITY_LABELS: { key: string; label: string; activeIf?: (v: string) => boolean }[] = [
   { key: 'drinking_water', label: 'Drinking water' },
   { key: 'toilets', label: 'Toilets' },
@@ -409,11 +431,7 @@ const SUITABILITY_LABELS: { key: string; label: string }[] = [
 
 const isYes = (v?: string) => v === 'yes' || v === 'designated';
 
-interface OsmTagDetailsProps {
-  tags: Record<string, string>;
-}
-
-const OsmTagDetails = ({ tags }: OsmTagDetailsProps) => {
+const OsmTagDetails = ({ tags }: { tags: Record<string, string> }) => {
   const amenities = AMENITY_LABELS.filter((a) => {
     const v = tags[a.key];
     if (!v) return false;
@@ -430,82 +448,63 @@ const OsmTagDetails = ({ tags }: OsmTagDetailsProps) => {
     : null;
 
   const hasAnything =
-    amenities.length > 0 ||
-    suitability.length > 0 ||
-    tags.capacity ||
-    tags.fee ||
-    tags.reservation ||
-    tags.opening_hours ||
-    tags.operator ||
-    tags.phone ||
-    tags.website ||
-    wikipediaHref ||
-    tags.description ||
-    tags.ele;
+    amenities.length > 0 || suitability.length > 0 ||
+    tags.capacity || tags.fee || tags.reservation || tags.opening_hours ||
+    tags.operator || tags.phone || tags.website || wikipediaHref ||
+    tags.description || tags.ele;
 
   if (!hasAnything) return null;
 
   return (
-    <div className="pt-3 border-t border-border space-y-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">From OSM</p>
-
+    <DetailSection title="From OSM">
       {amenities.length > 0 && (
-        <div>
-          <p className="text-xs text-muted-foreground mb-1.5">Amenities</p>
+        <div className="mb-3">
+          <Mono className="text-ink-3 block mb-1.5">Amenities</Mono>
           <div className="flex flex-wrap gap-1.5">
             {amenities.map((a) => (
-              <span key={a.key} className="px-2 py-1 rounded-md text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
-                {a.label}
-              </span>
+              <DetailTag key={a.key} variant="sage">{a.label}</DetailTag>
             ))}
           </div>
         </div>
       )}
 
       {suitability.length > 0 && (
-        <div>
-          <p className="text-xs text-muted-foreground mb-1.5">Allowed</p>
+        <div className="mb-3">
+          <Mono className="text-ink-3 block mb-1.5">Allowed</Mono>
           <div className="flex flex-wrap gap-1.5">
             {suitability.map((s) => (
-              <span key={s.key} className="px-2 py-1 rounded-md text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-                {s.label}
-              </span>
+              <DetailTag key={s.key} variant="water">{s.label}</DetailTag>
             ))}
           </div>
         </div>
       )}
 
-      <div className="space-y-1 text-sm">
-        {tags.capacity && (
-          <DetailRow label="Capacity" value={`${tags.capacity} sites`} />
-        )}
-        {tags.fee && (
-          <DetailRow
-            label="Fee"
-            value={tags.fee === 'yes' ? (tags['fee:amount'] || 'Yes') : 'Free'}
-          />
-        )}
-        {tags.reservation && <DetailRow label="Reservation" value={tags.reservation} />}
-        {tags.opening_hours && <DetailRow label="Hours" value={tags.opening_hours} />}
-        {tags.seasonal && <DetailRow label="Seasonal" value={tags.seasonal} />}
-        {tags.operator && <DetailRow label="Operator" value={tags.operator} />}
-        {tags.ele && <DetailRow label="Elevation" value={`${tags.ele}m`} />}
-      </div>
+      {(tags.capacity || tags.fee || tags.reservation || tags.opening_hours || tags.seasonal || tags.operator || tags.ele) && (
+        <div>
+          {tags.capacity && <DetailRow label="Capacity" value={`${tags.capacity} sites`} />}
+          {tags.fee && <DetailRow label="Fee" value={tags.fee === 'yes' ? (tags['fee:amount'] || 'Yes') : 'Free'} />}
+          {tags.reservation && <DetailRow label="Reservation" value={tags.reservation} />}
+          {tags.opening_hours && <DetailRow label="Hours" value={tags.opening_hours} />}
+          {tags.seasonal && <DetailRow label="Seasonal" value={tags.seasonal} />}
+          {tags.operator && <DetailRow label="Operator" value={tags.operator} />}
+          {tags.ele && <DetailRow label="Elevation" value={`${tags.ele}m`} />}
+        </div>
+      )}
 
       {(tags.phone || tags.website || wikipediaHref) && (
-        <div className="flex flex-wrap gap-3 text-xs">
+        <div className="mt-3 flex flex-wrap gap-3 text-[11px] font-mono uppercase tracking-[0.10em] font-semibold">
           {tags.phone && (
-            <a href={`tel:${tags.phone}`} className="text-primary hover:underline">
+            <a href={`tel:${tags.phone}`} className="text-pine-6 hover:text-pine-5 transition-colors">
               {tags.phone}
             </a>
           )}
           {tags.website && (
-            <a href={tags.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+            <a href={tags.website} target="_blank" rel="noopener noreferrer" className="text-pine-6 hover:text-pine-5 transition-colors">
               Website
             </a>
           )}
           {wikipediaHref && (
-            <a href={wikipediaHref} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+            <a href={wikipediaHref} target="_blank" rel="noopener noreferrer" className="text-pine-6 hover:text-pine-5 transition-colors">
               Wikipedia
             </a>
           )}
@@ -513,22 +512,10 @@ const OsmTagDetails = ({ tags }: OsmTagDetailsProps) => {
       )}
 
       {tags.description && (
-        <p className="text-sm text-muted-foreground leading-relaxed border-l-2 border-border pl-3">
+        <p className="mt-3 text-[13px] text-ink-3 leading-[1.55] border-l-2 border-line pl-3">
           {tags.description}
         </p>
       )}
-    </div>
+    </DetailSection>
   );
 };
-
-interface DetailRowProps {
-  label: string;
-  value: string;
-}
-
-const DetailRow = ({ label, value }: DetailRowProps) => (
-  <div className="flex justify-between gap-3">
-    <span className="text-muted-foreground">{label}</span>
-    <span className="text-foreground text-right">{value}</span>
-  </div>
-);

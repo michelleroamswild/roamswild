@@ -1,35 +1,30 @@
 import { Funnel, NavigationArrow, Star, Tent, Users } from '@phosphor-icons/react';
-import { Card, CardContent } from '@/components/ui/card';
 import { PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
 import type { Campsite } from '@/types/campsite';
 import type { UnifiedSpot } from './types';
+import { Mono, Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
-const getUnifiedSpotIcon = (spot: UnifiedSpot) => {
-  if (spot.category === 'campground') {
-    return <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />;
-  }
-  if (spot.category === 'mine') {
-    return <Tent className="w-3.5 h-3.5 text-wildviolet flex-shrink-0" weight="fill" />;
-  }
-  if (spot.category === 'friend') {
-    return <Users className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" weight="fill" />;
-  }
-  if (spot.spotType === 'camp-site') {
-    return <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#3d7a40' }} />;
-  }
-  if (spot.score && spot.score >= 35) {
-    return <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#eab308' }} />;
-  }
-  if (spot.score && spot.score >= 25) {
-    return <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#f97316' }} />;
-  }
-  return <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#e83a3a' }} />;
+// Pin badge for the leading column. Always w-2 h-2 so the row aligns
+// regardless of which type/score the spot is.
+const SpotDot = ({ spot }: { spot: UnifiedSpot }) => {
+  if (spot.category === 'campground') return <span className="w-2 h-2 rounded-full bg-pin-campground flex-shrink-0" />;
+  if (spot.category === 'mine')       return <Tent className="w-3 h-3 text-pine-6 flex-shrink-0" weight="fill" />;
+  if (spot.category === 'friend')     return <Users className="w-3 h-3 text-sage flex-shrink-0" weight="fill" />;
+  if (spot.spotType === 'camp-site')  return <span className="w-2 h-2 rounded-full bg-pin-safe flex-shrink-0" />;
+  if (spot.score && spot.score >= 35) return <span className="w-2 h-2 rounded-full bg-pin-easy flex-shrink-0" />;
+  if (spot.score && spot.score >= 25) return <span className="w-2 h-2 rounded-full bg-pin-moderate flex-shrink-0" />;
+  return <span className="w-2 h-2 rounded-full bg-pin-hard flex-shrink-0" />;
 };
 
-const getScoreColor = (score: number) => {
-  if (score >= 35) return 'text-amber-800 bg-amber-100 dark:text-amber-300 dark:bg-amber-900/30';
-  if (score >= 25) return 'text-orange-800 bg-orange-100 dark:text-orange-300 dark:bg-orange-900/30';
-  return 'text-red-800 bg-red-100 dark:text-red-300 dark:bg-red-900/30';
+// Build the "subtitle" line: agency / facility type / shared-by, etc. Returns
+// the parts that compose the mono "distance · sub" line under each row.
+const subtitleFor = (spot: UnifiedSpot): string => {
+  if (spot.category === 'campground') return spot.facilityType ? `Campground · ${spot.facilityType}` : 'Campground';
+  if (spot.category === 'mine')       return spot.campsiteType ? `My site · ${spot.campsiteType}` : 'My site';
+  if (spot.category === 'friend')     return spot.sharedBy ? `Shared by ${spot.sharedBy}` : 'Shared site';
+  if (spot.spotType === 'camp-site')  return 'Known campsite';
+  return spot.reasons?.[0] ?? 'Derived spot';
 };
 
 interface SpotResultsListProps {
@@ -59,17 +54,18 @@ export const SpotResultsList = ({
 }: SpotResultsListProps) => {
   if (unifiedSpotList.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-        <Funnel className="w-10 h-10 mb-3 opacity-50" />
-        <p className="text-base text-center font-medium">No campsites match your filters</p>
-        <p className="text-sm mt-1.5 opacity-75">Try adjusting your filters above</p>
+      <div className="border border-dashed border-line bg-white/50 rounded-[14px] mx-4 my-4 px-6 py-12 text-center">
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 text-pine-6 mb-3">
+          <Funnel className="w-5 h-5" weight="regular" />
+        </div>
+        <p className="text-[14px] font-sans font-semibold text-ink">No campsites match your filters</p>
+        <p className="text-[13px] text-ink-3 mt-1">Try loosening or removing a filter.</p>
         {hasFilters && (
-          <button
-            onClick={onClearFilters}
-            className="mt-3 text-sm text-primary hover:underline font-medium"
-          >
-            Clear all filters
-          </button>
+          <div className="mt-4">
+            <Pill variant="ghost" sm mono={false} onClick={onClearFilters}>
+              Clear all filters
+            </Pill>
+          </div>
         )}
       </div>
     );
@@ -77,95 +73,127 @@ export const SpotResultsList = ({
 
   return (
     <>
-      <div className="space-y-3">
-        {unifiedSpotList.slice(0, spotsToShow).map((spot) => {
+      {/* Flat row list — first row has no top border, subsequent rows divide
+          on a thin line. Selection state tints the whole row, no card chrome. */}
+      <div>
+        {unifiedSpotList.slice(0, spotsToShow).map((spot, i) => {
           const isSelected =
-            (spot.category === 'derived' && selectedSpot?.id === spot.originalSpot?.id) ||
+            (spot.category === 'derived'    && selectedSpot?.id      === spot.originalSpot?.id) ||
             (spot.category === 'campground' && selectedCampground?.id === spot.originalCampground?.id) ||
-            (spot.category === 'mine' && selectedCampsite?.id === spot.originalCampsite?.id) ||
-            (spot.category === 'friend' && selectedCampsite?.id === spot.originalCampsite?.id);
+            (spot.category === 'mine'       && selectedCampsite?.id   === spot.originalCampsite?.id) ||
+            (spot.category === 'friend'     && selectedCampsite?.id   === spot.originalCampsite?.id);
+
+          const distanceText = spot.distance !== undefined && spot.distance < 100
+            ? `${spot.distance.toFixed(1)} mi`
+            : null;
+          const subtitle = subtitleFor(spot);
 
           return (
-            <Card
+            <button
               key={spot.id}
-              className={`cursor-pointer transition-all hover:shadow-md ${
-                isSelected
-                  ? 'ring-2 ring-primary shadow-md'
-                  : spot.isRecommended
-                    ? 'border-primary/30 bg-primary/5'
-                    : ''
-              }`}
               onClick={() => onClickSpot(spot)}
+              className={cn(
+                'group w-full text-left px-4 py-3 transition-colors flex items-start gap-3',
+                i > 0 && 'border-t border-line',
+                isSelected ? 'bg-pine-6/[0.06]' : 'hover:bg-white/60',
+              )}
             >
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2.5">
-                  {getUnifiedSpotIcon(spot)}
-                  <span className="text-base font-medium text-foreground truncate flex-1">{spot.name}</span>
+              {/* Content column */}
+              <div className="flex-1 min-w-0">
+                {/* Title row — pin dot + name + recommended star */}
+                <div className="flex items-center gap-2">
+                  <SpotDot spot={spot} />
+                  <span className={cn(
+                    'flex-1 text-[13px] font-sans font-semibold tracking-[-0.01em] truncate',
+                    isSelected ? 'text-pine-6' : 'text-ink',
+                  )}>
+                    {spot.name}
+                  </span>
                   {spot.isRecommended && (
-                    <Star className="w-4 h-4 text-primary flex-shrink-0" weight="fill" />
-                  )}
-                  {spot.category === 'derived' && spot.score !== undefined && (
-                    <span className={`text-sm px-2 py-0.5 rounded font-medium ${getScoreColor(spot.score)}`}>
-                      {spot.score}
-                    </span>
-                  )}
-                  {spot.category === 'campground' && spot.reservable && (
-                    <span className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">Reserve</span>
+                    <Star className="w-3 h-3 text-pine-6 flex-shrink-0" weight="fill" />
                   )}
                 </div>
-                <div className="mt-2 flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
-                  {spot.distance !== undefined && spot.distance < 100 && (
-                    <span className="flex items-center gap-1">
-                      <NavigationArrow className="w-3.5 h-3.5" />
-                      {spot.distance.toFixed(1)} mi
-                    </span>
-                  )}
-                  {spot.category === 'derived' && spot.reasons && spot.reasons.slice(0, 2).map((reason, i) => (
-                    <span key={i} className="bg-muted px-2 py-0.5 rounded">{reason}</span>
+
+                {/* Mono meta line — "distance · subtitle" */}
+                <Mono className="text-ink-3 block mt-0.5">
+                  {[distanceText, subtitle].filter(Boolean).join(' · ')}
+                </Mono>
+
+                {/* Tag pills row — accent for road/access, ghost for "Reserve", etc. */}
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {spot.category === 'derived' && spot.reasons?.slice(0, 2).map((reason) => (
+                    <RowPill key={reason} variant="accent">{reason}</RowPill>
                   ))}
-                  {spot.category === 'campground' && spot.facilityType && (
-                    <span>{spot.facilityType}</span>
-                  )}
-                  {spot.category === 'mine' && spot.campsiteType && (
-                    <span>{spot.campsiteType}</span>
+                  {spot.category === 'campground' && spot.reservable && (
+                    <RowPill variant="ghost">Reservable</RowPill>
                   )}
                   {spot.category === 'friend' && spot.sharedBy && (
-                    <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded">
-                      Shared by {spot.sharedBy}
-                    </span>
+                    <RowPill variant="sage">Shared</RowPill>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+
+              {/* Rating column — star + mono score */}
+              {spot.category === 'derived' && spot.score !== undefined ? (
+                <div className="flex items-center gap-1 mt-0.5 flex-shrink-0">
+                  <Star className="w-3 h-3 text-clay" weight="fill" />
+                  <span className="text-[11px] font-mono font-bold tracking-[0.02em] text-ink">{spot.score}</span>
+                </div>
+              ) : null}
+            </button>
           );
         })}
       </div>
 
       {unifiedSpotList.length > 30 && (
-        <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Showing {Math.min(spotsToShow, unifiedSpotList.length)} of {unifiedSpotList.length}
-          </p>
-          <div className="flex gap-2">
+        <div className="px-4 py-3 border-t border-line flex items-center justify-between">
+          <Mono className="text-ink-3">
+            {Math.min(spotsToShow, unifiedSpotList.length)} / {unifiedSpotList.length}
+          </Mono>
+          <div className="flex items-center gap-3">
             {spotsToShow < unifiedSpotList.length && (
               <button
                 onClick={onShowMore}
-                className="text-sm text-primary hover:underline font-medium"
+                className="text-[11px] font-mono uppercase tracking-[0.10em] font-semibold text-pine-6 hover:text-pine-5 transition-colors"
               >
-                Show More
+                Show more
               </button>
             )}
             {spotsToShow > 30 && (
               <button
                 onClick={onShowLess}
-                className="text-sm text-muted-foreground hover:underline"
+                className="text-[11px] font-mono uppercase tracking-[0.10em] font-semibold text-ink-3 hover:text-ink transition-colors"
               >
-                Show Less
+                Show less
               </button>
             )}
           </div>
         </div>
       )}
     </>
+  );
+};
+
+// Row tag pill — matches the design's small Pill: 10px font, 5px/10px padding,
+// pill shape, mono caps. Variants follow the design's accent/ghost/clay set.
+const RowPill = ({
+  children,
+  variant,
+}: {
+  children: React.ReactNode;
+  variant: 'accent' | 'ghost' | 'clay' | 'sage';
+}) => {
+  const styles =
+    variant === 'accent' ? 'bg-pine-6/[0.18] border-pine-6 text-pine-6' :
+    variant === 'clay'   ? 'bg-clay/[0.14]  border-clay   text-clay' :
+    variant === 'sage'   ? 'bg-sage/[0.18]  border-sage   text-sage' :
+                           'bg-white        border-line   text-ink';
+  return (
+    <span className={cn(
+      'inline-flex items-center gap-1 px-2.5 py-[3px] rounded-full border text-[10px] font-mono font-semibold uppercase tracking-[0.12em]',
+      styles,
+    )}>
+      {children}
+    </span>
   );
 };

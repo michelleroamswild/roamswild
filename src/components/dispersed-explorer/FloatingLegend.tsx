@@ -1,18 +1,41 @@
 import { MapTrifold, Tent } from '@phosphor-icons/react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Mono } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 interface FloatingLegendProps {
   visibleLandAgencies: Set<string>;
   onToggleLandAgency: (key: string) => void;
 }
 
+// Land overlay agencies, mapped to the redesign land-* tokens (each has a
+// fill color + a darker stroke pair). Stays semantically faithful to the
+// existing map polygons while picking up the redesigned colors.
 const LAND_AGENCIES: { key: string; label: string; fill: string; stroke: string }[] = [
-  { key: 'USFS',        label: 'USFS',        fill: 'bg-emerald-500/30', stroke: 'border-emerald-600' },
-  { key: 'BLM',         label: 'BLM',         fill: 'bg-amber-500/30',   stroke: 'border-amber-600' },
-  { key: 'NPS',         label: 'NPS',         fill: 'bg-violet-500/30',  stroke: 'border-violet-600' },
-  { key: 'STATE_PARK',  label: 'State Park',  fill: 'bg-blue-500/30',    stroke: 'border-blue-600' },
-  { key: 'STATE_TRUST', label: 'State Trust', fill: 'bg-cyan-500/30',    stroke: 'border-cyan-600' },
-  { key: 'LAND_TRUST',  label: 'Land Trust',  fill: 'bg-pink-500/30',    stroke: 'border-pink-600' },
+  { key: 'USFS',        label: 'USFS',        fill: 'bg-land-usfs/40',       stroke: 'border-land-usfs-stroke' },
+  { key: 'BLM',         label: 'BLM',         fill: 'bg-land-blm/40',        stroke: 'border-land-blm-stroke' },
+  { key: 'NPS',         label: 'NPS',         fill: 'bg-land-nps/40',        stroke: 'border-land-nps-stroke' },
+  { key: 'STATE_PARK',  label: 'State Park',  fill: 'bg-land-statepark/40',  stroke: 'border-land-statepark-stroke' },
+  { key: 'STATE_TRUST', label: 'State Trust', fill: 'bg-land-statetrust/40', stroke: 'border-land-statetrust-stroke' },
+  { key: 'LAND_TRUST',  label: 'Land Trust',  fill: 'bg-land-landtrust/40',  stroke: 'border-land-landtrust-stroke' },
+];
+
+// Spot marker colors come straight from the pin-* tokens used by the actual
+// map markers, so the legend always matches what the user sees on the map.
+const SPOT_LEGEND: { dot?: string; label: string; tent?: boolean }[] = [
+  { dot: 'bg-pin-safe',       label: 'Known campsite' },
+  { dot: 'bg-pin-easy',       label: 'Easy access' },
+  { dot: 'bg-pin-moderate',   label: 'Moderate' },
+  { dot: 'bg-pin-hard',       label: 'Hard / extreme' },
+  { dot: 'bg-pin-campground', label: 'Campground' },
+  { tent: true,               label: 'My campsite' },
+];
+
+const ROAD_LEGEND: { color: string; label: string }[] = [
+  { color: 'bg-road-paved',     label: 'Paved' },
+  { color: 'bg-road-passenger', label: 'Passenger' },
+  { color: 'bg-road-highclear', label: 'High clearance' },
+  { color: 'bg-road-fourwd',    label: '4WD' },
 ];
 
 export const FloatingLegend = ({
@@ -23,101 +46,77 @@ export const FloatingLegend = ({
     <Popover>
       <PopoverTrigger asChild>
         <button
-          className="absolute bottom-4 left-4 z-10 w-12 h-12 rounded-full bg-background border border-border shadow-lg flex items-center justify-center hover:bg-secondary transition-colors"
+          className="absolute bottom-4 left-4 z-10 w-11 h-11 rounded-full bg-white border border-line shadow-[0_8px_22px_rgba(29,34,24,.12),0_2px_4px_rgba(29,34,24,.06)] flex items-center justify-center hover:bg-cream transition-colors"
           aria-label="Show legend"
         >
-          <MapTrifold className="w-5 h-5 text-foreground" />
+          <MapTrifold className="w-4 h-4 text-ink" weight="regular" />
         </button>
       </PopoverTrigger>
       <PopoverContent
         side="top"
         align="start"
-        className="w-72 p-4"
         sideOffset={8}
+        className="w-72 p-4 rounded-[14px] border-line bg-white"
       >
-        <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <MapTrifold className="w-4 h-4" />
-            Map Legend
-          </h3>
+        <div className="space-y-5">
+          <div className="flex items-center gap-2">
+            <MapTrifold className="w-4 h-4 text-pine-6" weight="regular" />
+            <Mono className="text-pine-6">Map legend</Mono>
+          </div>
 
-          {/* Land Overlays — one toggle per agency, off by default */}
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Land Overlays</p>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+          {/* Land overlays — toggle on/off; off-state dims to ~50% */}
+          <div className="space-y-2.5">
+            <Mono className="text-ink-2 block">Land overlays</Mono>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
               {LAND_AGENCIES.map((a) => {
                 const on = visibleLandAgencies.has(a.key);
                 return (
                   <button
                     key={a.key}
                     onClick={() => onToggleLandAgency(a.key)}
-                    className={`flex items-center gap-2 px-1.5 py-1 rounded transition-colors text-left ${
-                      on ? 'bg-secondary' : 'opacity-50 hover:opacity-100 hover:bg-secondary/50'
-                    }`}
                     aria-pressed={on}
+                    className={cn(
+                      'flex items-center gap-2 px-1.5 py-1 rounded-md transition-colors text-left',
+                      on ? 'bg-cream' : 'opacity-40 hover:opacity-100 hover:bg-cream/60',
+                    )}
                   >
-                    <div className={`w-3 h-3 rounded border ${a.fill} ${a.stroke}`} />
-                    <span className="flex-1">{a.label}</span>
+                    <div className={cn('w-3.5 h-3.5 rounded-[3px] border', a.fill, a.stroke)} />
+                    <span className="flex-1 text-[12px] text-ink">{a.label}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Spot Markers */}
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Spot Markers</p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#3d7a40' }} />
-                <span>Known Campsite</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#eab308' }} />
-                <span>Easy Access</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#f97316' }} />
-                <span>Moderate</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-black" />
-                <span>Hard / Extreme</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-blue-500 rounded-full" />
-                <span>Campground</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Tent className="w-3 h-3 text-wildviolet" weight="fill" />
-                <span>My Campsite</span>
-              </div>
+          {/* Spot markers */}
+          <div className="space-y-2.5">
+            <Mono className="text-ink-2 block">Spot markers</Mono>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12px] text-ink">
+              {SPOT_LEGEND.map(({ dot, label, tent }) => (
+                <div key={label} className="flex items-center gap-2">
+                  {tent ? (
+                    <Tent className="w-3.5 h-3.5 text-pine-6 flex-shrink-0" weight="fill" />
+                  ) : (
+                    <span className={cn('w-3 h-3 rounded-full flex-shrink-0', dot)} />
+                  )}
+                  {label}
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Road Colors */}
-          <div className="space-y-1.5">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Road Access</p>
-            <div className="grid grid-cols-2 gap-1.5 text-xs">
-              <div className="flex items-center gap-1.5">
-                <div className="w-4 h-0.5 bg-blue-500 rounded" />
-                <span>Paved</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-4 h-0.5 bg-green-500 rounded" />
-                <span>Passenger</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-4 h-0.5 bg-orange-500 rounded" />
-                <span>High Clearance</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-4 h-0.5 bg-red-500 rounded" />
-                <span>4WD</span>
-              </div>
+          {/* Road access */}
+          <div className="space-y-2.5">
+            <Mono className="text-ink-2 block">Road access</Mono>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12px] text-ink">
+              {ROAD_LEGEND.map(({ color, label }) => (
+                <div key={label} className="flex items-center gap-2">
+                  <span className={cn('w-5 h-0.5 rounded-full flex-shrink-0', color)} />
+                  {label}
+                </div>
+              ))}
             </div>
           </div>
-
         </div>
       </PopoverContent>
     </Popover>

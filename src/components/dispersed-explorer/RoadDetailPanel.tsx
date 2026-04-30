@@ -1,16 +1,24 @@
+import { ReactNode } from 'react';
 import {
-  ArrowLeft,
   ArrowSquareOut,
-  ArrowsClockwise,
   Car,
   Database,
   Jeep,
   Path,
-  SpinnerGap,
 } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
 import { MVUMRoad, OSMTrack } from '@/hooks/use-dispersed-roads';
 import { useOsmWayHistory, type OsmWayHistory } from '@/hooks/use-osm-way-history';
+import { Mono, Pill } from '@/components/redesign';
+import {
+  DetailShell,
+  DetailBody,
+  DetailActions,
+  BackLink,
+  DetailHero,
+  DetailSection,
+  DetailRow,
+  DetailTag,
+} from './DetailPanelChrome';
 
 type SelectedRoad = MVUMRoad | OSMTrack;
 
@@ -31,7 +39,6 @@ const TRACKTYPE_LABEL: Record<string, string> = {
   grade5: 'Grade 5 (4WD required)',
 };
 
-// USFS Operational Maintenance Levels (1=basic 4WD/closed → 5=fully paved)
 const MAINT_LEVEL_LABEL: Record<string, string> = {
   '1': 'Level 1 — basic custodial care',
   '2': 'Level 2 — high-clearance vehicle',
@@ -40,10 +47,7 @@ const MAINT_LEVEL_LABEL: Record<string, string> = {
   '5': 'Level 5 — passenger car (high-degree comfort)',
 };
 
-// --- OSM tag prettification ----------------------------------------------
-// OSM keys/values are machine-readable (snake_case lowercase). Translate to
-// human-friendly forms for display. Explicit mappings handle abbreviations
-// (4wd, mtb, atv, etc.) so the fallback can stay simple.
+// --- OSM tag prettification (unchanged from the previous panel) ----------
 const KEY_LABEL_OVERRIDES: Record<string, string> = {
   '4wd_only': '4WD only',
   motor_vehicle: 'Motor vehicle',
@@ -126,7 +130,6 @@ const VALUE_LABEL_OVERRIDES: Record<string, string> = {
 
 function prettifyKey(key: string): string {
   if (KEY_LABEL_OVERRIDES[key]) return KEY_LABEL_OVERRIDES[key];
-  // Fallback: split on : and _, capitalize first segment, lowercase the rest
   const parts = key.split(/[:_]/);
   if (parts.length === 0) return key;
   const head = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
@@ -137,12 +140,9 @@ function prettifyKey(key: string): string {
 function prettifyValue(key: string, value: string): string {
   if (key === 'tracktype' && TRACKTYPE_LABEL[value]) return TRACKTYPE_LABEL[value];
   if (VALUE_LABEL_OVERRIDES[value]) return VALUE_LABEL_OVERRIDES[value];
-  // Numbers, URLs, mixed-case strings — leave alone
   if (/^https?:\/\//.test(value)) return value;
   if (/^\d/.test(value)) return value;
   if (/[A-Z]/.test(value)) return value;
-  // All-lowercase single word — capitalize. Multi-word — replace _ with space
-  // and capitalize first letter only.
   const cleaned = value.replace(/_/g, ' ');
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
@@ -152,10 +152,7 @@ export const RoadDetailPanel = ({ road, fromDatabase, onBack }: RoadDetailPanelP
   const wayId = !isMvum ? Number(road.id) : null;
   const { history } = useOsmWayHistory(wayId && Number.isFinite(wayId) ? wayId : null);
   const historyBlurb = history ? buildHistoryBlurb(history) : null;
-  const sourceLabel = isMvum ? 'USFS MVUM' : 'OSM Track';
-  const sourceClass = isMvum
-    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-    : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+  const sourceEyebrow = isMvum ? 'USFS MVUM road' : 'OSM track';
 
   const displayName = road.name || (isMvum ? 'Unnamed road' : 'Unnamed track');
 
@@ -164,108 +161,72 @@ export const RoadDetailPanel = ({ road, fromDatabase, onBack }: RoadDetailPanelP
   const midIdx = Math.floor(coords.length / 2);
   const midpoint = coords[midIdx] ? { lng: coords[midIdx][0], lat: coords[midIdx][1] } : null;
 
-  // Vehicle-access pills
-  const accessPills: { key: string; label: React.ReactNode; className: string }[] = [];
+  // Vehicle-access tags — same accent system as the rest of the redesign.
+  const accessTags: { key: string; label: ReactNode; variant: Parameters<typeof DetailTag>[0]['variant'] }[] = [];
   if (isMvum) {
     if (road.passengerVehicle) {
-      accessPills.push({
-        key: 'pass',
-        label: <><Car className="w-3 h-3" /> Passenger</>,
-        className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-      });
+      accessTags.push({ key: 'pass', variant: 'pine', label: <><Car className="w-3 h-3" weight="regular" /> Passenger</> });
     }
     if (road.highClearanceVehicle && !road.passengerVehicle) {
-      accessPills.push({
-        key: 'hc',
-        label: <><Jeep className="w-3 h-3" /> High clearance</>,
-        className: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-      });
+      accessTags.push({ key: 'hc', variant: 'clay', label: <><Jeep className="w-3 h-3" weight="regular" /> High clearance</> });
     }
-    if (road.atv) {
-      accessPills.push({ key: 'atv', label: 'ATV', className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' });
-    }
-    if (road.motorcycle) {
-      accessPills.push({ key: 'moto', label: 'Motorcycle', className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' });
-    }
+    if (road.atv) accessTags.push({ key: 'atv', variant: 'ghost', label: 'ATV' });
+    if (road.motorcycle) accessTags.push({ key: 'moto', variant: 'ghost', label: 'Motorcycle' });
   } else {
     if (road.fourWdOnly || road.tracktype === 'grade5' || road.tracktype === 'grade4') {
-      accessPills.push({
-        key: '4wd',
-        label: <><Jeep className="w-3 h-3" /> 4WD only</>,
-        className: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-      });
+      accessTags.push({ key: '4wd', variant: 'ember', label: <><Jeep className="w-3 h-3" weight="regular" /> 4WD only</> });
     } else if (road.tracktype === 'grade3') {
-      accessPills.push({
-        key: 'hc',
-        label: <><Jeep className="w-3 h-3" /> High clearance</>,
-        className: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-      });
+      accessTags.push({ key: 'hc', variant: 'clay', label: <><Jeep className="w-3 h-3" weight="regular" /> High clearance</> });
     } else if (road.tracktype === 'grade1' || road.isPaved) {
-      accessPills.push({
-        key: 'pass',
-        label: <><Car className="w-3 h-3" /> Passenger</>,
-        className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-      });
+      accessTags.push({ key: 'pass', variant: 'pine', label: <><Car className="w-3 h-3" weight="regular" /> Passenger</> });
     }
   }
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-5">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to results
-        </button>
-
-        {/* Hero */}
-        <div className="flex items-start gap-3">
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
-            isMvum ? 'bg-green-500/10 text-green-700 dark:text-green-300' : 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
-          }`}>
-            <Path className="w-6 h-6" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-bold leading-tight text-foreground">{displayName}</h2>
-            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${sourceClass}`}>
-                {sourceLabel}
-              </span>
-              {fromDatabase && (
-                <span title="Loaded from database cache" className="inline-flex items-center text-muted-foreground">
-                  <Database className="w-3.5 h-3.5" weight="fill" />
-                </span>
-              )}
-            </div>
-          </div>
+    <DetailShell>
+      <DetailBody>
+        {/* Top bar — back link + cache indicator if loaded from DB */}
+        <div className="px-[18px] py-3 border-b border-line flex items-center justify-between">
+          <BackLink onBack={onBack} />
+          {fromDatabase && (
+            <Mono className="text-ink-3 inline-flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5" weight="regular" />
+              Cached
+            </Mono>
+          )}
         </div>
 
-        {/* Access pills */}
-        {accessPills.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {accessPills.map((p) => (
-              <span
-                key={p.key}
-                className={`px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1 ${p.className}`}
-              >
-                {p.label}
-              </span>
-            ))}
-          </div>
+        {/* Hero — colored Path icon, source eyebrow, name */}
+        <DetailSection title={sourceEyebrow} first>
+          <DetailHero
+            Icon={Path}
+            iconBg={isMvum ? 'bg-sage/15' : 'bg-water/15'}
+            iconText={isMvum ? 'text-sage' : 'text-ink-2'}
+            title={displayName}
+          />
+        </DetailSection>
+
+        {/* Access tags */}
+        {accessTags.length > 0 && (
+          <DetailSection title="Vehicle access">
+            <div className="flex flex-wrap gap-1.5">
+              {accessTags.map((t) => (
+                <DetailTag key={t.key} variant={t.variant}>
+                  {t.label}
+                </DetailTag>
+              ))}
+            </div>
+          </DetailSection>
         )}
 
-        {/* Curated details */}
-        <div className="space-y-1.5 text-sm">
+        {/* Curated detail rows */}
+        <DetailSection title="Details">
           {isMvum ? (
             <>
-              {road.surfaceType && (
-                <DetailRow label="Surface" value={road.surfaceType} />
-              )}
+              {road.surfaceType && <DetailRow label="Surface" value={road.surfaceType} />}
               {road.operationalMaintLevel && (
                 <DetailRow
-                  label="Maintenance level"
+                  label="Maintenance"
                   value={MAINT_LEVEL_LABEL[road.operationalMaintLevel] ?? road.operationalMaintLevel}
                 />
               )}
@@ -273,88 +234,67 @@ export const RoadDetailPanel = ({ road, fromDatabase, onBack }: RoadDetailPanelP
             </>
           ) : (
             <>
-              {road.highway && (
-                <DetailRow label="Highway" value={prettifyValue('highway', road.highway)} />
-              )}
+              {road.highway && <DetailRow label="Highway" value={prettifyValue('highway', road.highway)} />}
               {road.tracktype && (
-                <div className="space-y-1">
-                  <DetailRow
-                    label="Track type"
-                    value={TRACKTYPE_LABEL[road.tracktype] ?? road.tracktype}
-                  />
+                <>
+                  <DetailRow label="Track type" value={TRACKTYPE_LABEL[road.tracktype] ?? road.tracktype} />
                   {historyBlurb && (
-                    <p className="text-xs text-muted-foreground leading-snug">
+                    <p className="text-[12px] text-ink-3 leading-[1.5] mt-1.5 pl-3 border-l-2 border-line">
                       {historyBlurb}
                     </p>
                   )}
-                </div>
+                </>
               )}
-              {road.surface && (
-                <DetailRow label="Surface" value={prettifyValue('surface', road.surface)} />
-              )}
-              {road.access && (
-                <DetailRow label="Access" value={prettifyValue('access', road.access)} />
-              )}
+              {road.surface && <DetailRow label="Surface" value={prettifyValue('surface', road.surface)} />}
+              {road.access && <DetailRow label="Access" value={prettifyValue('access', road.access)} />}
             </>
           )}
-        </div>
+        </DetailSection>
 
-        {/* Raw OSM tags (long tail — smoothness, motor_vehicle, ref, operator, etc.) */}
-        {!isMvum && road.osmTags && (
-          <RoadOsmTagDetails tags={road.osmTags} />
-        )}
+        {/* Raw OSM tag bag */}
+        {!isMvum && road.osmTags && <RoadOsmTagDetails tags={road.osmTags} />}
 
         {/* OSM source link */}
         {!isMvum && (
-          <a
-            href={`https://www.openstreetmap.org/way/${road.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-          >
-            <ArrowSquareOut className="w-3 h-3" />
-            View way on OpenStreetMap
-          </a>
+          <div className="px-[18px] pb-4 pt-1">
+            <a
+              href={`https://www.openstreetmap.org/way/${road.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.10em] font-semibold text-pine-6 hover:text-pine-5 transition-colors"
+            >
+              <ArrowSquareOut className="w-3 h-3" weight="regular" />
+              View way on OpenStreetMap
+            </a>
+          </div>
         )}
-      </div>
+      </DetailBody>
 
-      {/* Fixed bottom action */}
+      {/* Sticky action */}
       {midpoint && (
-        <div className="shrink-0 border-t border-border bg-background p-3 sm:p-4 md:p-6">
-          <Button
-            variant="primary"
-            size="sm"
-            className="w-full"
+        <DetailActions>
+          <Pill
+            variant="solid-pine"
+            mono={false}
             onClick={() =>
               window.open(
                 `https://www.google.com/maps/search/?api=1&query=${midpoint.lat},${midpoint.lng}`,
-                '_blank'
+                '_blank',
               )
             }
+            className="!w-full !justify-center"
           >
-            <ArrowSquareOut className="w-4 h-4 mr-1.5" />
+            <ArrowSquareOut className="w-3.5 h-3.5" weight="regular" />
             Open midpoint in Maps
-          </Button>
-        </div>
+          </Pill>
+        </DetailActions>
       )}
-    </div>
+    </DetailShell>
   );
 };
 
-interface DetailRowProps {
-  label: string;
-  value: string;
-}
-
-const DetailRow = ({ label, value }: DetailRowProps) => (
-  <div className="flex justify-between gap-3">
-    <span className="text-muted-foreground">{label}</span>
-    <span className="text-foreground text-right break-words">{value}</span>
-  </div>
-);
-
 // Raw OSM tag bag — surfaces every key we got that isn't already shown in
-// the curated section above. Designed verbose; refine after observing data.
+// the curated section above. Featured tags float to the top, the rest collapse.
 const ROAD_TAG_KEYS_TO_HIDE = new Set([
   'highway',
   'tracktype',
@@ -365,59 +305,41 @@ const ROAD_TAG_KEYS_TO_HIDE = new Set([
   '4wd_only',
 ]);
 
-interface RoadOsmTagDetailsProps {
-  tags: Record<string, string>;
-}
-
-const RoadOsmTagDetails = ({ tags }: RoadOsmTagDetailsProps) => {
+const RoadOsmTagDetails = ({ tags }: { tags: Record<string, string> }) => {
   const entries = Object.entries(tags).filter(([k]) => !ROAD_TAG_KEYS_TO_HIDE.has(k));
   if (entries.length === 0) return null;
 
-  // Group commonly useful tags up top
   const featured = ['ref', 'smoothness', 'motor_vehicle', 'motorcycle', 'bicycle', 'mtb', 'oneway', 'maxspeed', 'width', 'bridge', 'tunnel', 'ford', 'seasonal', 'operator'];
   const featuredEntries = entries.filter(([k]) => featured.includes(k));
   const otherEntries = entries.filter(([k]) => !featured.includes(k));
 
   return (
-    <div className="pt-3 border-t border-border space-y-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">From OSM</p>
-
+    <DetailSection title="From OSM">
       {featuredEntries.length > 0 && (
-        <div className="space-y-1.5 text-sm">
+        <>
           {featuredEntries.map(([k, v]) => (
             <DetailRow key={k} label={prettifyKey(k)} value={prettifyValue(k, String(v))} />
           ))}
-        </div>
+        </>
       )}
 
       {otherEntries.length > 0 && (
-        <details className="text-xs">
-          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+        <details className="mt-2 group">
+          <summary className="cursor-pointer text-[11px] font-mono uppercase tracking-[0.10em] font-semibold text-pine-6 hover:text-pine-5 transition-colors list-none">
             All tags ({otherEntries.length})
           </summary>
-          <div className="mt-2 space-y-1">
+          <div className="mt-2 space-y-0">
             {otherEntries.map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-3">
-                <span className="text-muted-foreground">{prettifyKey(k)}</span>
-                <span className="text-foreground text-right break-words">
-                  {prettifyValue(k, String(v))}
-                </span>
-              </div>
+              <DetailRow key={k} label={prettifyKey(k)} value={prettifyValue(k, String(v))} />
             ))}
           </div>
         </details>
       )}
-    </div>
+    </DetailSection>
   );
 };
 
-
-// --- OSM way edit history -------------------------------------------------
-// Builds a one-line context blurb to render below the Track type row when
-// a way has been tagged at multiple grades over time (e.g. Rusty Nail
-// recently softened from grade 5 → grade 3). Returns null when the
-// tracktype has never changed (or never been set), so the UI stays clean
-// for the boring majority of tracks.
+// --- OSM way edit history ------------------------------------------------
 const GRADE_ORDER = ['grade1', 'grade2', 'grade3', 'grade4', 'grade5'];
 const GRADE_FRIENDLY: Record<string, string> = {
   grade1: 'Grade 1 (Paved)',

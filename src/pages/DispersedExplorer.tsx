@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
-import { useSearchParams, useLocation } from 'react-router-dom';
-import { MapPin, MagnifyingGlass, Path, SpinnerGap, Tent, Drop, MapPinLine } from '@phosphor-icons/react';
+import { useSearchParams, useLocation, Link } from 'react-router-dom';
+import { MapPin, MagnifyingGlass, Path, SpinnerGap, Tent, Drop, MapPinLine, Jeep, Funnel, ArrowRight, Plus, Minus } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import { LocationSelector, SelectedLocation } from '@/components/LocationSelector';
 import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
@@ -29,6 +29,8 @@ import { UserCampsiteDetailPanel } from '@/components/dispersed-explorer/UserCam
 import { RoadDetailPanel } from '@/components/dispersed-explorer/RoadDetailPanel';
 import { DispersedMap } from '@/components/dispersed-explorer/DispersedMap';
 import type { UnifiedSpot } from '@/components/dispersed-explorer/types';
+import { Mono } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 
 const DispersedExplorer = () => {
@@ -110,6 +112,11 @@ const DispersedExplorer = () => {
   // True between Re-analyse click and save completion. While true, useDispersedRoads
   // fires alongside DB mode so we can refresh data without going pin-less.
   const [refreshing, setRefreshing] = useState(false);
+
+  // Filter card collapse — when loading, the panel stays as a small pill so
+  // the empty filter shell doesn't flash. Auto-expands when results land.
+  const [filterCardOpen, setFilterCardOpen] = useState(false);
+  const wasLoadingRef = useRef(false);
   // Bumped after a save to force useDispersedDatabase to refetch (so DB pins update).
   const [dbRefreshKey, setDbRefreshKey] = useState(0);
   const { checkRegionCache, saveRegionToCache } = useRegionCache();
@@ -210,6 +217,19 @@ const DispersedExplorer = () => {
   const establishedCampgrounds = useDatabase ? dbCampgrounds : clientCampgrounds;
   const loading = useDatabase ? dbLoading : clientLoading;
   const error = useDatabase ? dbError : clientError;
+
+  // Auto-expand the filter panel when results land. Tracks the loading edge
+  // so we only fire on the true→false transition, not on every re-render.
+  useEffect(() => {
+    if (wasLoadingRef.current && !loading) {
+      setFilterCardOpen(true);
+    }
+    if (!searchLocation) {
+      // Collapse back to the pill when the user clears their search.
+      setFilterCardOpen(false);
+    }
+    wasLoadingRef.current = loading;
+  }, [loading, searchLocation]);
   // Always use client public lands (complete boundaries from direct API)
   const publicLands = clientPublicLands;
   const publicLandsLoading = clientPublicLandsLoading;
@@ -1488,94 +1508,130 @@ const DispersedExplorer = () => {
       .filter((p): p is google.maps.LatLngLiteral => p !== null && isFinite(p.lat) && isFinite(p.lng));
   };
 
-  return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <Header showBorder />
+  // Coordinates display for the desktop search bar (matches design's mono).
+  const coordLabel = searchLocation
+    ? `${searchLocation.lat.toFixed(2)}${searchLocation.lat >= 0 ? 'N' : 'S'} · ${Math.abs(searchLocation.lng).toFixed(2)}${searchLocation.lng >= 0 ? 'E' : 'W'}`
+    : null;
+  const placeLabel = searchLocation?.name?.split(',')[0]?.trim() || null;
+  const userName = user?.user_metadata?.name as string | undefined;
+  const userEmail = user?.email;
+  const initials = (() => {
+    const src = userName || userEmail || '';
+    const parts = src.split(/\s+/);
+    if (parts.length >= 2 && parts[0] && parts[1]) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return src.slice(0, 2).toUpperCase() || '··';
+  })();
 
-      {/* Mobile: Search + toggle above content */}
-      <div className="lg:hidden shrink-0 p-3 pb-0 space-y-2">
-            <LocationSelector
-              value={searchLocation}
-              onChange={handleLocationChange}
-              placeholder="Search location..."
-              showMyLocation={false}
-              showSavedLocations={false}
-              showCoordinates={false}
-              onMapClickHint={false}
-              compact={true}
-            />
-        <MobileViewTabs mobileView={mobileView} onChange={setMobileView} />
+  return (
+    <div className="h-screen bg-paper text-ink font-sans flex flex-col overflow-hidden">
+      {/* === Mobile: global Header + search bar + view tabs === */}
+      <div className="lg:hidden shrink-0">
+        <Header showBorder />
+        <div className="p-3 pb-2 space-y-2 border-b border-line bg-cream">
+          <LocationSelector
+            value={searchLocation}
+            onChange={handleLocationChange}
+            placeholder="Search location..."
+            showMyLocation={false}
+            showSavedLocations={false}
+            showCoordinates={false}
+            onMapClickHint={false}
+            compact={true}
+          />
+          <MobileViewTabs mobileView={mobileView} onChange={setMobileView} />
+        </div>
       </div>
 
-      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[13fr_7fr] overflow-hidden">
-        {/* Map - Left side on desktop, toggled on mobile */}
-        <div className={`order-2 lg:order-1 lg:h-full relative ${mobileView === 'map' ? 'flex-1' : 'hidden lg:block'}`}>
-          <DispersedMap
-            mapRef={mapRef}
-            mapCenter={mapCenter}
-            mapZoom={mapZoom}
-            onMapLoad={onMapLoad}
-            onMapClick={onMapClick}
-            searchLocation={searchLocation}
-            visibleLandAgencies={visibleLandAgencies}
-            publicLands={publicLands}
-            filteredMvumRoads={filteredMvumRoads}
-            filteredOsmTracks={filteredOsmTracks}
-            selectedRoad={selectedRoad}
-            onSelectRoad={setSelectedRoad}
-            filteredPotentialSpots={filteredPotentialSpots}
-            selectedSpot={selectedSpot}
-            onSpotClusterClick={(spot) => {
-              setSelectedSpot(spot);
-              setSelectedRoad(null);
-              setSelectedCampground(null);
-              setSelectedCampsite(null);
-              setCopiedCoords(false);
-              // Cache lookup handled by useEffect on selectedSpot change
-            }}
-            getSpotMarkerIcon={getSpotMarkerIcon}
-            showCampgroundsFiltered={showCampgroundsFiltered}
-            allEstablishedCampgrounds={allEstablishedCampgrounds}
-            selectedCampground={selectedCampground}
-            onSelectCampground={(cg) => {
-              setSelectedCampground(cg);
-              setSelectedSpot(null);
-              setSelectedRoad(null);
-              setSelectedCampsite(null);
-            }}
-            showMyCampsites={showMyCampsites}
-            showMyCampsitesFiltered={showMyCampsitesFiltered}
-            campsites={campsites}
-            selectedCampsite={selectedCampsite}
-            onSelectCampsite={(cs) => {
-              setSelectedCampsite(cs);
-              setSelectedSpot(null);
-              setSelectedRoad(null);
-              setSelectedCampground(null);
-            }}
-            onCloseSelection={clearAllSelections}
-            mapTapPoint={mapTapPoint}
-            onDismissMapTap={() => setMapTapPoint(null)}
-            onOpenSaveFromMap={() => setSaveFromMapOpen(true)}
-          />
+      {/* === Map-first layout (matches the Pine Grove "explore-mapfirst-split"
+           design): full-bleed map with three floating header pills on top
+           and two floating cards underneath (filters left, results right).
+           Mobile keeps the stacked map ⇄ list flow above. === */}
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        {/* Full-bleed map (desktop). On mobile: only when mobileView === 'map'. */}
+        <div
+          className={cn(
+            'lg:absolute lg:inset-0',
+            mobileView === 'map' ? 'flex-1 flex' : 'hidden lg:block',
+          )}
+        >
+          <div className="relative w-full h-full">
+            <DispersedMap
+              mapRef={mapRef}
+              mapCenter={mapCenter}
+              mapZoom={mapZoom}
+              onMapLoad={onMapLoad}
+              onMapClick={onMapClick}
+              searchLocation={searchLocation}
+              visibleLandAgencies={visibleLandAgencies}
+              publicLands={publicLands}
+              filteredMvumRoads={filteredMvumRoads}
+              filteredOsmTracks={filteredOsmTracks}
+              selectedRoad={selectedRoad}
+              onSelectRoad={setSelectedRoad}
+              filteredPotentialSpots={filteredPotentialSpots}
+              selectedSpot={selectedSpot}
+              onSpotClusterClick={(spot) => {
+                setSelectedSpot(spot);
+                setSelectedRoad(null);
+                setSelectedCampground(null);
+                setSelectedCampsite(null);
+                setCopiedCoords(false);
+              }}
+              getSpotMarkerIcon={getSpotMarkerIcon}
+              showCampgroundsFiltered={showCampgroundsFiltered}
+              allEstablishedCampgrounds={allEstablishedCampgrounds}
+              selectedCampground={selectedCampground}
+              onSelectCampground={(cg) => {
+                setSelectedCampground(cg);
+                setSelectedSpot(null);
+                setSelectedRoad(null);
+                setSelectedCampsite(null);
+              }}
+              showMyCampsites={showMyCampsites}
+              showMyCampsitesFiltered={showMyCampsitesFiltered}
+              campsites={campsites}
+              selectedCampsite={selectedCampsite}
+              onSelectCampsite={(cs) => {
+                setSelectedCampsite(cs);
+                setSelectedSpot(null);
+                setSelectedRoad(null);
+                setSelectedCampground(null);
+              }}
+              onCloseSelection={clearAllSelections}
+              mapTapPoint={mapTapPoint}
+              onDismissMapTap={() => setMapTapPoint(null)}
+              onOpenSaveFromMap={() => setSaveFromMapOpen(true)}
+            />
+          </div>
+        </div>
 
+        {/* Floating legend — bottom-left on mobile, bottom-center between
+            cards on desktop (clears both floating cards + the bottom edge). */}
+        <div className={cn(
+          'lg:absolute lg:bottom-5 lg:left-[360px] lg:z-10',
+          mobileView === 'map' ? 'block' : 'hidden lg:block',
+        )}>
           <FloatingLegend
             visibleLandAgencies={visibleLandAgencies}
             onToggleLandAgency={toggleLandAgency}
           />
+        </div>
 
-          {/* Bulk auto-pan helper — programmatically steps through tiles
-              to populate the spots table. Triggered via a tiny corner button. */}
-          {!bulkPanOpen && (
+        {/* Bulk auto-pan helper — small corner pill in the upper map gutter
+            between the floating header and the cards. */}
+        <div className={cn(
+          'lg:absolute lg:bottom-5 lg:right-[420px] lg:z-10',
+          mobileView === 'map' ? 'block' : 'hidden lg:block',
+        )}>
+          {!bulkPanOpen ? (
             <button
               onClick={() => setBulkPanOpen(true)}
-              className="absolute top-20 right-4 z-10 px-3 py-1.5 rounded-md bg-card border border-border text-xs font-medium shadow hover:bg-muted/40"
+              className="absolute top-4 right-4 lg:relative lg:top-0 lg:right-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-line text-[11px] font-mono uppercase tracking-[0.10em] font-semibold text-ink-2 hover:text-ink hover:border-ink-3 shadow-[0_4px_12px_rgba(29,34,24,.10)] transition-colors"
               title="Bulk auto-pan: walk a state grid and let the analysis pipeline run"
             >
               Bulk auto-pan
             </button>
-          )}
-          {bulkPanOpen && (
+          ) : (
             <BulkPanPanel
               loading={loading}
               lastAnalysedAt={lastAnalysedAt}
@@ -1585,119 +1641,221 @@ const DispersedExplorer = () => {
           )}
         </div>
 
-        {/* Sidebar - Right side on desktop, toggled on mobile */}
-        <div className={`order-1 lg:order-2 min-h-0 flex flex-col ${mobileView === 'list' ? 'flex-1' : 'hidden lg:block'}`}>
-            {selectedSpot ? (
-              <SpotDetailPanel
-                selectedSpot={selectedSpot}
-                existingCampsiteForSpot={existingCampsiteForSpot}
-                aiAnalysis={aiAnalysis}
-                aiAnalyzing={aiAnalyzing}
-                aiCheckingCache={aiCheckingCache}
-                aiError={aiError}
-                copiedCoords={copiedCoords}
-                fromDatabase={useDatabase}
-                onBack={clearAllSelections}
-                onCopyCoords={copySpotCoords}
-                onAnalyze={() => runSpotAnalysis(false)}
-                onReanalyze={() => runSpotAnalysis(true)}
-                onDismissError={() => setAiError(null)}
-                onConfirm={() => setConfirmDialogOpen(true)}
-              />
-            ) : selectedCampground ? (
-              <CampgroundDetailPanel campground={selectedCampground} onBack={clearAllSelections} />
-            ) : selectedCampsite ? (
-              <UserCampsiteDetailPanel campsite={selectedCampsite} onBack={clearAllSelections} />
-            ) : selectedRoad ? (
-              <RoadDetailPanel
-                road={selectedRoad}
-                fromDatabase={useDatabase}
-                onBack={clearAllSelections}
-              />
-            ) : (
-              <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-3 sm:space-y-5">
-                {/* Search - desktop only (mobile has it above the toggle) */}
-                <div className="hidden lg:block">
-                  <LocationSelector
-                    value={searchLocation}
-                    onChange={handleLocationChange}
-                    placeholder="Search location..."
-                    showMyLocation={false}
-                    showSavedLocations={false}
-                    showCoordinates={false}
-                    onMapClickHint={false}
-                    compact={true}
-                  />
+        {/* === DESKTOP FLOATING HEADER (3 pills) ===
+             Logo + nav (left) · centered search bar · location + avatar (right).
+             All sit at top:5 over the full-bleed map. */}
+        <ExploreHeaderPills
+          coordLabel={coordLabel}
+          placeLabel={placeLabel}
+          initials={initials}
+          searchLocation={searchLocation}
+          onSearchChange={handleLocationChange}
+        />
+
+        {/* === LEFT FILTER PANEL — genie collapse ===
+             Header strip stays put at the same width; the body collapses
+             with a smooth max-height animation. While loading, the panel
+             stays collapsed; on results-arrival it auto-expands. */}
+        <aside
+          className={cn(
+            'hidden lg:flex absolute top-[88px] left-5 w-[330px] z-10 flex-col bg-cream border border-line rounded-[16px] shadow-[0_18px_44px_rgba(29,34,24,.14)] overflow-hidden transition-[max-height] duration-300 ease-out',
+            filterCardOpen ? 'max-h-[calc(100vh-108px)]' : 'max-h-[60px]',
+          )}
+        >
+          {/* Header — always visible. Click the strip (or the +/- toggle)
+              to open/close. Reset lives inline so it stays reachable while
+              the body is collapsed. */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setFilterCardOpen((o) => !o)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setFilterCardOpen((o) => !o);
+              }
+            }}
+            aria-expanded={filterCardOpen}
+            className="shrink-0 px-[18px] py-4 flex items-center justify-between gap-2 cursor-pointer hover:bg-paper-2/40 transition-colors select-none"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Funnel className="w-4 h-4 text-ink flex-shrink-0" weight="regular" />
+              <span className="text-[15px] font-sans font-bold tracking-[-0.01em] text-ink">
+                Filters
+              </span>
+              {!loading && spotFilters.size > 0 && (
+                <Mono className="text-pine-6">{spotFilters.size} active</Mono>
+              )}
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              {/* Reset — only when there are active filters. Lives inline so
+                  the action is reachable even when the body is collapsed. */}
+              {(spotFilters.size > 0 || visibleLandAgencies.size > 0) && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSpotFilters(new Set());
+                    setVisibleLandAgencies(new Set());
+                  }}
+                  className="text-[11px] font-mono uppercase tracking-[0.10em] font-semibold text-ink-3 hover:text-ember transition-colors"
+                >
+                  Reset
+                </button>
+              )}
+              {!loading && searchLocation && (spotFilters.size === 0 && visibleLandAgencies.size === 0) && (
+                <Mono className="text-ink-3">{unifiedSpotList.length}</Mono>
+              )}
+              {/* +/- toggle indicator */}
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-line text-ink-3">
+                {filterCardOpen ? (
+                  <Minus className="w-3 h-3" weight="bold" />
+                ) : (
+                  <Plus className="w-3 h-3" weight="bold" />
+                )}
+              </span>
+            </div>
+          </div>
+
+          {/* Result summary — big sans count + mono "IN VIEW" + subtitle */}
+          {searchLocation && !loading && (
+            <div className="px-[18px] pb-4">
+              <div className="flex items-baseline justify-between gap-2">
+                <div className="text-[24px] font-sans font-bold tracking-[-0.02em] text-ink leading-none">
+                  {unifiedSpotList.length} {unifiedSpotList.length === 1 ? 'spot' : 'spots'}
                 </div>
+                <Mono className="text-ink-3">In view</Mono>
+              </div>
+              <p className="text-[12px] text-ink-3 mt-1.5">
+                {filteredPotentialSpots.length + allEstablishedCampgrounds.length + campsites.length} indexed nearby
+              </p>
+            </div>
+          )}
 
-                {/* Loading state */}
-                {loading && (
-                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                    <SpinnerGap className="w-10 h-10 animate-spin mb-4" />
-                    <p className="text-base">Discovering campsites...</p>
-                  </div>
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto px-[18px]">
+            {loading && (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 mb-3">
+                  <SpinnerGap className="w-5 h-5 text-pine-6 animate-spin" />
+                </div>
+                <Mono className="text-pine-6">Discovering campsites…</Mono>
+              </div>
+            )}
+
+            {!searchLocation && !loading && (
+              <div className="border border-dashed border-line bg-white/50 rounded-[14px] px-5 py-10 text-center">
+                <div className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-pine-6/10 text-pine-6 mb-3">
+                  <MagnifyingGlass className="w-5 h-5" weight="regular" />
+                </div>
+                <p className="text-[14px] font-sans font-semibold text-ink">Search for a location</p>
+                <p className="text-[12px] text-ink-3 mt-1.5 leading-[1.5]">
+                  Pick a region above, or tap anywhere on the map.
+                </p>
+              </div>
+            )}
+
+            {searchLocation && !loading && (
+              <SpotFiltersPanel
+                spotFilters={spotFilters}
+                onToggleFilter={toggleFilter}
+                onClearFilters={() => setSpotFilters(new Set())}
+                roadFilter={roadFilter}
+                onChangeRoadFilter={setRoadFilter}
+                sortBy={sortBy}
+                onChangeSortBy={setSortBy}
+                visibleLandAgencies={visibleLandAgencies}
+                onToggleLandAgency={toggleLandAgency}
+              />
+            )}
+          </div>
+
+          {/* Sticky cache strip footer — surfaces freshness without burning
+              filter real estate. */}
+          {searchLocation && !loading && (
+            <div className="px-[18px] py-3 border-t border-line bg-cream">
+              <CacheStrip
+                useDatabase={useDatabase}
+                lastAnalysedAt={lastAnalysedAt}
+                refreshing={refreshing}
+                onReanalyse={() => {
+                  regionSavedRef.current = null;
+                  setRefreshing(true);
+                  setReanalyseBust((n) => n + 1);
+                }}
+              />
+            </div>
+          )}
+        </aside>
+
+        {/* === RIGHT FLOATING CARD: Results / Detail panel === */}
+        <aside
+          className={cn(
+            'flex flex-col overflow-hidden bg-cream',
+            'lg:absolute lg:top-[88px] lg:right-5 lg:bottom-5 lg:w-[400px] lg:z-10',
+            'lg:border lg:border-line lg:rounded-[16px] lg:shadow-[0_18px_44px_rgba(29,34,24,.14)]',
+            mobileView === 'list' ? 'flex-1' : 'hidden lg:flex',
+          )}
+        >
+          {selectedSpot ? (
+            <SpotDetailPanel
+              selectedSpot={selectedSpot}
+              existingCampsiteForSpot={existingCampsiteForSpot}
+              aiAnalysis={aiAnalysis}
+              aiAnalyzing={aiAnalyzing}
+              aiCheckingCache={aiCheckingCache}
+              aiError={aiError}
+              copiedCoords={copiedCoords}
+              fromDatabase={useDatabase}
+              onBack={clearAllSelections}
+              onCopyCoords={copySpotCoords}
+              onAnalyze={() => runSpotAnalysis(false)}
+              onReanalyze={() => runSpotAnalysis(true)}
+              onDismissError={() => setAiError(null)}
+              onConfirm={() => setConfirmDialogOpen(true)}
+            />
+          ) : selectedCampground ? (
+            <CampgroundDetailPanel campground={selectedCampground} onBack={clearAllSelections} />
+          ) : selectedCampsite ? (
+            <UserCampsiteDetailPanel campsite={selectedCampsite} onBack={clearAllSelections} />
+          ) : selectedRoad ? (
+            <RoadDetailPanel
+              road={selectedRoad}
+              fromDatabase={useDatabase}
+              onBack={clearAllSelections}
+            />
+          ) : (
+            <>
+              {/* Results header */}
+              <div className="px-4 py-3 border-b border-line flex items-center justify-between gap-2">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">Results</span>
+                  {searchLocation && !loading && <Mono className="text-ink-3">{unifiedSpotList.length}</Mono>}
+                </div>
+                {searchLocation && !loading && unifiedSpotList.length > 0 && (
+                  <Mono className="text-pine-6">Sort · {sortBy === 'recommended' ? 'recommended' : sortBy}</Mono>
                 )}
+              </div>
 
-                {/* Search prompt before search */}
-                {!searchLocation && !loading && (
-                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                    <MagnifyingGlass className="w-12 h-12 mb-4 opacity-50" />
-                    <p className="text-lg text-center font-medium">Search for a location to discover campsites</p>
-                    <p className="text-sm mt-2 opacity-75">Or click anywhere on the map</p>
-                  </div>
-                )}
-
-                {/* Results: Stats, Filters, Campsites */}
+              {/* Mobile-only: search + cache + stats + filters live above the
+                  list since there's no left card on small screens. */}
+              <div className="lg:hidden p-4 space-y-3 border-b border-line">
                 {searchLocation && !loading && (
                   <>
-                    <div className="flex items-center justify-between gap-2 text-xs px-2.5 py-1.5 rounded-md bg-muted/50 border border-border">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        {useDatabase ? (
-                          <>
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                            <span className="font-medium text-foreground">Database cache</span>
-                            {lastAnalysedAt && (
-                              <span className="text-muted-foreground truncate">
-                                · analysed {lastAnalysedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                              </span>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
-                            <span className="font-medium text-foreground">Fresh client analysis</span>
-                            {lastAnalysedAt && (
-                              <span className="text-muted-foreground truncate">
-                                · saved {lastAnalysedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                      {lastAnalysedAt && (
-                        <button
-                          onClick={() => {
-                            // Don't clear lastAnalysedAt or flip useDatabase —
-                            // we want DB pins to keep showing while the
-                            // background refresh runs.
-                            regionSavedRef.current = null;
-                            setRefreshing(true);
-                            setReanalyseBust((n) => n + 1);
-                          }}
-                          disabled={refreshing}
-                          className="text-primary hover:underline font-medium shrink-0 disabled:opacity-50 disabled:no-underline"
-                        >
-                          {refreshing ? 'Refreshing…' : 'Re-analyse'}
-                        </button>
-                      )}
-                    </div>
-
+                    <CacheStrip
+                      useDatabase={useDatabase}
+                      lastAnalysedAt={lastAnalysedAt}
+                      refreshing={refreshing}
+                      onReanalyse={() => {
+                        regionSavedRef.current = null;
+                        setRefreshing(true);
+                        setReanalyseBust((n) => n + 1);
+                      }}
+                    />
                     <ResultsStatsRow
                       filteredPotentialSpots={filteredPotentialSpots}
                       allEstablishedCampgrounds={allEstablishedCampgrounds}
                       campsites={campsitesInRadius}
                     />
-
                     <SpotFiltersPanel
                       spotFilters={spotFilters}
                       onToggleFilter={toggleFilter}
@@ -1706,25 +1864,55 @@ const DispersedExplorer = () => {
                       onChangeRoadFilter={setRoadFilter}
                       sortBy={sortBy}
                       onChangeSortBy={setSortBy}
-                    />
-
-                    <SpotResultsList
-                      unifiedSpotList={unifiedSpotList}
-                      spotsToShow={spotsToShow}
-                      selectedSpot={selectedSpot}
-                      selectedCampground={selectedCampground}
-                      selectedCampsite={selectedCampsite}
-                      hasFilters={spotFilters.size > 0}
-                      onClickSpot={handleUnifiedSpotClick}
-                      onClearFilters={() => setSpotFilters(new Set())}
-                      onShowMore={() => setSpotsToShow(prev => Math.min(prev + 50, unifiedSpotList.length))}
-                      onShowLess={() => setSpotsToShow(30)}
+                      visibleLandAgencies={visibleLandAgencies}
+                      onToggleLandAgency={toggleLandAgency}
                     />
                   </>
                 )}
               </div>
-            )}
-        </div>
+
+              {/* Body — no horizontal padding so result rows go full-width
+                  (each row owns its own px-4 gutter). */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                {loading && (
+                  <div className="flex flex-col items-center justify-center py-12 px-4">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 mb-3">
+                      <SpinnerGap className="w-5 h-5 text-pine-6 animate-spin" />
+                    </div>
+                    <Mono className="text-pine-6">Discovering campsites…</Mono>
+                  </div>
+                )}
+
+                {!searchLocation && !loading && (
+                  <div className="border border-dashed border-line bg-white/50 rounded-[14px] m-4 px-5 py-10 text-center">
+                    <div className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-pine-6/10 text-pine-6 mb-3">
+                      <MagnifyingGlass className="w-5 h-5" weight="regular" />
+                    </div>
+                    <p className="text-[14px] font-sans font-semibold text-ink">Search for a location</p>
+                    <p className="text-[12px] text-ink-3 mt-1.5 leading-[1.5]">
+                      Pick a region in the search above, or tap anywhere on the map.
+                    </p>
+                  </div>
+                )}
+
+                {searchLocation && !loading && (
+                  <SpotResultsList
+                    unifiedSpotList={unifiedSpotList}
+                    spotsToShow={spotsToShow}
+                    selectedSpot={selectedSpot}
+                    selectedCampground={selectedCampground}
+                    selectedCampsite={selectedCampsite}
+                    hasFilters={spotFilters.size > 0}
+                    onClickSpot={handleUnifiedSpotClick}
+                    onClearFilters={() => setSpotFilters(new Set())}
+                    onShowMore={() => setSpotsToShow(prev => Math.min(prev + 50, unifiedSpotList.length))}
+                    onShowLess={() => setSpotsToShow(30)}
+                  />
+                )}
+              </div>
+            </>
+          )}
+        </aside>
       </div>
 
       {/* Confirm Spot Dialog */}
@@ -1762,3 +1950,145 @@ const DispersedExplorer = () => {
 };
 
 export default DispersedExplorer;
+
+// Tiny inline component for the "Database cache / Fresh analysis" status pill.
+// Used in both the desktop filter card and the mobile results block. Label
+// stacks above the date so neither truncates in the narrow filter card.
+const CacheStrip = ({
+  useDatabase,
+  lastAnalysedAt,
+  refreshing,
+  onReanalyse,
+}: {
+  useDatabase: boolean;
+  lastAnalysedAt: Date | null;
+  refreshing: boolean;
+  onReanalyse: () => void;
+}) => {
+  const label = useDatabase ? 'Database cache' : 'Fresh analysis';
+  const labelClass = useDatabase ? 'text-pine-6' : 'text-clay';
+  const dotClass = useDatabase ? 'bg-pine-6' : 'bg-clay';
+  const dateText = lastAnalysedAt
+    ? `${lastAnalysedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${lastAnalysedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+    : null;
+
+  return (
+    <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-[10px] border border-line bg-white">
+      <div className="flex items-start gap-2 min-w-0">
+        <span className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${dotClass}`} />
+        <div className="flex flex-col min-w-0 leading-tight">
+          <Mono className={labelClass}>{label}</Mono>
+          {dateText && <Mono className="text-ink-3">{dateText}</Mono>}
+        </div>
+      </div>
+      {lastAnalysedAt && (
+        <button
+          onClick={onReanalyse}
+          disabled={refreshing}
+          className="text-[11px] font-mono uppercase tracking-[0.10em] font-semibold text-pine-6 hover:text-pine-5 transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {refreshing ? 'Refreshing…' : 'Re-analyse'}
+        </button>
+      )}
+    </div>
+  );
+};
+
+// === Custom desktop floating header for the explore page ===
+// Three pills sit absolute at the top of the map:
+//   1. Logo + nav links (left)
+//   2. Search bar (center)
+//   3. Place label + avatar (right)
+// Mirrors the Pine Grove "explore-mapfirst-split" reference exactly. The
+// global Header is hidden on lg+ here and used only on mobile.
+const ExploreHeaderPills = ({
+  coordLabel,
+  placeLabel,
+  initials,
+  searchLocation,
+  onSearchChange,
+}: {
+  coordLabel: string | null;
+  placeLabel: string | null;
+  initials: string;
+  searchLocation: SelectedLocation | null;
+  onSearchChange: (loc: SelectedLocation) => void;
+}) => (
+  <div className="hidden lg:block pointer-events-none">
+    {/* Left pill — logo + nav links */}
+    <div className="absolute top-5 left-5 z-20 pointer-events-auto inline-flex items-center gap-2.5 px-3.5 py-2 bg-cream/95 backdrop-blur-md border border-line rounded-full shadow-[0_4px_12px_rgba(29,34,24,.08)]">
+      <Link to="/" className="inline-flex items-center gap-2 pl-0.5">
+        <Jeep className="w-5 h-5 text-pine-6" weight="regular" />
+        <span className="text-[14px] font-sans font-bold tracking-[-0.01em] text-ink">RoamsWild</span>
+      </Link>
+      <span className="w-px h-3.5 bg-line mx-1" />
+      <NavLink to="/dispersed" active>Explore</NavLink>
+      <NavLink to="/my-trips">Trips</NavLink>
+      <NavLink to="/saved">Saved</NavLink>
+    </div>
+
+    {/* Center pill — search bar with leading icon, input, mono coords,
+        and a solid pine "Search" button (matches the design exactly). */}
+    <div className="absolute top-5 left-1/2 -translate-x-1/2 z-20 pointer-events-auto w-[min(560px,calc(100vw-740px))] min-w-[380px]">
+      <div className="flex items-center gap-2.5 bg-cream border border-line rounded-[14px] shadow-[0_12px_32px_rgba(29,34,24,.12)] pl-3.5 pr-1.5 py-1.5">
+        <MagnifyingGlass className="w-4 h-4 text-ink-3 flex-shrink-0" weight="regular" />
+        <div className="flex-1 min-w-0">
+          {/* LocationSelector handles the actual Places autocomplete — strip
+              its chrome so it slots into our pill cleanly. */}
+          <LocationSelector
+            value={searchLocation}
+            onChange={onSearchChange}
+            placeholder="Search a region, road, or coordinate"
+            showMyLocation={false}
+            showSavedLocations={false}
+            showCoordinates={false}
+            onMapClickHint={false}
+            compact={true}
+            className="!gap-0 !flex-row [&_input]:!border-none [&_input]:!shadow-none [&_input]:!h-auto [&_input]:!py-1.5 [&_input]:!pl-0 [&_input]:!bg-transparent [&_input]:!text-[14px] [&_button]:!hidden [&_.relative>svg:first-child]:!hidden"
+          />
+        </div>
+        {coordLabel && (
+          <Mono className="text-ink-3 hidden xl:inline whitespace-nowrap">{coordLabel}</Mono>
+        )}
+        <button
+          type="button"
+          // Visual "Search" affordance — Places autocomplete already commits
+          // selection on dropdown click, so this button is a no-op marker.
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-pine-6 text-cream text-[12px] font-sans font-semibold hover:bg-pine-5 transition-colors flex-shrink-0"
+          tabIndex={-1}
+        >
+          Search
+          <ArrowRight className="w-3 h-3" weight="bold" />
+        </button>
+      </div>
+    </div>
+
+    {/* Right pill — place label + avatar */}
+    <div className="absolute top-5 right-5 z-20 pointer-events-auto inline-flex items-center gap-2 pl-3 pr-1 py-1 bg-cream/95 backdrop-blur-md border border-line rounded-full shadow-[0_4px_12px_rgba(29,34,24,.08)]">
+      {placeLabel && <Mono className="text-ink-2">{placeLabel}</Mono>}
+      <div className="w-7 h-7 rounded-full bg-pine-6 text-cream inline-flex items-center justify-center text-[11px] font-sans font-semibold tracking-[0.02em]">
+        {initials}
+      </div>
+    </div>
+  </div>
+);
+
+const NavLink = ({
+  to,
+  active,
+  children,
+}: {
+  to: string;
+  active?: boolean;
+  children: React.ReactNode;
+}) => (
+  <Link
+    to={to}
+    className={cn(
+      'text-[12px] font-sans font-semibold tracking-[-0.005em] px-1.5 py-0.5 transition-colors',
+      active ? 'text-pine-6' : 'text-ink-3 hover:text-ink',
+    )}
+  >
+    {children}
+  </Link>
+);
