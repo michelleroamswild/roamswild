@@ -1,7 +1,5 @@
 import { useState } from 'react';
-import { User, Trash, X, Check, Clock, ProhibitInset } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Trash, X, Check, Clock, ProhibitInset } from '@phosphor-icons/react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,6 +11,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Friend, FriendRequest, OutgoingRequest, PendingInvite } from '@/types/friends';
+import { Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 interface FriendCardProps {
   type: 'friend' | 'incoming' | 'outgoing' | 'invite';
@@ -28,6 +28,9 @@ interface FriendCardProps {
   onBlock?: () => Promise<boolean>;
 }
 
+// Reusable row card for friends / requests / invites. Style mirrors the
+// MyTrips trip rows: white surface, line border, mono-cap meta, ember for
+// destructive actions. Avatar uses the pine-6 fill from the header.
 export function FriendCard({
   type,
   friend,
@@ -64,9 +67,7 @@ export function FriendCard({
     const name = getName();
     if (!name) return '?';
     const parts = name.split(' ');
-    if (parts.length >= 2) {
-      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    }
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     return name.slice(0, 2).toUpperCase();
   };
 
@@ -80,167 +81,155 @@ export function FriendCard({
   };
 
   const handleConfirmRemove = async () => {
-    if (onRemove) {
-      await handleAction(onRemove);
-    }
+    if (onRemove) await handleAction(onRemove);
     setConfirmDialog(null);
   };
 
   const handleConfirmBlock = async () => {
-    if (onBlock) {
-      await handleAction(onBlock);
-    }
+    if (onBlock) await handleAction(onBlock);
     setConfirmDialog(null);
   };
 
+  const fmtDate = (d: string) =>
+    new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  // Pick the meta line + label for each variant.
+  const meta: { label: string; date?: string } | null =
+    type === 'friend' && friend?.since ? { label: 'Friends since', date: friend.since } :
+    type === 'incoming' && request?.createdAt ? { label: 'Received', date: request.createdAt } :
+    type === 'outgoing' && outgoing?.createdAt ? { label: 'Sent', date: outgoing.createdAt } :
+    type === 'invite' && invite?.createdAt ? { label: 'Invited', date: invite.createdAt } :
+    null;
+
+  // Tiny "non-user" badge for invites — they don't have an account yet.
+  const isInvite = type === 'invite';
+
   return (
     <>
-      <Card className="hover:border-primary/20 transition-colors">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-4">
-            {/* Avatar */}
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <span className="text-primary font-medium text-sm">{getInitials()}</span>
-            </div>
+      <div className="border border-line bg-white rounded-[14px] p-5 flex items-center gap-4 transition-colors hover:border-ink-3/40">
+        {/* Avatar */}
+        <div className="w-11 h-11 rounded-full bg-pine-6 text-cream font-sans font-semibold text-[12px] tracking-[0.02em] inline-flex items-center justify-center flex-shrink-0">
+          {getInitials()}
+        </div>
 
-            {/* Info */}
-            <div className="flex-1 min-w-0">
-              <h4 className="font-medium text-foreground truncate">{getName()}</h4>
-              {friend?.name && (
-                <p className="text-sm text-muted-foreground truncate">{getEmail()}</p>
-              )}
-              {type === 'friend' && friend?.since && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Friends since {new Date(friend.since).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
-                </p>
-              )}
-              {type === 'incoming' && request?.createdAt && (
-                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Received {new Date(request.createdAt).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </p>
-              )}
-              {type === 'outgoing' && outgoing?.createdAt && (
-                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Sent {new Date(outgoing.createdAt).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </p>
-              )}
-              {type === 'invite' && invite?.createdAt && (
-                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Invited {new Date(invite.createdAt).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </p>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {type === 'incoming' && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onReject && handleAction(onReject)}
-                    disabled={isLoading}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="w-4 h-4 mr-1" />
-                    Decline
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => onAccept && handleAction(onAccept)}
-                    disabled={isLoading}
-                  >
-                    <Check className="w-4 h-4 mr-1" />
-                    Accept
-                  </Button>
-                </>
-              )}
-
-              {type === 'outgoing' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onCancel && handleAction(onCancel)}
-                  disabled={isLoading}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <X className="w-4 h-4 mr-1" />
-                  Cancel
-                </Button>
-              )}
-
-              {type === 'invite' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onCancelInvite && handleAction(onCancelInvite)}
-                  disabled={isLoading}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <X className="w-4 h-4 mr-1" />
-                  Cancel
-                </Button>
-              )}
-
-              {type === 'friend' && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setConfirmDialog('remove')}
-                    disabled={isLoading}
-                    className="text-muted-foreground hover:text-destructive hover:border-destructive"
-                  >
-                    <Trash className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setConfirmDialog('block')}
-                    disabled={isLoading}
-                    className="text-muted-foreground hover:text-destructive hover:border-destructive"
-                  >
-                    <ProhibitInset className="w-4 h-4" />
-                  </Button>
-                </>
-              )}
-            </div>
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="text-[15px] font-sans font-semibold tracking-[-0.01em] text-ink truncate">
+              {getName()}
+            </h4>
+            {isInvite && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-clay/12 text-clay border border-clay/40 text-[10px] font-mono font-semibold uppercase tracking-[0.10em]">
+                Invited
+              </span>
+            )}
           </div>
-        </CardContent>
-      </Card>
+          {friend?.name && (
+            <p className="text-[13px] text-ink-3 truncate mt-0.5">{getEmail()}</p>
+          )}
+          {meta && (
+            <p className="text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3 mt-1.5 flex items-center gap-1.5">
+              <Clock className="w-3 h-3" weight="regular" />
+              {meta.label} {meta.date && fmtDate(meta.date)}
+            </p>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {type === 'incoming' && (
+            <>
+              <Pill
+                variant="ghost"
+                sm
+                mono={false}
+                onClick={() => onReject && handleAction(onReject)}
+                className={cn(isLoading && 'opacity-50 pointer-events-none')}
+              >
+                <X size={12} weight="bold" />
+                Decline
+              </Pill>
+              <Pill
+                variant="solid-pine"
+                sm
+                mono={false}
+                onClick={() => onAccept && handleAction(onAccept)}
+                className={cn(isLoading && 'opacity-50 pointer-events-none')}
+              >
+                <Check size={12} weight="bold" />
+                Accept
+              </Pill>
+            </>
+          )}
+
+          {type === 'outgoing' && (
+            <Pill
+              variant="ghost"
+              sm
+              mono={false}
+              onClick={() => onCancel && handleAction(onCancel)}
+              className={cn(isLoading && 'opacity-50 pointer-events-none')}
+            >
+              <X size={12} weight="bold" />
+              Cancel
+            </Pill>
+          )}
+
+          {type === 'invite' && (
+            <Pill
+              variant="ghost"
+              sm
+              mono={false}
+              onClick={() => onCancelInvite && handleAction(onCancelInvite)}
+              className={cn(isLoading && 'opacity-50 pointer-events-none')}
+            >
+              <X size={12} weight="bold" />
+              Cancel
+            </Pill>
+          )}
+
+          {type === 'friend' && (
+            <>
+              <button
+                onClick={() => setConfirmDialog('remove')}
+                disabled={isLoading}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-ink-3 hover:text-ember hover:bg-ember/10 transition-colors disabled:opacity-50"
+                aria-label="Remove friend"
+              >
+                <Trash className="w-4 h-4" weight="regular" />
+              </button>
+              <button
+                onClick={() => setConfirmDialog('block')}
+                disabled={isLoading}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-ink-3 hover:text-ember hover:bg-ember/10 transition-colors disabled:opacity-50"
+                aria-label="Block user"
+              >
+                <ProhibitInset className="w-4 h-4" weight="regular" />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Confirm Remove Dialog */}
       <AlertDialog open={confirmDialog === 'remove'} onOpenChange={() => setConfirmDialog(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="border-line bg-white rounded-[18px]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove Friend</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to remove <strong>{getName()}</strong> from your friends?
+            <AlertDialogTitle className="font-sans font-semibold tracking-[-0.01em] text-ink">
+              Remove friend
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[14px] text-ink-3 leading-[1.55]">
+              Are you sure you want to remove <strong className="text-ink font-semibold">{getName()}</strong> from your friends?
               You can send them a new friend request later.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-full border-line text-ink hover:bg-cream">
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmRemove}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="rounded-full bg-ember text-cream hover:bg-ember/90"
             >
               Remove
             </AlertDialogAction>
@@ -250,19 +239,23 @@ export function FriendCard({
 
       {/* Confirm Block Dialog */}
       <AlertDialog open={confirmDialog === 'block'} onOpenChange={() => setConfirmDialog(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="border-line bg-white rounded-[18px]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Block User</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to block <strong>{getName()}</strong>?
+            <AlertDialogTitle className="font-sans font-semibold tracking-[-0.01em] text-ink">
+              Block user
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[14px] text-ink-3 leading-[1.55]">
+              Are you sure you want to block <strong className="text-ink font-semibold">{getName()}</strong>?
               They won't be able to send you friend requests or see your shared content.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-full border-line text-ink hover:bg-cream">
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmBlock}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="rounded-full bg-ember text-cream hover:bg-ember/90"
             >
               Block
             </AlertDialogAction>

@@ -6,9 +6,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { MapPinArea, NavigationArrow, SpinnerGap, Warning, CaretRight } from '@phosphor-icons/react';
+import { Mono, Pill } from '@/components/redesign';
 
 interface EntryPoint {
   placeId: string;
@@ -214,70 +213,85 @@ export function EntryPointSelector({
       <div ref={placesContainerRef} style={{ position: 'absolute', visibility: 'hidden', width: 0, height: 0 }} />
 
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col border-line bg-white rounded-[18px]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <NavigationArrow className="w-5 h-5 text-primary" />
-              Choose a Specific Location
+            <Mono className="text-pine-6 flex items-center gap-1.5">
+              <NavigationArrow className="w-3.5 h-3.5" weight="regular" />
+              Pick an entry point
+            </Mono>
+            <DialogTitle className="font-sans font-semibold tracking-[-0.015em] text-ink text-[22px] leading-[1.15] mt-1">
+              Choose a specific spot.
             </DialogTitle>
-            <DialogDescription>
-              <span className="font-medium text-foreground">{parentPlace.name}</span> is a large area
-              without a single drivable destination. Choose a specific entry point:
+            <DialogDescription className="text-[14px] text-ink-3 leading-[1.55]">
+              <span className="font-semibold text-ink">{parentPlace.name}</span> is a large area without
+              a single drivable destination. Pick an entry point inside it.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto space-y-3 py-2">
+          <div className="flex-1 overflow-y-auto py-2">
             {loading && (
-              <div className="flex items-center justify-center py-8">
-                <SpinnerGap className="w-6 h-6 text-primary animate-spin" />
-                <span className="ml-2 text-muted-foreground">Finding entry points...</span>
+              <div className="flex items-center justify-center py-10 gap-2 text-ink-3">
+                <SpinnerGap className="w-5 h-5 text-pine-6 animate-spin" />
+                <span className="text-[14px]">Finding entry points…</span>
               </div>
             )}
 
             {error && !loading && (
-              <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                <Warning className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                <span className="text-sm text-amber-700 dark:text-amber-400">{error}</span>
+              <div className="flex items-start gap-2 px-3 py-2.5 bg-clay/10 border border-clay/30 rounded-[12px] text-clay text-[13px]">
+                <Warning className="w-4 h-4 flex-shrink-0 mt-0.5" weight="regular" />
+                <span>{error}</span>
               </div>
             )}
 
             {!loading && entryPoints.length > 0 && (
               <div className="space-y-2">
-                {entryPoints.map((entryPoint) => (
-                  <Card
-                    key={entryPoint.placeId}
-                    className="p-3 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all group"
-                    onClick={() => handleSelect(entryPoint)}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-lavenderslate/20 flex-shrink-0">
-                        <MapPinArea className="w-4 h-4 text-lavenderslate" />
+                {entryPoints.map((entryPoint) => {
+                  const isVC = entryPoint.name.toLowerCase().includes('visitor');
+                  return (
+                    <button
+                      key={entryPoint.placeId}
+                      type="button"
+                      onClick={() => handleSelect(entryPoint)}
+                      className="group w-full flex items-start gap-3 p-3 rounded-[12px] border border-line bg-white text-left transition-all hover:border-pine-6 hover:bg-pine-6/[0.04]"
+                    >
+                      <div className={
+                        isVC
+                          ? 'inline-flex items-center justify-center w-9 h-9 rounded-[10px] bg-water/15 text-water flex-shrink-0'
+                          : 'inline-flex items-center justify-center w-9 h-9 rounded-[10px] bg-clay/15 text-clay flex-shrink-0'
+                      }>
+                        <MapPinArea className="w-4 h-4" weight="regular" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground group-hover:text-primary transition-colors">
-                          {entryPoint.name}
-                        </p>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {entryPoint.address}
-                        </p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink truncate">
+                            {entryPoint.name}
+                          </p>
+                          {isVC && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-water/12 text-water border border-water/40 text-[10px] font-mono font-semibold uppercase tracking-[0.10em]">
+                              Visitor center
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[13px] text-ink-3 truncate mt-0.5">{entryPoint.address}</p>
                       </div>
-                      <CaretRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
-                    </div>
-                  </Card>
-                ))}
+                      <CaretRight className="w-4 h-4 text-ink-3 group-hover:text-pine-6 group-hover:translate-x-0.5 transition-all flex-shrink-0 mt-2.5" weight="bold" />
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
 
-          <div className="flex flex-col gap-2 pt-4 border-t">
-            <Button
-              variant="outline"
+          <div className="pt-4 border-t border-line">
+            <Pill
+              variant="ghost"
+              mono={false}
               onClick={handleUseOriginal}
-              className="w-full"
+              className="w-full justify-center"
             >
-              <MapPinArea className="w-4 h-4 mr-2" />
+              <MapPinArea className="w-3.5 h-3.5" weight="regular" />
               Use general location anyway
-            </Button>
+            </Pill>
           </div>
         </DialogContent>
       </Dialog>

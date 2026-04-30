@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Jeep, Envelope, Lock, SpinnerGap, WarningCircle, Mountains, Tent, Path } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import {
+  Jeep,
+  Envelope,
+  Lock,
+  SpinnerGap,
+  WarningCircle,
+  ArrowRight,
+} from '@phosphor-icons/react';
 import { useAuth } from '@/context/AuthContext';
+import { Mono, TopoBg, AuthSidePanel, AuthInput } from '@/components/redesign';
 
-// Import a landing page photo for the side panel
 import heroPhoto from '@/images/landingpage/DJI_0792.jpg';
 
 const Login = () => {
@@ -19,16 +23,13 @@ const Login = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Get the page they were trying to visit
   const from = location.state?.from?.pathname || '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
-
     const { error } = await signIn(email, password);
-
     if (error) {
       setError('Unable to sign in, please check your email and password.');
       setIsLoading(false);
@@ -38,138 +39,94 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left side - Photo (hidden on mobile) */}
-      <div className="hidden lg:flex lg:w-1/2 relative">
-        <img
-          src={heroPhoto}
-          alt="Overlanding adventure"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/80 via-primary/60 to-transparent" />
-        <div className="relative z-10 flex flex-col justify-between p-12 text-white">
-          <Link to="/" className="flex items-center gap-2">
-            <Jeep className="w-8 h-8" weight="fill" />
-            <span className="text-2xl font-display font-bold">RoamsWild</span>
-          </Link>
+    <div className="min-h-screen bg-cream text-ink font-sans flex">
+      <AuthSidePanel
+        photo={heroPhoto}
+        headline={<>Your next adventure<br />starts here.</>}
+      />
 
-          <div className="space-y-6">
-            <h2 className="text-4xl font-display font-bold leading-tight">
-              Your next adventure<br />starts here.
-            </h2>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <Path className="w-5 h-5" />
-                </div>
-                <span className="text-lg">Plan scenic routes</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <Tent className="w-5 h-5" />
-                </div>
-                <span className="text-lg">Discover hidden campsites</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <Mountains className="w-5 h-5" />
-                </div>
-                <span className="text-lg">Find amazing hikes</span>
-              </div>
-            </div>
-          </div>
-
-          <p className="text-white/70 text-sm">
-            Join thousands of adventurers planning their trips with RoamsWild.
-          </p>
-        </div>
-      </div>
-
-      {/* Right side - Login form */}
-      <div className="flex-1 flex items-center justify-center p-6 md:p-12 hero-topo">
-        <div className="w-full max-w-md">
+      {/* Right side — form */}
+      <div className="flex-1 relative flex items-center justify-center p-6 md:p-12 overflow-hidden">
+        <TopoBg color="hsl(var(--paper))" opacity={0.55} scale={700} />
+        <div className="relative w-full max-w-[420px]">
           {/* Mobile logo */}
-          <Link to="/" className="flex items-center justify-center gap-2 mb-8 lg:hidden">
-            <Jeep className="w-8 h-8 text-primary" weight="fill" />
-            <span className="text-2xl font-display font-bold text-foreground">RoamsWild</span>
+          <Link to="/" className="flex items-center justify-center gap-2.5 mb-8 lg:hidden">
+            <Jeep className="w-6 h-6 text-pine-6" weight="regular" />
+            <span className="text-[16px] font-sans font-bold tracking-[-0.01em] text-ink">
+              RoamsWild
+            </span>
           </Link>
 
-          <div className="bg-card rounded-2xl border border-border p-8 shadow-lg">
-            <div className="text-center mb-8">
-              <h1 className="text-2xl font-display font-bold text-foreground">Welcome back</h1>
-              <p className="text-muted-foreground mt-2">Sign in to continue your adventure</p>
-            </div>
+          <div className="bg-white border border-line rounded-[18px] p-8 shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+            <Mono className="text-pine-6">Welcome back</Mono>
+            <h1 className="font-sans font-bold tracking-[-0.025em] text-ink text-[28px] leading-[1.1] mt-2">
+              Sign in to your account.
+            </h1>
+            <p className="text-[14px] text-ink-3 mt-2">
+              Continue planning your adventure.
+            </p>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="mt-7 space-y-4">
               {error && (
-                <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive text-sm">
-                  <WarningCircle className="w-4 h-4 flex-shrink-0" />
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-ember/10 border border-ember/30 rounded-[12px] text-ember text-[13px]">
+                  <WarningCircle className="w-4 h-4 flex-shrink-0" weight="regular" />
                   <span>{error}</span>
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-foreground font-medium">Email</Label>
-                <div className="relative">
-                  <Envelope className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-12"
-                    required
-                  />
-                </div>
-              </div>
+              <AuthInput
+                id="email"
+                label="Email"
+                type="email"
+                icon={Envelope}
+                placeholder="you@example.com"
+                value={email}
+                onChange={setEmail}
+                required
+              />
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password" className="text-foreground font-medium">Password</Label>
+              <AuthInput
+                id="password"
+                label="Password"
+                type="password"
+                icon={Lock}
+                placeholder="Enter your password"
+                value={password}
+                onChange={setPassword}
+                required
+                rightSlot={
                   <Link
                     to="/forgot-password"
-                    className="text-sm text-primary hover:underline font-medium"
+                    className="text-[12px] font-mono uppercase tracking-[0.10em] text-pine-6 hover:text-pine-5 transition-colors"
                   >
-                    Forgot password?
+                    Forgot?
                   </Link>
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-12"
-                    required
-                  />
-                </div>
-              </div>
+                }
+              />
 
-              <Button
+              <button
                 type="submit"
-                variant="primary"
-                size="lg"
-                className="w-full"
                 disabled={isLoading}
+                className="w-full inline-flex items-center justify-center gap-2 h-12 px-5 rounded-[14px] bg-pine-6 text-cream text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors disabled:opacity-50"
               >
                 {isLoading ? (
                   <>
-                    <SpinnerGap className="w-5 h-5 mr-2 animate-spin" />
-                    Signing in...
+                    <SpinnerGap className="w-4 h-4 animate-spin" />
+                    Signing in…
                   </>
                 ) : (
-                  'Sign In'
+                  <>
+                    Sign in
+                    <ArrowRight className="w-4 h-4" weight="bold" />
+                  </>
                 )}
-              </Button>
+              </button>
             </form>
 
-            <div className="mt-8 text-center text-sm text-muted-foreground">
+            <div className="mt-7 pt-6 border-t border-line text-center text-[13px] text-ink-3">
               Don't have an account?{' '}
-              <Link to="/signup" className="text-primary font-semibold hover:underline">
-                Sign up for free
+              <Link to="/signup" className="font-semibold text-pine-6 hover:text-pine-5 transition-colors">
+                Sign up
               </Link>
             </div>
           </div>

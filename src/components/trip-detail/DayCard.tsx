@@ -6,6 +6,7 @@ import {
   Camera,
   CaretDown,
   CaretUp,
+  CaretRight,
   Clock,
   GasPump,
   MapPin,
@@ -18,31 +19,46 @@ import {
   Trash,
   Warning,
 } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { TripDay, TripStop } from '@/types/trip';
 import { estimateDayTime } from '@/utils/tripValidation';
 import { getAllTrailsUrl, estimateTrailLength } from '@/utils/hikeUtils';
-import { getTypeStyles } from '@/utils/mapMarkers';
 import { getDayUrl } from '@/utils/slugify';
+import { Mono, Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
-const getIcon = (type: string) => {
-  switch (type) {
-    case 'hike':
-      return Boot;
-    case 'gas':
-      return GasPump;
-    case 'camp':
-      return Tent;
-    case 'photo':
-      return Camera;
-    case 'start':
-    case 'end':
-      return MapPin;
-    default:
-      return MapPinArea;
-  }
+// Icon + accent color per stop type. ALL stop / endpoint / warning icons use
+// the exact same container shape: w-9 h-9 rounded-[10px] with a 15% accent
+// fill. Only the accent hue varies. This rule is enforced by `IconBlock`
+// below — don't render bespoke icon containers in this file.
+const TYPE_STYLES: Record<string, { Icon: typeof MapPin; bg: string; text: string }> = {
+  hike:     { Icon: Boot,       bg: 'bg-sage/15',   text: 'text-sage' },
+  camp:     { Icon: Tent,       bg: 'bg-clay/15',   text: 'text-clay' },
+  photo:    { Icon: Camera,     bg: 'bg-ember/15',  text: 'text-ember' },
+  gas:      { Icon: GasPump,    bg: 'bg-ink/10',    text: 'text-ink-2' },
+  start:    { Icon: MapPin,     bg: 'bg-pine-6/15', text: 'text-pine-6' },
+  end:      { Icon: MapPin,     bg: 'bg-pine-6/15', text: 'text-pine-6' },
+  default:  { Icon: MapPinArea, bg: 'bg-pine-6/15', text: 'text-pine-6' },
 };
+
+const styleFor = (type: string) => TYPE_STYLES[type] ?? TYPE_STYLES.default;
+
+// Single source of truth for stop/endpoint/warning icon containers in the
+// DayCard. Always w-9 h-9, rounded-[10px], tinted bg + saturated icon.
+const IconBlock = ({
+  Icon,
+  bg,
+  text,
+  weight = 'regular',
+}: {
+  Icon: typeof MapPin;
+  bg: string;
+  text: string;
+  weight?: 'regular' | 'fill';
+}) => (
+  <div className={cn('inline-flex items-center justify-center w-9 h-9 rounded-[10px] flex-shrink-0', bg, text)}>
+    <Icon className="w-4 h-4" weight={weight} />
+  </div>
+);
 
 export interface DayCardProps {
   day: TripDay;
@@ -83,216 +99,228 @@ export const DayCard = ({
 }: DayCardProps) => {
   const timeEstimate = estimateDayTime(day);
 
-  const dayDate = tripStartDate ? (() => {
-    const [year, month, dayNum] = tripStartDate.split('-').map(Number);
-    const date = new Date(year, month - 1, dayNum + day.day - 1);
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  })() : null;
+  const dayDate = tripStartDate
+    ? (() => {
+        const [year, month, dayNum] = tripStartDate.split('-').map(Number);
+        const date = new Date(year, month - 1, dayNum + day.day - 1);
+        return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      })()
+    : null;
 
   return (
-    <Card className={`overflow-hidden ${isActive ? 'ring-2 ring-primary border-primary' : ''}`}>
-      {/* Day Header */}
-      <div className="p-3 sm:p-4 hover:bg-secondary/50 transition-colors">
-        <div className="flex items-center justify-between">
+    <div
+      className={cn(
+        'border bg-white rounded-[14px] overflow-hidden transition-colors',
+        isActive ? 'border-pine-6 ring-1 ring-pine-6' : 'border-line',
+      )}
+    >
+      {/* Day header — click to expand */}
+      <div className="hover:bg-cream/40 transition-colors">
+        <div className="flex items-center justify-between p-3 sm:p-4 gap-2">
           <button
             onClick={onToggle}
-            className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0"
+            className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 text-left"
           >
-            <div className={`flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full shrink-0 ${isActive ? 'bg-primary text-primary-foreground' : 'bg-primary/10'}`}>
-              <span className={`text-sm sm:text-lg font-bold ${isActive ? '' : 'text-primary'}`}>{day.day}</span>
+            <div
+              className={cn(
+                'inline-flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-full shrink-0 font-mono font-bold text-[13px] sm:text-[15px] tracking-[0.02em]',
+                isActive ? 'bg-pine-6 text-cream' : 'bg-pine-6/10 text-pine-6',
+              )}
+            >
+              {day.day}
             </div>
-            <div className="text-left min-w-0">
-              <p className="font-medium text-foreground text-sm sm:text-base truncate">
-                Day {day.day}
-                {dayDate && <span className="ml-1.5 sm:ml-2 text-xs sm:text-sm font-normal text-muted-foreground">{dayDate}</span>}
-                {isActive && <span className="ml-1.5 text-[10px] sm:text-xs text-primary font-normal">(Previewing)</span>}
-              </p>
-              <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Path className="w-3 h-3" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-sans font-semibold text-ink text-[14px] sm:text-[15px] tracking-[-0.005em]">
+                  Day {day.day}
+                </p>
+                {dayDate && (
+                  <Mono className="text-ink-3" size={11}>
+                    {dayDate}
+                  </Mono>
+                )}
+                {isActive && <Mono className="text-pine-6">Previewing</Mono>}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
+                <span className="inline-flex items-center gap-1.5">
+                  <Path className="w-3 h-3" weight="regular" />
                   {day.drivingDistance}
                 </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock className="w-3 h-3" weight="regular" />
                   {day.drivingTime}
                 </span>
+                {day.hike && (
+                  <span className="inline-flex items-center gap-1 text-sage">
+                    <Boot className="w-3 h-3" weight="regular" />
+                    Hike
+                  </span>
+                )}
+                {day.campsite && (
+                  <span className="inline-flex items-center gap-1 text-clay">
+                    <Tent className="w-3 h-3" weight="regular" />
+                    Camp
+                  </span>
+                )}
               </div>
             </div>
           </button>
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+
+          <div className="flex items-center gap-1.5 shrink-0">
             {timeEstimate.warningMessage && (
-              <Warning
-                className={`w-4 h-4 hidden sm:block ${timeEstimate.isOverloaded ? 'text-amber-500' : 'text-blue-500'}`}
+              <span
                 title={timeEstimate.warningMessage}
-              />
+                className={cn(
+                  'hidden sm:inline-flex items-center justify-center w-7 h-7 rounded-full',
+                  timeEstimate.isOverloaded ? 'text-clay' : 'text-water',
+                )}
+              >
+                <Warning className="w-4 h-4" weight="regular" />
+              </span>
             )}
-            <div className="hidden sm:flex items-center gap-1">
-              {day.hike && <Boot className="w-4 h-4 text-pinesoft" />}
-              {day.campsite && <Tent className="w-4 h-4 text-wildviolet" />}
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="text-xs sm:text-sm h-7 w-7 sm:w-auto sm:h-8 px-0 sm:px-3"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (isActive) {
-                  onExitDay();
-                } else {
-                  onStartDay();
-                }
-              }}
+
+            <Pill
+              variant={isActive ? 'solid-pine' : 'ghost'}
+              sm
+              mono={false}
+              onClick={() => (isActive ? onExitDay() : onStartDay())}
             >
-              <NavigationArrow className="w-3 h-3 sm:mr-1" />
-              <span className="hidden sm:inline">{isActive ? 'Exit Preview' : 'Preview'}</span>
-            </Button>
-            <button onClick={onToggle}>
+              <NavigationArrow className="w-3 h-3" weight="regular" />
+              <span className="hidden sm:inline">{isActive ? 'Exit' : 'Preview'}</span>
+            </Pill>
+
+            <button
+              onClick={onToggle}
+              aria-label={expanded ? 'Collapse day' : 'Expand day'}
+              className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors"
+            >
               {expanded ? (
-                <CaretUp className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
+                <CaretUp className="w-4 h-4" weight="bold" />
               ) : (
-                <CaretDown className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
+                <CaretDown className="w-4 h-4" weight="bold" />
               )}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Day Stops */}
+      {/* Stops */}
       {expanded && (
-        <div className="border-t border-border">
-          {/* Starting location on day 1 */}
+        <div className="border-t border-line">
+          {/* Day-1 starting location chip */}
           {isFirstDay && startLocation && (
-            <div className="p-4 bg-aquateal/5 border-b border-border">
-              <div className="flex items-start gap-3">
-                <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-aquateal/30 bg-aquateal/20">
-                  <MapPin className="w-4 h-4 text-aquateal" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-medium text-foreground">Start: {startLocation.name}</h4>
-                  <p className="text-sm text-muted-foreground mt-0.5">Trip starting point</p>
-                </div>
-              </div>
-            </div>
+            <Endpoint label={`Start: ${startLocation.name}`} sub="Trip starting point" />
           )}
 
           {day.stops.map((stop) => {
-            const Icon = getIcon(stop.type);
-            const typeStyles = getTypeStyles(stop.type);
-
-            // Special handling for "no dispersed sites found" marker
+            // Special "no dispersed sites found" placeholder — same icon
+            // container treatment as everything else (just clay accent).
             if (stop.id === 'no-dispersed-found' || stop.note === 'NO_DISPERSED_SITES_FOUND') {
               return (
                 <div
                   key={stop.id}
-                  className="p-4 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800"
+                  className="p-4 hover:bg-cream/40 transition-colors border-b border-line last:border-b-0"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-100 dark:bg-amber-800/30">
-                      <Warning className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-medium text-amber-800 dark:text-amber-200">No dispersed campsites found</h4>
-                      <p className="text-sm text-amber-700 dark:text-amber-300 mt-0.5">
+                    <IconBlock Icon={Warning} bg="bg-clay/15" text="text-clay" />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-[14px] font-sans font-semibold text-ink">
+                        No dispersed campsites found
+                      </h4>
+                      <p className="text-[13px] text-ink-3 mt-0.5 leading-[1.5]">
                         There are no known dispersed camping spots in this area.
                       </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-3 border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-300 dark:hover:bg-amber-800/30"
-                        onClick={() => onSwapCampsite(stop)}
-                      >
-                        <Tent className="w-4 h-4 mr-2" />
-                        Search for established campgrounds instead
-                      </Button>
+                      <div className="mt-3">
+                        <Pill variant="ghost" sm mono={false} onClick={() => onSwapCampsite(stop)} className="!border-clay !text-clay hover:!bg-clay/10">
+                          <Tent className="w-3.5 h-3.5" weight="regular" />
+                          Search established campgrounds instead
+                        </Pill>
+                      </div>
                     </div>
                   </div>
                 </div>
               );
             }
 
+            const { Icon, bg, text } = styleFor(stop.type);
             return (
               <div
                 key={stop.id}
-                className="p-4 hover:bg-secondary/30 transition-colors border-b border-border last:border-b-0 group"
+                className="p-4 hover:bg-cream/40 transition-colors border-b border-line last:border-b-0 group"
               >
                 <div className="flex items-start gap-3">
-                  <div
-                    className={`flex items-center justify-center w-9 h-9 rounded-lg border ${typeStyles}`}
-                  >
-                    <Icon className="w-4 h-4" />
-                  </div>
+                  <IconBlock Icon={Icon} bg={bg} text={text} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <div
-                        className="cursor-pointer flex-1"
+                      <button
+                        type="button"
                         onClick={() => onStopClick(stop)}
+                        className="text-left flex-1 min-w-0"
                       >
-                        <h4 className="font-medium text-foreground">{stop.name}</h4>
-                        <p className="text-sm text-muted-foreground mt-0.5">{stop.description}</p>
-                      </div>
+                        <h4 className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">
+                          {stop.name}
+                        </h4>
+                        <p className="text-[13px] text-ink-3 mt-0.5 leading-[1.5]">
+                          {stop.description}
+                        </p>
+                      </button>
+
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         {stop.type === 'hike' && (
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSwapHike(stop);
-                            }}
-                            className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
-                            title="Choose different hike"
+                            onClick={(e) => { e.stopPropagation(); onSwapHike(stop); }}
+                            title="Swap hike"
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-full text-sage hover:bg-sage/15 transition-colors"
                           >
-                            <ArrowsClockwise className="w-4 h-4" weight="bold" />
+                            <ArrowsClockwise className="w-3.5 h-3.5" weight="bold" />
                           </button>
                         )}
                         {stop.type === 'camp' && (
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSwapCampsite(stop);
-                            }}
-                            className="p-1.5 rounded-lg hover:bg-wildviolet/10 text-wildviolet transition-colors"
-                            title="Choose different campsite"
+                            onClick={(e) => { e.stopPropagation(); onSwapCampsite(stop); }}
+                            title="Swap campsite"
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-full text-clay hover:bg-clay/15 transition-colors"
                           >
-                            <ArrowsClockwise className="w-4 h-4" weight="bold" />
+                            <ArrowsClockwise className="w-3.5 h-3.5" weight="bold" />
                           </button>
                         )}
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onRemoveStop(day.day, stop);
-                          }}
-                          className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+                          onClick={(e) => { e.stopPropagation(); onRemoveStop(day.day, stop); }}
                           title="Remove stop"
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-3 hover:text-ember hover:bg-ember/10 transition-colors"
                         >
-                          <Trash className="w-4 h-4" weight="bold" />
+                          <Trash className="w-3.5 h-3.5" weight="regular" />
                         </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
+
+                    {/* Meta line — mono caps */}
+                    <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1.5 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="w-3 h-3" weight="regular" />
                         {stop.duration}
                       </span>
                       {stop.type === 'hike' && estimateTrailLength(stop.duration) && (
-                        <span className="flex items-center gap-1">
-                          <Mountains className="w-3 h-3" />
+                        <span className="inline-flex items-center gap-1">
+                          <Mountains className="w-3 h-3" weight="regular" />
                           {estimateTrailLength(stop.duration)}
                         </span>
                       )}
                       {stop.distance && (
-                        <span className="flex items-center gap-1">
-                          <Path className="w-3 h-3" />
+                        <span className="inline-flex items-center gap-1">
+                          <Path className="w-3 h-3" weight="regular" />
                           {stop.distance}
                         </span>
                       )}
                       {stop.drivingTime && (
-                        <span className="flex items-center gap-1 text-primary">
-                          <NavigationArrow className="w-3 h-3" />
+                        <span className="inline-flex items-center gap-1 text-pine-6">
+                          <NavigationArrow className="w-3 h-3" weight="regular" />
                           {stop.drivingTime}
                         </span>
                       )}
                       {stop.rating && (
-                        <span className="flex items-center gap-1">
-                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        <span className="inline-flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-clay text-clay" weight="fill" />
                           {stop.rating.toFixed(1)}
                         </span>
                       )}
@@ -302,9 +330,9 @@ export const DayCard = ({
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 hover:underline"
+                          className="inline-flex items-center gap-1 text-sage hover:text-sage/80 transition-colors"
                         >
-                          <ArrowSquareOut className="w-3 h-3" />
+                          <ArrowSquareOut className="w-3 h-3" weight="regular" />
                           AllTrails
                         </a>
                       )}
@@ -314,21 +342,21 @@ export const DayCard = ({
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="flex items-center gap-1 text-wildviolet hover:text-wildviolet/80 hover:underline"
+                          className="inline-flex items-center gap-1 text-clay hover:text-clay/80 transition-colors"
                         >
-                          <ArrowSquareOut className="w-3 h-3" />
-                          Book Site
+                          <ArrowSquareOut className="w-3 h-3" weight="regular" />
+                          Book site
                         </a>
                       )}
                       {stop.type === 'camp' && (
-                        <span className="flex items-center gap-1 text-muted-foreground/70">
+                        <span className="inline-flex items-center gap-1.5 text-ink-3">
                           {stop.id.startsWith('ridb-') ? (
                             <a
                               href={`https://www.recreation.gov/camping/campgrounds/${stop.id.replace('ridb-', '')}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
-                              className="hover:text-primary hover:underline"
+                              className="hover:text-pine-6 transition-colors"
                             >
                               Recreation.gov
                             </a>
@@ -338,7 +366,7 @@ export const DayCard = ({
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
-                              className="hover:text-primary hover:underline"
+                              className="hover:text-pine-6 transition-colors"
                             >
                               USFS
                             </a>
@@ -348,7 +376,7 @@ export const DayCard = ({
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
-                              className="hover:text-primary hover:underline"
+                              className="hover:text-pine-6 transition-colors"
                             >
                               OpenStreetMap
                             </a>
@@ -358,12 +386,14 @@ export const DayCard = ({
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
-                              className="hover:text-primary hover:underline"
+                              className="hover:text-pine-6 transition-colors"
                             >
                               Google Maps
                             </a>
-                          ) : 'source unknown'}
-                          <span className="text-[10px] opacity-70">
+                          ) : (
+                            'source unknown'
+                          )}
+                          <span className="opacity-70">
                             ({stop.coordinates.lat.toFixed(4)}, {stop.coordinates.lng.toFixed(4)})
                           </span>
                         </span>
@@ -375,30 +405,35 @@ export const DayCard = ({
             );
           })}
 
-          {/* Ending location on last day if returning to start */}
+          {/* Last-day return-to-start chip */}
           {isLastDay && returnToStart && startLocation && (
-            <div className="p-4 bg-aquateal/5 border-b border-border">
-              <div className="flex items-start gap-3">
-                <div className="flex items-center justify-center w-9 h-9 rounded-lg border border-aquateal/30 bg-aquateal/20">
-                  <MapPin className="w-4 h-4 text-aquateal" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-medium text-foreground">End: {startLocation.name}</h4>
-                  <p className="text-sm text-muted-foreground mt-0.5">Return to starting point</p>
-                </div>
-              </div>
-            </div>
+            <Endpoint label={`End: ${startLocation.name}`} sub="Return to starting point" />
           )}
 
-          {/* View Day Details Link */}
+          {/* View Day Details link */}
           <Link
             to={getDayUrl(tripName, day.day)}
-            className="block p-3 text-center text-sm font-medium text-primary hover:bg-primary/5 transition-colors"
+            className="flex items-center justify-center gap-1.5 px-4 py-3 text-[12px] font-mono uppercase tracking-[0.10em] font-semibold text-pine-6 hover:bg-pine-6/5 transition-colors"
           >
-            View Day Details →
+            View day details
+            <CaretRight className="w-3 h-3" weight="bold" />
           </Link>
         </div>
       )}
-    </Card>
+    </div>
   );
 };
+
+// Endpoint chip — same row container + IconBlock as stops, pine-tinted to
+// match the "start/end" type style (water was too light for icon contrast).
+const Endpoint = ({ label, sub }: { label: string; sub: string }) => (
+  <div className="p-4 border-b border-line">
+    <div className="flex items-start gap-3">
+      <IconBlock Icon={MapPin} bg="bg-pine-6/15" text="text-pine-6" />
+      <div className="flex-1 min-w-0">
+        <h4 className="text-[14px] font-sans font-semibold text-ink">{label}</h4>
+        <p className="text-[13px] text-ink-3 mt-0.5">{sub}</p>
+      </div>
+    </div>
+  </div>
+);

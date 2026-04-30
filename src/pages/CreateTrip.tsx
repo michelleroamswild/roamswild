@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { X, CloudCheck, SpinnerGap } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { Mono, Pill } from "@/components/redesign";
+import { WizardProgress } from "@/components/wizard/WizardProgress";
 import { EntryPointSelector, checkIfDrivable } from "@/components/EntryPointSelector";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
 import { useTrip } from "@/context/TripContext";
@@ -658,35 +659,49 @@ const CreateTrip = () => {
   const isDayBuilderStep = currentStepId?.startsWith('day-');
 
   return (
-    <div className={isDayBuilderStep ? "h-screen bg-background flex flex-col overflow-hidden" : "min-h-screen bg-background"}>
-      {/* Header */}
-      <header className={`${isDayBuilderStep ? '' : 'sticky top-0'} z-50 bg-surface border-b border-border`}>
-        <div className="container px-4 md:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/">
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <X className="w-5 h-5" weight="bold" />
-                </Button>
+    <div className={isDayBuilderStep ? "h-screen bg-cream text-ink font-sans flex flex-col overflow-hidden" : "min-h-screen bg-cream text-ink font-sans"}>
+      {/* Header — cream surface, mono meta + sans title, close pill on the right */}
+      <header className={`${isDayBuilderStep ? '' : 'sticky top-0'} z-50 bg-cream/95 backdrop-blur-md border-b border-line`}>
+        <div className="max-w-[1440px] mx-auto px-4 md:px-14 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <Link
+                to="/"
+                aria-label="Close"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors shrink-0"
+              >
+                <X className="w-4 h-4" weight="regular" />
               </Link>
-              <div>
-                <h1 className="text-xl font-display font-bold text-foreground">Create Trip</h1>
-                <p className="text-sm text-muted-foreground">Step {wizard.currentStep + 1} of {wizardSteps.length}</p>
+              <div className="min-w-0">
+                <Mono className="text-pine-6">
+                  Step {wizard.currentStep + 1} of {wizardSteps.length}
+                </Mono>
+                <h1 className="text-[18px] md:text-[20px] font-sans font-bold tracking-[-0.01em] text-ink mt-0.5">
+                  Create a trip
+                </h1>
               </div>
             </div>
+
             {/* Draft save indicator */}
             {draftSaving ? (
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                <SpinnerGap className="w-4 h-4 animate-spin" />
-                <span className="hidden sm:inline">Saving...</span>
+              <div className="flex items-center gap-1.5 text-ink-3">
+                <SpinnerGap className="w-3.5 h-3.5 animate-spin" />
+                <Mono className="hidden sm:inline">Saving</Mono>
               </div>
             ) : lastSaved ? (
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                <CloudCheck className="w-4 h-4 text-green-600" />
-                <span className="hidden sm:inline">Draft saved</span>
+              <div className="flex items-center gap-1.5 text-pine-6">
+                <CloudCheck className="w-3.5 h-3.5" weight="regular" />
+                <Mono className="hidden sm:inline text-pine-6">Draft saved</Mono>
               </div>
             ) : null}
           </div>
+
+          {/* Progress bar — hide on the day-builder full-screen layout */}
+          {!isDayBuilderStep && (
+            <div className="mt-5">
+              <WizardProgress steps={wizardSteps} currentStep={wizard.currentStep} />
+            </div>
+          )}
         </div>
       </header>
 
@@ -696,12 +711,11 @@ const CreateTrip = () => {
           {renderStep()}
         </div>
       ) : (
-        <main className="container px-4 md:px-6 py-6 pb-24">
-          {/* Current Step Content */}
+        <main className="max-w-[1440px] mx-auto px-4 md:px-14 py-10 pb-28">
           <div className={`min-h-[400px] ${
             currentStepId === 'basics' || currentStepId === 'build-method'
-              ? 'max-w-xl mx-auto'
-              : ''
+              ? 'max-w-2xl mx-auto'
+              : 'max-w-3xl mx-auto'
           }`}>
             {renderStep()}
           </div>
@@ -721,10 +735,13 @@ const CreateTrip = () => {
 
       {/* Restore Draft Dialog */}
       <Dialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
-        <DialogContent>
+        <DialogContent className="border-line bg-white rounded-[18px]">
           <DialogHeader>
-            <DialogTitle>Continue where you left off?</DialogTitle>
-            <DialogDescription>
+            <Mono className="text-pine-6">Draft found</Mono>
+            <DialogTitle className="font-sans font-semibold tracking-[-0.015em] text-ink text-[22px] leading-[1.15] mt-1">
+              Pick up where you left off?
+            </DialogTitle>
+            <DialogDescription className="text-[14px] text-ink-3 leading-[1.55]">
               You have a saved draft from{' '}
               {draft?.updated_at
                 ? new Date(draft.updated_at).toLocaleDateString(undefined, {
@@ -734,27 +751,30 @@ const CreateTrip = () => {
                     minute: '2-digit',
                   })
                 : 'earlier'}
-              . Would you like to continue editing it?
+              . Continue editing it, or start fresh?
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
+          <DialogFooter className="gap-2 sm:gap-2 mt-2">
+            <Pill
+              variant="ghost"
+              mono={false}
               onClick={() => {
                 deleteDraft();
                 setShowRestoreDialog(false);
               }}
             >
-              Start Fresh
-            </Button>
-            <Button
+              Start fresh
+            </Pill>
+            <Pill
+              variant="solid-pine"
+              mono={false}
               onClick={() => {
                 restoreFromDraft(draft);
                 setShowRestoreDialog(false);
               }}
             >
-              Continue Draft
-            </Button>
+              Continue draft
+            </Pill>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -37,6 +37,7 @@ export default {
   				'serif'
   			],
   			mono: [
+  				'Space Mono',
   				'ui-monospace',
   				'SFMono-Regular',
   				'Menlo',
@@ -120,6 +121,71 @@ export default {
   			wildviolet: 'hsl(var(--accent-wildviolet))',
   			mossgreen: 'hsl(var(--accent-mossgreen))',
   			coralred: 'hsl(var(--accent-coralred))',
+
+  			// 2026 Redesign tokens — Pine + Paper
+  			cream:    'hsl(var(--cream))',
+  			paper:    'hsl(var(--paper))',
+  			'paper-2': 'hsl(var(--paper-2))',
+  			line:     'hsl(var(--line))',
+  			'line-2': 'hsl(var(--line-2))',
+  			ink: {
+  				DEFAULT: 'hsl(var(--ink))',
+  				pine:    'hsl(var(--ink-pine))',
+  				2:       'hsl(var(--ink-2))',
+  				3:       'hsl(var(--ink-3))',
+  				ondark:  'hsl(var(--ink-on-dark))',
+  			},
+  			pine: {
+  				1: 'hsl(var(--pine-1))',
+  				2: 'hsl(var(--pine-2))',
+  				3: 'hsl(var(--pine-3))',
+  				4: 'hsl(var(--pine-4))',
+  				5: 'hsl(var(--pine-5))',
+  				6: 'hsl(var(--pine-6))',
+  				7: 'hsl(var(--pine-7))',
+  				8: 'hsl(var(--pine-8))',
+  				9: 'hsl(var(--pine-9))',
+  				DEFAULT: 'hsl(var(--pine-6))',
+  			},
+  			clay:  'hsl(var(--clay))',
+  			sage:  'hsl(var(--sage))',
+  			ember: 'hsl(var(--ember))',
+  			water: 'hsl(var(--water))',
+
+  			// Functional palette
+  			pin: {
+  				easy:       'hsl(var(--pin-easy))',
+  				safe:       'hsl(var(--pin-safe))',
+  				campground: 'hsl(var(--pin-campground))',
+  				moderate:   'hsl(var(--pin-moderate))',
+  				hard:       'hsl(var(--pin-hard))',
+  			},
+  			land: {
+  				blm:        { DEFAULT: 'hsl(var(--land-blm-fill))',        stroke: 'hsl(var(--land-blm-stroke))' },
+  				usfs:       { DEFAULT: 'hsl(var(--land-usfs-fill))',       stroke: 'hsl(var(--land-usfs-stroke))' },
+  				nps:        { DEFAULT: 'hsl(var(--land-nps-fill))',        stroke: 'hsl(var(--land-nps-stroke))' },
+  				statepark:  { DEFAULT: 'hsl(var(--land-statepark-fill))',  stroke: 'hsl(var(--land-statepark-stroke))' },
+  				statetrust: { DEFAULT: 'hsl(var(--land-statetrust-fill))', stroke: 'hsl(var(--land-statetrust-stroke))' },
+  				landtrust:  { DEFAULT: 'hsl(var(--land-landtrust-fill))',  stroke: 'hsl(var(--land-landtrust-stroke))' },
+  			},
+  			road: {
+  				paved:     'hsl(var(--road-paved))',
+  				passenger: 'hsl(var(--road-passenger))',
+  				highclear: 'hsl(var(--road-highclear))',
+  				fourwd:    'hsl(var(--road-fourwd))',
+  				atv:       'hsl(var(--road-atv))',
+  			},
+  			// Refreshed decorative palette (lower-saturation v2)
+  			'accent-sage-2':  'hsl(var(--accent-sage))',
+  			'accent-mist':    'hsl(var(--accent-mist))',
+  			'accent-sky':     'hsl(var(--accent-sky))',
+  			'accent-iris':    'hsl(var(--accent-iris))',
+  			'accent-amber-2': 'hsl(var(--accent-amber-soft))',
+  			'accent-rose':    'hsl(var(--accent-rose))',
+  			'accent-plum':    'hsl(var(--accent-plum))',
+  			'accent-moss-2':  'hsl(var(--accent-moss))',
+  			'accent-clay-2':  'hsl(var(--accent-clay-soft))',
+
   			sidebar: {
   				DEFAULT: 'hsl(var(--sidebar-background))',
   				foreground: 'hsl(var(--sidebar-foreground))',

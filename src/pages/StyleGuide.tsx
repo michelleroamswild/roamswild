@@ -1,1278 +1,774 @@
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import {
-  ArrowLeft,
-  Boot,
   Tent,
-  GasPump,
-  MapPin,
-  MapPinArea,
-  Camera,
-  NavigationArrow,
+  MagnifyingGlass,
   Star,
+  ArrowRight,
+  CaretDown,
+  X as XIcon,
+  Sun,
+  Moon,
+  Mountains,
+  Camera,
+  GasPump,
+  Path,
   Heart,
   Plus,
   Trash,
   ArrowsClockwise,
   Check,
-  X,
   Warning,
   Info,
-  CaretDown,
   CaretUp,
-  MagnifyingGlass,
   Gear,
   User,
   SignOut,
   Share,
   Copy,
-  Path,
   Clock,
   Calendar,
-  Sun,
-  Moon,
   Cloud,
-  Mountains,
+  MapPin,
+  MapPinArea,
+  NavigationArrow,
+  Wind,
+  Compass,
+  Truck,
+  Funnel,
 } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
-import { getTypeStyles } from '@/utils/mapMarkers';
+import { Mono, Pill, Tag, StatusDot, TopoBg } from '@/components/redesign';
 
+// 2026 Redesign Style Guide
+// Comprehensive showcase of the Pine + Paper system. Covers surfaces, ink,
+// pine ramp, supporting + functional palettes, type scale, primitives,
+// interactive form controls, stop-type iconography, full Phosphor icon grid,
+// guardrails — and a dark-mode preview the whole page can toggle into.
+
+// ---------- helpers ----------
+const Section = ({
+  label,
+  title,
+  children,
+  dark,
+}: {
+  label: string;
+  title: string;
+  children: React.ReactNode;
+  dark?: boolean;
+}) => (
+  <section
+    className={[
+      'border-t px-14 py-12',
+      dark ? 'border-cream/10 bg-ink-pine text-cream' : 'border-line text-ink',
+    ].join(' ')}
+  >
+    <div className="grid grid-cols-[220px_1fr] gap-12 items-start">
+      <div>
+        <Mono className={dark ? 'text-ink-ondark' : 'text-pine-6'} size={11}>{label}</Mono>
+        <div className="mt-2 font-sans font-bold text-3xl leading-[1.05] tracking-[-0.02em]">{title}</div>
+      </div>
+      <div>{children}</div>
+    </div>
+  </section>
+);
+
+const Swatch = ({
+  cls,
+  name,
+  hex,
+  hsl,
+  textOnLight,
+}: {
+  cls: string;
+  name: string;
+  hex: string;
+  hsl: string;
+  textOnLight?: boolean;
+}) => (
+  <div className="flex flex-col gap-2">
+    <div className={`${cls} aspect-[1.6] rounded-lg border border-black/10 dark:border-white/10`} />
+    <div className="flex justify-between items-baseline">
+      <span className={`font-sans font-semibold text-[13px] ${textOnLight ? 'text-ink' : 'text-ink dark:text-cream'}`}>{name}</span>
+      <Mono size={9} className="text-ink-3">{hex}</Mono>
+    </div>
+    <Mono size={9} className="text-ink-3 opacity-70">{hsl}</Mono>
+  </div>
+);
+
+// ---------- page ----------
 const StyleGuide = () => {
+  // Page-level dark toggle. Wraps the page in a div with `.dark` so the
+  // global dark-mode CSS variables kick in for everything inside.
+  const [dark, setDark] = useState(false);
+
+  // Interactive form state
+  const [vehicle, setVehicle] = useState('passenger');
+  const [agencies, setAgencies] = useState<Set<string>>(new Set(['blm', 'usfs']));
+  const [showDerived, setShowDerived] = useState(true);
+  const [hideVisited, setHideVisited] = useState(false);
+  // Dual-thumb range slider (low/high), in miles, max 50.
+  const [distLow, setDistLow] = useState(2);
+  const [distHigh, setDistHigh] = useState(14);
+  const distMax = 50;
+  const [sortBy, setSortBy] = useState('Recommended');
+  const [region, setRegion] = useState('');
+
+  // Restore dark preference within the page session
+  useEffect(() => {
+    const saved = localStorage.getItem('styleguide-dark');
+    if (saved === '1') setDark(true);
+  }, []);
+  useEffect(() => {
+    localStorage.setItem('styleguide-dark', dark ? '1' : '0');
+  }, [dark]);
+
+  const toggleAgency = (key: string) =>
+    setAgencies((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="container px-4 md:px-6 py-4">
-          <div className="flex items-center gap-4">
-            <Link to="/">
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-            </Link>
+    <div className={dark ? 'dark' : ''}>
+      <div className="w-full bg-paper text-ink font-sans">
+        {/* HEADER */}
+        <div className="relative overflow-hidden px-14 pt-14 pb-2">
+          <TopoBg color="hsl(var(--ink-pine))" opacity={0.12} />
+          <div className="relative flex justify-between items-start">
             <div>
-              <h1 className="text-xl font-display font-bold text-foreground">Style Guide</h1>
-              <p className="text-sm text-muted-foreground">UI Components & Design System</p>
+              <Mono className="text-pine-6" size={11}>STYLE GUIDE · v0.2 · 2026</Mono>
+              <h1 className="font-sans font-bold text-[88px] leading-[0.94] tracking-[-0.04em] mt-3.5 max-w-[880px]">
+                One paper. One ink. One accent.
+              </h1>
+              <p className="text-[18px] leading-[1.55] text-ink-3 max-w-[680px] mt-6 mb-8">
+                The full primitive set behind the redesign. Surfaces, ink ramps,
+                a single accent, type scale, controls, and form elements — all
+                on warm paper, detailed with mono labels and quiet outlines.
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-3">
+              {/* Dark-mode toggle */}
+              <button
+                type="button"
+                onClick={() => setDark((d) => !d)}
+                aria-pressed={dark}
+                className="inline-flex items-center gap-2 rounded-full border border-line-2 bg-cream dark:bg-paper-2 px-3 py-1.5 text-[12px] font-semibold text-ink transition-colors hover:bg-paper-2 dark:hover:bg-paper"
+              >
+                {dark ? <Sun size={14} weight="regular" /> : <Moon size={14} weight="regular" />}
+                {dark ? 'Light' : 'Dark'} preview
+              </button>
+              <Mono>FONT</Mono>
+              <div className="font-sans font-bold text-[32px] tracking-[-0.02em]">Manrope</div>
+              <Mono>+ Space Mono · meta</Mono>
             </div>
           </div>
         </div>
-      </header>
 
-      <main className="container px-4 md:px-6 py-8 space-y-12">
-        {/* Colors */}
-        <section>
-          <h2 className="text-2xl font-bold mb-6">Colors</h2>
-
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-3">Core Colors</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-primary"></div>
-                  <p className="text-sm font-medium">Primary</p>
-                  <p className="text-xs text-muted-foreground font-mono">#3f3e2c</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(69 17% 21%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-secondary"></div>
-                  <p className="text-sm font-medium">Secondary</p>
-                  <p className="text-xs text-muted-foreground font-mono">#e9e5d4</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(51 37% 89%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-accent"></div>
-                  <p className="text-sm font-medium">Accent</p>
-                  <p className="text-xs text-muted-foreground font-mono">#a5c94a</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(74 68% 56%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-destructive"></div>
-                  <p className="text-sm font-medium">Destructive</p>
-                  <p className="text-xs text-muted-foreground font-mono">#ef4444</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(0 84% 60%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-muted"></div>
-                  <p className="text-sm font-medium">Muted</p>
-                  <p className="text-xs text-muted-foreground font-mono">#e0d9cf</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(35 20% 85%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-card border"></div>
-                  <p className="text-sm font-medium">Card</p>
-                  <p className="text-xs text-muted-foreground font-mono">#f9f8f6</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(36 23% 97%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-background-secondary"></div>
-                  <p className="text-sm font-medium">Background Secondary</p>
-                  <p className="text-xs text-muted-foreground font-mono">#b09d7d</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(35 20% 62%)</p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-3">Custom Accent Colors</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-pinesoft"></div>
-                  <p className="text-sm font-medium">Pinesoft</p>
-                  <p className="text-xs text-muted-foreground">Hikes</p>
-                  <p className="text-xs text-muted-foreground font-mono">#4da391</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(167 39% 49%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-softamber"></div>
-                  <p className="text-sm font-medium">Soft Amber</p>
-                  <p className="text-xs text-muted-foreground">Campsites</p>
-                  <p className="text-xs text-muted-foreground font-mono">#eaaf3c</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(40 83% 63%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-skyblue"></div>
-                  <p className="text-sm font-medium">Sky Blue</p>
-                  <p className="text-xs text-muted-foreground">Viewpoints</p>
-                  <p className="text-xs text-muted-foreground font-mono">#94c4f5</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(212 86% 77%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-blushorchid"></div>
-                  <p className="text-sm font-medium">Blush Orchid</p>
-                  <p className="text-xs text-muted-foreground">Photo Spots</p>
-                  <p className="text-xs text-muted-foreground font-mono">#f0a5c4</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(332 76% 79%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-aquateal"></div>
-                  <p className="text-sm font-medium">Aqua Teal</p>
-                  <p className="text-xs text-muted-foreground">Start/End</p>
-                  <p className="text-xs text-muted-foreground font-mono">#5cc9be</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(171 60% 64%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-lavenderslate"></div>
-                  <p className="text-sm font-medium">Lavender Slate</p>
-                  <p className="text-xs text-muted-foreground">Default</p>
-                  <p className="text-xs text-muted-foreground font-mono">#a99bf0</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(249 80% 75%)</p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-3">Map Marker Colors (Darkened 20%)</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg" style={{ backgroundColor: '#3c8a79' }}></div>
-                  <p className="text-sm font-medium">Hike Marker</p>
-                  <p className="text-xs text-muted-foreground font-mono">#3c8a79</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(167 39% 39%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg" style={{ backgroundColor: '#ea9b0c' }}></div>
-                  <p className="text-sm font-medium">Camp Marker</p>
-                  <p className="text-xs text-muted-foreground font-mono">#ea9b0c</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(40 83% 50%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg" style={{ backgroundColor: '#4a96ed' }}></div>
-                  <p className="text-sm font-medium">Viewpoint Marker</p>
-                  <p className="text-xs text-muted-foreground font-mono">#4a96ed</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(212 86% 62%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg" style={{ backgroundColor: '#e85a9a' }}></div>
-                  <p className="text-sm font-medium">Photo Marker</p>
-                  <p className="text-xs text-muted-foreground font-mono">#e85a9a</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(332 76% 63%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg" style={{ backgroundColor: '#34b5a5' }}></div>
-                  <p className="text-sm font-medium">Start/End Marker</p>
-                  <p className="text-xs text-muted-foreground font-mono">#34b5a5</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(171 60% 51%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg" style={{ backgroundColor: '#6b5ce6' }}></div>
-                  <p className="text-sm font-medium">Default Marker</p>
-                  <p className="text-xs text-muted-foreground font-mono">#6b5ce6</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(249 80% 60%)</p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-3">Earth Tones</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-forest"></div>
-                  <p className="text-sm font-medium">Forest</p>
-                  <p className="text-xs text-muted-foreground font-mono">#6b8a1d</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(74 68% 35%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-forest-light"></div>
-                  <p className="text-sm font-medium">Forest Light</p>
-                  <p className="text-xs text-muted-foreground font-mono">#a5c94a</p>
-                  <p className="text-xs text-muted-foreground font-mono">var(--accent)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-sand"></div>
-                  <p className="text-sm font-medium">Sand</p>
-                  <p className="text-xs text-muted-foreground font-mono">#e2d9c9</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(35 35% 85%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-sand-dark"></div>
-                  <p className="text-sm font-medium">Sand Dark</p>
-                  <p className="text-xs text-muted-foreground font-mono">#ccc2b0</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(35 25% 75%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-terracotta"></div>
-                  <p className="text-sm font-medium">Terracotta</p>
-                  <p className="text-xs text-muted-foreground font-mono">#cd6a3d</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(20 65% 55%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-cream"></div>
-                  <p className="text-sm font-medium">Cream</p>
-                  <p className="text-xs text-muted-foreground font-mono">#e0d9cf</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(35 20% 85%)</p>
-                </div>
-              </div>
-            </div>
+        {/* 01 SURFACES */}
+        <Section label="01 · SURFACES" title="Warm neutral paper">
+          <div className="grid grid-cols-5 gap-3.5">
+            <Swatch cls="bg-cream"   name="Cream"   hex="#FAF6EA" hsl="hsl(45 56% 95%)" />
+            <Swatch cls="bg-paper"   name="Paper"   hex="#F4F0E4" hsl="hsl(43 50% 92%)" />
+            <Swatch cls="bg-paper-2" name="Paper 2" hex="#ECE6D4" hsl="hsl(45 38% 88%)" />
+            <Swatch cls="bg-line"    name="Line"    hex="#DFD8C4" hsl="hsl(45 33% 82%)" />
+            <Swatch cls="bg-line-2"  name="Line 2"  hex="#C9C0A8" hsl="hsl(43 25% 72%)" />
           </div>
-        </section>
+        </Section>
 
-        <Separator />
-
-        {/* Dark Theme */}
-        <section>
-          <h2 className="text-2xl font-bold mb-6">Dark Theme Preview</h2>
-          <div className="dark bg-background rounded-xl p-6 space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-3 text-foreground">Core Colors (Dark)</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-primary"></div>
-                  <p className="text-sm font-medium text-foreground">Primary</p>
-                  <p className="text-xs text-muted-foreground font-mono">#e0d9cf</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(35 20% 85%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-secondary"></div>
-                  <p className="text-sm font-medium text-foreground">Secondary</p>
-                  <p className="text-xs text-muted-foreground font-mono">#ccc2b0</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(35 25% 75%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-accent"></div>
-                  <p className="text-sm font-medium text-foreground">Accent</p>
-                  <p className="text-xs text-muted-foreground font-mono">#a5c94a</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(74 68% 56%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-destructive"></div>
-                  <p className="text-sm font-medium text-foreground">Destructive</p>
-                  <p className="text-xs text-muted-foreground font-mono">#bd3c3c</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(0 65% 45%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-muted"></div>
-                  <p className="text-sm font-medium text-foreground">Muted</p>
-                  <p className="text-xs text-muted-foreground font-mono">#28251f</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(30 10% 16%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-card border border-border"></div>
-                  <p className="text-sm font-medium text-foreground">Card</p>
-                  <p className="text-xs text-muted-foreground font-mono">#353425</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(69 17% 18%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-background-secondary"></div>
-                  <p className="text-sm font-medium text-foreground">Background Secondary</p>
-                  <p className="text-xs text-muted-foreground font-mono">#4a3f30</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(35 20% 22%)</p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-3 text-foreground">Background & Foreground (Dark)</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-background border border-border"></div>
-                  <p className="text-sm font-medium text-foreground">Background</p>
-                  <p className="text-xs text-muted-foreground font-mono">#1e1d15</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(69 17% 10%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-foreground"></div>
-                  <p className="text-sm font-medium text-foreground">Foreground</p>
-                  <p className="text-xs text-muted-foreground font-mono">#f9f8f6</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(36 23% 97%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-border"></div>
-                  <p className="text-sm font-medium text-foreground">Border</p>
-                  <p className="text-xs text-muted-foreground font-mono">#3f3e2c</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(69 17% 21%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-card-light"></div>
-                  <p className="text-sm font-medium text-foreground">Card Light</p>
-                  <p className="text-xs text-muted-foreground font-mono">#454435</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(69 17% 24%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-border-light"></div>
-                  <p className="text-sm font-medium text-foreground">Border Light</p>
-                  <p className="text-xs text-muted-foreground font-mono">#696849</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(69 17% 36%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg" style={{ backgroundColor: 'hsl(40 12% 55%)' }}></div>
-                  <p className="text-sm font-medium text-foreground">Muted Foreground</p>
-                  <p className="text-xs text-muted-foreground font-mono">#9a907f</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(40 12% 55%)</p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-3 text-foreground">Earth Tones (Dark)</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-forest"></div>
-                  <p className="text-sm font-medium text-foreground">Forest</p>
-                  <p className="text-xs text-muted-foreground font-mono">#6b8a1d</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(74 68% 35%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-forest-light"></div>
-                  <p className="text-sm font-medium text-foreground">Forest Light</p>
-                  <p className="text-xs text-muted-foreground font-mono">#a5c94a</p>
-                  <p className="text-xs text-muted-foreground font-mono">var(--accent)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-sand"></div>
-                  <p className="text-sm font-medium text-foreground">Sand</p>
-                  <p className="text-xs text-muted-foreground font-mono">#3d362f</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(35 15% 22%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-sand-dark"></div>
-                  <p className="text-sm font-medium text-foreground">Sand Dark</p>
-                  <p className="text-xs text-muted-foreground font-mono">#2c2824</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(35 12% 16%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-terracotta"></div>
-                  <p className="text-sm font-medium text-foreground">Terracotta</p>
-                  <p className="text-xs text-muted-foreground font-mono">#bf5f3a</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(20 55% 50%)</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-16 rounded-lg bg-cream"></div>
-                  <p className="text-sm font-medium text-foreground">Cream</p>
-                  <p className="text-xs text-muted-foreground font-mono">#262320</p>
-                  <p className="text-xs text-muted-foreground font-mono">hsl(35 10% 14%)</p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4 text-foreground">Buttons (Dark)</h3>
-              <div className="flex flex-wrap gap-4 items-center">
-                <Button variant="primary">Primary</Button>
-                <Button variant="secondary">Secondary</Button>
-                <Button variant="tertiary">Tertiary</Button>
-                <Button variant="destructive">Destructive</Button>
-                <Button variant="outline">Outline</Button>
-                <Button variant="ghost">Ghost</Button>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4 text-foreground">Inputs (Dark)</h3>
-              <div className="max-w-md space-y-4">
-                <Input placeholder="Enter text..." />
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="dark-checkbox" />
-                  <Label htmlFor="dark-checkbox" className="text-foreground cursor-pointer">Checkbox label</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Switch id="dark-switch" />
-                  <Label htmlFor="dark-switch" className="text-foreground">Switch label</Label>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4 text-foreground">Cards (Dark)</h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Card Title</CardTitle>
-                    <CardDescription>Card description text</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-foreground">Card content in dark mode.</p>
-                  </CardContent>
-                </Card>
-                <Card className="ring-2 ring-border-light border-border-light bg-card-light">
-                  <CardHeader>
-                    <CardTitle>Active Card</CardTitle>
-                    <CardDescription>With border-light ring</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-foreground">Active state in dark mode.</p>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4 text-foreground">Typography (Dark)</h3>
-              <div className="space-y-2">
-                <h4 className="text-xl font-semibold text-foreground">Heading text</h4>
-                <p className="text-foreground">Regular body text in dark mode</p>
-                <p className="text-muted-foreground">Muted text in dark mode</p>
-                <p className="text-primary">Primary colored text</p>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4 text-foreground">Button Sizes (Dark)</h3>
-              <div className="flex flex-wrap gap-4 items-center">
-                <Button size="sm">Small</Button>
-                <Button size="default">Default</Button>
-                <Button size="lg">Large</Button>
-                <Button size="xl">Extra Large</Button>
-                <Button size="icon"><Plus className="w-4 h-4" /></Button>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4 text-foreground">Buttons with Icons (Dark)</h3>
-              <div className="flex flex-wrap gap-4 items-center">
-                <Button variant="primary">
-                  <Plus className="w-4 h-4" />
-                  Add Item
-                </Button>
-                <Button variant="secondary">
-                  <NavigationArrow className="w-4 h-4" />
-                  Navigate
-                </Button>
-                <Button variant="tertiary">
-                  <Share className="w-4 h-4" />
-                  Share
-                </Button>
-                <Button variant="destructive">
-                  <Trash className="w-4 h-4" />
-                  Delete
-                </Button>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4 text-foreground">Chip Buttons (Dark)</h3>
-              <div className="flex flex-wrap gap-2 items-center">
-                <Button variant="chip" size="chip">Filter</Button>
-                <Button variant="chip-active" size="chip">Active</Button>
-                <Button variant="chip" size="chip">Hiking</Button>
-                <Button variant="chip" size="chip">Camping</Button>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4 text-foreground">Badges (Dark)</h3>
-              <div className="flex flex-wrap gap-2">
-                <Badge>Default</Badge>
-                <Badge variant="secondary">Secondary</Badge>
-                <Badge variant="destructive">Destructive</Badge>
-                <Badge variant="outline">Outline</Badge>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4 text-foreground">Stop Type Badges (Dark)</h3>
-              <div className="flex flex-wrap gap-2">
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getTypeStyles('hike')}`}>
-                  <Boot className="w-3 h-3" /> Hike
-                </span>
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getTypeStyles('camp')}`}>
-                  <Tent className="w-3 h-3" /> Camp
-                </span>
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getTypeStyles('viewpoint')}`}>
-                  <MapPinArea className="w-3 h-3" /> Viewpoint
-                </span>
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getTypeStyles('photo')}`}>
-                  <Camera className="w-3 h-3" /> Photo
-                </span>
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getTypeStyles('gas')}`}>
-                  <GasPump className="w-3 h-3" /> Gas
-                </span>
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getTypeStyles('start')}`}>
-                  <MapPin className="w-3 h-3" /> Start/End
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4 text-foreground">Stop Type Icons (Dark)</h3>
-              <div className="flex flex-wrap gap-6 items-center">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-pinesoft/20 flex items-center justify-center">
-                    <Boot className="w-5 h-5 text-pinesoft" />
-                  </div>
-                  <span className="text-xs text-foreground">Hike</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-wildviolet/20 flex items-center justify-center">
-                    <Tent className="w-5 h-5 text-wildviolet" />
-                  </div>
-                  <span className="text-xs text-foreground">Camp</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-skyblue/20 flex items-center justify-center">
-                    <MapPinArea className="w-5 h-5 text-skyblue" />
-                  </div>
-                  <span className="text-xs text-foreground">Viewpoint</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-blushorchid/20 flex items-center justify-center">
-                    <Camera className="w-5 h-5 text-blushorchid" />
-                  </div>
-                  <span className="text-xs text-foreground">Photo</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-blushorchid/20 flex items-center justify-center">
-                    <GasPump className="w-5 h-5 text-blushorchid" />
-                  </div>
-                  <span className="text-xs text-foreground">Gas</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-aquateal/20 flex items-center justify-center">
-                    <MapPin className="w-5 h-5 text-aquateal" />
-                  </div>
-                  <span className="text-xs text-foreground">Start/End</span>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4 text-foreground">UI Icons (Dark)</h3>
-              <div className="flex flex-wrap gap-4 items-center text-foreground">
-                <div className="flex flex-col items-center gap-2">
-                  <NavigationArrow className="w-6 h-6" />
-                  <span className="text-xs">Navigate</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Star className="w-6 h-6" />
-                  <span className="text-xs">Star</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Heart className="w-6 h-6" />
-                  <span className="text-xs">Heart</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Plus className="w-6 h-6" />
-                  <span className="text-xs">Plus</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Trash className="w-6 h-6" />
-                  <span className="text-xs">Trash</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <ArrowsClockwise className="w-6 h-6" />
-                  <span className="text-xs">Refresh</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Check className="w-6 h-6" />
-                  <span className="text-xs">Check</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <X className="w-6 h-6" />
-                  <span className="text-xs">Close</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Warning className="w-6 h-6" />
-                  <span className="text-xs">Warning</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Info className="w-6 h-6" />
-                  <span className="text-xs">Info</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <MagnifyingGlass className="w-6 h-6" />
-                  <span className="text-xs">Search</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Gear className="w-6 h-6" />
-                  <span className="text-xs">Settings</span>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4 text-foreground">Day Card States (Dark)</h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                <Card>
-                  <div className="flex items-center justify-between p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
-                        <span className="text-lg font-bold text-primary">1</span>
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">Day 1</p>
-                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Path className="w-3 h-3" />
-                            45 mi
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            1h 15m
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Boot className="w-4 h-4 text-pinesoft" />
-                      <Tent className="w-4 h-4 text-wildviolet" />
-                    </div>
-                  </div>
-                </Card>
-
-                <Card className="ring-2 ring-border-light border-border-light bg-card-light">
-                  <div className="flex items-center justify-between p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-10 h-10 rounded-full bg-border-light text-foreground">
-                        <span className="text-lg font-bold">2</span>
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">
-                          Day 2
-                          <span className="ml-2 text-xs text-border-light font-normal">(Active)</span>
-                        </p>
-                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Path className="w-3 h-3" />
-                            62 mi
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            1h 45m
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Boot className="w-4 h-4 text-pinesoft" />
-                      <Tent className="w-4 h-4 text-wildviolet" />
-                    </div>
-                  </div>
-                </Card>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4 text-foreground">Border Radius (Dark)</h3>
-              <div className="flex flex-wrap gap-6">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-16 h-16 bg-primary rounded-sm"></div>
-                  <span className="text-xs text-foreground">rounded-sm</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-16 h-16 bg-primary rounded"></div>
-                  <span className="text-xs text-foreground">rounded</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-16 h-16 bg-primary rounded-md"></div>
-                  <span className="text-xs text-foreground">rounded-md</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-16 h-16 bg-primary rounded-lg"></div>
-                  <span className="text-xs text-foreground">rounded-lg</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-16 h-16 bg-primary rounded-xl"></div>
-                  <span className="text-xs text-foreground">rounded-xl</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-16 h-16 bg-primary rounded-full"></div>
-                  <span className="text-xs text-foreground">rounded-full</span>
-                </div>
-              </div>
-            </div>
+        {/* 02 INK */}
+        <Section label="02 · INK" title="Five steps for hierarchy">
+          <div className="grid grid-cols-5 gap-3.5">
+            <Swatch cls="bg-ink"        name="Ink"      hex="#13160F" hsl="hsl(80 18% 7%)" />
+            <Swatch cls="bg-ink-pine"   name="Pine ink" hex="#1D2218" hsl="hsl(96 18% 11%)" />
+            <Swatch cls="bg-ink-2"      name="Ink 2"    hex="#33352E" hsl="hsl(60 8% 19%)" />
+            <Swatch cls="bg-ink-3"      name="Ink 3"    hex="#5A5D52" hsl="hsl(80 6% 34%)" />
+            <Swatch cls="bg-ink-ondark" name="On dark"  hex="#9AA190" hsl="hsl(96 8% 60%)" />
           </div>
-        </section>
+        </Section>
 
-        <Separator />
-
-        {/* Typography */}
-        <section>
-          <h2 className="text-2xl font-bold mb-6">Typography</h2>
-          <div className="space-y-6">
-            <div className="space-y-4">
-              <div>
-                <h1>Heading 1</h1>
-                <p className="text-sm text-muted-foreground mt-1">text-4xl md:text-5xl lg:text-6xl font-bold</p>
-              </div>
-              <div>
-                <h2>Heading 2</h2>
-                <p className="text-sm text-muted-foreground mt-1">text-3xl md:text-4xl font-bold</p>
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold">Heading 3</h3>
-                <p className="text-sm text-muted-foreground mt-1">text-2xl font-bold</p>
-              </div>
-              <div>
-                <h4 className="text-xl font-semibold">Heading 4</h4>
-                <p className="text-sm text-muted-foreground mt-1">text-xl font-semibold</p>
-              </div>
-              <div>
-                <p className="text-lg">Large text - text-lg</p>
-              </div>
-              <div>
-                <p className="text-base">Base text - text-base (default)</p>
-              </div>
-              <div>
-                <p className="text-sm">Small text - text-sm</p>
-              </div>
-              <div>
-                <p className="text-xs">Extra small text - text-xs</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Muted text - text-muted-foreground</p>
-              </div>
-            </div>
+        {/* 03 ACCENT */}
+        <Section label="03 · ACCENT" title="Pine ramp · 1 to 9">
+          <div className="grid grid-cols-9 gap-2.5">
+            {[
+              { c: 'bg-pine-1', n: 'Pine 1', h: '#EEF1E4', hsl: 'hsl(78 38% 92%)' },
+              { c: 'bg-pine-2', n: 'Pine 2', h: '#D9E1C4', hsl: 'hsl(78 36% 83%)' },
+              { c: 'bg-pine-3', n: 'Pine 3', h: '#B9C79B', hsl: 'hsl(80 30% 70%)' },
+              { c: 'bg-pine-4', n: 'Pine 4', h: '#8AA067', hsl: 'hsl(85 25% 52%)' },
+              { c: 'bg-pine-5', n: 'Pine 5', h: '#5B6F3F', hsl: 'hsl(90 27% 34%)' },
+              { c: 'bg-pine-6', n: 'Pine 6 ★', h: '#3A4A2A', hsl: 'hsl(96 27% 23%)' },
+              { c: 'bg-pine-7', n: 'Pine 7', h: '#2F3D22', hsl: 'hsl(96 28% 19%)' },
+              { c: 'bg-pine-8', n: 'Pine 8', h: '#28341D', hsl: 'hsl(96 30% 16%)' },
+              { c: 'bg-pine-9', n: 'Pine 9', h: '#243018', hsl: 'hsl(96 33% 14%)' },
+            ].map((s) => <Swatch key={s.n} cls={s.c} name={s.n} hex={s.h} hsl={s.hsl} />)}
           </div>
-        </section>
+        </Section>
 
-        <Separator />
-
-        {/* Buttons */}
-        <section>
-          <h2 className="text-2xl font-bold mb-6">Buttons</h2>
-
-          <div className="space-y-8">
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Variants</h3>
-              <div className="flex flex-wrap gap-4 items-center">
-                <Button variant="primary">Primary</Button>
-                <Button variant="secondary">Secondary</Button>
-                <Button variant="tertiary">Tertiary</Button>
-                <Button variant="destructive">Destructive</Button>
-                <Button variant="outline">Outline</Button>
-                <Button variant="ghost">Ghost</Button>
-                <Button variant="link">Link</Button>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Sizes</h3>
-              <div className="flex flex-wrap gap-4 items-center">
-                <Button size="sm">Small</Button>
-                <Button size="default">Default</Button>
-                <Button size="lg">Large</Button>
-                <Button size="xl">Extra Large</Button>
-                <Button size="icon"><Plus className="w-4 h-4" /></Button>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4">With Icons</h3>
-              <div className="flex flex-wrap gap-4 items-center">
-                <Button variant="primary">
-                  <Plus className="w-4 h-4" />
-                  Add Item
-                </Button>
-                <Button variant="secondary">
-                  <NavigationArrow className="w-4 h-4" />
-                  Navigate
-                </Button>
-                <Button variant="tertiary">
-                  <Share className="w-4 h-4" />
-                  Share
-                </Button>
-                <Button variant="destructive">
-                  <Trash className="w-4 h-4" />
-                  Delete
-                </Button>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Chip Buttons</h3>
-              <div className="flex flex-wrap gap-2 items-center">
-                <Button variant="chip" size="chip">Filter</Button>
-                <Button variant="chip-active" size="chip">Active</Button>
-                <Button variant="chip" size="chip">Hiking</Button>
-                <Button variant="chip" size="chip">Camping</Button>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4">States</h3>
-              <div className="flex flex-wrap gap-4 items-center">
-                <Button variant="primary">Normal</Button>
-                <Button variant="primary" disabled>Disabled</Button>
-              </div>
-            </div>
+        {/* 04 SUPPORTING */}
+        <Section label="04 · SUPPORTING" title="Used sparingly, with intent">
+          <div className="grid grid-cols-4 gap-3.5">
+            <Swatch cls="bg-clay"  name="Clay (derived)"   hex="#A86A3C" hsl="hsl(25 47% 45%)" />
+            <Swatch cls="bg-sage"  name="Sage (verified)"  hex="#7A9156" hsl="hsl(86 25% 45%)" />
+            <Swatch cls="bg-ember" name="Ember (alert)"    hex="#B8542E" hsl="hsl(15 60% 45%)" />
+            <Swatch cls="bg-water" name="Water (map only)" hex="#9AB1A3" hsl="hsl(150 13% 65%)" />
           </div>
-        </section>
+        </Section>
 
-        <Separator />
-
-        {/* Inputs */}
-        <section>
-          <h2 className="text-2xl font-bold mb-6">Inputs</h2>
-
-          <div className="space-y-6 max-w-md">
-            <div className="space-y-2">
-              <Label htmlFor="default">Default Input</Label>
-              <Input id="default" placeholder="Enter text..." />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="with-icon">With Icon</Label>
-              <div className="relative">
-                <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <Input id="with-icon" className="pl-10" placeholder="Search..." />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="disabled">Disabled</Label>
-              <Input id="disabled" placeholder="Disabled input" disabled />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="textarea">Textarea</Label>
-              <Textarea id="textarea" placeholder="Enter longer text..." />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox id="checkbox" />
-              <Label htmlFor="checkbox" className="cursor-pointer">Checkbox label</Label>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch id="switch" />
-              <Label htmlFor="switch">Switch label</Label>
-            </div>
+        {/* 05 PINS */}
+        <Section label="05 · MAP PINS" title="Severity, ordinal">
+          <div className="grid grid-cols-5 gap-3.5">
+            <Swatch cls="bg-pin-easy"       name="Easy"       hex="#D7AB45" hsl="hsl(45 62% 56%)" />
+            <Swatch cls="bg-pin-safe"       name="Known/Safe" hex="#476E3D" hsl="hsl(96 28% 38%)" />
+            <Swatch cls="bg-pin-moderate"   name="Moderate"   hex="#D9712B" hsl="hsl(24 68% 52%)" />
+            <Swatch cls="bg-pin-hard"       name="Hard"       hex="#3A2A1F" hsl="hsl(20 30% 16%)" />
+            <Swatch cls="bg-pin-campground" name="Campground" hex="#4979A7" hsl="hsl(206 38% 46%)" />
           </div>
-        </section>
+          <p className="text-[13px] text-ink-3 mt-4 leading-[1.5] max-w-[620px]">
+            Hierarchy: easy → moderate → hard reads ordinally. Safe (known camp-sites) sits
+            off the severity ramp. Campground is a separate kind, blue.
+          </p>
+        </Section>
 
-        <Separator />
-
-        {/* Cards */}
-        <section>
-          <h2 className="text-2xl font-bold mb-6">Cards</h2>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Card Title</CardTitle>
-                <CardDescription>Card description text goes here</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p>Card content goes here. This is where the main information lives.</p>
-              </CardContent>
-            </Card>
-
-            <Card className="ring-2 ring-primary border-primary">
-              <CardHeader>
-                <CardTitle>Active Card</CardTitle>
-                <CardDescription>With primary ring border</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p>This card has an active state with primary color border.</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10">
-                    <Mountains className="w-6 h-6 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-semibold">Icon Card</p>
-                    <p className="text-sm text-muted-foreground">With icon and content</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        {/* 06 LAND OVERLAYS */}
+        <Section label="06 · LAND OVERLAYS" title="Six agencies, all desaturated">
+          <div className="grid grid-cols-6 gap-3.5">
+            <Swatch cls="bg-land-blm"        name="BLM"          hex="#BD8538" hsl="hsl(36 55% 52%)" />
+            <Swatch cls="bg-land-usfs"       name="USFS"         hex="#4D8F65" hsl="hsl(140 32% 42%)" />
+            <Swatch cls="bg-land-nps"        name="NPS"          hex="#7A6A9E" hsl="hsl(268 28% 52%)" />
+            <Swatch cls="bg-land-statepark"  name="State Park"   hex="#4A7DB5" hsl="hsl(206 42% 50%)" />
+            <Swatch cls="bg-land-statetrust" name="State Trust"  hex="#4A95A4" hsl="hsl(186 36% 48%)" />
+            <Swatch cls="bg-land-landtrust"  name="Land Trust"   hex="#B3677A" hsl="hsl(338 38% 58%)" />
           </div>
-        </section>
+        </Section>
 
-        <Separator />
-
-        {/* Badges */}
-        <section>
-          <h2 className="text-2xl font-bold mb-6">Badges</h2>
-
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Default Badges</h3>
-              <div className="flex flex-wrap gap-2">
-                <Badge>Default</Badge>
-                <Badge variant="secondary">Secondary</Badge>
-                <Badge variant="destructive">Destructive</Badge>
-                <Badge variant="outline">Outline</Badge>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Stop Type Badges</h3>
-              <div className="flex flex-wrap gap-2">
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getTypeStyles('hike')}`}>
-                  <Boot className="w-3 h-3" /> Hike
-                </span>
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getTypeStyles('camp')}`}>
-                  <Tent className="w-3 h-3" /> Camp
-                </span>
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getTypeStyles('viewpoint')}`}>
-                  <MapPinArea className="w-3 h-3" /> Viewpoint
-                </span>
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getTypeStyles('photo')}`}>
-                  <Camera className="w-3 h-3" /> Photo
-                </span>
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getTypeStyles('gas')}`}>
-                  <GasPump className="w-3 h-3" /> Gas
-                </span>
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getTypeStyles('start')}`}>
-                  <MapPin className="w-3 h-3" /> Start/End
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <Separator />
-
-        {/* Icons */}
-        <section>
-          <h2 className="text-2xl font-bold mb-6">Icons</h2>
-
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Stop Type Icons</h3>
-              <div className="flex flex-wrap gap-6 items-center">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-pinesoft/20 flex items-center justify-center">
-                    <Boot className="w-5 h-5 text-pinesoft" />
-                  </div>
-                  <span className="text-xs">Hike</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-wildviolet/20 flex items-center justify-center">
-                    <Tent className="w-5 h-5 text-wildviolet" />
-                  </div>
-                  <span className="text-xs">Camp</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-skyblue/20 flex items-center justify-center">
-                    <MapPinArea className="w-5 h-5 text-skyblue" />
-                  </div>
-                  <span className="text-xs">Viewpoint</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-blushorchid/20 flex items-center justify-center">
-                    <Camera className="w-5 h-5 text-blushorchid" />
-                  </div>
-                  <span className="text-xs">Photo</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-blushorchid/20 flex items-center justify-center">
-                    <GasPump className="w-5 h-5 text-blushorchid" />
-                  </div>
-                  <span className="text-xs">Gas</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-aquateal/20 flex items-center justify-center">
-                    <MapPin className="w-5 h-5 text-aquateal" />
-                  </div>
-                  <span className="text-xs">Start/End</span>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4">UI Icons</h3>
-              <div className="flex flex-wrap gap-4 items-center">
-                <div className="flex flex-col items-center gap-2">
-                  <NavigationArrow className="w-6 h-6" />
-                  <span className="text-xs">Navigate</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Star className="w-6 h-6" />
-                  <span className="text-xs">Star</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Heart className="w-6 h-6" />
-                  <span className="text-xs">Heart</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Plus className="w-6 h-6" />
-                  <span className="text-xs">Plus</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Trash className="w-6 h-6" />
-                  <span className="text-xs">Trash</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <ArrowsClockwise className="w-6 h-6" />
-                  <span className="text-xs">Refresh</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Check className="w-6 h-6" />
-                  <span className="text-xs">Check</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <X className="w-6 h-6" />
-                  <span className="text-xs">Close</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Warning className="w-6 h-6" />
-                  <span className="text-xs">Warning</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Info className="w-6 h-6" />
-                  <span className="text-xs">Info</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <CaretDown className="w-6 h-6" />
-                  <span className="text-xs">Caret Down</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <CaretUp className="w-6 h-6" />
-                  <span className="text-xs">Caret Up</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <MagnifyingGlass className="w-6 h-6" />
-                  <span className="text-xs">Search</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Gear className="w-6 h-6" />
-                  <span className="text-xs">Settings</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <User className="w-6 h-6" />
-                  <span className="text-xs">User</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <SignOut className="w-6 h-6" />
-                  <span className="text-xs">Sign Out</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Share className="w-6 h-6" />
-                  <span className="text-xs">Share</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Copy className="w-6 h-6" />
-                  <span className="text-xs">Copy</span>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Info Icons</h3>
-              <div className="flex flex-wrap gap-4 items-center">
-                <div className="flex flex-col items-center gap-2">
-                  <Path className="w-6 h-6" />
-                  <span className="text-xs">Distance</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Clock className="w-6 h-6" />
-                  <span className="text-xs">Time</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Calendar className="w-6 h-6" />
-                  <span className="text-xs">Date</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Sun className="w-6 h-6" />
-                  <span className="text-xs">Sun</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Moon className="w-6 h-6" />
-                  <span className="text-xs">Moon</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Cloud className="w-6 h-6" />
-                  <span className="text-xs">Cloud</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <Mountains className="w-6 h-6" />
-                  <span className="text-xs">Mountains</span>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Icon Sizes</h3>
-              <div className="flex flex-wrap gap-6 items-end">
-                <div className="flex flex-col items-center gap-2">
-                  <MapPin className="w-3 h-3" />
-                  <span className="text-xs">w-3 h-3</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  <span className="text-xs">w-4 h-4</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <MapPin className="w-5 h-5" />
-                  <span className="text-xs">w-5 h-5</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <MapPin className="w-6 h-6" />
-                  <span className="text-xs">w-6 h-6</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <MapPin className="w-8 h-8" />
-                  <span className="text-xs">w-8 h-8</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <Separator />
-
-        {/* Day Card Example */}
-        <section>
-          <h2 className="text-2xl font-bold mb-6">Day Card States</h2>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card>
-              <div className="flex items-center justify-between p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
-                    <span className="text-lg font-bold text-primary">1</span>
-                  </div>
-                  <div>
-                    <p className="font-medium">Day 1</p>
-                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Path className="w-3 h-3" />
-                        45 mi
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        1h 15m
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Boot className="w-4 h-4 text-pinesoft" />
-                  <Tent className="w-4 h-4 text-wildviolet" />
-                  <Button variant="secondary" size="sm">
-                    <NavigationArrow className="w-3 h-3 mr-1" />
-                    Preview
-                  </Button>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="ring-2 ring-primary border-primary">
-              <div className="flex items-center justify-between p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground">
-                    <span className="text-lg font-bold">2</span>
-                  </div>
-                  <div>
-                    <p className="font-medium">
-                      Day 2
-                      <span className="ml-2 text-xs text-primary font-normal">(Previewing)</span>
-                    </p>
-                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Path className="w-3 h-3" />
-                        62 mi
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        1h 45m
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Boot className="w-4 h-4 text-pinesoft" />
-                  <Tent className="w-4 h-4 text-wildviolet" />
-                  <Button variant="secondary" size="sm">
-                    <NavigationArrow className="w-3 h-3 mr-1" />
-                    Exit Preview
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          </div>
-        </section>
-
-        <Separator />
-
-        {/* Spacing */}
-        <section>
-          <h2 className="text-2xl font-bold mb-6">Spacing Scale</h2>
-          <div className="space-y-4">
-            {[1, 2, 3, 4, 6, 8, 10, 12, 16].map((size) => (
-              <div key={size} className="flex items-center gap-4">
-                <span className="w-12 text-sm text-muted-foreground">{size * 4}px</span>
-                <div className={`h-4 bg-primary rounded`} style={{ width: `${size * 16}px` }}></div>
-                <span className="text-sm">gap-{size}, p-{size}, m-{size}</span>
+        {/* 07 ROADS */}
+        <Section label="07 · ROAD TIERS" title="Solid, dashed by access">
+          <div className="space-y-3.5">
+            {[
+              { c: 'bg-road-paved',     n: 'Paved',           dash: 'solid' },
+              { c: 'bg-road-passenger', n: 'Passenger',       dash: 'solid' },
+              { c: 'bg-road-highclear', n: 'High clearance',  dash: '8 4' },
+              { c: 'bg-road-fourwd',    n: '4WD',             dash: '4 4' },
+              { c: 'bg-road-atv',       n: 'ATV / motorcycle', dash: '2 5' },
+            ].map((r) => (
+              <div key={r.n} className="flex items-center gap-4">
+                <div className={`${r.c} h-1.5 w-32 rounded-full`} />
+                <div className="text-[13.5px] font-medium text-ink-2 dark:text-cream/80">{r.n}</div>
+                <Mono>DASH {r.dash}</Mono>
               </div>
             ))}
           </div>
-        </section>
+        </Section>
 
-        <Separator />
+        {/* 08 TYPE */}
+        <Section label="08 · TYPE" title="One sans, one mono. That's all.">
+          <div className="space-y-5">
+            {[
+              { n: 'Display L', px: 96, lh: 0.92, w: 700, t: -0.045, sample: 'Find a quiet place to roam.' },
+              { n: 'Display M', px: 72, lh: 0.94, w: 700, t: -0.04, sample: 'Less colour. More character.' },
+              { n: 'Headline',  px: 48, lh: 1.0,  w: 700, t: -0.03, sample: 'This week, the Sawtooths.' },
+              { n: 'Title',     px: 28, lh: 1.15, w: 700, t: -0.02, sample: 'Sawtooth NRA' },
+              { n: 'Body Large', px: 19, lh: 1.55, w: 500, t: 0, sample: 'Off-grid camping on public land — community spots, dispersed sites, and established campgrounds, on one honest map.' },
+              { n: 'Body',      px: 15, lh: 1.55, w: 500, t: 0, sample: '756,000 acres of mountain alpine, threaded by 40+ trailheads.' },
+              { n: 'Caption',   px: 12, lh: 1.5,  w: 500, t: 0, sample: 'Updated 14 minutes ago · Salt Lake City' },
+              { n: 'Mono · meta', px: 10, lh: 1.4, w: 500, t: 0.14, mono: true, upper: true, sample: 'BLM · UT-279 · 38.55N 109.67W' },
+            ].map((t) => (
+              <div key={t.n} className="grid grid-cols-[150px_1fr] gap-6 items-baseline border-b border-line dark:border-line/30 pb-5">
+                <div>
+                  <Mono>{t.n}</Mono>
+                  <div className="text-[11px] text-ink-3 mt-1 font-mono">{t.px}px · {t.lh} · {t.w}</div>
+                </div>
+                <div
+                  className={t.mono ? 'font-mono' : 'font-sans'}
+                  style={{
+                    fontSize: t.px,
+                    lineHeight: t.lh,
+                    fontWeight: t.w,
+                    letterSpacing: `${t.t}em`,
+                    textTransform: t.upper ? 'uppercase' : 'none',
+                    textWrap: 'pretty',
+                    maxWidth: '95%',
+                  }}
+                >
+                  {t.sample}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
 
-        {/* Border Radius */}
-        <section>
-          <h2 className="text-2xl font-bold mb-6">Border Radius</h2>
-          <div className="flex flex-wrap gap-6">
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-primary rounded-sm"></div>
-              <span className="text-xs">rounded-sm</span>
+        {/* 09 PILLS & TAGS */}
+        <Section label="09 · PILLS & TAGS" title="One shape, three weights">
+          <div className="space-y-6">
+            <div>
+              <Mono>SOLID · primary CTA · hover me</Mono>
+              <div className="flex gap-2.5 mt-2.5 flex-wrap">
+                <Pill variant="solid-pine" mono={false} onClick={() => null}>Find camps near me <ArrowRight size={13} weight="bold" /></Pill>
+                <Pill variant="solid-ink" mono={false} onClick={() => null}>Open map</Pill>
+              </div>
             </div>
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-primary rounded"></div>
-              <span className="text-xs">rounded</span>
+            <div>
+              <Mono>GHOST · secondary CTA</Mono>
+              <div className="flex gap-2.5 mt-2.5 flex-wrap">
+                <Pill variant="ghost" mono={false} onClick={() => null}>Best hikes today</Pill>
+                <Pill variant="accent" mono={false} onClick={() => null}>Save region</Pill>
+                <Pill variant="clay" mono={false} onClick={() => null}>Mark unverified</Pill>
+              </div>
             </div>
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-primary rounded-md"></div>
-              <span className="text-xs">rounded-md</span>
+            <div>
+              <Mono>TAGS · small, mono caps, outline only</Mono>
+              <div className="flex gap-1.5 mt-2.5 flex-wrap items-center">
+                {['BLM', 'USFS', 'Dead-end', '4WD', 'Vault toilet', 'Bear country', 'Free dispersed'].map((t) => (
+                  <Tag key={t}>{t}</Tag>
+                ))}
+              </div>
             </div>
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-primary rounded-lg"></div>
-              <span className="text-xs">rounded-lg</span>
-            </div>
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-primary rounded-xl"></div>
-              <span className="text-xs">rounded-xl</span>
-            </div>
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-primary rounded-full"></div>
-              <span className="text-xs">rounded-full</span>
+            <div>
+              <Mono>STATUS DOTS · single accent + shape</Mono>
+              <div className="flex gap-2.5 mt-2.5 flex-wrap items-center">
+                <StatusDot kind="known" />
+                <StatusDot kind="derived" />
+                <StatusDot kind="verified" />
+                <StatusDot kind="alert" />
+              </div>
             </div>
           </div>
-        </section>
-      </main>
+        </Section>
+
+        {/* 10 FORM CONTROLS — interactive */}
+        <Section label="10 · FORM CONTROLS" title="Radios, checkboxes, sliders, inputs">
+          <div className="grid grid-cols-2 gap-8">
+            {/* Radios */}
+            <div className="bg-cream dark:bg-paper-2 border border-line dark:border-line-2 rounded-[14px] px-6 py-5">
+              <Mono className="text-pine-6">RADIO · single select</Mono>
+              <div className="font-sans font-bold text-[18px] mt-2 tracking-[-0.01em]">Vehicle type</div>
+              <div className="mt-3.5 flex flex-col gap-2.5">
+                {[
+                  { v: 'any',        l: 'Any vehicle',          sub: 'No filter applied' },
+                  { v: 'passenger',  l: 'Passenger car',        sub: 'Maintained gravel + paved' },
+                  { v: 'hc',         l: 'High-clearance (HC+)', sub: 'Rough but no engagement' },
+                  { v: '4wd',        l: '4WD only',             sub: 'Engagement required' },
+                ].map((r) => {
+                  const on = vehicle === r.v;
+                  return (
+                    <label key={r.v} className="flex items-start gap-3 cursor-pointer group">
+                      <input
+                        type="radio"
+                        name="vehicle"
+                        value={r.v}
+                        checked={on}
+                        onChange={() => setVehicle(r.v)}
+                        className="sr-only"
+                      />
+                      <span
+                        className={[
+                          'shrink-0 w-[18px] h-[18px] mt-px rounded-full border-[1.5px] grid place-items-center transition-colors',
+                          on ? 'border-pine-6' : 'border-ink-3/50 group-hover:border-ink-3',
+                        ].join(' ')}
+                      >
+                        {on && <span className="w-2 h-2 rounded-full bg-pine-6" />}
+                      </span>
+                      <div>
+                        <div className={`text-[14px] ${on ? 'font-semibold text-ink' : 'font-medium text-ink-2'}`}>{r.l}</div>
+                        <div className="text-[12px] text-ink-3 mt-0.5">{r.sub}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Checkboxes */}
+            <div className="bg-cream dark:bg-paper-2 border border-line dark:border-line-2 rounded-[14px] px-6 py-5">
+              <Mono className="text-pine-6">CHECKBOX · multi select</Mono>
+              <div className="font-sans font-bold text-[18px] mt-2 tracking-[-0.01em]">Land manager</div>
+              <div className="mt-3.5 flex flex-col gap-2">
+                {[
+                  { k: 'blm', l: 'BLM',         sub: 'Bureau of Land Management', count: 58 },
+                  { k: 'usfs', l: 'USFS',       sub: 'US Forest Service',         count: 71 },
+                  { k: 'nps', l: 'NPS',         sub: 'National Park Service',     count: 3 },
+                  { k: 'sp',  l: 'State park',  sub: '',                          count: 2 },
+                  { k: 'st',  l: 'State trust', sub: '',                          count: 3 },
+                ].map((r) => {
+                  const on = agencies.has(r.k);
+                  return (
+                    <label key={r.k} className="flex items-center gap-3 cursor-pointer py-1 group">
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => toggleAgency(r.k)}
+                        className="sr-only"
+                      />
+                      <span
+                        className={[
+                          'shrink-0 w-[18px] h-[18px] rounded-[5px] border-[1.5px] grid place-items-center transition-colors',
+                          on ? 'border-pine-6 bg-pine-6 text-cream' : 'border-ink-3/50 group-hover:border-ink-3',
+                        ].join(' ')}
+                      >
+                        {on && <Check size={11} weight="bold" />}
+                      </span>
+                      <div className="flex-1">
+                        <div className={`text-[14px] ${on ? 'font-semibold text-ink' : 'font-medium text-ink-2'}`}>{r.l}</div>
+                        {r.sub && <div className="text-[11px] text-ink-3 mt-0.5">{r.sub}</div>}
+                      </div>
+                      <Mono>{r.count}</Mono>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 pt-5 border-t border-line">
+                <Mono className="text-pine-6">TOGGLE · binary</Mono>
+                <div className="mt-2.5 flex flex-col gap-2.5">
+                  {[
+                    { l: 'Show derived spots',  on: showDerived,  set: setShowDerived },
+                    { l: 'Hide already-visited', on: hideVisited, set: setHideVisited },
+                  ].map((t) => (
+                    <button
+                      key={t.l}
+                      type="button"
+                      onClick={() => t.set(!t.on)}
+                      className="flex items-center justify-between w-full text-left"
+                    >
+                      <span className="text-[13px] font-medium text-ink-2">{t.l}</span>
+                      <span className={`relative w-9 h-5 rounded-full transition-colors ${t.on ? 'bg-pine-6' : 'bg-line-2'}`}>
+                        <span
+                          className="absolute top-0.5 w-4 h-4 rounded-full bg-cream transition-[left] duration-150"
+                          style={{ left: t.on ? 18 : 2 }}
+                        />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Slider — working dual-thumb */}
+            <div className="bg-cream dark:bg-paper-2 border border-line dark:border-line-2 rounded-[14px] px-6 py-5">
+              <Mono className="text-pine-6">SLIDER · range</Mono>
+              <div className="flex justify-between items-baseline mt-2">
+                <div className="font-sans font-bold text-[18px] tracking-[-0.01em]">Distance from me</div>
+                <div className="font-mono text-[12px] font-semibold text-ink">{distLow} – {distHigh} mi</div>
+              </div>
+              <div className="mt-6 relative h-6 select-none">
+                {/* Track */}
+                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 bg-line rounded-full" />
+                {/* Active fill */}
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 h-1 bg-pine-6 rounded-full"
+                  style={{
+                    left: `${(distLow / distMax) * 100}%`,
+                    right: `${100 - (distHigh / distMax) * 100}%`,
+                  }}
+                />
+                {/* Two range inputs overlaid; pointer-events:none on track,
+                   pointer-events:auto on the thumbs only via Tailwind arbitrary
+                   variants for the webkit/moz thumb pseudo-elements. */}
+                {[
+                  { value: distLow, set: (v: number) => setDistLow(Math.min(v, distHigh - 1)) },
+                  { value: distHigh, set: (v: number) => setDistHigh(Math.max(v, distLow + 1)) },
+                ].map((s, i) => (
+                  <input
+                    key={i}
+                    type="range"
+                    min={0}
+                    max={distMax}
+                    value={s.value}
+                    onChange={(e) => s.set(Number(e.target.value))}
+                    className={[
+                      'absolute inset-0 w-full appearance-none bg-transparent pointer-events-none',
+                      '[&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none',
+                      '[&::-webkit-slider-thumb]:h-[18px] [&::-webkit-slider-thumb]:w-[18px]',
+                      '[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cream',
+                      '[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-pine-6',
+                      '[&::-webkit-slider-thumb]:shadow-[0_2px_6px_rgba(29,34,24,.18)]',
+                      '[&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing',
+                      '[&::-moz-range-thumb]:pointer-events-auto',
+                      '[&::-moz-range-thumb]:h-[18px] [&::-moz-range-thumb]:w-[18px]',
+                      '[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-cream',
+                      '[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-pine-6',
+                      '[&::-moz-range-thumb]:shadow-[0_2px_6px_rgba(29,34,24,.18)]',
+                      '[&::-moz-range-thumb]:cursor-grab',
+                    ].join(' ')}
+                    style={{ height: 24 }}
+                    aria-label={i === 0 ? 'Minimum distance' : 'Maximum distance'}
+                  />
+                ))}
+              </div>
+              <div className="flex justify-between mt-2.5">
+                <Mono>0 MI</Mono><Mono>{distMax} MI</Mono>
+              </div>
+            </div>
+
+            {/* Inputs — built out: text, search, dropdown (no inner label),
+               error state, disabled. Borders use ink-3/30 instead of line for
+               better contrast against cream. */}
+            <div className="bg-cream dark:bg-paper-2 border border-line dark:border-line-2 rounded-[14px] px-6 py-5">
+              <Mono className="text-pine-6">INPUT · variants</Mono>
+
+              <div className="mt-4 space-y-4">
+                {/* 1. Text — label above, helper below */}
+                <div>
+                  <label className="block">
+                    <Mono className="text-ink-2">REGION</Mono>
+                    <input
+                      value={region}
+                      onChange={(e) => setRegion(e.target.value)}
+                      placeholder="e.g. Moab, Olympic, Sawtooth NRA"
+                      className="mt-1.5 w-full bg-cream dark:bg-ink-pine border border-ink-3/35 dark:border-ink-3/40 rounded-[10px] px-3.5 py-2.5 text-[14px] outline-none placeholder:text-ink-3 transition-colors hover:border-ink-3 focus:border-pine-6"
+                    />
+                  </label>
+                  <div className="text-[12px] text-ink-3 mt-1.5">A region, road, or coordinate.</div>
+                </div>
+
+                {/* 2. Search with icon */}
+                <div>
+                  <Mono className="text-ink-2">SEARCH</Mono>
+                  <div className="mt-1.5 flex items-center gap-2.5 bg-cream dark:bg-ink-pine border border-ink-3/35 dark:border-ink-3/40 rounded-[10px] px-3.5 py-2.5 hover:border-ink-3 focus-within:border-pine-6 transition-colors">
+                    <MagnifyingGlass size={16} weight="regular" className="text-ink-2" />
+                    <input
+                      placeholder="Search a road, agency, or coordinate"
+                      className="flex-1 border-none outline-none text-[14px] bg-transparent placeholder:text-ink-3"
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Dropdown — label OUTSIDE, value alone in field */}
+                <div>
+                  <label className="block">
+                    <Mono className="text-ink-2">SORT BY</Mono>
+                    <div className="relative mt-1.5">
+                      <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                        className="w-full appearance-none bg-cream dark:bg-ink-pine border border-ink-3/35 dark:border-ink-3/40 rounded-[10px] px-3.5 py-2.5 pr-10 text-[14px] font-semibold text-ink outline-none cursor-pointer hover:border-ink-3 focus:border-pine-6 transition-colors"
+                      >
+                        {['Recommended', 'Closest', 'Highest rated', 'Recently added', 'Most photos'].map((o) => (
+                          <option key={o}>{o}</option>
+                        ))}
+                      </select>
+                      <CaretDown size={14} weight="bold" className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-ink-2" />
+                    </div>
+                  </label>
+                </div>
+
+                {/* 4. Error state */}
+                <div>
+                  <Mono className="text-ember">COORDINATES · invalid</Mono>
+                  <input
+                    defaultValue="38.55, --109.67"
+                    className="mt-1.5 w-full bg-cream dark:bg-ink-pine border border-ember rounded-[10px] px-3.5 py-2.5 text-[14px] outline-none focus:border-ember focus:ring-2 focus:ring-ember/20"
+                  />
+                  <div className="text-[12px] text-ember mt-1.5 flex items-center gap-1">
+                    <Warning size={12} weight="fill" />
+                    Longitude must be a positive or negative number.
+                  </div>
+                </div>
+
+                {/* 5. Disabled */}
+                <div>
+                  <Mono className="text-ink-3">DISABLED</Mono>
+                  <input
+                    disabled
+                    placeholder="Locked while syncing…"
+                    className="mt-1.5 w-full bg-paper-2/60 border border-line-2 rounded-[10px] px-3.5 py-2.5 text-[14px] text-ink-3 placeholder:text-ink-3 cursor-not-allowed"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </Section>
+
+        {/* 11 STOP TYPE ICONS — restored from old guide, re-themed */}
+        <Section label="11 · STOP TYPES" title="Trip stop iconography">
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { Icon: Tent,       l: 'Camp',     sub: 'Established + dispersed', color: 'text-pine-6' },
+              { Icon: Mountains,  l: 'Hike',     sub: 'Trailhead, summit',       color: 'text-pine-6' },
+              { Icon: Camera,     l: 'View',     sub: 'Photo / scenic spot',     color: 'text-pine-6' },
+              { Icon: GasPump,    l: 'Fuel',     sub: 'Gas station, propane',    color: 'text-clay' },
+              { Icon: MapPinArea, l: 'Region',   sub: 'Park, NRA, NF',           color: 'text-pine-6' },
+              { Icon: NavigationArrow, l: 'Pass-through', sub: 'Routing waypoint', color: 'text-ink-3' },
+              { Icon: Cloud,      l: 'Weather',  sub: 'Forecast checkpoint',     color: 'text-water' },
+              { Icon: Path,       l: 'Drive',    sub: 'Scenic road segment',     color: 'text-pine-6' },
+              { Icon: Star,       l: 'Saved',    sub: 'User favourite',          color: 'text-clay' },
+            ].map(({ Icon, l, sub, color }) => (
+              <div key={l} className="flex items-center gap-3 px-4 py-3 border border-line dark:border-line-2 rounded-[10px] bg-cream dark:bg-paper-2">
+                <div className="w-10 h-10 rounded-[8px] bg-paper dark:bg-ink-pine border border-line dark:border-line-2 grid place-items-center">
+                  <Icon size={20} weight="regular" className={color} />
+                </div>
+                <div>
+                  <div className="text-[14px] font-semibold text-ink">{l}</div>
+                  <Mono className="text-ink-3">{sub}</Mono>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* 12 ICON GRID — Phosphor reference */}
+        <Section label="12 · ICONS" title="Phosphor — single weight, currentColor">
+          <div className="grid grid-cols-8 gap-3">
+            {([
+              [MagnifyingGlass, 'Search'], [MapPin, 'Pin'], [MapPinArea, 'Region'],
+              [Tent, 'Camp'], [Mountains, 'Hike'], [Camera, 'Photo'],
+              [Compass, 'Compass'], [Sun, 'Sun'], [Moon, 'Moon'], [Cloud, 'Cloud'], [Wind, 'Wind'],
+              [Truck, 'Truck'], [GasPump, 'Fuel'], [Path, 'Path'], [NavigationArrow, 'Nav'],
+              [Funnel, 'Filter'], [Star, 'Star'], [Heart, 'Heart'],
+              [Plus, 'Plus'], [ArrowsClockwise, 'Reload'], [ArrowRight, 'Arrow'],
+              [Check, 'Check'], [XIcon, 'Close'], [Warning, 'Warning'], [Info, 'Info'],
+              [CaretDown, 'CaretDown'], [CaretUp, 'CaretUp'],
+              [Gear, 'Gear'], [User, 'User'], [SignOut, 'SignOut'],
+              [Share, 'Share'], [Copy, 'Copy'], [Clock, 'Clock'], [Calendar, 'Calendar'],
+              [Trash, 'Trash'],
+            ] as const).map(([Icon, name]) => (
+              <div key={name} className="flex flex-col items-center gap-1.5 px-3 py-3 border border-line dark:border-line-2 rounded-[8px] bg-cream dark:bg-paper-2">
+                <Icon size={20} weight="regular" className="text-ink" />
+                <Mono size={9} className="text-ink-3">{name}</Mono>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* 13 COMPONENTS — cards + list rows */}
+        <Section label="13 · COMPONENTS" title="Cards, list rows, and badges">
+          <div className="grid grid-cols-2 gap-5">
+            <article className="border border-line dark:border-line-2 rounded-xl overflow-hidden bg-white dark:bg-paper-2">
+              <div className="h-[140px] relative bg-gradient-to-br from-[#a89779] via-[#7d6e54] to-[#4d4636]">
+                <div className="absolute inset-0" style={{ backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,255,255,.04) 0 14px, rgba(0,0,0,.06) 14px 28px)' }} />
+                <div className="absolute left-3 top-3">
+                  <span className="font-mono text-[9px] tracking-[0.14em] uppercase font-semibold px-2.5 py-1 rounded-full bg-pine-6 text-cream">KNOWN</span>
+                </div>
+                <div className="absolute right-3 top-3 bg-ink-pine/80 rounded-full px-2.5 py-1 inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-cream">
+                  <Star size={11} weight="fill" />38
+                </div>
+                <div className="absolute left-2.5 bottom-2 font-mono text-[9px] tracking-[0.14em] uppercase text-white/80">UT-279 · 38.55N</div>
+              </div>
+              <div className="px-5 py-4">
+                <div className="font-semibold text-[15px] tracking-[-0.01em]">Mill D South</div>
+                <Mono className="text-ink-3">12.4 mi · BLM · UT-279</Mono>
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  <Tag>Passenger</Tag>
+                  <Tag>Verified</Tag>
+                  <Tag>Fire ring</Tag>
+                </div>
+              </div>
+            </article>
+
+            <div className="border border-line dark:border-line-2 rounded-xl overflow-hidden bg-white dark:bg-paper-2">
+              {[
+                { n: 'End of FR 1821A', d: '3.4 mi', sub: 'BLM · Road terminus', r: 38, dot: 'bg-pine-6' },
+                { n: 'Camp Site · Mesquite', d: '8.9 mi', sub: 'USFS · Camping', r: 35, dot: 'bg-pine-6' },
+                { n: 'End of 1816', d: '5.3 mi', sub: 'BLM · Dead-end', r: 36, dot: 'bg-clay' },
+              ].map((r, i) => (
+                <div
+                  key={i}
+                  className={`grid grid-cols-[52px_1fr_auto] gap-3 items-start px-4 py-3.5 ${i > 0 ? 'border-t border-line dark:border-line-2' : ''} hover:bg-paper dark:hover:bg-paper-2/60 transition-colors cursor-pointer`}
+                >
+                  <div className="w-[52px] h-[52px] rounded-lg overflow-hidden border border-line bg-gradient-to-br from-[#cdb892] via-[#a78a63] to-[#6e5a3d]" />
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${r.dot}`} />
+                      <span className="font-semibold text-[13px] tracking-[-0.01em]">{r.n}</span>
+                    </div>
+                    <Mono className="text-ink-3">{r.d} · {r.sub}</Mono>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Star size={12} weight="fill" />
+                    <span className="font-mono text-[11px] font-semibold">{r.r}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Section>
+
+        {/* 14 TOKENS */}
+        <Section label="14 · TOKENS" title="Radii, spacing, shadow">
+          <div className="grid grid-cols-3 gap-8">
+            <div>
+              <Mono className="text-pine-6">RADIUS</Mono>
+              <div className="flex flex-col gap-2.5 mt-3.5">
+                {[
+                  { n: 'sm', v: 6, use: 'tags, swatches' },
+                  { n: 'md', v: 10, use: 'inputs, segmented' },
+                  { n: 'lg', v: 14, use: 'cards, panels' },
+                  { n: 'xl', v: 18, use: 'hero search' },
+                  { n: 'full', v: 999, use: 'pills, status' },
+                ].map((r) => (
+                  <div key={r.n} className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-cream dark:bg-paper-2 border border-line dark:border-line-2" style={{ borderRadius: r.v }} />
+                    <div>
+                      <div className="font-mono text-[11px] font-semibold">{r.n} · {r.v === 999 ? '999' : r.v + 'px'}</div>
+                      <div className="text-[11px] text-ink-3 mt-0.5">{r.use}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Mono className="text-pine-6">SPACING · 4pt grid</Mono>
+              <div className="flex flex-col gap-1.5 mt-3.5">
+                {[4, 8, 12, 16, 24, 32, 48, 64, 96].map((s) => (
+                  <div key={s} className="flex items-center gap-2.5">
+                    <div className="h-3.5 bg-pine-6 rounded-sm" style={{ width: s }} />
+                    <span className="font-mono text-[11px] text-ink-3">{s}px</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Mono className="text-pine-6">SHADOW</Mono>
+              <div className="flex flex-col gap-3.5 mt-3.5">
+                {[
+                  { n: 'subtle', s: '0 1px 2px rgba(29,34,24,.06)', use: 'inputs, list rows' },
+                  { n: 'card', s: '0 8px 22px rgba(29,34,24,.05)', use: 'cards on paper' },
+                  { n: 'float', s: '0 18px 44px rgba(29,34,24,.10), 0 3px 8px rgba(29,34,24,.04)', use: 'hero search' },
+                  { n: 'pop', s: '0 24px 60px rgba(29,34,24,.18)', use: 'modals, focus' },
+                ].map((s) => (
+                  <div key={s.n} className="flex items-center gap-3.5">
+                    <div className="w-[60px] h-12 bg-cream dark:bg-paper-2 rounded-[10px] border border-line dark:border-line-2" style={{ boxShadow: s.s }} />
+                    <div>
+                      <div className="font-mono text-[11px] font-semibold">{s.n}</div>
+                      <div className="text-[11px] text-ink-3 mt-0.5">{s.use}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Section>
+
+        {/* 15 GUARDRAILS */}
+        <Section label="15 · GUARDRAILS" title="Don'ts" dark>
+          <div className="grid grid-cols-2 gap-4">
+            {[
+              'No drop shadows on tags — shape carries weight',
+              'No emoji in UI — Space Mono carries the tone',
+              'No gradients on backgrounds — paper or pine ink only',
+              'No icon-only buttons without a tooltip — labels matter',
+              'No mid-pine ramp tints (4/5) for body type',
+            ].map((d) => (
+              <div key={d} className="flex items-start gap-3 px-4 py-3.5 border border-cream/15 rounded-[10px]">
+                <span className="shrink-0 mt-0.5 w-[18px] h-[18px] rounded-full bg-ember text-cream grid place-items-center">
+                  <XIcon size={9} weight="bold" />
+                </span>
+                <span className="text-[14px] text-cream leading-[1.5]">{d}</span>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* Footer */}
+        <footer className="border-t border-line dark:border-line-2 px-14 py-8 bg-cream dark:bg-paper-2 flex items-center justify-between">
+          <Mono>ROAMSWILD · STYLE GUIDE · 2026</Mono>
+          <div className="flex gap-4">
+            <Pill variant="ghost" mono={false} onClick={() => null}><Tent size={13} weight="regular" />Find a spot</Pill>
+            <Pill variant="solid-pine" mono={false} onClick={() => null}>Open map<ArrowRight size={13} weight="bold" /></Pill>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 };

@@ -1,11 +1,27 @@
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { Mountains, Camera, Jeep, Check } from "@phosphor-icons/react";
 import { PacePreference } from "@/types/trip";
+import { Mono } from "@/components/redesign";
+import { cn } from "@/lib/utils";
 
-const ACTIVITIES = [
-  { id: "hiking", label: "Hiking", description: "Find trails and hikes along your route" },
-  { id: "photography", label: "Photography", description: "Find photo hotspots and scenic viewpoints" },
-  { id: "offroading", label: "Offroading", description: "Find trails and off-highway routes" },
+type AccentName = 'pine' | 'sage' | 'water' | 'clay' | 'ember';
+const ACCENT: Record<AccentName, { iconBg: string; iconText: string; selectedBorder: string; selectedBg: string; check: string; dot: string }> = {
+  pine:  { iconBg: 'bg-pine-6/12', iconText: 'text-pine-6', selectedBorder: 'border-pine-6', selectedBg: 'bg-pine-6/[0.06]', check: 'bg-pine-6', dot: 'border-pine-6 bg-pine-6' },
+  sage:  { iconBg: 'bg-sage/15',   iconText: 'text-sage',   selectedBorder: 'border-sage',   selectedBg: 'bg-sage/[0.06]',   check: 'bg-sage',   dot: 'border-sage bg-sage' },
+  water: { iconBg: 'bg-water/15',  iconText: 'text-water',  selectedBorder: 'border-water',  selectedBg: 'bg-water/[0.06]',  check: 'bg-water',  dot: 'border-water bg-water' },
+  clay:  { iconBg: 'bg-clay/15',   iconText: 'text-clay',   selectedBorder: 'border-clay',   selectedBg: 'bg-clay/[0.06]',   check: 'bg-clay',   dot: 'border-clay bg-clay' },
+  ember: { iconBg: 'bg-ember/15',  iconText: 'text-ember',  selectedBorder: 'border-ember',  selectedBg: 'bg-ember/[0.06]',  check: 'bg-ember',  dot: 'border-ember bg-ember' },
+};
+
+const ACTIVITIES: Array<{ id: string; label: string; description: string; icon: typeof Mountains; accent: AccentName }> = [
+  { id: 'hiking',      label: 'Hiking',      description: 'Find trails near your route — easy strolls to summit pushes.', icon: Mountains, accent: 'sage' },
+  { id: 'photography', label: 'Photography', description: 'Surface scenic viewpoints and golden-hour-friendly stops.',     icon: Camera,    accent: 'ember' },
+  { id: 'offroading',  label: 'Offroading',  description: 'Find OHV trails and high-clearance routes along the way.',      icon: Jeep,      accent: 'clay' },
+];
+
+const PACE_OPTIONS: Array<{ id: PacePreference; label: string; description: string; accent: AccentName }> = [
+  { id: 'relaxed',  label: 'Relaxed',  description: 'Fewer activities, more time at camp.',     accent: 'water' },
+  { id: 'moderate', label: 'Moderate', description: 'A balance of activity and rest.',           accent: 'pine'  },
+  { id: 'packed',   label: 'Packed',   description: 'Pack the day — sunrise to sunset.',         accent: 'ember' },
 ];
 
 interface StepActivitiesProps {
@@ -25,159 +41,150 @@ export function StepActivities({
   pacePreference,
   setPacePreference,
 }: StepActivitiesProps) {
-  const handleActivityChange = (activityId: string, checked: boolean) => {
-    if (checked) {
-      setActivities([...activities, activityId]);
-    } else {
-      setActivities(activities.filter(id => id !== activityId));
-    }
+  const handleActivityToggle = (id: string, checked: boolean) => {
+    if (checked) setActivities([...activities, id]);
+    else setActivities(activities.filter((x) => x !== id));
   };
 
   return (
-    <div className="space-y-6">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-          Activities
+    <div className="space-y-8">
+      <div className="text-center">
+        <Mono className="text-pine-6">Step 05 · Activities</Mono>
+        <h2 className="font-sans font-bold tracking-[-0.025em] text-ink text-[28px] md:text-[34px] leading-[1.1] mt-2">
+          What do you want to do?
         </h2>
-        <p className="text-muted-foreground">
-          What do you want to do on your trip?
+        <p className="text-[15px] text-ink-3 mt-2">
+          Pick your activities and how packed each day should be.
         </p>
       </div>
 
-      {/* Activities Selection */}
-      <div className="space-y-3">
-        <Label>Select activities to include</Label>
-        {ACTIVITIES.map((activity) => {
-          const isSelected = activities.includes(activity.id);
-          return (
-            <div
-              key={activity.id}
-              className={`rounded-lg border transition-colors ${
-                isSelected ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-              }`}
-            >
-              <label
-                htmlFor={`activity-${activity.id}`}
-                className="flex items-start space-x-3 p-3 cursor-pointer"
+      {/* Activities */}
+      <fieldset className="space-y-3">
+        <Mono className="text-ink-2 block">Pick your activities</Mono>
+        <div className="space-y-3">
+          {ACTIVITIES.map(({ id, label, description, icon: Icon, accent }) => {
+            const a = ACCENT[accent];
+            const selected = activities.includes(id);
+            return (
+              <div
+                key={id}
+                className={cn(
+                  'rounded-[14px] border bg-white transition-all',
+                  selected ? `${a.selectedBorder} ${a.selectedBg}` : 'border-line hover:border-ink-3/40',
+                )}
               >
-                <Checkbox
-                  id={`activity-${activity.id}`}
-                  checked={isSelected}
-                  onCheckedChange={(checked) => handleActivityChange(activity.id, checked === true)}
-                  className="mt-0.5"
-                />
-                <div className="flex-1 space-y-0.5">
-                  <span className="font-medium text-sm">{activity.label}</span>
-                  <p className="text-xs text-muted-foreground">
-                    {activity.description}
-                  </p>
-                </div>
-              </label>
+                <label className="flex items-start gap-4 p-4 cursor-pointer">
+                  <div className={cn('w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0', a.iconBg, a.iconText)}>
+                    <Icon className="w-5 h-5" weight="regular" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">{label}</div>
+                    <p className="text-[13px] text-ink-3 mt-0.5 leading-[1.5]">{description}</p>
+                  </div>
+                  {/* Checkbox */}
+                  <div className={cn(
+                    'w-5 h-5 rounded-[5px] border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-colors',
+                    selected ? a.dot : 'border-ink-3/40 bg-transparent',
+                  )}>
+                    {selected && <Check className="w-3 h-3 text-cream" weight="bold" />}
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={(e) => handleActivityToggle(id, e.target.checked)}
+                    className="sr-only"
+                  />
+                </label>
 
-              {/* Conditional vehicle selection for offroading */}
-              {activity.id === 'offroading' && isSelected && (
-                <div className="px-3 pb-3 pt-1 ml-7 space-y-2 animate-fade-in">
-                  <p className="text-xs text-muted-foreground mb-2">What's your vehicle?</p>
-                  <label htmlFor="offroad-4wd" className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      id="offroad-4wd"
-                      name="offroad-vehicle"
-                      value="4wd-high"
-                      checked={offroadVehicle === '4wd-high'}
-                      onChange={(e) => setOffroadVehicle(e.target.value as '4wd-high' | 'awd-medium')}
-                      className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
-                    />
-                    <span className="text-sm">4WD high clearance</span>
-                  </label>
-                  <label htmlFor="offroad-awd" className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      id="offroad-awd"
-                      name="offroad-vehicle"
-                      value="awd-medium"
-                      checked={offroadVehicle === 'awd-medium'}
-                      onChange={(e) => setOffroadVehicle(e.target.value as '4wd-high' | 'awd-medium')}
-                      className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
-                    />
-                    <span className="text-sm">AWD medium clearance</span>
-                  </label>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Trip Pace */}
-      <div className="space-y-3 pt-4 border-t border-border">
-        <Label>Trip Pace</Label>
-        <p className="text-xs text-muted-foreground mb-2">
-          How packed do you want each day to be?
-        </p>
-        <div className="grid gap-2">
-          <label
-            htmlFor="pace-relaxed"
-            className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-              pacePreference === 'relaxed' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-            }`}
-          >
-            <input
-              type="radio"
-              id="pace-relaxed"
-              name="pace-preference"
-              value="relaxed"
-              checked={pacePreference === 'relaxed'}
-              onChange={(e) => setPacePreference(e.target.value as PacePreference)}
-              className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
-            />
-            <div className="space-y-0.5">
-              <span className="font-medium text-sm">Relaxed</span>
-              <p className="text-xs text-muted-foreground">Fewer activities, more downtime</p>
-            </div>
-          </label>
-          <label
-            htmlFor="pace-moderate"
-            className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-              pacePreference === 'moderate' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-            }`}
-          >
-            <input
-              type="radio"
-              id="pace-moderate"
-              name="pace-preference"
-              value="moderate"
-              checked={pacePreference === 'moderate'}
-              onChange={(e) => setPacePreference(e.target.value as PacePreference)}
-              className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
-            />
-            <div className="space-y-0.5">
-              <span className="font-medium text-sm">Moderate</span>
-              <p className="text-xs text-muted-foreground">Balanced activity and rest</p>
-            </div>
-          </label>
-          <label
-            htmlFor="pace-packed"
-            className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-              pacePreference === 'packed' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-            }`}
-          >
-            <input
-              type="radio"
-              id="pace-packed"
-              name="pace-preference"
-              value="packed"
-              checked={pacePreference === 'packed'}
-              onChange={(e) => setPacePreference(e.target.value as PacePreference)}
-              className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
-            />
-            <div className="space-y-0.5">
-              <span className="font-medium text-sm">Packed</span>
-              <p className="text-xs text-muted-foreground">Maximum activities each day</p>
-            </div>
-          </label>
+                {/* Conditional vehicle selection — opens under "Offroading" */}
+                {id === 'offroading' && selected && (
+                  <div className="px-4 pb-4 -mt-1 ml-14 animate-fade-in">
+                    <Mono className="text-ink-3 block mb-2">Your vehicle</Mono>
+                    <div className="grid sm:grid-cols-2 gap-2">
+                      <VehicleRadio
+                        checked={offroadVehicle === '4wd-high'}
+                        onChange={() => setOffroadVehicle('4wd-high')}
+                        label="4WD high clearance"
+                      />
+                      <VehicleRadio
+                        checked={offroadVehicle === 'awd-medium'}
+                        onChange={() => setOffroadVehicle('awd-medium')}
+                        label="AWD medium clearance"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-      </div>
+      </fieldset>
+
+      {/* Pace */}
+      <fieldset className="space-y-3 pt-2 border-t border-line">
+        <div className="pt-6">
+          <Mono className="text-ink-2 block">Trip pace</Mono>
+          <p className="text-[13px] text-ink-3 mt-1">How packed do you want each day to be?</p>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3">
+          {PACE_OPTIONS.map(({ id, label, description, accent }) => {
+            const a = ACCENT[accent];
+            const selected = pacePreference === id;
+            return (
+              <label
+                key={id}
+                className={cn(
+                  'flex flex-col p-4 rounded-[14px] border bg-white cursor-pointer transition-all',
+                  selected ? `${a.selectedBorder} ${a.selectedBg}` : 'border-line hover:border-ink-3/40',
+                )}
+              >
+                <input
+                  type="radio"
+                  name="pace-preference"
+                  checked={selected}
+                  onChange={() => setPacePreference(id)}
+                  className="sr-only"
+                />
+                <div className="flex items-center justify-between">
+                  <div className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">{label}</div>
+                  <div className={cn(
+                    'w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors',
+                    selected ? a.dot : 'border-ink-3/40 bg-transparent',
+                  )}>
+                    {selected && <span className="w-1.5 h-1.5 rounded-full bg-cream" />}
+                  </div>
+                </div>
+                <p className="text-[13px] text-ink-3 mt-1.5 leading-[1.45]">{description}</p>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
     </div>
   );
 }
+
+// Compact radio used inside the offroading "vehicle" expansion.
+const VehicleRadio = ({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+}) => (
+  <label className={cn(
+    'flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] border bg-white cursor-pointer transition-colors',
+    checked ? 'border-clay bg-clay/[0.06]' : 'border-line hover:border-ink-3/40',
+  )}>
+    <input type="radio" checked={checked} onChange={onChange} className="sr-only" />
+    <div className={cn(
+      'w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors',
+      checked ? 'border-clay bg-clay' : 'border-ink-3/40',
+    )}>
+      {checked && <span className="w-1.5 h-1.5 rounded-full bg-cream" />}
+    </div>
+    <span className="text-[13px] text-ink">{label}</span>
+  </label>
+);

@@ -1,8 +1,19 @@
 import { useState, useEffect } from 'react';
-import { X, Star, MapPin, SpinnerGap, Boot, Check, Clock, Path, ArrowSquareOut } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
+import {
+  X,
+  Star,
+  MapPin,
+  SpinnerGap,
+  Boot,
+  Check,
+  Clock,
+  Path,
+  ArrowSquareOut,
+} from '@phosphor-icons/react';
 import { TripStop } from '@/types/trip';
 import { getAllTrailsUrl } from '@/utils/hikeUtils';
+import { Mono } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 interface AddStopModalProps {
   isOpen: boolean;
@@ -23,11 +34,10 @@ interface HikeOption {
   lat: number;
   lng: number;
   placeId?: string;
-  distance?: number; // driving distance in miles
-  drivingMinutes?: number; // driving time in minutes
+  distance?: number;
+  drivingMinutes?: number;
 }
 
-// Get actual driving distance and time between two points
 interface DrivingInfo {
   distanceMiles: number;
   durationMinutes: number;
@@ -41,16 +51,17 @@ async function getDrivingInfo(
   destLng: number,
   destName?: string
 ): Promise<DrivingInfo> {
-  // Fallback using straight-line distance with mountain road multiplier
   const R = 3959;
   const dLat = (destLat - originLat) * (Math.PI / 180);
   const dLng = (destLng - originLng) * (Math.PI / 180);
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(originLat * (Math.PI / 180)) * Math.cos(destLat * (Math.PI / 180)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    Math.cos(originLat * (Math.PI / 180)) *
+      Math.cos(destLat * (Math.PI / 180)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const straightLineDistance = R * c;
-  // Mountain roads can be 2-4x longer than straight line
   const estimatedRoadDistance = straightLineDistance * 2.5;
 
   const fallback: DrivingInfo = {
@@ -72,7 +83,6 @@ async function getDrivingInfo(
 
     try {
       const directionsService = new google.maps.DirectionsService();
-
       directionsService.route(
         {
           origin: { lat: originLat, lng: originLng },
@@ -85,16 +95,10 @@ async function getDrivingInfo(
             const leg = result.routes[0].legs[0];
             const miles = (leg.distance?.value || 0) / 1609.34;
             const mins = (leg.duration?.value || 0) / 60;
-            console.log(`[AddStopModal] SUCCESS for ${destName}: ${Math.round(miles)} mi, ${Math.round(mins)} min`);
-            resolve({
-              distanceMiles: miles,
-              durationMinutes: mins,
-              isReachable: true,
-            });
+            resolve({ distanceMiles: miles, durationMinutes: mins, isReachable: true });
           } else if (status === google.maps.DirectionsStatus.ZERO_RESULTS) {
             resolve({ ...fallback, isReachable: false });
           } else {
-            console.log(`[AddStopModal] API status ${status} for ${destName}, using fallback`);
             resolve(fallback);
           }
         }
@@ -106,24 +110,16 @@ async function getDrivingInfo(
   });
 }
 
-// Fetch hikes from Google Places API with actual driving distances
-// maxDrivingMinutes: filter out hikes farther than this (default 60 min each way)
 async function fetchNearbyHikes(
   lat: number,
   lng: number,
   excludePlaceIds: string[],
   maxDrivingMinutes: number = 60
 ): Promise<HikeOption[]> {
-  console.log('Fetching hikes near:', { lat, lng, excludePlaceIds });
-
-  if (!window.google?.maps?.places) {
-    console.log('Google Places not available');
-    return [];
-  }
+  if (!window.google?.maps?.places) return [];
 
   return new Promise((resolve) => {
     const service = new google.maps.places.PlacesService(document.createElement('div'));
-
     const request: google.maps.places.PlaceSearchRequest = {
       location: new google.maps.LatLng(lat, lng),
       radius: 50000,
@@ -132,40 +128,21 @@ async function fetchNearbyHikes(
 
     const processResults = async (results: google.maps.places.PlaceResult[] | null) => {
       if (!results || results.length === 0) return [];
-
       const candidates = results
-        .filter((place) =>
-          place.geometry?.location &&
-          !excludePlaceIds.includes(place.place_id || '')
-        )
+        .filter((place) => place.geometry?.location && !excludePlaceIds.includes(place.place_id || ''))
         .slice(0, 15);
-
-      console.log('Candidates to check:', candidates.length);
-
-      // Get actual driving info for each candidate
-      const hikesWithDrivingInfo: HikeOption[] = [];
-
+      const out: HikeOption[] = [];
       for (const place of candidates) {
-        if (hikesWithDrivingInfo.length >= 6) break;
-
-        const drivingInfo = await getDrivingInfo(
-          lat, lng,
+        if (out.length >= 6) break;
+        const di = await getDrivingInfo(
+          lat,
+          lng,
           place.geometry!.location!.lat(),
           place.geometry!.location!.lng(),
           place.name
         );
-
-        if (!drivingInfo.isReachable) {
-          console.log('Filtered unreachable:', place.name);
-          continue;
-        }
-
-        if (drivingInfo.durationMinutes > maxDrivingMinutes) {
-          console.log(`Filtered too far (${Math.round(drivingInfo.durationMinutes)} min):`, place.name);
-          continue;
-        }
-
-        hikesWithDrivingInfo.push({
+        if (!di.isReachable || di.durationMinutes > maxDrivingMinutes) continue;
+        out.push({
           id: `hike-new-${place.place_id}`,
           name: place.name || 'Unknown Trail',
           location: place.vicinity || '',
@@ -174,40 +151,26 @@ async function fetchNearbyHikes(
           lat: place.geometry!.location!.lat(),
           lng: place.geometry!.location!.lng(),
           placeId: place.place_id,
-          distance: drivingInfo.distanceMiles,
-          drivingMinutes: drivingInfo.durationMinutes,
+          distance: di.distanceMiles,
+          drivingMinutes: di.durationMinutes,
         });
       }
-
-      console.log('Hikes within driving limit:', hikesWithDrivingInfo.length);
-
-      // Sort by driving time
-      hikesWithDrivingInfo.sort((a, b) => (a.drivingMinutes || 0) - (b.drivingMinutes || 0));
-      return hikesWithDrivingInfo;
+      out.sort((a, b) => (a.drivingMinutes || 0) - (b.drivingMinutes || 0));
+      return out;
     };
 
     service.nearbySearch(request, async (results, status) => {
-      console.log('Places search status:', status, 'Results count:', results?.length || 0);
-
       if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
-        const hikes = await processResults(results);
-        resolve(hikes);
+        resolve(await processResults(results));
       } else {
-        console.log('First search failed, trying fallback...');
         const fallbackRequest: google.maps.places.PlaceSearchRequest = {
           location: new google.maps.LatLng(lat, lng),
           radius: 50000,
           type: 'park',
         };
-
-        service.nearbySearch(fallbackRequest, async (fallbackResults, fallbackStatus) => {
-          if (fallbackStatus === google.maps.places.PlacesServiceStatus.OK && fallbackResults) {
-            const hikes = await processResults(fallbackResults);
-            resolve(hikes);
-          } else {
-            console.log('Both searches failed');
-            resolve([]);
-          }
+        service.nearbySearch(fallbackRequest, async (fr, fs) => {
+          if (fs === google.maps.places.PlacesServiceStatus.OK && fr) resolve(await processResults(fr));
+          else resolve([]);
         });
       }
     });
@@ -239,11 +202,9 @@ export function AddStopModal({
   }, [isOpen, searchLat, searchLng, existingStopIds]);
 
   const handleSelect = (hike: HikeOption) => {
-    // Use actual driving time from API
     const mins = Math.round(hike.drivingMinutes || 0);
-    const drivingTimeStr = mins < 60
-      ? `${mins} min each way`
-      : `${Math.floor(mins / 60)}h ${mins % 60}m each way`;
+    const drivingTimeStr =
+      mins < 60 ? `${mins} min each way` : `${Math.floor(mins / 60)}h ${mins % 60}m each way`;
 
     const newStop: TripStop = {
       id: `hike-${dayNumber}-${Date.now()}`,
@@ -270,126 +231,141 @@ export function AddStopModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center font-sans">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-ink-pine/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
 
-      {/* Modal */}
-      <div className="relative bg-card rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] overflow-hidden animate-fade-in">
+      {/* Modal — same chrome as the redesign Dialogs */}
+      <div className="relative bg-white border border-line rounded-[18px] shadow-[0_18px_44px_rgba(29,34,24,.16),0_3px_8px_rgba(29,34,24,.08)] w-full max-w-lg mx-4 max-h-[80vh] overflow-hidden animate-fade-in">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
+        <div className="flex items-start justify-between p-5 border-b border-line gap-3">
           <div>
-            <h2 className="text-lg font-display font-semibold text-foreground">
-              Add a Hike
+            <Mono className="text-pine-6 flex items-center gap-1.5">
+              <Boot className="w-3.5 h-3.5" weight="regular" />
+              Add a hike
+            </Mono>
+            <h2 className="text-[20px] font-sans font-semibold tracking-[-0.015em] text-ink leading-[1.15] mt-1">
+              Pick a trail for Day {dayNumber}.
             </h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Recommended hikes for Day {dayNumber}
+            <p className="text-[13px] text-ink-3 mt-1">
+              Nearby hikes ranked by driving time.
             </p>
           </div>
-          <Button variant="ghost" size="icon" className="rounded-full" onClick={onClose}>
-            <X className="w-5 h-5" weight="bold" />
-          </Button>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors shrink-0"
+          >
+            <X className="w-4 h-4" weight="regular" />
+          </button>
         </div>
 
         {/* Content */}
-        <div className="p-4 overflow-y-auto max-h-[60vh]">
+        <div className="p-5 overflow-y-auto max-h-[60vh]">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <SpinnerGap className="w-8 h-8 text-primary animate-spin mb-3" />
-              <p className="text-muted-foreground">Finding nearby hikes...</p>
+            <div className="flex flex-col items-center justify-center py-14 gap-3">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10">
+                <SpinnerGap className="w-5 h-5 text-pine-6 animate-spin" />
+              </div>
+              <p className="text-[14px] text-ink-3">Finding nearby hikes…</p>
             </div>
           ) : hikes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Boot className="w-12 h-12 text-muted-foreground mb-3" />
-              <p className="text-muted-foreground">No hikes found nearby</p>
+            <div className="border border-dashed border-line bg-cream/40 rounded-[14px] px-6 py-12 text-center">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-sage/15 text-sage mb-3">
+                <Boot className="w-5 h-5" weight="regular" />
+              </div>
+              <p className="text-[14px] font-sans font-semibold text-ink">No hikes found nearby</p>
+              <p className="text-[13px] text-ink-3 mt-1">Try adjusting the trip area.</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {hikes.map((hike) => (
-                <button
-                  key={hike.id}
-                  onClick={() => handleSelect(hike)}
-                  className={`w-full text-left p-4 rounded-xl border transition-all duration-200 ${
-                    selectedId === hike.id
-                      ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                      : 'border-border hover:border-primary/30 hover:bg-secondary/50'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`flex items-center justify-center w-10 h-10 rounded-lg ${
-                        selectedId === hike.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-pinesoft/20 text-pinesoft'
-                      }`}
-                    >
-                      {selectedId === hike.id ? (
-                        <Check className="w-5 h-5" weight="bold" />
-                      ) : (
-                        <Boot className="w-5 h-5" weight="bold" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-foreground">{hike.name}</h3>
-                      <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                        <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
-                        <span className="truncate">{hike.location}</span>
-                      </div>
-                      <div className="flex items-center gap-4 mt-2 text-sm flex-wrap">
-                        {hike.rating && (
-                          <div className="flex items-center gap-1">
-                            <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                            <span className="font-medium text-foreground">
-                              {hike.rating.toFixed(1)}
-                            </span>
-                            {hike.reviewCount && (
-                              <span className="text-muted-foreground">
-                                ({hike.reviewCount.toLocaleString()})
-                              </span>
-                            )}
-                          </div>
+            <div className="space-y-2.5">
+              {hikes.map((hike) => {
+                const selected = selectedId === hike.id;
+                return (
+                  <button
+                    key={hike.id}
+                    onClick={() => handleSelect(hike)}
+                    className={cn(
+                      'w-full text-left p-4 rounded-[14px] border bg-white transition-all',
+                      selected
+                        ? 'border-pine-6 ring-1 ring-pine-6/40 bg-pine-6/[0.04]'
+                        : 'border-line hover:border-ink-3/40',
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={cn(
+                          'inline-flex items-center justify-center w-9 h-9 rounded-[10px] flex-shrink-0 transition-colors',
+                          selected ? 'bg-pine-6 text-cream' : 'bg-sage/15 text-sage',
                         )}
-                        {hike.drivingMinutes && (
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>
+                      >
+                        {selected ? (
+                          <Check className="w-4 h-4" weight="bold" />
+                        ) : (
+                          <Boot className="w-4 h-4" weight="regular" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">
+                          {hike.name}
+                        </h3>
+                        <div className="flex items-center gap-1.5 mt-1 text-[13px] text-ink-3">
+                          <MapPin className="w-3.5 h-3.5 flex-shrink-0" weight="regular" />
+                          <span className="truncate">{hike.location}</span>
+                        </div>
+                        <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1.5 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
+                          {hike.rating && (
+                            <span className="inline-flex items-center gap-1">
+                              <Star className="w-3 h-3 fill-clay text-clay" weight="fill" />
+                              {hike.rating.toFixed(1)}
+                              {hike.reviewCount && (
+                                <span className="opacity-70">({hike.reviewCount.toLocaleString()})</span>
+                              )}
+                            </span>
+                          )}
+                          {hike.drivingMinutes && (
+                            <span className="inline-flex items-center gap-1 text-pine-6">
+                              <Clock className="w-3 h-3" weight="regular" />
                               {hike.drivingMinutes < 60
                                 ? `${Math.round(hike.drivingMinutes)} min`
-                                : `${Math.floor(hike.drivingMinutes / 60)}h ${Math.round(hike.drivingMinutes % 60)}m`
-                              } drive
+                                : `${Math.floor(hike.drivingMinutes / 60)}h ${Math.round(hike.drivingMinutes % 60)}m`}{' '}
+                              drive
                             </span>
-                          </div>
-                        )}
-                        {hike.distance && (
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <Path className="w-3.5 h-3.5" />
-                            <span>{Math.round(hike.distance)} mi</span>
-                          </div>
-                        )}
-                        <a
-                          href={getAllTrailsUrl(hike.name, hike.lat, hike.lng)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 hover:underline"
-                        >
-                          <ArrowSquareOut className="w-3.5 h-3.5" />
-                          AllTrails
-                        </a>
+                          )}
+                          {hike.distance && (
+                            <span className="inline-flex items-center gap-1">
+                              <Path className="w-3 h-3" weight="regular" />
+                              {Math.round(hike.distance)} mi
+                            </span>
+                          )}
+                          <a
+                            href={getAllTrailsUrl(hike.name, hike.lat, hike.lng)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 text-sage hover:text-sage/80 transition-colors"
+                          >
+                            <ArrowSquareOut className="w-3 h-3" weight="regular" />
+                            AllTrails
+                          </a>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-border bg-secondary/30">
-          <p className="text-xs text-muted-foreground text-center">
-            Select a hike to add it to your day
-          </p>
+        <div className="px-5 py-3 border-t border-line bg-cream">
+          <Mono className="text-ink-3 block text-center">
+            Tap a hike to add it to Day {dayNumber}
+          </Mono>
         </div>
       </div>
     </div>

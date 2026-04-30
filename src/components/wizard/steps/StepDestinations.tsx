@@ -1,8 +1,5 @@
 import { useState } from "react";
 import { DotsSixVertical, Plus, Minus, X, MapPin, MapTrifold } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PlaceSearch } from "@/components/PlaceSearch";
 import { MapLocationPicker } from "@/components/MapLocationPicker";
 import {
@@ -11,6 +8,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Mono, Pill } from "@/components/redesign";
+import { cn } from "@/lib/utils";
 
 interface LocationData {
   id: string;
@@ -46,179 +45,165 @@ export function StepDestinations({
   const [manualName, setManualName] = useState("");
   const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
 
-  // Calculate available days for destinations
+  // Day-budget math so the Plus button disables when there are no days left.
   const travelDays = returnToStart ? 1 : 0;
   const totalSpecifiedDays = destinations.reduce((sum, d) => sum + (d.days || 0), 0);
   const availableDays = duration - travelDays;
   const remainingDays = availableDays - totalSpecifiedDays;
 
   const handleRemoveDestination = (id: string) => {
-    setDestinations(destinations.filter(d => d.id !== id));
+    setDestinations(destinations.filter((d) => d.id !== id));
   };
 
   const handleDestinationDaysChange = (id: string, days: number) => {
-    setDestinations(destinations.map(d =>
-      d.id === id ? { ...d, days } : d
-    ));
+    setDestinations(destinations.map((d) => (d.id === id ? { ...d, days } : d)));
   };
 
-  const handleDragStart = (index: number) => {
-    setDraggedIndex(index);
-  };
-
+  const handleDragStart = (index: number) => setDraggedIndex(index);
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     if (draggedIndex === null || draggedIndex === index) return;
-
-    const newDestinations = [...destinations];
-    const draggedItem = newDestinations[draggedIndex];
-    newDestinations.splice(draggedIndex, 1);
-    newDestinations.splice(index, 0, draggedItem);
-    setDestinations(newDestinations);
+    const next = [...destinations];
+    const [moved] = next.splice(draggedIndex, 1);
+    next.splice(index, 0, moved);
+    setDestinations(next);
     setDraggedIndex(index);
   };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-  };
+  const handleDragEnd = () => setDraggedIndex(null);
 
   const handleAddManualCoords = () => {
     const lat = parseFloat(manualLat);
     const lng = parseFloat(manualLng);
-
-    if (isNaN(lat) || isNaN(lng)) {
-      return;
-    }
-
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      return;
-    }
-
+    if (isNaN(lat) || isNaN(lng)) return;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
     const name = manualName.trim() || `Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-    const newDest: LocationData = {
-      id: `dest-manual-${Date.now()}`,
-      name,
-      lat,
-      lng,
-      placeId: `manual-${Date.now()}`,
-    };
-
-    setDestinations([...destinations, newDest]);
-    setManualLat("");
-    setManualLng("");
-    setManualName("");
+    setDestinations([
+      ...destinations,
+      { id: `dest-manual-${Date.now()}`, name, lat, lng, placeId: `manual-${Date.now()}` },
+    ]);
+    setManualLat('');
+    setManualLng('');
+    setManualName('');
     setShowManualCoords(false);
   };
 
   const handleMapLocationSelect = (location: { lat: number; lng: number; name: string }) => {
-    const newDest: LocationData = {
-      id: `dest-map-${Date.now()}`,
-      name: location.name,
-      lat: location.lat,
-      lng: location.lng,
-      placeId: `map-${Date.now()}`,
-    };
-    setDestinations([...destinations, newDest]);
+    setDestinations([
+      ...destinations,
+      {
+        id: `dest-map-${Date.now()}`,
+        name: location.name,
+        lat: location.lat,
+        lng: location.lng,
+        placeId: `map-${Date.now()}`,
+      },
+    ]);
     setIsMapPickerOpen(false);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-          Choose Destinations
+    <div className="space-y-7">
+      <div className="text-center">
+        <Mono className="text-pine-6">Step 03 · Destinations</Mono>
+        <h2 className="font-sans font-bold tracking-[-0.025em] text-ink text-[28px] md:text-[34px] leading-[1.1] mt-2">
+          Where are you headed?
         </h2>
-        <p className="text-muted-foreground">
-          Add the places you want to visit
+        <p className="text-[15px] text-ink-3 mt-2">
+          Add the places you want to visit. Drag to reorder.
         </p>
       </div>
 
-      {/* Add Destination */}
-      <div className="space-y-2">
-        <Label>Add places you want to visit</Label>
+      {/* Add destination */}
+      <div>
+        <div className="flex items-center gap-2 mb-1.5">
+          <Mono className="text-ink-2">Add a destination</Mono>
+        </div>
         <PlaceSearch
           onPlaceSelect={onAddDestination}
-          placeholder="Search and add destinations..."
+          placeholder="Search a region — Moab, Joshua Tree, Olympic Peninsula…"
           key={destinations.length}
         />
 
         {/* Alternative input methods */}
-        <div className="flex items-center justify-center gap-4 pt-1">
+        <div className="flex items-center justify-center gap-3 pt-3">
           <button
             type="button"
             onClick={() => setIsMapPickerOpen(true)}
-            className="text-xs text-primary hover:underline flex items-center gap-1"
+            className="inline-flex items-center gap-1.5 text-[12px] font-mono uppercase tracking-[0.10em] font-semibold text-pine-6 hover:text-pine-5 transition-colors"
           >
-            <MapTrifold className="w-3 h-3" />
+            <MapTrifold className="w-3.5 h-3.5" weight="regular" />
             Pick on map
           </button>
-          <span className="text-xs text-muted-foreground">or</span>
+          <span className="text-[11px] text-ink-3">·</span>
           <button
             type="button"
             onClick={() => setShowManualCoords(!showManualCoords)}
-            className="text-xs text-primary hover:underline"
+            className="inline-flex items-center gap-1.5 text-[12px] font-mono uppercase tracking-[0.10em] font-semibold text-pine-6 hover:text-pine-5 transition-colors"
           >
-            {showManualCoords ? "Hide" : "Enter"} GPS coordinates
+            <MapPin className="w-3.5 h-3.5" weight="regular" />
+            {showManualCoords ? 'Hide GPS coords' : 'Enter GPS coords'}
           </button>
         </div>
 
-        {/* Manual Coordinates Input */}
+        {/* Manual coordinates input */}
         {showManualCoords && (
-          <div className="space-y-3 p-3 bg-muted/50 rounded-lg border border-border animate-fade-in">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <MapPin className="w-4 h-4" />
-              <span>Enter GPS coordinates</span>
-            </div>
-            <Input
+          <div className="mt-4 p-4 bg-paper-2 rounded-[14px] border border-line space-y-3 animate-fade-in">
+            <Mono className="text-ink-2 block">GPS coordinates</Mono>
+            <input
               type="text"
               placeholder="Name (optional)"
               value={manualName}
               onChange={(e) => setManualName(e.target.value)}
+              className="w-full h-11 px-4 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
             />
             <div className="flex gap-2">
-              <Input
+              <input
                 type="number"
                 step="any"
-                placeholder="Latitude (e.g., 36.8529)"
+                placeholder="Lat (e.g. 36.8529)"
                 value={manualLat}
                 onChange={(e) => setManualLat(e.target.value)}
-                className="flex-1"
+                className="flex-1 h-11 px-4 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
               />
-              <Input
+              <input
                 type="number"
                 step="any"
-                placeholder="Longitude (e.g., -111.3803)"
+                placeholder="Lng (e.g. -111.3803)"
                 value={manualLng}
                 onChange={(e) => setManualLng(e.target.value)}
-                className="flex-1"
+                className="flex-1 h-11 px-4 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
               />
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
+            <Pill
+              variant="solid-pine"
+              mono={false}
               onClick={handleAddManualCoords}
-              disabled={!manualLat || !manualLng}
-              className="w-full"
+              className={cn('w-full justify-center', (!manualLat || !manualLng) && 'opacity-50 pointer-events-none')}
             >
-              Add Location
-            </Button>
+              <Plus className="w-3.5 h-3.5" weight="bold" />
+              Add location
+            </Pill>
           </div>
         )}
       </div>
 
-      {/* Destination List */}
-      {destinations.length > 0 && (
-        <div className="space-y-3">
-          <Label className="text-muted-foreground text-xs">
-            Drag to reorder - {destinations.length} destination{destinations.length !== 1 ? 's' : ''}
-          </Label>
+      {/* Destination list */}
+      {destinations.length > 0 ? (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <Mono className="text-ink-2">
+              {destinations.length} {destinations.length === 1 ? 'destination' : 'destinations'}
+            </Mono>
+            <Mono className="text-ink-3">
+              {remainingDays > 0 ? `${remainingDays} ${remainingDays === 1 ? 'day' : 'days'} unassigned` : 'All days assigned'}
+            </Mono>
+          </div>
           <div className="space-y-2">
             {destinations.map((dest, index) => {
               const currentDays = dest.days || 0;
-              const maxDays = currentDays + remainingDays;
-              const canIncrease = maxDays > currentDays;
+              const canIncrease = remainingDays > 0;
               const canDecrease = currentDays > 0;
-
+              const dragging = draggedIndex === index;
               return (
                 <div
                   key={dest.id}
@@ -226,87 +211,81 @@ export function StepDestinations({
                   onDragStart={() => handleDragStart(index)}
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragEnd={handleDragEnd}
-                  className={`flex items-center gap-2 p-3 bg-card rounded-lg border border-border hover:border-primary/30 transition-all cursor-move ${
-                    draggedIndex === index ? 'opacity-50 border-primary' : ''
-                  }`}
+                  className={cn(
+                    'flex items-center gap-3 p-3 bg-white border rounded-[12px] cursor-move transition-all',
+                    dragging ? 'opacity-50 border-pine-6' : 'border-line hover:border-ink-3/40',
+                  )}
                 >
-                  <DotsSixVertical className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <div className="flex items-center justify-center w-6 h-6 bg-primary/10 rounded-full flex-shrink-0">
-                    <span className="text-xs font-semibold text-primary">{index + 1}</span>
+                  <DotsSixVertical className="w-4 h-4 text-ink-3 flex-shrink-0" weight="bold" />
+                  <div className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-pine-6/10 text-pine-6 flex-shrink-0">
+                    <span className="text-[11px] font-mono font-bold">{index + 1}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium truncate block">{dest.name}</span>
+                    <span className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink truncate block">
+                      {dest.name}
+                    </span>
                   </div>
 
-                  {/* Days Stepper */}
+                  {/* Days stepper */}
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (canDecrease) {
-                          handleDestinationDaysChange(dest.id, currentDays - 1);
-                        }
-                      }}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); if (canDecrease) handleDestinationDaysChange(dest.id, currentDays - 1); }}
                       disabled={!canDecrease}
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-line bg-white text-ink hover:border-ink-3 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      aria-label="Decrease days"
                     >
-                      <Minus className="w-3 h-3" />
-                    </Button>
-                    <span className="w-12 text-center text-sm font-medium">
+                      <Minus className="w-3 h-3" weight="bold" />
+                    </button>
+                    <span className="w-12 text-center text-[12px] font-mono uppercase tracking-[0.05em] font-semibold text-ink">
                       {currentDays === 0 ? 'Auto' : `${currentDays}d`}
                     </span>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (canIncrease) {
-                          handleDestinationDaysChange(dest.id, currentDays + 1);
-                        }
-                      }}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); if (canIncrease) handleDestinationDaysChange(dest.id, currentDays + 1); }}
                       disabled={!canIncrease}
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-line bg-white text-ink hover:border-ink-3 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      aria-label="Increase days"
                     >
-                      <Plus className="w-3 h-3" />
-                    </Button>
+                      <Plus className="w-3 h-3" weight="bold" />
+                    </button>
                   </div>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                  <button
+                    type="button"
                     onClick={() => handleRemoveDestination(dest.id)}
-                    className="h-6 w-6 p-0 flex-shrink-0 hover:bg-destructive/10 hover:text-destructive"
+                    className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-3 hover:text-ember hover:bg-ember/10 transition-colors flex-shrink-0"
+                    aria-label="Remove destination"
                   >
-                    <X className="w-4 h-4" weight="bold" />
-                  </Button>
+                    <X className="w-3.5 h-3.5" weight="bold" />
+                  </button>
                 </div>
               );
             })}
           </div>
         </div>
-      )}
-
-      {destinations.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          <p>No destinations added yet.</p>
-          <p className="text-sm mt-1">Search above to add your first stop!</p>
+      ) : (
+        <div className="border border-dashed border-line bg-white/50 rounded-[14px] px-6 py-10 text-center">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 text-pine-6 mb-3">
+            <MapPin className="w-5 h-5" weight="regular" />
+          </div>
+          <p className="text-[14px] font-sans font-semibold text-ink">No destinations yet</p>
+          <p className="text-[13px] text-ink-3 mt-1">Search above to add your first stop.</p>
         </div>
       )}
 
-      {/* Map Location Picker Sheet */}
+      {/* Map location picker */}
       <Sheet open={isMapPickerOpen} onOpenChange={setIsMapPickerOpen}>
         <SheetContent
           side="right"
-          className="w-full sm:max-w-xl p-0"
+          className="w-full sm:max-w-xl p-0 bg-cream border-line"
           onInteractOutside={(e) => e.preventDefault()}
           onPointerDownOutside={(e) => e.preventDefault()}
         >
-          <SheetHeader className="p-4 border-b border-border">
-            <SheetTitle className="flex items-center gap-2">
-              <MapTrifold className="w-5 h-5" />
-              Pick Location on Map
+          <SheetHeader className="p-4 border-b border-line">
+            <SheetTitle className="flex items-center gap-2 text-ink font-sans font-semibold tracking-[-0.01em]">
+              <MapTrifold className="w-5 h-5 text-pine-6" weight="regular" />
+              Pick a location on the map
             </SheetTitle>
           </SheetHeader>
           <div className="h-[calc(100vh-80px)]">

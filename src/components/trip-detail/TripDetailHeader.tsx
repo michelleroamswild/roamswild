@@ -5,8 +5,8 @@ import {
   SlidersHorizontal,
   X,
 } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
 import { CollaboratorAvatars } from '@/components/CollaboratorAvatars';
+import { Mono, Pill } from '@/components/redesign';
 import type { Collaborator } from '@/context/TripContext';
 
 interface TripDetailHeaderProps {
@@ -22,6 +22,9 @@ interface TripDetailHeaderProps {
   onSave: () => void;
 }
 
+// Pine + Paper trip-detail header: cream surface with backdrop blur, mono
+// meta + sans bold title, icon-button row on the right ending in a save pill
+// that flips between solid-pine (Saved) and ghost (Save).
 export const TripDetailHeader = ({
   tripName,
   totalDays,
@@ -36,63 +39,66 @@ export const TripDetailHeader = ({
 }: TripDetailHeaderProps) => {
   return (
     <header
-      className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border"
+      className="bg-cream/95 backdrop-blur-md border-b border-line"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
     >
-      <div className="container px-3 sm:px-4 md:px-6 pt-4 pb-2.5 sm:py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-            <Button variant="ghost" size="icon" className="rounded-full shrink-0" onClick={onExitClick}>
-              <X className="w-5 h-5" weight="bold" />
-            </Button>
+      <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-3 sm:py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <button
+              onClick={onExitClick}
+              aria-label="Close"
+              className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors shrink-0"
+            >
+              <X className="w-4 h-4" weight="regular" />
+            </button>
             <div className="min-w-0">
-              <h1 className="text-base sm:text-xl font-display font-bold text-foreground truncate">
-                {tripName || 'My Trip'}
+              <Mono className="text-pine-6">
+                {totalDays} {totalDays === 1 ? 'DAY' : 'DAYS'} · {totalDistance}
+              </Mono>
+              <h1 className="text-[16px] sm:text-[20px] font-sans font-bold tracking-[-0.01em] text-ink truncate mt-0.5">
+                {tripName || 'My trip'}
               </h1>
-              <p className="text-xs sm:text-sm text-muted-foreground">
-                {totalDays} days • {totalDistance}
-              </p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {collaborators.length > 1 && (
-              <CollaboratorAvatars collaborators={collaborators} size="sm" maxDisplay={4} />
+              <div className="hidden sm:block">
+                <CollaboratorAvatars collaborators={collaborators} size="sm" maxDisplay={4} />
+              </div>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full"
+
+            <button
               onClick={onOpenActivityEditor}
-              title="Edit Activities"
+              aria-label="Edit activities"
+              title="Edit activities"
+              className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors"
             >
-              <SlidersHorizontal className="w-5 h-5" weight="bold" />
-            </Button>
+              <SlidersHorizontal className="w-4 h-4" weight="regular" />
+            </button>
+
             {isSaved && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-full"
-                onClick={onOpenShare}
-              >
-                <ShareNetwork className="w-5 h-5" weight="bold" />
-              </Button>
-            )}
-            {isSaved ? (
               <button
-                onClick={onUnsave}
-                className="flex items-center justify-center gap-1.5 w-9 h-9 sm:w-[110px] sm:h-auto sm:py-2 text-sm font-semibold text-white bg-earth border-2 border-earth rounded-md hover:bg-earth/90 transition-colors"
+                onClick={onOpenShare}
+                aria-label="Share trip"
+                title="Share trip"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors"
               >
+                <ShareNetwork className="w-4 h-4" weight="regular" />
+              </button>
+            )}
+
+            {isSaved ? (
+              <Pill variant="solid-pine" mono={false} onClick={onUnsave}>
                 <CheckCircle className="w-4 h-4" weight="fill" />
                 <span className="hidden sm:inline">Saved</span>
-              </button>
+              </Pill>
             ) : (
-              <button
-                onClick={onSave}
-                className="flex items-center justify-center gap-1.5 w-9 h-9 sm:w-[110px] sm:h-auto sm:py-2 text-sm font-semibold text-earth bg-earth-light border-2 border-earth rounded-md hover:bg-earth-light/80 transition-colors"
-              >
-                <Heart className="w-4 h-4" weight="bold" />
-                <span className="hidden sm:inline">Save Trip</span>
-              </button>
+              <Pill variant="ghost" mono={false} onClick={onSave} className="!border-pine-6 !text-pine-6 hover:!bg-pine-6/10">
+                <Heart className="w-4 h-4" weight="regular" />
+                <span className="hidden sm:inline">Save trip</span>
+              </Pill>
             )}
           </div>
         </div>

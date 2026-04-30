@@ -1,11 +1,19 @@
 import { Link } from 'react-router-dom';
-import { Boot, Calendar, Clock, Gauge, NavigationArrow, Path, PencilSimple } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
-import { PhotoWeatherCard } from '@/components/PhotoWeatherCard';
+import {
+  Boot,
+  Calendar,
+  Clock,
+  Gauge,
+  NavigationArrow,
+  Path,
+  PencilSimple,
+  PencilSimpleLine,
+} from '@phosphor-icons/react';
 import { DayCard } from '@/components/trip-detail/DayCard';
 import { GeneratedTrip, TripConfig, TripStop } from '@/types/trip';
 import { PhotoWeatherForecast } from '@/types/weather';
 import { estimateDayTime } from '@/utils/tripValidation';
+import { Mono, Pill } from '@/components/redesign';
 
 interface ItineraryPanelProps {
   tripConfig: TripConfig;
@@ -46,136 +54,131 @@ export const ItineraryPanel = ({
   onRemoveStop,
   onStartNavigation,
 }: ItineraryPanelProps) => {
+  // Roll up hike count + estimated total time/miles for the meta line.
+  let totalHikingMinutes = 0;
+  let hikeCount = 0;
+  generatedTrip.days.forEach((day) => {
+    const est = estimateDayTime(day);
+    totalHikingMinutes += est.hikingHours * 60;
+    hikeCount += day.stops.filter((s) => s.type === 'hike').length;
+  });
+  const hikingHours = Math.floor(totalHikingMinutes / 60);
+  const hikingMiles = Math.round((totalHikingMinutes / 60) * 1.8);
+
+  // Format the trip date range when start date is set.
+  const dateRange = (() => {
+    if (!tripConfig.startDate) return null;
+    const start = new Date(tripConfig.startDate);
+    const end = new Date(start);
+    end.setDate(start.getDate() + generatedTrip.days.length - 1);
+    const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const sameMonth = start.getMonth() === end.getMonth();
+    return sameMonth ? `${fmt(start)} – ${end.getDate()}` : `${fmt(start)} – ${fmt(end)}`;
+  })();
+
   return (
-    <div className="order-1 lg:order-2 space-y-4 lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
-      {/* Trip Header */}
-      <div className="bg-muted/40 border-b px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 space-y-2 sm:space-y-3">
-        <div>
-          <h1 className="text-xl sm:text-3xl font-display font-bold text-foreground">
-            {tripConfig.name || 'My Trip'}
+    <div className="order-1 lg:order-2 bg-paper lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
+      <div className="px-4 sm:px-6 pt-5 pb-5 space-y-5">
+        {/* Trip header — wrapped in a card on the paper sidebar so it reads
+            as a contained intro section rather than a flat band. */}
+        <div className="bg-white border border-line rounded-[14px] p-5">
+          <Mono className="text-pine-6">Your trip</Mono>
+          <h1 className="text-[24px] sm:text-[32px] font-sans font-bold tracking-[-0.025em] text-ink leading-[1.1] mt-1">
+            {tripConfig.name || 'My trip'}
           </h1>
-          {tripConfig.startDate ? (
+
+          {/* Date range — clickable to edit */}
+          {dateRange ? (
             <button
               onClick={onOpenDateEdit}
-              className="flex items-center gap-2 mt-1 text-sm group hover:bg-secondary/50 rounded-lg px-2 py-1 -mx-2 transition-colors"
+              className="mt-2 inline-flex items-center gap-1.5 group text-[12px] font-mono uppercase tracking-[0.10em] text-ink-3 hover:text-ink transition-colors"
             >
-              <Calendar className="w-4 h-4 text-primary" />
-              <span className="text-muted-foreground">
-                {new Date(tripConfig.startDate).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                })}
-                {' – '}
-                {(() => {
-                  const startDate = new Date(tripConfig.startDate!);
-                  const endDate = new Date(startDate);
-                  endDate.setDate(startDate.getDate() + generatedTrip.days.length - 1);
-                  return endDate.toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  });
-                })()}
-              </span>
-              <PencilSimple className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              <Calendar className="w-3.5 h-3.5" weight="regular" />
+              {dateRange}
+              <PencilSimple className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" weight="regular" />
             </button>
           ) : (
             <button
               onClick={onOpenDateEdit}
-              className="flex items-center gap-2 mt-1 text-sm text-primary hover:underline"
+              className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-mono uppercase tracking-[0.10em] text-pine-6 hover:text-pine-5 transition-colors"
             >
-              <Calendar className="w-4 h-4" />
-              <span>Add trip dates</span>
+              <PencilSimpleLine className="w-3.5 h-3.5" weight="regular" />
+              Add trip dates
             </button>
           )}
-        </div>
 
-        <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-muted-foreground">
-          <span className="flex items-center gap-1 sm:gap-1.5">
-            <Path className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-terracotta" />
-            {generatedTrip.totalDistance}
-          </span>
-          <span className="flex items-center gap-1 sm:gap-1.5">
-            <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-            {generatedTrip.totalDrivingTime}
-          </span>
-          <span className="flex items-center gap-1 sm:gap-1.5">
-            <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />
-            {generatedTrip.days.length} days
-          </span>
-          <span className="hidden sm:flex items-center gap-1.5 capitalize">
-            <Gauge className="w-3.5 h-3.5" />
-            {tripConfig.pacePreference || 'Moderate'}
-          </span>
-          {(() => {
-            let totalHikingMinutes = 0;
-            let hikeCount = 0;
-            generatedTrip.days.forEach(day => {
-              const estimate = estimateDayTime(day);
-              totalHikingMinutes += estimate.hikingHours * 60;
-              hikeCount += day.stops.filter(s => s.type === 'hike').length;
-            });
-            const hikingHours = Math.floor(totalHikingMinutes / 60);
-            const hikingMiles = Math.round((totalHikingMinutes / 60) * 1.8);
-            if (hikeCount === 0) return null;
-            return (
-              <span className="flex items-center gap-1.5">
-                <Boot className="w-3.5 h-3.5 text-pinesoft" />
-                {hikeCount} {hikeCount === 1 ? 'hike' : 'hikes'} • ~{hikingHours}h • ~{hikingMiles} mi
+          {/* Stat row — mono caps. All icons share the ink-3 color of the row
+              so nothing stands out asymmetrically. */}
+          <div className="mt-4 pt-4 border-t border-line flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
+            <span className="inline-flex items-center gap-1.5">
+              <Path className="w-3.5 h-3.5" weight="regular" />
+              {generatedTrip.totalDistance}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" weight="regular" />
+              {generatedTrip.totalDrivingTime}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5" weight="regular" />
+              {generatedTrip.days.length} {generatedTrip.days.length === 1 ? 'day' : 'days'}
+            </span>
+            {tripConfig.pacePreference && (
+              <span className="hidden sm:inline-flex items-center gap-1.5">
+                <Gauge className="w-3.5 h-3.5" weight="regular" />
+                {tripConfig.pacePreference} pace
               </span>
-            );
-          })()}
+            )}
+            {hikeCount > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <Boot className="w-3.5 h-3.5" weight="regular" />
+                {hikeCount} {hikeCount === 1 ? 'hike' : 'hikes'} · ~{hikingHours}h · ~{hikingMiles} mi
+              </span>
+            )}
+          </div>
         </div>
-      </div>
-
-      <div className="px-4 sm:px-6 space-y-4">
-        {/* Photography Conditions - shows when a stop is selected */}
-        {selectedStop && (
-          <PhotoWeatherCard
-            forecast={selectedStopWeather}
-            loading={loadingStopWeather}
-            error={stopWeatherError}
-            locationName={selectedStop.name}
-          />
-        )}
-
-        {/* Day-by-Day Itinerary */}
+        {/* Day-by-day itinerary */}
         <div className="space-y-3">
-          <h2 className="text-lg font-display font-semibold text-foreground">Itinerary</h2>
-
-          {generatedTrip.days.map((day) => (
-            <DayCard
-              key={day.day}
-              day={day}
-              tripName={tripConfig.name}
-              tripStartDate={tripConfig.startDate}
-              expanded={expandedDays.includes(day.day)}
-              isActive={activeDay === day.day}
-              isFirstDay={day.day === 1}
-              isLastDay={day.day === generatedTrip.days.length}
-              startLocation={tripConfig.startLocation}
-              returnToStart={tripConfig.returnToStart}
-              onToggle={() => onToggleDay(day.day)}
-              onStartDay={() => onStartDay(day.day)}
-              onExitDay={onExitDay}
-              onStopClick={onStopClick}
-              onSwapHike={onSwapHike}
-              onSwapCampsite={onSwapCampsite}
-              onRemoveStop={onRemoveStop}
-            />
-          ))}
+          <Mono className="text-ink-2">Itinerary</Mono>
+          <div className="space-y-3">
+            {generatedTrip.days.map((day) => (
+              <DayCard
+                key={day.day}
+                day={day}
+                tripName={tripConfig.name}
+                tripStartDate={tripConfig.startDate}
+                expanded={expandedDays.includes(day.day)}
+                isActive={activeDay === day.day}
+                isFirstDay={day.day === 1}
+                isLastDay={day.day === generatedTrip.days.length}
+                startLocation={tripConfig.startLocation}
+                returnToStart={tripConfig.returnToStart}
+                onToggle={() => onToggleDay(day.day)}
+                onStartDay={() => onStartDay(day.day)}
+                onExitDay={onExitDay}
+                onStopClick={onStopClick}
+                onSwapHike={onSwapHike}
+                onSwapCampsite={onSwapCampsite}
+                onRemoveStop={onRemoveStop}
+              />
+            ))}
+          </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 pb-4 sm:pb-0">
-          <Button variant="primary" size="lg" className="flex-1" onClick={onStartNavigation}>
-            <NavigationArrow className="w-4 h-4 mr-2" />
-            Start Trip
-          </Button>
+        {/* Action pills */}
+        <div className="flex flex-col sm:flex-row gap-2 pt-2">
+          <Pill
+            variant="solid-pine"
+            mono={false}
+            onClick={onStartNavigation}
+            className="!flex-1 !justify-center !py-3"
+          >
+            <NavigationArrow className="w-4 h-4" weight="regular" />
+            Start trip
+          </Pill>
           <Link to="/create-trip" className="sm:w-auto">
-            <Button variant="outline" size="lg" className="w-full sm:w-auto">
-              Edit Trip
-            </Button>
+            <Pill variant="ghost" mono={false} className="!w-full !justify-center !py-3">
+              Edit trip
+            </Pill>
           </Link>
         </div>
       </div>

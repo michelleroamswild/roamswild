@@ -1108,42 +1108,44 @@ const TripDetail = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <TripDetailHeader
-        tripName={tripConfig.name}
-        totalDays={generatedTrip.days.length}
-        totalDistance={generatedTrip.totalDistance}
-        collaborators={collaborators}
-        isSaved={isSaved}
-        onExitClick={handleExitClick}
-        onOpenActivityEditor={() => setActivityEditorOpen(true)}
-        onOpenShare={() => setShareModalOpen(true)}
-        onUnsave={handleUnsaveTrip}
-        onSave={handleSaveTrip}
-      />
+    <div className="min-h-screen bg-paper text-ink font-sans">
+      {/* Sticky cluster — header + timeline strip move together so the
+          timeline never gets cut off behind the sticky header. */}
+      <div className="sticky top-0 z-50">
+        <TripDetailHeader
+          tripName={tripConfig.name}
+          totalDays={generatedTrip.days.length}
+          totalDistance={generatedTrip.totalDistance}
+          collaborators={collaborators}
+          isSaved={isSaved}
+          onExitClick={handleExitClick}
+          onOpenActivityEditor={() => setActivityEditorOpen(true)}
+          onOpenShare={() => setShareModalOpen(true)}
+          onUnsave={handleUnsaveTrip}
+          onSave={handleSaveTrip}
+        />
 
-      {/* Trip Timeline Overview */}
-      <TripTimelineStrip
-        tripConfig={tripConfig}
-        onEditStart={() => setEditLocationModal({
-          isOpen: true,
-          type: 'start',
-          currentName: tripConfig.startLocation?.name || '',
-        })}
-        onEditDestination={(index, currentName, isEndLocation) => setEditLocationModal({
-          isOpen: true,
-          type: isEndLocation ? 'end' : 'destination',
-          index,
-          currentName,
-        })}
-        onEditEnd={() => setEditLocationModal({
-          isOpen: true,
-          type: 'end',
-          currentName: tripConfig.startLocation?.name || '',
-        })}
-        onAddDestination={() => setAddDestinationModal(true)}
-      />
+        <TripTimelineStrip
+          tripConfig={tripConfig}
+          onEditStart={() => setEditLocationModal({
+            isOpen: true,
+            type: 'start',
+            currentName: tripConfig.startLocation?.name || '',
+          })}
+          onEditDestination={(index, currentName, isEndLocation) => setEditLocationModal({
+            isOpen: true,
+            type: isEndLocation ? 'end' : 'destination',
+            index,
+            currentName,
+          })}
+          onEditEnd={() => setEditLocationModal({
+            isOpen: true,
+            type: 'end',
+            currentName: tripConfig.startLocation?.name || '',
+          })}
+          onAddDestination={() => setAddDestinationModal(true)}
+        />
+      </div>
 
       {/* Edit Location Modal */}
       <EditLocationModal

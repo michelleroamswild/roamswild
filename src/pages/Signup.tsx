@@ -1,17 +1,22 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Jeep, Envelope, Lock, User, SpinnerGap, WarningCircle, CheckCircle, Mountains, Tent, Path, Ticket } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Link } from 'react-router-dom';
+import {
+  Jeep,
+  Envelope,
+  Lock,
+  User,
+  SpinnerGap,
+  WarningCircle,
+  Ticket,
+  ArrowRight,
+} from '@phosphor-icons/react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { Mono, TopoBg, AuthSidePanel, AuthInput } from '@/components/redesign';
 
-// Import a landing page photo for the side panel
 import heroPhoto from '@/images/landingpage/DJI_0682.jpg';
 
 const Signup = () => {
-  const navigate = useNavigate();
   const { signUp } = useAuth();
 
   const [name, setName] = useState('');
@@ -25,10 +30,7 @@ const Signup = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+  const validateEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,25 +38,18 @@ const Signup = () => {
     setEmailError(null);
     setInviteError(null);
 
-    // Validate invite code
     if (!inviteCode.trim()) {
       setInviteError('Invite code is required');
       return;
     }
-
-    // Validate email
     if (!validateEmail(email)) {
       setEmailError('Please enter a valid email address');
       return;
     }
-
-    // Validate passwords match
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-
-    // Validate password length
     if (password.length < 6) {
       setError('Password must be at least 6 characters');
       return;
@@ -62,7 +57,6 @@ const Signup = () => {
 
     setIsLoading(true);
 
-    // First, validate the invite code
     const { data: codeCheck, error: codeError } = await supabase
       .rpc('check_invite_code', { code: inviteCode.trim().toUpperCase() });
 
@@ -72,20 +66,17 @@ const Signup = () => {
       return;
     }
 
-    // Proceed with signup
-    const { error, data } = await signUp(email, password, name);
+    const { error: signUpError, data } = await signUp(email, password, name);
 
-    if (error) {
-      // Check for duplicate email error
-      const errorMessage = error.message?.toLowerCase() || '';
-      if (errorMessage.includes('already') || errorMessage.includes('exists') || errorMessage.includes('registered')) {
+    if (signUpError) {
+      const msg = signUpError.message?.toLowerCase() || '';
+      if (msg.includes('already') || msg.includes('exists') || msg.includes('registered')) {
         setEmailError('An account with this email already exists');
       } else {
         setError('Unable to create account, please try again.');
       }
       setIsLoading(false);
     } else {
-      // Mark the invite code as used
       if (data?.user?.id) {
         await supabase.rpc('use_invite_code', {
           code: inviteCode.trim().toUpperCase(),
@@ -97,45 +88,54 @@ const Signup = () => {
     }
   };
 
+  // === Success state — full-screen confirmation card ===
   if (success) {
     return (
-      <div className="min-h-screen hero-topo flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          {/* Logo */}
-          <div className="flex items-center justify-center gap-2 mb-8">
-            <Jeep className="w-8 h-8 text-primary" weight="fill" />
-            <span className="text-2xl font-display font-bold text-foreground">RoamsWild</span>
-          </div>
+      <div className="min-h-screen bg-cream text-ink font-sans relative flex items-center justify-center p-6 overflow-hidden">
+        <TopoBg color="hsl(var(--paper))" opacity={0.55} scale={700} />
+        <div className="relative w-full max-w-[420px]">
+          <Link to="/" className="flex items-center justify-center gap-2.5 mb-8">
+            <Jeep className="w-6 h-6 text-pine-6" weight="regular" />
+            <span className="text-[16px] font-sans font-bold tracking-[-0.01em] text-ink">
+              RoamsWild
+            </span>
+          </Link>
 
-          <div className="bg-card rounded-2xl border border-border p-8 shadow-lg">
-            <div className="text-center">
-              <div className="flex items-center justify-center w-16 h-16 bg-accent/20 rounded-full mx-auto mb-4">
-                <Envelope className="w-8 h-8 text-accent" />
-              </div>
-              <h1 className="text-2xl font-display font-bold text-foreground">Check your email</h1>
-              <p className="text-muted-foreground mt-2">
-                We've sent a confirmation link to
+          <div className="bg-white border border-line rounded-[18px] p-8 text-center shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/10 text-pine-6 mb-4">
+              <Envelope className="w-6 h-6" weight="regular" />
+            </div>
+            <Mono className="text-pine-6">Almost there</Mono>
+            <h1 className="font-sans font-bold tracking-[-0.025em] text-ink text-[26px] leading-[1.1] mt-2">
+              Check your email.
+            </h1>
+            <p className="text-[14px] text-ink-3 mt-2">
+              We've sent a confirmation link to
+            </p>
+            <p className="font-mono text-[13px] uppercase tracking-[0.06em] text-ink mt-2 break-all">
+              {email}
+            </p>
+            <p className="text-[13px] text-ink-3 mt-4 leading-[1.55]">
+              Click the link in the email to verify your account and start planning your adventures.
+            </p>
+
+            <div className="mt-6 pt-6 border-t border-line space-y-3">
+              <p className="text-[13px] text-ink-3">
+                Didn't receive the email?{' '}
+                <button
+                  onClick={() => setSuccess(false)}
+                  className="font-semibold text-pine-6 hover:text-pine-5 transition-colors"
+                >
+                  Try again
+                </button>
               </p>
-              <p className="font-medium text-foreground mt-1">{email}</p>
-              <p className="text-muted-foreground mt-4 text-sm">
-                Click the link in the email to verify your account and start planning your adventures.
-              </p>
-              <div className="mt-6 pt-6 border-t border-border space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Didn't receive the email?{' '}
-                  <button
-                    onClick={() => setSuccess(false)}
-                    className="text-primary font-semibold hover:underline"
-                  >
-                    Try again
-                  </button>
-                </p>
-                <Link to="/login" className="inline-block mt-2">
-                  <Button variant="secondary">
-                    Go to login
-                  </Button>
-                </Link>
-              </div>
+              <Link
+                to="/login"
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-[13px] font-sans font-semibold bg-ink text-cream hover:bg-ink-2 transition-colors"
+              >
+                Go to sign in
+                <ArrowRight className="w-3.5 h-3.5" weight="bold" />
+              </Link>
             </div>
           </div>
         </div>
@@ -144,199 +144,136 @@ const Signup = () => {
   }
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left side - Photo (hidden on mobile) */}
-      <div className="hidden lg:flex lg:w-1/2 relative">
-        <img
-          src={heroPhoto}
-          alt="Overlanding adventure"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/80 via-primary/60 to-transparent" />
-        <div className="relative z-10 flex flex-col justify-between p-12 text-white">
-          <Link to="/" className="flex items-center gap-2">
-            <Jeep className="w-8 h-8" weight="fill" />
-            <span className="text-2xl font-display font-bold">RoamsWild</span>
+    <div className="min-h-screen bg-cream text-ink font-sans flex">
+      <AuthSidePanel
+        photo={heroPhoto}
+        headline={<>Start planning your<br />next adventure.</>}
+      />
+
+      {/* Right side — form */}
+      <div className="flex-1 relative flex items-center justify-center p-6 md:p-12 overflow-hidden">
+        <TopoBg color="hsl(var(--paper))" opacity={0.55} scale={700} />
+        <div className="relative w-full max-w-[420px]">
+          <Link to="/" className="flex items-center justify-center gap-2.5 mb-8 lg:hidden">
+            <Jeep className="w-6 h-6 text-pine-6" weight="regular" />
+            <span className="text-[16px] font-sans font-bold tracking-[-0.01em] text-ink">
+              RoamsWild
+            </span>
           </Link>
 
-          <div className="space-y-6">
-            <h2 className="text-4xl font-display font-bold leading-tight">
-              Start planning your<br />next adventure.
-            </h2>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <Path className="w-5 h-5" />
-                </div>
-                <span className="text-lg">Plan scenic routes</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <Tent className="w-5 h-5" />
-                </div>
-                <span className="text-lg">Discover hidden campsites</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <Mountains className="w-5 h-5" />
-                </div>
-                <span className="text-lg">Find amazing hikes</span>
-              </div>
-            </div>
-          </div>
+          <div className="bg-white border border-line rounded-[18px] p-8 shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+            <Mono className="text-pine-6">Create account</Mono>
+            <h1 className="font-sans font-bold tracking-[-0.025em] text-ink text-[28px] leading-[1.1] mt-2">
+              Get started.
+            </h1>
+            <p className="text-[14px] text-ink-3 mt-2">
+              Plan your next trip with RoamsWild.
+            </p>
 
-          <p className="text-white/70 text-sm">
-            Join thousands of adventurers planning their trips with RoamsWild.
-          </p>
-        </div>
-      </div>
-
-      {/* Right side - Signup form */}
-      <div className="flex-1 flex items-center justify-center p-6 md:p-12 hero-topo">
-        <div className="w-full max-w-md">
-          {/* Mobile logo */}
-          <Link to="/" className="flex items-center justify-center gap-2 mb-8 lg:hidden">
-            <Jeep className="w-8 h-8 text-primary" weight="fill" />
-            <span className="text-2xl font-display font-bold text-foreground">RoamsWild</span>
-          </Link>
-
-          <div className="bg-card rounded-2xl border border-border p-8 shadow-lg">
-            <div className="text-center mb-8">
-              <h1 className="text-2xl font-display font-bold text-foreground">Create your account</h1>
-              <p className="text-muted-foreground mt-2">Start planning your next adventure</p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="mt-7 space-y-4">
               {error && (
-                <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive text-sm">
-                  <WarningCircle className="w-4 h-4 flex-shrink-0" />
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-ember/10 border border-ember/30 rounded-[12px] text-ember text-[13px]">
+                  <WarningCircle className="w-4 h-4 flex-shrink-0" weight="regular" />
                   <span>{error}</span>
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="invite-code" className="text-foreground font-medium">Invite Code</Label>
-                <div className="relative">
-                  <Ticket className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="invite-code"
-                    type="text"
-                    placeholder="ROAM-XXXXXX"
-                    value={inviteCode}
-                    onChange={(e) => {
-                      setInviteCode(e.target.value.toUpperCase());
-                      if (inviteError) setInviteError(null);
-                    }}
-                    className={`pl-12 uppercase ${inviteError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
-                    required
-                  />
-                </div>
-                {inviteError && (
-                  <p className="text-sm text-destructive">{inviteError}</p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Don't have a code?{' '}
-                  <Link to="/" className="text-primary hover:underline">
+              <AuthInput
+                id="invite-code"
+                label="Invite code"
+                type="text"
+                icon={Ticket}
+                placeholder="ROAM-XXXXXX"
+                value={inviteCode}
+                onChange={(v) => {
+                  setInviteCode(v.toUpperCase());
+                  if (inviteError) setInviteError(null);
+                }}
+                required
+                error={inviteError}
+                uppercase
+              />
+              {!inviteError && (
+                <p className="-mt-2 text-[12px] font-mono uppercase tracking-[0.10em] text-ink-3">
+                  No code?{' '}
+                  <Link to="/" className="text-pine-6 hover:text-pine-5 transition-colors">
                     Join the waitlist
                   </Link>
                 </p>
-              </div>
+              )}
 
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-foreground font-medium">Name</Label>
-                <div className="relative">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="Your name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="pl-12"
-                  />
-                </div>
-              </div>
+              <AuthInput
+                id="name"
+                label="Name"
+                type="text"
+                icon={User}
+                placeholder="Your name"
+                value={name}
+                onChange={setName}
+              />
 
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-foreground font-medium">Email</Label>
-                <div className="relative">
-                  <Envelope className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (emailError) setEmailError(null);
-                    }}
-                    onBlur={() => {
-                      if (email && !validateEmail(email)) {
-                        setEmailError('Please enter a valid email address');
-                      }
-                    }}
-                    className={`pl-12 ${emailError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
-                  />
-                </div>
-                {emailError && (
-                  <p className="text-sm text-destructive">{emailError}</p>
-                )}
-              </div>
+              <AuthInput
+                id="email"
+                label="Email"
+                type="email"
+                icon={Envelope}
+                placeholder="you@example.com"
+                value={email}
+                onChange={(v) => {
+                  setEmail(v);
+                  if (emailError) setEmailError(null);
+                }}
+                onBlur={() => {
+                  if (email && !validateEmail(email)) setEmailError('Please enter a valid email address');
+                }}
+                error={emailError}
+              />
 
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-foreground font-medium">Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="At least 6 characters"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-12"
-                    required
-                    minLength={6}
-                  />
-                </div>
-              </div>
+              <AuthInput
+                id="password"
+                label="Password"
+                type="password"
+                icon={Lock}
+                placeholder="At least 6 characters"
+                value={password}
+                onChange={setPassword}
+                required
+                minLength={6}
+              />
 
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password" className="text-foreground font-medium">Confirm Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="confirm-password"
-                    type="password"
-                    placeholder="Confirm your password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="pl-12"
-                    required
-                  />
-                </div>
-              </div>
+              <AuthInput
+                id="confirm-password"
+                label="Confirm password"
+                type="password"
+                icon={Lock}
+                placeholder="Confirm your password"
+                value={confirmPassword}
+                onChange={setConfirmPassword}
+                required
+              />
 
-              <Button
+              <button
                 type="submit"
-                variant="primary"
-                size="lg"
-                className="w-full"
                 disabled={isLoading}
+                className="w-full inline-flex items-center justify-center gap-2 h-12 px-5 rounded-[14px] bg-pine-6 text-cream text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors disabled:opacity-50"
               >
                 {isLoading ? (
                   <>
-                    <SpinnerGap className="w-5 h-5 mr-2 animate-spin" />
-                    Creating account...
+                    <SpinnerGap className="w-4 h-4 animate-spin" />
+                    Creating account…
                   </>
                 ) : (
-                  'Create Account'
+                  <>
+                    Create account
+                    <ArrowRight className="w-4 h-4" weight="bold" />
+                  </>
                 )}
-              </Button>
+              </button>
             </form>
 
-            <div className="mt-8 text-center text-sm text-muted-foreground">
+            <div className="mt-7 pt-6 border-t border-line text-center text-[13px] text-ink-3">
               Already have an account?{' '}
-              <Link to="/login" className="text-primary font-semibold hover:underline">
+              <Link to="/login" className="font-semibold text-pine-6 hover:text-pine-5 transition-colors">
                 Sign in
               </Link>
             </div>

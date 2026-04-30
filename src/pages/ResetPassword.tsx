@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Compass, Lock, SpinnerGap, WarningCircle, CheckCircle } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
+import {
+  Jeep,
+  Lock,
+  SpinnerGap,
+  WarningCircle,
+  CheckCircle,
+  ArrowRight,
+} from '@phosphor-icons/react';
 import { useAuth } from '@/context/AuthContext';
+import { Mono, TopoBg, AuthInput } from '@/components/redesign';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
@@ -21,142 +25,121 @@ const ResetPassword = () => {
     e.preventDefault();
     setError(null);
 
-    // Validate passwords match
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-
-    // Validate password length
     if (password.length < 6) {
       setError('Password must be at least 6 characters');
       return;
     }
 
     setIsLoading(true);
-
     const { error } = await updatePassword(password);
-
     if (error) {
       setError(error.message);
       setIsLoading(false);
     } else {
       setSuccess(true);
       setIsLoading(false);
-      // Redirect to home after a moment
       setTimeout(() => navigate('/'), 2000);
     }
   };
 
-  if (success) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-center">
-                <div className="flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mx-auto mb-4">
-                  <CheckCircle className="w-8 h-8 text-primary" />
-                </div>
-                <h1 className="text-2xl font-display font-bold text-foreground">Password updated!</h1>
-                <p className="text-muted-foreground mt-2">
-                  Your password has been reset. Redirecting you to the app...
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="flex items-center justify-center w-12 h-12 bg-primary rounded-xl">
-            <Compass className="w-6 h-6 text-primary-foreground" />
-          </div>
-          <span className="text-2xl font-display font-bold text-foreground">RoamsWild</span>
-        </div>
+    <div className="min-h-screen bg-cream text-ink font-sans relative flex items-center justify-center p-6 overflow-hidden">
+      <TopoBg color="hsl(var(--paper))" opacity={0.55} scale={700} />
+      <div className="relative w-full max-w-[420px]">
+        <Link to="/" className="flex items-center justify-center gap-2.5 mb-8">
+          <Jeep className="w-6 h-6 text-pine-6" weight="regular" />
+          <span className="text-[16px] font-sans font-bold tracking-[-0.01em] text-ink">
+            RoamsWild
+          </span>
+        </Link>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center mb-6">
-              <h1 className="text-2xl font-display font-bold text-foreground">Set new password</h1>
-              <p className="text-muted-foreground mt-1">
-                Choose a strong password for your account
+        <div className="bg-white border border-line rounded-[18px] p-8 shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+          {success ? (
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/10 text-pine-6 mb-4">
+                <CheckCircle className="w-6 h-6" weight="fill" />
+              </div>
+              <Mono className="text-pine-6">All set</Mono>
+              <h1 className="font-sans font-bold tracking-[-0.025em] text-ink text-[26px] leading-[1.1] mt-2">
+                Password updated.
+              </h1>
+              <p className="text-[14px] text-ink-3 mt-3 leading-[1.55]">
+                Redirecting you to the app…
               </p>
             </div>
+          ) : (
+            <>
+              <Mono className="text-pine-6">New password</Mono>
+              <h1 className="font-sans font-bold tracking-[-0.025em] text-ink text-[28px] leading-[1.1] mt-2">
+                Set a new password.
+              </h1>
+              <p className="text-[14px] text-ink-3 mt-2">
+                Choose a strong password for your account.
+              </p>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
-                  <WarningCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="password">New Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="At least 6 characters"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-12"
-                    required
-                    minLength={6}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm New Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="confirm-password"
-                    type="password"
-                    placeholder="Confirm your password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="pl-12"
-                    required
-                  />
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                variant="primary"
-                size="lg"
-                className="w-full"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <SpinnerGap className="w-4 h-4 mr-2 animate-spin" />
-                    Updating...
-                  </>
-                ) : (
-                  'Update Password'
+              <form onSubmit={handleSubmit} className="mt-7 space-y-4">
+                {error && (
+                  <div className="flex items-center gap-2 px-3 py-2.5 bg-ember/10 border border-ember/30 rounded-[12px] text-ember text-[13px]">
+                    <WarningCircle className="w-4 h-4 flex-shrink-0" weight="regular" />
+                    <span>{error}</span>
+                  </div>
                 )}
-              </Button>
-            </form>
 
-            <div className="mt-6 text-center text-sm text-muted-foreground">
-              Remember your password?{' '}
-              <Link to="/login" className="text-primary font-medium hover:underline">
-                Sign in
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+                <AuthInput
+                  id="password"
+                  label="New password"
+                  type="password"
+                  icon={Lock}
+                  placeholder="At least 6 characters"
+                  value={password}
+                  onChange={setPassword}
+                  required
+                  minLength={6}
+                />
+
+                <AuthInput
+                  id="confirm-password"
+                  label="Confirm new password"
+                  type="password"
+                  icon={Lock}
+                  placeholder="Confirm your password"
+                  value={confirmPassword}
+                  onChange={setConfirmPassword}
+                  required
+                />
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full inline-flex items-center justify-center gap-2 h-12 px-5 rounded-[14px] bg-pine-6 text-cream text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors disabled:opacity-50"
+                >
+                  {isLoading ? (
+                    <>
+                      <SpinnerGap className="w-4 h-4 animate-spin" />
+                      Updating…
+                    </>
+                  ) : (
+                    <>
+                      Update password
+                      <ArrowRight className="w-4 h-4" weight="bold" />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-7 pt-6 border-t border-line text-center text-[13px] text-ink-3">
+                Remember your password?{' '}
+                <Link to="/login" className="font-semibold text-pine-6 hover:text-pine-5 transition-colors">
+                  Sign in
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

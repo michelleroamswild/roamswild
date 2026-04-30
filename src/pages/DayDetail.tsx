@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
+  ArrowRight,
   Path,
   Clock,
   MapPin,
@@ -25,101 +26,67 @@ import {
   SpinnerGap,
   Camera,
 } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { useTrip } from '@/context/TripContext';
 import { GoogleMap } from '@/components/GoogleMap';
 import { Marker, DirectionsRenderer } from '@react-google-maps/api';
-import { TripStop, TripDay } from '@/types/trip';
+import { TripStop } from '@/types/trip';
 import { toast } from 'sonner';
 import { AlternativeHikesModal } from '@/components/AlternativeHikesModal';
 import { AlternativeCampsitesModal } from '@/components/AlternativeCampsitesModal';
 import { AddStopModal } from '@/components/AddStopModal';
-import { createMarkerIcon, getTypeStyles } from '@/utils/mapMarkers';
+import { createMarkerIcon } from '@/utils/mapMarkers';
 import { estimateDayTime } from '@/utils/tripValidation';
 import { getAllTrailsUrl, estimateTrailLength } from '@/utils/hikeUtils';
 import { getTripSlug, getTripUrl, getDayUrl } from '@/utils/slugify';
+import { Mono, Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
-// NOAA Weather types
+// NOAA weather types — local to this page (not used elsewhere).
 interface WeatherForecast {
   temperature: number;
   temperatureUnit: string;
   shortForecast: string;
 }
 
-// Cache for weather data to avoid repeated API calls
 const weatherCache = new Map<string, WeatherForecast>();
 
-// Get weather icon based on forecast
-function getWeatherIcon(forecast: string) {
+const getWeatherIcon = (forecast: string) => {
   const lower = forecast.toLowerCase();
   if (lower.includes('snow')) return Snowflake;
   if (lower.includes('rain') || lower.includes('shower')) return CloudRain;
   if (lower.includes('cloud') || lower.includes('overcast')) return Cloud;
   if (lower.includes('wind')) return Wind;
   return Sun;
-}
+};
 
-// Fetch weather from NOAA API
 async function fetchWeather(lat: number, lng: number): Promise<WeatherForecast | null> {
   const cacheKey = `${lat.toFixed(2)},${lng.toFixed(2)}`;
-
-  // Check cache first
-  if (weatherCache.has(cacheKey)) {
-    return weatherCache.get(cacheKey)!;
-  }
+  if (weatherCache.has(cacheKey)) return weatherCache.get(cacheKey)!;
 
   try {
-    // Step 1: Get the forecast URL for this location
     const pointsResponse = await fetch(
       `https://api.weather.gov/points/${lat.toFixed(4)},${lng.toFixed(4)}`,
-      {
-        headers: {
-          'User-Agent': 'TripPlanner (contact@example.com)',
-          'Accept': 'application/geo+json',
-        },
-      }
+      { headers: { 'User-Agent': 'TripPlanner (contact@example.com)', Accept: 'application/geo+json' } }
     );
-
-    if (!pointsResponse.ok) {
-      return null;
-    }
-
+    if (!pointsResponse.ok) return null;
     const pointsData = await pointsResponse.json();
     const forecastUrl = pointsData.properties?.forecast;
+    if (!forecastUrl) return null;
 
-    if (!forecastUrl) {
-      return null;
-    }
-
-    // Step 2: Get the actual forecast
     const forecastResponse = await fetch(forecastUrl, {
-      headers: {
-        'User-Agent': 'TripPlanner (contact@example.com)',
-        'Accept': 'application/geo+json',
-      },
+      headers: { 'User-Agent': 'TripPlanner (contact@example.com)', Accept: 'application/geo+json' },
     });
-
-    if (!forecastResponse.ok) {
-      return null;
-    }
-
+    if (!forecastResponse.ok) return null;
     const forecastData = await forecastResponse.json();
     const periods = forecastData.properties?.periods;
+    if (!periods || periods.length === 0) return null;
 
-    if (!periods || periods.length === 0) {
-      return null;
-    }
-
-    // Get the first period (current/today)
     const current = periods[0];
     const weather: WeatherForecast = {
       temperature: current.temperature,
       temperatureUnit: current.temperatureUnit,
       shortForecast: current.shortForecast,
     };
-
-    // Cache the result
     weatherCache.set(cacheKey, weather);
     return weather;
   } catch (error) {
@@ -128,25 +95,24 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherForecast |
   }
 }
 
-const getIcon = (type: string) => {
-  switch (type) {
-    case 'hike':
-      return Boot;
-    case 'gas':
-      return GasPump;
-    case 'camp':
-      return Tent;
-    case 'viewpoint':
-      return MapPinArea;
-    case 'photo':
-      return Camera;
-    case 'start':
-    case 'end':
-      return MapPin;
-    default:
-      return MapPinArea;
-  }
+// Per-stop-type icon + accent (matches DayCard in trip-detail).
+const TYPE_STYLES: Record<string, { Icon: typeof MapPin; bg: string; text: string }> = {
+  hike:      { Icon: Boot,       bg: 'bg-sage/15',   text: 'text-sage' },
+  camp:      { Icon: Tent,       bg: 'bg-clay/15',   text: 'text-clay' },
+  photo:     { Icon: Camera,     bg: 'bg-ember/15',  text: 'text-ember' },
+  viewpoint: { Icon: MapPinArea, bg: 'bg-ember/15',  text: 'text-ember' },
+  gas:       { Icon: GasPump,    bg: 'bg-ink/10',    text: 'text-ink-2' },
+  start:     { Icon: MapPin,     bg: 'bg-pine-6/15', text: 'text-pine-6' },
+  end:       { Icon: MapPin,     bg: 'bg-pine-6/15', text: 'text-pine-6' },
+  default:   { Icon: MapPinArea, bg: 'bg-pine-6/15', text: 'text-pine-6' },
 };
+const styleFor = (type: string) => TYPE_STYLES[type] ?? TYPE_STYLES.default;
+
+const IconBlock = ({ Icon, bg, text }: { Icon: typeof MapPin; bg: string; text: string }) => (
+  <div className={cn('inline-flex items-center justify-center w-9 h-9 rounded-[10px] flex-shrink-0', bg, text)}>
+    <Icon className="w-4 h-4" weight="regular" />
+  </div>
+);
 
 const DayDetail = () => {
   const { slug, dayNumber } = useParams<{ slug: string; dayNumber: string }>();
@@ -166,51 +132,43 @@ const DayDetail = () => {
 
   const dayNum = parseInt(dayNumber || '1', 10);
 
-  // Load trip if not already loaded
   useEffect(() => {
     if (slug && (!generatedTrip || getTripSlug(generatedTrip.config.name) !== slug)) {
       const loaded = loadSavedTripBySlug(slug);
-      if (!loaded) {
-        navigate('/trips');
-      }
+      if (!loaded) navigate('/trips');
     }
   }, [slug, generatedTrip, loadSavedTripBySlug, navigate]);
 
-  // Get the current day's data
-  const day = generatedTrip?.days.find(d => d.day === dayNum);
+  const day = generatedTrip?.days.find((d) => d.day === dayNum);
 
-  // Fetch directions for this day
+  // Fetch directions for this day's route.
   useEffect(() => {
-    if (!mapsLoaded || !generatedTrip || !day || day.stops.length === 0) {
-      return;
-    }
+    if (!mapsLoaded || !generatedTrip || !day || day.stops.length === 0) return;
 
     const directionsService = new google.maps.DirectionsService();
     const startLocation = generatedTrip.config.startLocation?.coordinates;
     const baseLocation = generatedTrip.config.baseLocation?.coordinates;
 
-    // Determine where this day starts from
     let dayOrigin: google.maps.LatLngLiteral;
-
     if (dayNum === 1) {
       dayOrigin = startLocation || baseLocation || day.stops[0].coordinates;
     } else {
-      const prevDay = generatedTrip.days.find(d => d.day === dayNum - 1);
-      const prevCampsite = prevDay?.stops.find(s => s.type === 'camp');
+      const prevDay = generatedTrip.days.find((d) => d.day === dayNum - 1);
+      const prevCampsite = prevDay?.stops.find((s) => s.type === 'camp');
       dayOrigin = prevCampsite?.coordinates || day.stops[0].coordinates;
     }
 
-    // Day ends at this day's campsite, or last activity if no camp
-    const dayCampsite = day.stops.find(s => s.type === 'camp');
-    const dayActivities = day.stops.filter(s => s.type === 'hike' || s.type === 'viewpoint' || s.type === 'photo');
-    const dayDestination = dayCampsite?.coordinates || dayActivities[dayActivities.length - 1]?.coordinates || day.stops[day.stops.length - 1]?.coordinates;
+    const dayCampsite = day.stops.find((s) => s.type === 'camp');
+    const dayActivities = day.stops.filter(
+      (s) => s.type === 'hike' || s.type === 'viewpoint' || s.type === 'photo'
+    );
+    const dayDestination =
+      dayCampsite?.coordinates ||
+      dayActivities[dayActivities.length - 1]?.coordinates ||
+      day.stops[day.stops.length - 1]?.coordinates;
+    if (!dayDestination) return;
 
-    if (!dayDestination) {
-      return;
-    }
-
-    // Waypoints are the activities for this day
-    const waypoints = dayActivities.map(stop => ({
+    const waypoints = dayActivities.map((stop) => ({
       location: stop.coordinates,
       stopover: true,
     }));
@@ -224,90 +182,61 @@ const DayDetail = () => {
         optimizeWaypoints: false,
       },
       (result, status) => {
-        if (status === google.maps.DirectionsStatus.OK && result) {
-          setDirections(result);
-        }
+        if (status === google.maps.DirectionsStatus.OK && result) setDirections(result);
       }
     );
   }, [mapsLoaded, generatedTrip, day, dayNum]);
 
-  // Fetch weather for this day's main location
+  // Weather for the day's main location.
   useEffect(() => {
     if (!day || day.stops.length === 0) return;
-
-    // Get the main location for weather - use first hike/viewpoint, or first stop
-    const mainStop = day.stops.find(s => s.type === 'hike' || s.type === 'viewpoint') || day.stops[0];
+    const mainStop = day.stops.find((s) => s.type === 'hike' || s.type === 'viewpoint') || day.stops[0];
     if (!mainStop) return;
 
     setWeatherLoading(true);
     fetchWeather(mainStop.coordinates.lat, mainStop.coordinates.lng)
-      .then(w => {
-        setWeather(w);
-      })
-      .finally(() => {
-        setWeatherLoading(false);
-      });
+      .then((w) => setWeather(w))
+      .finally(() => setWeatherLoading(false));
   }, [day]);
 
-  // Reverse geocode the end location (campsite) to get city/state
+  // Reverse geocode end location for the header.
   useEffect(() => {
     if (!mapsLoaded || !generatedTrip || !day) return;
-
     const isLastDay = dayNum === generatedTrip.days.length;
 
-    // Last day returning home - use start location name
     if (isLastDay && generatedTrip.config.returnToStart) {
       setEndLocationName(generatedTrip.config.startLocation?.name || 'Home');
       return;
     }
 
-    // Find the end stop for this day
-    const endStop = day.stops.find(s => s.type === 'end');
-    const campsite = day.stops.find(s => s.type === 'camp');
+    const endStop = day.stops.find((s) => s.type === 'end');
+    const campsite = day.stops.find((s) => s.type === 'camp');
     const finalStop = endStop || campsite;
-
     if (!finalStop) {
       setEndLocationName(null);
       return;
     }
 
-    // Reverse geocode to get city/state
     const geocoder = new google.maps.Geocoder();
-    geocoder.geocode(
-      { location: finalStop.coordinates },
-      (results, status) => {
-        if (status === 'OK' && results && results.length > 0) {
-          // Look for locality (city) and administrative_area_level_1 (state)
-          let city = '';
-          let state = '';
-
-          for (const result of results) {
-            for (const component of result.address_components) {
-              if (component.types.includes('locality')) {
-                city = component.long_name;
-              }
-              if (component.types.includes('administrative_area_level_1')) {
-                state = component.short_name;
-              }
-            }
-            if (city && state) break;
+    geocoder.geocode({ location: finalStop.coordinates }, (results, status) => {
+      if (status === 'OK' && results && results.length > 0) {
+        let city = '';
+        let state = '';
+        for (const result of results) {
+          for (const component of result.address_components) {
+            if (component.types.includes('locality')) city = component.long_name;
+            if (component.types.includes('administrative_area_level_1')) state = component.short_name;
           }
-
-          if (city && state) {
-            setEndLocationName(`${city}, ${state}`);
-          } else if (city) {
-            setEndLocationName(city);
-          } else if (state) {
-            setEndLocationName(state);
-          } else {
-            // Fall back to formatted address or stop name
-            setEndLocationName(finalStop.name);
-          }
-        } else {
-          setEndLocationName(finalStop.name);
+          if (city && state) break;
         }
+        if (city && state) setEndLocationName(`${city}, ${state}`);
+        else if (city) setEndLocationName(city);
+        else if (state) setEndLocationName(state);
+        else setEndLocationName(finalStop.name);
+      } else {
+        setEndLocationName(finalStop.name);
       }
-    );
+    });
   }, [mapsLoaded, generatedTrip, day, dayNum]);
 
   const handleOpenHikeSwap = (hike: TripStop) => {
@@ -318,9 +247,7 @@ const DayDetail = () => {
   const handleSwapHike = (newHike: TripStop) => {
     if (selectedHikeForSwap) {
       updateTripStop(selectedHikeForSwap.day, selectedHikeForSwap.id, newHike);
-      toast.success('Hike updated!', {
-        description: `Changed to ${newHike.name}`,
-      });
+      toast.success('Hike updated', { description: `Changed to ${newHike.name}` });
     }
   };
 
@@ -332,190 +259,160 @@ const DayDetail = () => {
   const handleSwapCampsite = (newCampsite: TripStop) => {
     if (selectedCampsiteForSwap) {
       updateTripStop(selectedCampsiteForSwap.day, selectedCampsiteForSwap.id, newCampsite);
-      toast.success('Campsite updated!', {
-        description: `Changed to ${newCampsite.name}`,
-      });
+      toast.success('Campsite updated', { description: `Changed to ${newCampsite.name}` });
     }
   };
 
   const handleRemoveStop = (stop: TripStop) => {
     removeTripStop(dayNum, stop.id);
-    toast.success('Stop removed', {
-      description: `Removed ${stop.name}`,
-    });
+    toast.success('Stop removed', { description: `Removed ${stop.name}` });
   };
 
   const handleAddStop = (stop: TripStop) => {
     addTripStop(dayNum, stop);
-    toast.success('Stop added!', {
-      description: `Added ${stop.name} to Day ${dayNum}`,
-    });
+    toast.success('Stop added', { description: `Added ${stop.name} to Day ${dayNum}` });
   };
 
   const handleNavigateDay = () => {
     if (!day || day.stops.length === 0) return;
-
     const stops = day.stops;
     const dest = `${stops[stops.length - 1].coordinates.lat},${stops[stops.length - 1].coordinates.lng}`;
 
-    // Build navigation URL with current location as origin (on mobile)
     const buildNavUrl = (origin?: string) => {
-      // If using current location, all stops become waypoints
-      // Otherwise, first stop is origin and rest (except last) are waypoints
       let waypoints: string;
       if (origin) {
-        // Using current location - all stops except last are waypoints
-        waypoints = stops.slice(0, -1)
-          .map(s => `${s.coordinates.lat},${s.coordinates.lng}`)
-          .join('|');
+        waypoints = stops.slice(0, -1).map((s) => `${s.coordinates.lat},${s.coordinates.lng}`).join('|');
       } else {
-        // Using first stop as origin - middle stops are waypoints
-        waypoints = stops.slice(1, -1)
-          .map(s => `${s.coordinates.lat},${s.coordinates.lng}`)
-          .join('|');
+        waypoints = stops.slice(1, -1).map((s) => `${s.coordinates.lat},${s.coordinates.lng}`).join('|');
         origin = `${stops[0].coordinates.lat},${stops[0].coordinates.lng}`;
       }
-
       return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}${waypoints ? `&waypoints=${waypoints}` : ''}`;
     };
 
-    // Try to get user's current location
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const origin = `${position.coords.latitude},${position.coords.longitude}`;
           window.open(buildNavUrl(origin), '_blank');
         },
-        () => {
-          // Geolocation failed or denied - use first stop as origin
-          window.open(buildNavUrl(), '_blank');
-        },
+        () => window.open(buildNavUrl(), '_blank'),
         { timeout: 5000, maximumAge: 60000 }
       );
     } else {
-      // Geolocation not available - use first stop as origin
       window.open(buildNavUrl(), '_blank');
     }
   };
 
-  if (!generatedTrip || !day) {
-    return null;
-  }
+  if (!generatedTrip || !day) return null;
 
-  // Calculate map center
-  const mapCenter = day.stops.length > 0
-    ? {
-        lat: day.stops.reduce((sum, s) => sum + s.coordinates.lat, 0) / day.stops.length,
-        lng: day.stops.reduce((sum, s) => sum + s.coordinates.lng, 0) / day.stops.length,
-      }
-    : { lat: 37.7749, lng: -122.4194 };
+  const mapCenter =
+    day.stops.length > 0
+      ? {
+          lat: day.stops.reduce((sum, s) => sum + s.coordinates.lat, 0) / day.stops.length,
+          lng: day.stops.reduce((sum, s) => sum + s.coordinates.lng, 0) / day.stops.length,
+        }
+      : { lat: 37.7749, lng: -122.4194 };
 
-  // Determine the main destination for this day (viewpoint or first major stop)
-  const mainDestination = day.stops.find(s => s.type === 'viewpoint') || day.stops[0];
+  const mainDestination = day.stops.find((s) => s.type === 'viewpoint') || day.stops[0];
   const destinationName = mainDestination?.name || `Day ${dayNum}`;
 
-  // Get the destination/area name for a given day
   const getDestinationForDay = (dayNumber: number): string => {
-    // For base location trips, use the base location name
-    if (generatedTrip.config.baseLocation) {
-      return generatedTrip.config.baseLocation.name;
-    }
-
-    // For multi-destination trips, figure out which destination this day is at
+    if (generatedTrip.config.baseLocation) return generatedTrip.config.baseLocation.name;
     const destinations = generatedTrip.config.destinations;
     if (destinations.length === 0) return destinationName;
-
-    // Count days per destination to find which one this day belongs to
     let dayCount = 0;
     for (const dest of destinations) {
       const daysAtDest = dest.daysAtDestination || 1;
       dayCount += daysAtDest;
-      if (dayNumber <= dayCount) {
-        return dest.name;
-      }
+      if (dayNumber <= dayCount) return dest.name;
     }
-
-    // Fall back to last destination
     return destinations[destinations.length - 1]?.name || destinationName;
   };
 
-  // Determine where this day starts from for the summary
   const getOriginName = (): string => {
     if (dayNum === 1) {
-      return generatedTrip.config.startLocation?.name ||
-             generatedTrip.config.baseLocation?.name ||
-             'your starting point';
+      return (
+        generatedTrip.config.startLocation?.name ||
+        generatedTrip.config.baseLocation?.name ||
+        'your starting point'
+      );
     }
-    // Use previous day's destination area
     return getDestinationForDay(dayNum - 1);
   };
 
-  // Use geocoded end location name, or fall back to destination
   const endName = endLocationName || getDestinationForDay(dayNum);
   const originName = getOriginName();
 
-  // Generate a contextual summary for the day
   const getDaySummary = (): string => {
-    const originName = getOriginName();
     const isLastDay = dayNum === generatedTrip.days.length;
-    const hasHike = day.stops.some(s => s.type === 'hike');
-    const hasCamp = day.stops.some(s => s.type === 'camp');
+    const hasHike = day.stops.some((s) => s.type === 'hike');
+    const hasCamp = day.stops.some((s) => s.type === 'camp');
 
     if (dayNum === 1) {
-      if (hasHike && hasCamp) {
+      if (hasHike && hasCamp)
         return `Starting your adventure from ${originName}. Explore ${destinationName}, hit the trails, and set up camp for the night.`;
-      } else if (hasHike) {
+      if (hasHike)
         return `Starting your adventure from ${originName}. Drive to ${destinationName} and enjoy a hike.`;
-      } else {
-        return `Starting your drive from ${originName} to ${destinationName}.`;
-      }
-    } else if (isLastDay && generatedTrip.config.returnToStart) {
-      return `Final day! Head back from ${originName} to ${generatedTrip.config.startLocation?.name || 'home'}.`;
-    } else {
-      if (hasHike && hasCamp) {
-        return `Continuing from ${originName}. Explore ${destinationName}, enjoy a hike, and set up camp.`;
-      } else if (hasHike) {
-        return `Continuing from ${originName}. Drive to ${destinationName} and hit the trails.`;
-      } else {
-        return `Continuing your journey from ${originName} to ${destinationName}.`;
-      }
+      return `Starting your drive from ${originName} to ${destinationName}.`;
     }
+    if (isLastDay && generatedTrip.config.returnToStart) {
+      return `Final day. Head back from ${originName} to ${generatedTrip.config.startLocation?.name || 'home'}.`;
+    }
+    if (hasHike && hasCamp)
+      return `Continuing from ${originName}. Explore ${destinationName}, enjoy a hike, and set up camp.`;
+    if (hasHike)
+      return `Continuing from ${originName}. Drive to ${destinationName} and hit the trails.`;
+    return `Continuing your journey from ${originName} to ${destinationName}.`;
   };
 
+  const timeEstimate = estimateDayTime(day);
+  const WeatherIcon = weather ? getWeatherIcon(weather.shortForecast) : null;
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="container px-4 md:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to={getTripUrl(generatedTrip.config.name)}>
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <ArrowLeft className="w-5 h-5" />
-                </Button>
+    <div className="min-h-screen bg-paper text-ink font-sans">
+      {/* Header — mirrors the TripDetail header shape but with a day-number
+          badge sitting between the back button and the title. */}
+      <header className="sticky top-0 z-50 bg-cream/95 backdrop-blur-md border-b border-line">
+        <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+              <Link
+                to={getTripUrl(generatedTrip.config.name)}
+                aria-label="Back to trip"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors shrink-0"
+              >
+                <ArrowLeft className="w-4 h-4" weight="regular" />
               </Link>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">
+
+              {/* Day-number badge — prominent like the day cards in the itinerary */}
+              <div className="inline-flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-pine-6/12 text-pine-6 font-mono font-bold text-[15px] sm:text-[16px] tracking-[0.02em] shrink-0">
+                {dayNum}
+              </div>
+
+              <div className="min-w-0">
+                <Mono className="text-pine-6">
                   Day {dayNum} of {generatedTrip.days.length}
-                </p>
-                <h1 className="text-xl font-display font-bold text-foreground flex items-center gap-2">
-                  <span className="truncate max-w-[120px] sm:max-w-[180px]">{originName}</span>
-                  <span className="flex-shrink-0 text-muted-foreground">→</span>
-                  <span className="truncate max-w-[120px] sm:max-w-[180px]">{endName}</span>
+                  <span className="text-ink-3"> · {day.drivingDistance} · {day.drivingTime}</span>
+                </Mono>
+                <h1 className="text-[16px] sm:text-[20px] font-sans font-bold tracking-[-0.01em] text-ink mt-0.5 flex items-center gap-2">
+                  <span className="truncate max-w-[120px] sm:max-w-[200px]">{originName}</span>
+                  <span className="flex-shrink-0 text-ink-3">→</span>
+                  <span className="truncate max-w-[120px] sm:max-w-[200px]">{endName}</span>
                 </h1>
               </div>
             </div>
-            <Button variant="primary" size="sm" onClick={handleNavigateDay}>
-              <NavigationArrow className="w-4 h-4 mr-2" />
-              Navigate
-            </Button>
+
+            <Pill variant="solid-pine" mono={false} onClick={handleNavigateDay}>
+              <NavigationArrow className="w-4 h-4" weight="regular" />
+              <span className="hidden sm:inline">Navigate</span>
+            </Pill>
           </div>
         </div>
       </header>
 
       <main className="w-full">
         <div className="grid lg:grid-cols-2">
-          {/* Map Section */}
+          {/* Map */}
           <div className="order-2 lg:order-1 h-[400px] lg:h-[calc(100vh-73px)] lg:sticky lg:top-[73px]">
             <div className="relative w-full h-full">
               <GoogleMap
@@ -531,7 +428,7 @@ const DayDetail = () => {
                     options={{
                       suppressMarkers: true,
                       polylineOptions: {
-                        strokeColor: '#2d5a3d',
+                        strokeColor: '#3a4a2a',
                         strokeWeight: 5,
                         strokeOpacity: 1,
                       },
@@ -539,7 +436,6 @@ const DayDetail = () => {
                   />
                 )}
 
-                {/* Start location marker for Day 1 */}
                 {dayNum === 1 && (generatedTrip.config.startLocation || generatedTrip.config.baseLocation) && (
                   <Marker
                     position={(generatedTrip.config.startLocation || generatedTrip.config.baseLocation)!.coordinates}
@@ -558,273 +454,277 @@ const DayDetail = () => {
                 ))}
               </GoogleMap>
 
-              {/* Route info overlay */}
+              {/* Floating route info card */}
               <div className="absolute bottom-4 left-4 right-4 z-10">
-                <div className="bg-card/95 backdrop-blur-sm rounded-xl border border-border p-4 shadow-lg">
-                  <div className="flex items-center justify-between flex-wrap gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center justify-center w-10 h-10 bg-primary/10 rounded-full">
-                        <span className="text-lg font-bold text-primary">{dayNum}</span>
+                <div className="bg-white/95 backdrop-blur-md rounded-[14px] border border-line px-4 py-3 shadow-[0_18px_44px_rgba(29,34,24,0.12)]">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-pine-6/12 text-pine-6 font-mono font-bold text-[13px]">
+                        {dayNum}
                       </div>
                       <div>
-                        <p className="font-semibold text-foreground">Day {dayNum}</p>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Path className="w-3 h-3" />
+                        <p className="text-[14px] font-sans font-semibold text-ink">Day {dayNum}</p>
+                        <div className="flex items-center gap-3 mt-0.5 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
+                          <span className="inline-flex items-center gap-1">
+                            <Path className="w-3 h-3" weight="regular" />
                             {day.drivingDistance}
                           </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3" weight="regular" />
                             {day.drivingTime}
                           </span>
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {day.stops.length} stops
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="w-3 h-3" weight="regular" />
+                            {day.stops.length} {day.stops.length === 1 ? 'stop' : 'stops'}
                           </span>
                         </div>
                       </div>
                     </div>
-                    <Button variant="primary" size="sm" onClick={handleNavigateDay}>
-                      <NavigationArrow className="w-4 h-4 mr-2" />
-                      Navigate Day {dayNum}
-                    </Button>
+                    <Pill variant="solid-pine" sm mono={false} onClick={handleNavigateDay}>
+                      <NavigationArrow className="w-3.5 h-3.5" weight="regular" />
+                      Navigate day {dayNum}
+                    </Pill>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Day Details */}
-          <div className="order-1 lg:order-2 space-y-4 p-6 lg:h-[calc(100vh-73px)] lg:overflow-y-auto">
-            {/* Day Summary */}
-            <Card className="bg-gradient-card">
-              <CardContent className="p-5">
-                <p className="text-foreground leading-relaxed">
+          {/* Day details */}
+          <div className="order-1 lg:order-2 bg-paper lg:h-[calc(100vh-73px)] lg:overflow-y-auto">
+            <div className="px-4 sm:px-6 pt-5 pb-5 space-y-5">
+              {/* Day intro card — same pattern as "Your trip" on the trip
+                  detail. White card on paper, mono eyebrow + sans bold route
+                  title + supporting paragraph + mono-cap stat row with divider. */}
+              <div className="bg-white border border-line rounded-[14px] p-5">
+                <Mono className="text-pine-6">
+                  Day {dayNum} of {generatedTrip.days.length}
+                </Mono>
+                <h1 className="text-[24px] sm:text-[32px] font-sans font-bold tracking-[-0.025em] text-ink leading-[1.1] mt-1 flex items-center gap-2 flex-wrap">
+                  <span>{originName}</span>
+                  <span className="text-ink-3 font-normal">→</span>
+                  <span>{endName}</span>
+                </h1>
+                <p className="text-[14px] text-ink-3 leading-[1.55] mt-3">
                   {getDaySummary()}
                 </p>
-                <div className="flex items-center gap-6 mt-4 pt-4 border-t border-border/50 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <Path className="w-4 h-4 text-terracotta" />
-                    <span className="text-foreground font-medium">{day.drivingDistance}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-foreground">{day.drivingTime}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-primary" />
-                    <span className="text-foreground">{day.stops.length} stops</span>
-                  </div>
+
+                <div className="mt-4 pt-4 border-t border-line flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Path className="w-3.5 h-3.5" weight="regular" />
+                    {day.drivingDistance}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" weight="regular" />
+                    {day.drivingTime}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5" weight="regular" />
+                    {day.stops.length} {day.stops.length === 1 ? 'stop' : 'stops'}
+                  </span>
                   {weatherLoading && (
-                    <div className="flex items-center gap-2">
-                      <SpinnerGap className="w-4 h-4 text-blue-500 animate-spin" />
-                      <span className="text-muted-foreground text-sm">Loading weather...</span>
-                    </div>
+                    <span className="inline-flex items-center gap-1.5">
+                      <SpinnerGap className="w-3.5 h-3.5 animate-spin" />
+                      Loading weather
+                    </span>
                   )}
-                  {weather && !weatherLoading && (() => {
-                    const WeatherIcon = getWeatherIcon(weather.shortForecast);
-                    return (
-                      <div className="flex items-center gap-2" title={weather.shortForecast}>
-                        <WeatherIcon className="w-4 h-4 text-blue-500" />
-                        <span className="text-foreground font-medium">
-                          {weather.temperature}°{weather.temperatureUnit}
-                        </span>
-                        <span className="text-muted-foreground text-sm hidden sm:inline">
-                          {weather.shortForecast}
-                        </span>
-                      </div>
-                    );
-                  })()}
+                  {weather && !weatherLoading && WeatherIcon && (
+                    <span className="inline-flex items-center gap-1.5" title={weather.shortForecast}>
+                      <WeatherIcon className="w-3.5 h-3.5" weight="regular" />
+                      {weather.temperature}°{weather.temperatureUnit}
+                      <span className="hidden sm:inline opacity-70">{weather.shortForecast}</span>
+                    </span>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Day Overload Warning */}
-            {(() => {
-              const timeEstimate = estimateDayTime(day);
-              if (timeEstimate.warningMessage) {
-                return (
-                  <div className={`flex items-start gap-3 p-4 rounded-lg border ${
-                    timeEstimate.isOverloaded
-                      ? 'bg-amber-500/10 border-amber-500/30'
-                      : 'bg-blue-500/10 border-blue-500/30'
-                  }`}>
-                    <Warning className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                      timeEstimate.isOverloaded ? 'text-amber-500' : 'text-blue-500'
-                    }`} />
-                    <div>
-                      <p className={`text-sm font-medium ${
-                        timeEstimate.isOverloaded ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'
-                      }`}>
-                        {timeEstimate.isOverloaded ? 'Ambitious Schedule' : 'Heads Up'}
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        {timeEstimate.warningMessage}
-                      </p>
-                    </div>
-                  </div>
-                );
-              }
-              return null;
-            })()}
-
-            {/* Stops List */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-display font-semibold text-foreground">Stops</h3>
-                <Button variant="outline" size="sm" onClick={() => setAddStopModalOpen(true)}>
-                  <Plus className="w-4 h-4 mr-1" />
-                  Add Hike
-                </Button>
               </div>
 
-              {day.stops.map((stop, index) => {
-                const Icon = getIcon(stop.type);
-                const typeStyles = getTypeStyles(stop.type);
+              {/* Day overload warning */}
+              {timeEstimate.warningMessage && (
+                <div
+                  className={cn(
+                    'flex items-start gap-3 p-4 rounded-[14px] border',
+                    timeEstimate.isOverloaded
+                      ? 'bg-clay/8 border-clay/40'
+                      : 'bg-water/8 border-water/40',
+                  )}
+                >
+                  <Warning
+                    className={cn(
+                      'w-4 h-4 flex-shrink-0 mt-0.5',
+                      timeEstimate.isOverloaded ? 'text-clay' : 'text-water',
+                    )}
+                    weight="regular"
+                  />
+                  <div>
+                    <Mono className={timeEstimate.isOverloaded ? 'text-clay' : 'text-water'}>
+                      {timeEstimate.isOverloaded ? 'Ambitious schedule' : 'Heads up'}
+                    </Mono>
+                    <p className="text-[13px] text-ink-3 mt-1 leading-[1.5]">
+                      {timeEstimate.warningMessage}
+                    </p>
+                  </div>
+                </div>
+              )}
 
-                return (
-                  <Card
-                    key={stop.id}
-                    className="group hover:border-primary/30 transition-all"
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="flex flex-col items-center gap-1">
-                          <div
-                            className={`flex items-center justify-center w-10 h-10 rounded-lg border ${typeStyles}`}
-                          >
-                            <Icon className="w-5 h-5" />
-                          </div>
-                          <span className="text-xs text-muted-foreground font-medium">
-                            {index + 1}
-                          </span>
-                        </div>
+              {/* Stops */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Mono className="text-ink-2">Stops</Mono>
+                  <Pill variant="ghost" sm mono={false} onClick={() => setAddStopModalOpen(true)}>
+                    <Plus className="w-3.5 h-3.5" weight="bold" />
+                    Add hike
+                  </Pill>
+                </div>
 
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <h4 className="font-semibold text-foreground">{stop.name}</h4>
-                              <p className="text-sm text-muted-foreground mt-0.5">
-                                {stop.description}
-                              </p>
+                {day.stops.length === 0 ? (
+                  <div className="border border-dashed border-line bg-white/50 rounded-[14px] px-6 py-10 text-center">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 text-pine-6 mb-3">
+                      <MapPin className="w-5 h-5" weight="regular" />
+                    </div>
+                    <p className="text-[14px] font-sans font-semibold text-ink">No stops planned</p>
+                    <p className="text-[13px] text-ink-3 mt-1">Add hikes, camps, or stops to fill out the day.</p>
+                  </div>
+                ) : (
+                  /* Stops timeline — each card connects to the next via a thin
+                     vertical line aligned to the icon column, so the day reads
+                     as one continuous route. */
+                  <div className="space-y-0">
+                    {day.stops.map((stop, index) => {
+                      const { Icon, bg, text } = styleFor(stop.type);
+                      const isLast = index === day.stops.length - 1;
+                      return (
+                        <div key={stop.id} className="relative">
+                          <div className="border border-line bg-white rounded-[14px] p-4 group hover:border-ink-3/40 transition-colors">
+                            <div className="flex items-start gap-3">
+                              <IconBlock Icon={Icon} bg={bg} text={text} />
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <h4 className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">
+                                      {stop.name}
+                                    </h4>
+                                    <p className="text-[13px] text-ink-3 mt-0.5 leading-[1.5]">
+                                      {stop.description}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {stop.type === 'hike' && (
+                                      <button
+                                        onClick={() => handleOpenHikeSwap(stop)}
+                                        title="Swap hike"
+                                        className="inline-flex items-center justify-center w-7 h-7 rounded-full text-sage hover:bg-sage/15 transition-colors"
+                                      >
+                                        <ArrowsClockwise className="w-3.5 h-3.5" weight="bold" />
+                                      </button>
+                                    )}
+                                    {stop.type === 'camp' && (
+                                      <button
+                                        onClick={() => handleOpenCampsiteSwap(stop)}
+                                        title="Swap campsite"
+                                        className="inline-flex items-center justify-center w-7 h-7 rounded-full text-clay hover:bg-clay/15 transition-colors"
+                                      >
+                                        <ArrowsClockwise className="w-3.5 h-3.5" weight="bold" />
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleRemoveStop(stop)}
+                                      title="Remove stop"
+                                      className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-3 hover:text-ember hover:bg-ember/10 transition-colors"
+                                    >
+                                      <Trash className="w-3.5 h-3.5" weight="regular" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1.5 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
+                                  <span className="inline-flex items-center gap-1">
+                                    <Clock className="w-3 h-3" weight="regular" />
+                                    {stop.duration}
+                                  </span>
+                                  {stop.type === 'hike' && estimateTrailLength(stop.duration) && (
+                                    <span className="inline-flex items-center gap-1">
+                                      <Mountains className="w-3 h-3" weight="regular" />
+                                      {estimateTrailLength(stop.duration)}
+                                    </span>
+                                  )}
+                                  {stop.distance && (
+                                    <span className="inline-flex items-center gap-1">
+                                      <Path className="w-3 h-3" weight="regular" />
+                                      {stop.distance}
+                                    </span>
+                                  )}
+                                  {stop.drivingTime && (
+                                    <span className="inline-flex items-center gap-1 text-pine-6">
+                                      <NavigationArrow className="w-3 h-3" weight="regular" />
+                                      {stop.drivingTime}
+                                    </span>
+                                  )}
+                                  {stop.rating && (
+                                    <span className="inline-flex items-center gap-1">
+                                      <Star className="w-3 h-3 fill-clay text-clay" weight="fill" />
+                                      {stop.rating.toFixed(1)}
+                                    </span>
+                                  )}
+                                  {stop.type === 'hike' && (
+                                    <a
+                                      href={getAllTrailsUrl(stop.name, stop.coordinates.lat, stop.coordinates.lng)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-sage hover:text-sage/80 transition-colors"
+                                    >
+                                      <ArrowSquareOut className="w-3 h-3" weight="regular" />
+                                      AllTrails
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {stop.type === 'hike' && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-primary hover:bg-primary/10"
-                                  onClick={() => handleOpenHikeSwap(stop)}
-                                  title="Choose different hike"
-                                >
-                                  <ArrowsClockwise className="w-4 h-4" />
-                                </Button>
-                              )}
-                              {stop.type === 'camp' && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-amber-600 hover:bg-amber-500/10"
-                                  onClick={() => handleOpenCampsiteSwap(stop)}
-                                  title="Choose different campsite"
-                                >
-                                  <ArrowsClockwise className="w-4 h-4" />
-                                </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                onClick={() => handleRemoveStop(stop)}
-                                title="Remove stop"
-                              >
-                                <Trash className="w-4 h-4" />
-                              </Button>
-                            </div>
                           </div>
 
-                          <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground flex-wrap">
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5" />
-                              {stop.duration}
-                            </span>
-                            {stop.type === 'hike' && estimateTrailLength(stop.duration) && (
-                              <span className="flex items-center gap-1">
-                                <Mountains className="w-3.5 h-3.5" />
-                                {estimateTrailLength(stop.duration)}
-                              </span>
-                            )}
-                            {stop.distance && (
-                              <span className="flex items-center gap-1">
-                                <Path className="w-3.5 h-3.5" />
-                                {stop.distance}
-                              </span>
-                            )}
-                            {stop.drivingTime && (
-                              <span className="flex items-center gap-1 text-primary">
-                                <NavigationArrow className="w-3.5 h-3.5" />
-                                {stop.drivingTime}
-                              </span>
-                            )}
-                            {stop.rating && (
-                              <span className="flex items-center gap-1">
-                                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                                {stop.rating.toFixed(1)}
-                              </span>
-                            )}
-                            {stop.type === 'hike' && (
-                              <a
-                                href={getAllTrailsUrl(stop.name, stop.coordinates.lat, stop.coordinates.lng)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 hover:underline"
-                              >
-                                <ArrowSquareOut className="w-3.5 h-3.5" />
-                                AllTrails
-                              </a>
-                            )}
-                          </div>
+                          {/* Connector — sits in the 16px gap below each card,
+                              aligned to the icon column (left-1 + p-4 = 16px,
+                              icon center is 16+18=34px from card edge). */}
+                          {!isLast && (
+                            <div
+                              aria-hidden
+                              className="ml-[33px] h-4 w-0.5 bg-line"
+                            />
+                          )}
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
-              {day.stops.length === 0 && (
-                <Card>
-                  <CardContent className="p-8 text-center">
-                    <MapPin className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-muted-foreground">No stops planned for this day</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            {/* Day Navigation */}
-            <div className="flex gap-3 pt-4">
-              {dayNum > 1 && (
-                <Link to={getDayUrl(generatedTrip.config.name, dayNum - 1)} className="flex-1">
-                  <Button variant="outline" className="w-full">
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Day {dayNum - 1}
-                  </Button>
-                </Link>
-              )}
-              {dayNum < generatedTrip.days.length && (
-                <Link to={getDayUrl(generatedTrip.config.name, dayNum + 1)} className="flex-1">
-                  <Button variant="outline" className="w-full">
-                    Day {dayNum + 1}
-                    <ArrowLeft className="w-4 h-4 ml-2 rotate-180" />
-                  </Button>
-                </Link>
-              )}
+              {/* Day navigation */}
+              <div className="flex gap-2 pt-2">
+                {dayNum > 1 ? (
+                  <Link to={getDayUrl(generatedTrip.config.name, dayNum - 1)} className="flex-1">
+                    <Pill variant="ghost" mono={false} className="!w-full !justify-center">
+                      <ArrowLeft className="w-3.5 h-3.5" weight="bold" />
+                      Day {dayNum - 1}
+                    </Pill>
+                  </Link>
+                ) : (
+                  <div className="flex-1" />
+                )}
+                {dayNum < generatedTrip.days.length && (
+                  <Link to={getDayUrl(generatedTrip.config.name, dayNum + 1)} className="flex-1">
+                    <Pill variant="ghost" mono={false} className="!w-full !justify-center">
+                      Day {dayNum + 1}
+                      <ArrowRight className="w-3.5 h-3.5" weight="bold" />
+                    </Pill>
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </main>
 
-      {/* Alternative Hikes Modal */}
+      {/* Modals */}
       {selectedHikeForSwap && (
         <AlternativeHikesModal
           isOpen={hikeModalOpen}
@@ -839,18 +739,16 @@ const DayDetail = () => {
         />
       )}
 
-      {/* Add Stop Modal */}
       <AddStopModal
         isOpen={addStopModalOpen}
         onClose={() => setAddStopModalOpen(false)}
         dayNumber={dayNum}
         searchLat={mainDestination?.coordinates.lat || mapCenter.lat}
         searchLng={mainDestination?.coordinates.lng || mapCenter.lng}
-        existingStopIds={day.stops.map(s => s.placeId || s.id).filter(Boolean)}
+        existingStopIds={day.stops.map((s) => s.placeId || s.id).filter(Boolean)}
         onAddStop={handleAddStop}
       />
 
-      {/* Alternative Campsites Modal */}
       {selectedCampsiteForSwap && (
         <AlternativeCampsitesModal
           isOpen={campsiteModalOpen}
