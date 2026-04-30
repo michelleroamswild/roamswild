@@ -80,6 +80,17 @@ export interface PotentialSpot {
   landName?: string;
   landProtectClass?: string;
   landProtectionTitle?: string;
+  // Access difficulty derived from worst nearby road OSM tags
+  // (extreme = grade5/very_horrible — needs 4WD with rock-crawling capability)
+  accessDifficulty?: 'easy' | 'moderate' | 'hard' | 'extreme' | 'unknown' | null;
+  // Worst-nearby road's tags that drove the rating — for the detail panel
+  accessRoad?: {
+    road_name?: string | null;
+    tracktype?: string | null;
+    smoothness?: string | null;
+    surface?: string | null;
+    four_wd_only?: boolean | null;
+  } | null;
 }
 
 // BLM Road from GTLF (Ground Transportation Linear Feature)

@@ -117,7 +117,8 @@ export function useDispersedDatabase(
   lat: number | null,
   lng: number | null,
   radiusMiles: number = 10,
-  refreshKey: number = 0
+  refreshKey: number = 0,
+  zoom: number = 14
 ): DispersedDatabaseResult {
   const [potentialSpots, setPotentialSpots] = useState<PotentialSpot[]>([]);
   const [establishedCampgrounds, setEstablishedCampgrounds] = useState<EstablishedCampground[]>([]);
@@ -154,7 +155,7 @@ export function useDispersedDatabase(
             { signal: controller.signal }
           ),
           fetch(
-            `${SUPABASE_URL}/functions/v1/dispersed-roads?lat=${lat}&lng=${lng}&radius=${radiusMiles}&limit=1000`,
+            `${SUPABASE_URL}/functions/v1/dispersed-roads?lat=${lat}&lng=${lng}&radius=${radiusMiles}&limit=1000&zoom=${zoom}`,
             { signal: controller.signal }
           ),
         ]);
@@ -198,6 +199,10 @@ export function useDispersedDatabase(
           isEstablishedCampground: s.isEstablishedCampground,
           // Road accessibility flag (for filtering backcountry/hike-in camps)
           isRoadAccessible: s.isRoadAccessible,
+          // Difficulty of the worst nearby road (per spots.extra.access_difficulty)
+          accessDifficulty: (s as { accessDifficulty?: string }).accessDifficulty ?? null,
+          // The worst-nearby road's tags (road_name, tracktype, smoothness, …)
+          accessRoad: (s as { accessRoad?: Record<string, unknown> }).accessRoad ?? null,
         }));
 
         const campgrounds: EstablishedCampground[] = (campgroundsData.campgrounds || []).map(
@@ -241,10 +246,15 @@ export function useDispersedDatabase(
 
         const transformedOsmTracks: OSMTrack[] = dbRoads
           .filter((r: DatabaseRoad) => r.sourceType === 'osm')
-          .map((r: DatabaseRoad) => ({
-            // OSM way ID lives in external_id (the row's `id` is our UUID).
-            // Without this, /api/0.6/way/{id}/history would 404.
-            id: r.externalId ? parseInt(r.externalId, 10) : Math.random(),
+          .map((r: DatabaseRoad) => {
+            // external_id is stored as `osm_<wayId>` — strip the prefix
+            // before parseInt so the resulting id is a real OSM way id.
+            // Required for /way/{id} links and /api/0.6/way/{id}/history.
+            const raw = r.externalId ?? '';
+            const digits = raw.startsWith('osm_') ? raw.slice(4) : raw;
+            const wayId = parseInt(digits, 10);
+            return ({
+            id: Number.isFinite(wayId) ? wayId : Math.random(),
             name: r.name,
             highway: r.highway || 'track',
             surface: r.surface,
@@ -256,7 +266,8 @@ export function useDispersedDatabase(
               coordinates: (r.coordinates || []).map(c => [c.lng, c.lat] as [number, number]),
             },
             osmTags: r.osmTags,
-          }));
+            });
+          });
 
         setPotentialSpots(spots);
         setEstablishedCampgrounds(campgrounds);

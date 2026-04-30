@@ -292,7 +292,9 @@ async function importRoads(
     const bbox = `${bounds.west},${bounds.south},${bounds.east},${bounds.north}`;
 
     // Build URL manually - MVUM API needs unencoded commas
-    const url = `${MVUM_URL}?where=1=1&geometry=${bbox}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outFields=OBJECTID,NAME,SURFACE_TYPE,HIGH_CLEARANCE_VEHICLE,PASSENGER_VEHICLE&returnGeometry=true&outSR=4326&f=json&resultRecordCount=500`;
+    // MVUM service field names are lowercase (no underscores) — querying
+    // SURFACE_TYPE etc. returns 400. Use the canonical names.
+    const url = `${MVUM_URL}?where=1=1&geometry=${bbox}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outFields=objectid,name,surfacetype,passengervehicle,highclearancevehicle,seasonal&returnGeometry=true&outSR=4326&f=json&resultRecordCount=500`;
 
     console.log(`Fetching MVUM roads...`);
     const response = await fetch(url);
@@ -319,17 +321,17 @@ async function importRoads(
           const wktLine = arcgisToPostGISLine(geom.paths);
           if (!wktLine) continue;
 
-          // Determine vehicle access level
+          // MVUM attributes come back lowercase (matching the schema field names).
           let vehicleAccess = 'high_clearance';
-          if (attrs.PASSENGER_VEHICLE === 'OPEN') {
+          if (attrs.passengervehicle === 'OPEN') {
             vehicleAccess = 'passenger';
-          } else if (attrs.HIGH_CLEARANCE_VEHICLE === 'OPEN') {
+          } else if (attrs.highclearancevehicle === 'OPEN') {
             vehicleAccess = 'high_clearance';
           } else {
             vehicleAccess = '4wd';
           }
 
-          const externalId = `mvum_${attrs.OBJECTID}`;
+          const externalId = `mvum_${attrs.objectid}`;
 
           // Check if already exists
           const { data: existing } = await supabase
@@ -338,28 +340,22 @@ async function importRoads(
             .eq('external_id', externalId)
             .single();
 
-          if (existing) {
-            // Already exists, skip
-            continue;
-          }
+          if (existing) continue;
 
-          console.log(`Inserting road: ${externalId} - ${attrs.NAME || 'Unnamed'}`);
-          const { data: insertedId, error } = await supabase.rpc('insert_road_segment_simple', {
+          const { error } = await supabase.rpc('insert_road_segment_simple', {
             p_external_id: externalId,
             p_source_type: 'mvum',
             p_geometry_wkt: wktLine,
-            p_name: attrs.NAME,
-            p_surface_type: attrs.SURFACE_TYPE,
+            p_name: attrs.name,
+            p_surface_type: attrs.surfacetype,
             p_vehicle_access: vehicleAccess,
-            p_seasonal_closure: attrs.SEASONAL
+            p_seasonal_closure: attrs.seasonal,
           });
 
           if (error) {
-            console.error(`Error inserting road ${externalId}: ${error.message}`);
             errors.push(`Road insert error (${externalId}): ${error.message}`);
           } else {
             count++;
-            console.log(`Inserted road: ${attrs.NAME || 'Unnamed'}`);
           }
         } catch (e: any) {
           errors.push(`MVUM feature error: ${e.message}`);
@@ -394,31 +390,36 @@ async function importOSMRoads(
     out geom;
   `;
 
-  // Try each Overpass endpoint until one succeeds
+  // Try each Overpass endpoint until one succeeds — capture the actual
+  // error so debug isn't a black box if Overpass starts failing.
   let osmData: any = null;
+  const overpassErrors: string[] = [];
   for (const endpoint of OVERPASS_ENDPOINTS) {
     try {
       console.log(`Fetching OSM roads from ${endpoint}...`);
       const response = await fetch(endpoint, {
         method: "POST",
         body: `data=${encodeURIComponent(query)}`,
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "RoamsWild/1.0 (https://roamswild.com)",
+        },
       });
-
       if (response.ok) {
         osmData = await response.json();
         console.log(`Got ${osmData.elements?.length || 0} OSM road features`);
         break;
-      } else {
-        console.warn(`Overpass ${endpoint} returned ${response.status}`);
       }
+      const text = await response.text();
+      const snippet = text.substring(0, 200).replace(/\n/g, ' ');
+      overpassErrors.push(`${endpoint}: HTTP ${response.status} — ${snippet}`);
     } catch (e: any) {
-      console.warn(`Overpass ${endpoint} failed: ${e.message}`);
+      overpassErrors.push(`${endpoint}: ${e.name || 'Error'} — ${e.message}`);
     }
   }
 
   if (!osmData || !osmData.elements) {
-    errors.push("All Overpass endpoints failed");
+    errors.push(`Overpass failed for OSM roads: ${overpassErrors.join(' | ')}`);
     return { count, errors };
   }
 
@@ -458,6 +459,19 @@ async function importOSMRoads(
       const externalId = `osm_${element.id}`;
       const highway = element.tags?.highway || null;
 
+      // Filter the OSM tag bag down to the keys that drive difficulty
+      // classification + display. Skip noise like source=Bing, created_by, etc.
+      const TAG_KEYS = new Set([
+        'highway','tracktype','smoothness','surface','access',
+        '4wd_only','motor_vehicle','motorcar','sac_scale',
+        'mtb:scale','mtb:scale:imba','incline','oneway','maxspeed',
+        'name','ref','operator','description','seasonal','opening_hours',
+      ]);
+      const osmTagBag: Record<string, string> = {};
+      for (const [k, v] of Object.entries(element.tags ?? {})) {
+        if (TAG_KEYS.has(k)) osmTagBag[k] = v as string;
+      }
+
       // Check if already exists
       const { data: existing } = await supabase
         .from("road_segments")
@@ -467,7 +481,7 @@ async function importOSMRoads(
 
       let error;
       if (existing) {
-        // Update existing road with OSM tags
+        // Update existing road with full OSM tag bag
         const { error: updateError } = await supabase
           .from("road_segments")
           .update({
@@ -476,11 +490,12 @@ async function importOSMRoads(
             access: access || null,
             four_wd_only: fourWd === "yes",
             surface_type: surface || null,
+            osm_tags: osmTagBag,
           })
           .eq("id", existing.id);
         error = updateError;
       } else {
-        // Insert new road segment with OSM tags
+        // Insert new road segment with full OSM tag bag
         const { error: insertError } = await supabase.rpc("insert_road_segment_simple", {
           p_external_id: externalId,
           p_source_type: "osm",
@@ -493,6 +508,7 @@ async function importOSMRoads(
           p_tracktype: tracktype || null,
           p_access: access || null,
           p_four_wd_only: fourWd === "yes",
+          p_osm_tags: osmTagBag,
         });
         error = insertError;
       }
@@ -540,7 +556,10 @@ async function importPrivateRoads(
       const response = await fetch(endpoint, {
         method: "POST",
         body: `data=${encodeURIComponent(query)}`,
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "RoamsWild/1.0 (https://roamswild.com)",
+        },
       });
 
       if (response.ok) {
@@ -637,7 +656,10 @@ async function importOSMCampSites(
       const response = await fetch(endpoint, {
         method: "POST",
         body: `data=${encodeURIComponent(query)}`,
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "RoamsWild/1.0 (https://roamswild.com)",
+        },
       });
 
       if (response.ok) {
@@ -835,13 +857,10 @@ serve(async (req) => {
       result.errors.push(...campSitesResult.errors);
     }
 
-    // Import private roads for filtering (before deriving spots)
-    if (doDerive) {
-      console.log("Importing private roads for filtering...");
-      const privateRoadsResult = await importPrivateRoads(supabase, bounds);
-      result.privateRoadsImported = privateRoadsResult.count;
-      result.errors.push(...privateRoadsResult.errors);
-    }
+    // Private-road import retired (private_road_points table dropped 2026-04-30
+    // to free disk-IO budget). is_near_private_road() is now a noop, so derive
+    // skips that filter entirely. If we ever want it back, restore the table
+    // and importPrivateRoads helper.
 
     // Always backfill public_land_id for roads when deriving spots
     // This catches roads imported in previous runs that didn't get linked
@@ -871,7 +890,10 @@ serve(async (req) => {
         p_west: bounds.west,
       });
       if (allSpotsError) {
-        // Fall back to original functions if new one doesn't exist
+        // Capture the primary error so we can see what actually broke
+        result.errors.push(
+          `derive_spots_from_linked_roads error: ${allSpotsError.message || JSON.stringify(allSpotsError)}`
+        );
         console.log("Falling back to original derive functions...");
 
         console.log("Deriving USFS spots from dead-ends...");
@@ -894,6 +916,22 @@ serve(async (req) => {
       } else {
         result.spotsDerive = allSpotsCount || 0;
         console.log(`Derived ${allSpotsCount} spots from linked roads`);
+      }
+    }
+
+    // Classify access difficulty for spots in the bbox using OSM tags
+    // from nearby road segments. Run after derive so we cover the rows
+    // we just inserted. Logged-only on failure.
+    if (doDerive) {
+      console.log("Classifying access difficulty for new spots...");
+      const { error: clsErr } = await supabase.rpc('classify_spots_access_difficulty', {
+        p_south: bounds.south,
+        p_west: bounds.west,
+        p_north: bounds.north,
+        p_east: bounds.east,
+      });
+      if (clsErr) {
+        console.warn(`classify_spots_access_difficulty failed: ${clsErr.message}`);
       }
     }
 

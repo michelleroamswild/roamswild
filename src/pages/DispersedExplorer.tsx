@@ -18,6 +18,7 @@ import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
 import type { Campsite } from '@/types/campsite';
 import { isPointInPolygon, isWithinAnyPublicLand, findContainingLand, isFalseDeadEnd } from '@/utils/dispersedExplorer';
 import { FloatingLegend } from '@/components/dispersed-explorer/FloatingLegend';
+import { BulkPanPanel } from '@/components/dispersed-explorer/BulkPanPanel';
 import { MobileViewTabs } from '@/components/dispersed-explorer/MobileViewTabs';
 import { ResultsStatsRow } from '@/components/dispersed-explorer/ResultsStatsRow';
 import { SpotFiltersPanel } from '@/components/dispersed-explorer/SpotFiltersPanel';
@@ -46,7 +47,18 @@ const DispersedExplorer = () => {
   const [mapZoom, setMapZoom] = useState(12);
   const [selectedRoad, setSelectedRoad] = useState<MVUMRoad | OSMTrack | null>(null);
   const [selectedSpot, setSelectedSpot] = useState<PotentialSpot | null>(null);
-  const [showPublicLands, setShowPublicLands] = useState(true);
+  // Land-overlay agency toggles. Empty set = nothing rendered (default).
+  // Keys: 'USFS', 'BLM', 'NPS', 'STATE_PARK', 'STATE_TRUST', 'LAND_TRUST'.
+  const [visibleLandAgencies, setVisibleLandAgencies] = useState<Set<string>>(new Set());
+  const toggleLandAgency = useCallback((key: string) => {
+    setVisibleLandAgencies((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+  const [bulkPanOpen, setBulkPanOpen] = useState(false);
   const [roadFilter, setRoadFilter] = useState<'all' | 'passenger' | 'high-clearance' | '4wd'>('all');
   // Multi-select filter for spot types/confidence - empty set means show all
   const [spotFilters, setSpotFilters] = useState<Set<string>>(new Set());
@@ -130,7 +142,8 @@ const DispersedExplorer = () => {
     searchLocation?.lat ?? null,
     searchLocation?.lng ?? null,
     10,
-    dbRefreshKey
+    dbRefreshKey,
+    mapZoom
   );
 
   // Always use client-side for public lands (database has fragmented polygons)
@@ -1331,12 +1344,22 @@ const DispersedExplorer = () => {
       });
     }
 
-    // All non-confirmed spots get simple circles with confidence-based colors
-    // OSM camp-sites (known) get mossgreen, derived spots get colors based on score
-    let fillColor = '#e83a3a'; // accent-coralred darkened hsl(0 83% 51%) - low confidence
-    if (spot.type === 'camp-site') fillColor = '#3d7a40'; // accent-mossgreen darkened hsl(118 39% 30%)
-    else if (spot.score >= 35) fillColor = '#eab308'; // Yellow - high confidence
-    else if (spot.score >= 25) fillColor = '#f97316'; // Orange - medium confidence
+    // Color rules:
+    //   - Hard/extreme access (grade4–5, very_horrible, 4wd-only) → black warning
+    //   - Known OSM camp-site (and not hard/extreme) → green
+    //   - Moderate access (grade3, high-clearance) → orange
+    //   - Everything else → yellow
+    const diff = spot.accessDifficulty;
+    let fillColor: string;
+    if (diff === 'extreme' || diff === 'hard') {
+      fillColor = '#000000';
+    } else if (spot.type === 'camp-site') {
+      fillColor = '#3d7a40'; // accent-mossgreen
+    } else if (diff === 'moderate') {
+      fillColor = '#f97316'; // orange
+    } else {
+      fillColor = '#eab308'; // yellow
+    }
 
     const size = isSelected ? 10 : 7;
     return {
@@ -1494,7 +1517,7 @@ const DispersedExplorer = () => {
             onMapLoad={onMapLoad}
             onMapClick={onMapClick}
             searchLocation={searchLocation}
-            showPublicLands={showPublicLands}
+            visibleLandAgencies={visibleLandAgencies}
             publicLands={publicLands}
             filteredMvumRoads={filteredMvumRoads}
             filteredOsmTracks={filteredOsmTracks}
@@ -1537,9 +1560,29 @@ const DispersedExplorer = () => {
           />
 
           <FloatingLegend
-            showPublicLands={showPublicLands}
-            onTogglePublicLands={() => setShowPublicLands(!showPublicLands)}
+            visibleLandAgencies={visibleLandAgencies}
+            onToggleLandAgency={toggleLandAgency}
           />
+
+          {/* Bulk auto-pan helper — programmatically steps through tiles
+              to populate the spots table. Triggered via a tiny corner button. */}
+          {!bulkPanOpen && (
+            <button
+              onClick={() => setBulkPanOpen(true)}
+              className="absolute top-20 right-4 z-10 px-3 py-1.5 rounded-md bg-card border border-border text-xs font-medium shadow hover:bg-muted/40"
+              title="Bulk auto-pan: walk a state grid and let the analysis pipeline run"
+            >
+              Bulk auto-pan
+            </button>
+          )}
+          {bulkPanOpen && (
+            <BulkPanPanel
+              loading={loading}
+              lastAnalysedAt={lastAnalysedAt}
+              setSearchLocation={setSearchLocation}
+              onClose={() => setBulkPanOpen(false)}
+            />
+          )}
         </div>
 
         {/* Sidebar - Right side on desktop, toggled on mobile */}

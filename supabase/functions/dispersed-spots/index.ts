@@ -99,6 +99,10 @@ serve(async (req) => {
         landName: row.land_unit_name || null,
         landProtectClass: row.land_protect_class || null,
         landProtectionTitle: row.land_protection_title || null,
+        // Access difficulty (computed from nearby road OSM tags)
+        accessDifficulty: row.access_difficulty || null,
+        // Worst-nearby road's tags — explains why a spot is rated extreme/hard
+        accessRoad: row.access_road || null,
       };
     });
 

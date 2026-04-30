@@ -1,15 +1,23 @@
-import { Eye, EyeSlash, MapTrifold, Tent } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
+import { MapTrifold, Tent } from '@phosphor-icons/react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface FloatingLegendProps {
-  showPublicLands: boolean;
-  onTogglePublicLands: () => void;
+  visibleLandAgencies: Set<string>;
+  onToggleLandAgency: (key: string) => void;
 }
 
+const LAND_AGENCIES: { key: string; label: string; fill: string; stroke: string }[] = [
+  { key: 'USFS',        label: 'USFS',        fill: 'bg-emerald-500/30', stroke: 'border-emerald-600' },
+  { key: 'BLM',         label: 'BLM',         fill: 'bg-amber-500/30',   stroke: 'border-amber-600' },
+  { key: 'NPS',         label: 'NPS',         fill: 'bg-violet-500/30',  stroke: 'border-violet-600' },
+  { key: 'STATE_PARK',  label: 'State Park',  fill: 'bg-blue-500/30',    stroke: 'border-blue-600' },
+  { key: 'STATE_TRUST', label: 'State Trust', fill: 'bg-cyan-500/30',    stroke: 'border-cyan-600' },
+  { key: 'LAND_TRUST',  label: 'Land Trust',  fill: 'bg-pink-500/30',    stroke: 'border-pink-600' },
+];
+
 export const FloatingLegend = ({
-  showPublicLands,
-  onTogglePublicLands,
+  visibleLandAgencies,
+  onToggleLandAgency,
 }: FloatingLegendProps) => {
   return (
     <Popover>
@@ -33,48 +41,26 @@ export const FloatingLegend = ({
             Map Legend
           </h3>
 
-          {/* Land Overlays */}
+          {/* Land Overlays — one toggle per agency, off by default */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Land Overlays</p>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 w-5 p-0"
-                onClick={onTogglePublicLands}
-              >
-                {showPublicLands ? (
-                  <Eye className="w-3.5 h-3.5" />
-                ) : (
-                  <EyeSlash className="w-3.5 h-3.5" />
-                )}
-              </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-emerald-500/30 border border-emerald-600 rounded" />
-                <span>USFS</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-amber-500/30 border border-amber-600 rounded" />
-                <span>BLM</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-violet-500/30 border border-violet-600 rounded" />
-                <span>NPS</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-blue-500/30 border border-blue-600 rounded" />
-                <span>State Park</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-cyan-500/30 border border-cyan-600 rounded" />
-                <span>State Trust</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-pink-500/30 border border-pink-600 rounded" />
-                <span>Land Trust</span>
-              </div>
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Land Overlays</p>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+              {LAND_AGENCIES.map((a) => {
+                const on = visibleLandAgencies.has(a.key);
+                return (
+                  <button
+                    key={a.key}
+                    onClick={() => onToggleLandAgency(a.key)}
+                    className={`flex items-center gap-2 px-1.5 py-1 rounded transition-colors text-left ${
+                      on ? 'bg-secondary' : 'opacity-50 hover:opacity-100 hover:bg-secondary/50'
+                    }`}
+                    aria-pressed={on}
+                  >
+                    <div className={`w-3 h-3 rounded border ${a.fill} ${a.stroke}`} />
+                    <span className="flex-1">{a.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -88,11 +74,15 @@ export const FloatingLegend = ({
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#eab308' }} />
-                <span>High Confidence</span>
+                <span>Easy Access</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#f97316' }} />
                 <span>Moderate</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-black" />
+                <span>Hard / Extreme</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-blue-500 rounded-full" />

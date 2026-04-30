@@ -59,7 +59,7 @@ interface DispersedMapProps {
 
   searchLocation: SelectedLocation | null;
 
-  showPublicLands: boolean;
+  visibleLandAgencies: Set<string>;
   publicLands: PublicLand[];
 
   filteredMvumRoads: MVUMRoad[];
@@ -95,7 +95,7 @@ export const DispersedMap = ({
   onMapLoad,
   onMapClick,
   searchLocation,
-  showPublicLands,
+  visibleLandAgencies,
   publicLands,
   filteredMvumRoads,
   filteredOsmTracks,
@@ -143,8 +143,8 @@ export const DispersedMap = ({
         />
       )}
 
-      {/* Public Lands Overlay */}
-      {showPublicLands && publicLands.map((land) => {
+      {/* Public Lands Overlay — only render agencies whose toggle is on */}
+      {publicLands.map((land) => {
         if (!land.polygon) return null;
         if (!land.renderOnMap) return null;
 
@@ -153,6 +153,15 @@ export const DispersedMap = ({
         const isState = land.managingAgency === 'STATE';
         const isStateTrust = ['SDOL', 'SFW', 'SPR', 'SDNR'].includes(land.managingAgency);
         const isLandTrust = land.managingAgency === 'NGO';
+
+        const agencyKey = isBLM ? 'BLM'
+          : isNPS ? 'NPS'
+          : isState ? 'STATE_PARK'
+          : isStateTrust ? 'STATE_TRUST'
+          : isLandTrust ? 'LAND_TRUST'
+          : 'USFS';
+        if (!visibleLandAgencies.has(agencyKey)) return null;
+
         const fillColor = isBLM ? '#d97706' : isNPS ? '#7c3aed' : isState ? '#3b82f6' : isStateTrust ? '#06b6d4' : isLandTrust ? '#ec4899' : '#10b981';
         const strokeColor = isBLM ? '#b45309' : isNPS ? '#6d28d9' : isState ? '#2563eb' : isStateTrust ? '#0891b2' : isLandTrust ? '#db2777' : '#059669';
 

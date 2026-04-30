@@ -203,16 +203,18 @@ serve(async (req) => {
 
     const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Find existing rows in the bbox so we can skip dupes.
-    // We slightly pad the bbox to catch rows that round to the same 5-decimal key.
+    // === DISPERSED SPOTS ===
+    // Dedup against rows already in the unified `spots` table (kind=dispersed_camping),
+    // pad the bbox slightly so 5-decimal-rounded coords still match.
     const pad = 0.0001;
     const { data: existing, error: existingErr } = await db
-      .from("potential_spots")
-      .select("id, lat, lng")
-      .gte("lat", bbox.south - pad)
-      .lte("lat", bbox.north + pad)
-      .gte("lng", bbox.west - pad)
-      .lte("lng", bbox.east + pad);
+      .from("spots")
+      .select("id, latitude, longitude")
+      .eq("kind", "dispersed_camping")
+      .gte("latitude", bbox.south - pad)
+      .lte("latitude", bbox.north + pad)
+      .gte("longitude", bbox.west - pad)
+      .lte("longitude", bbox.east + pad);
 
     if (existingErr) {
       console.error("Failed to fetch existing spots:", existingErr);
@@ -223,8 +225,8 @@ serve(async (req) => {
     }
 
     const existingKeys = new Set(
-      (existing || []).map((row: { lat: number; lng: number }) =>
-        coordKey(Number(row.lat), Number(row.lng))
+      (existing || []).map((row: { latitude: number; longitude: number }) =>
+        coordKey(Number(row.latitude), Number(row.longitude))
       )
     );
 
@@ -237,34 +239,42 @@ serve(async (req) => {
       if (existingKeys.has(key) || seenInBatch.has(key)) continue;
       seenInBatch.add(key);
 
+      const isCampSite = spot.type === "camp-site";
+      const isEstablished = spot.isEstablishedCampground ?? false;
+
       rowsToInsert.push({
-        // PostGIS point — Supabase accepts WKT format for geometry columns
-        location: `SRID=4326;POINT(${spot.lng} ${spot.lat})`,
-        spot_type: mapSpotType(spot.type),
-        status: "derived",
-        confidence_score: spot.score,
-        road_name: spot.roadName ?? null,
-        vehicle_access: mapVehicleAccess(spot),
-        is_passenger_reachable: spot.passengerReachable ?? false,
-        is_high_clearance_reachable: spot.highClearanceReachable ?? true,
-        derivation_reasons: spot.reasons ?? [],
-        source_type: mapSourceType(spot),
-        managing_agency: mapManagingAgency(spot),
-        name: spot.name ?? null,
-        is_established_campground: spot.isEstablishedCampground ?? false,
-        is_road_accessible: spot.isRoadAccessible ?? true,
-        is_on_public_land: spot.isOnPublicLand ?? false,
-        land_unit_name: spot.landName ?? null,
-        land_protect_class: spot.landProtectClass ?? null,
-        land_protection_title: spot.landProtectionTitle ?? null,
-        osm_tags: spot.osmTags ?? null,
+        name: spot.name ?? spot.roadName ?? (isCampSite ? "OSM Campsite" : "Dispersed spot"),
+        latitude: spot.lat,
+        longitude: spot.lng,
+        kind: isEstablished ? "established_campground" : "dispersed_camping",
+        sub_kind: isEstablished ? "campground" : (isCampSite ? "known" : "derived"),
+        source: mapSourceType(spot),
+        source_external_id: null,
+        public_land_unit: spot.landName ?? null,
+        public_land_manager: mapManagingAgency(spot),
+        public_land_designation: spot.landProtectionTitle ?? null,
+        land_type: spot.isOnPublicLand ? "public" : "unknown",
+        amenities: {
+          vehicle_required: mapVehicleAccess(spot),
+        },
+        extra: {
+          confidence_score: spot.score,
+          derivation_reasons: spot.reasons ?? [],
+          is_passenger_reachable: spot.passengerReachable ?? false,
+          is_high_clearance_reachable: spot.highClearanceReachable ?? true,
+          is_road_accessible: spot.isRoadAccessible ?? true,
+          status: "derived",
+          osm_tags: spot.osmTags ?? null,
+          road_name: spot.roadName ?? null,
+          land_protect_class: spot.landProtectClass ?? null,
+        },
       });
     }
 
     let inserted = 0;
     if (rowsToInsert.length > 0) {
       const { error: insertErr, count } = await db
-        .from("potential_spots")
+        .from("spots")
         .insert(rowsToInsert, { count: "exact" });
 
       if (insertErr) {
@@ -282,12 +292,13 @@ serve(async (req) => {
     let skippedCampgrounds = 0;
     if (campgrounds.length > 0) {
       const { data: existingCg, error: existingCgErr } = await db
-        .from("established_campgrounds")
-        .select("id, lat, lng")
-        .gte("lat", bbox.south - pad)
-        .lte("lat", bbox.north + pad)
-        .gte("lng", bbox.west - pad)
-        .lte("lng", bbox.east + pad);
+        .from("spots")
+        .select("id, latitude, longitude")
+        .eq("kind", "established_campground")
+        .gte("latitude", bbox.south - pad)
+        .lte("latitude", bbox.north + pad)
+        .gte("longitude", bbox.west - pad)
+        .lte("longitude", bbox.east + pad);
 
       if (existingCgErr) {
         console.error("Failed to fetch existing campgrounds:", existingCgErr);
@@ -298,8 +309,8 @@ serve(async (req) => {
       }
 
       const existingCgKeys = new Set(
-        (existingCg || []).map((row: { lat: number; lng: number }) =>
-          coordKey(Number(row.lat), Number(row.lng))
+        (existingCg || []).map((row: { latitude: number; longitude: number }) =>
+          coordKey(Number(row.latitude), Number(row.longitude))
         )
       );
 
@@ -307,6 +318,10 @@ serve(async (req) => {
       const seenCgInBatch = new Set<string>();
 
       for (const cg of campgrounds) {
+        // Skip non-camping facility types (matches the legacy mirror trigger)
+        const ft = (cg.facilityType ?? "").toLowerCase();
+        if (ft === "day use" || ft === "day_use" || ft === "trailhead") continue;
+
         const key = coordKey(cg.lat, cg.lng);
         if (existingCgKeys.has(key) || seenCgInBatch.has(key)) {
           skippedCampgrounds++;
@@ -315,20 +330,29 @@ serve(async (req) => {
         seenCgInBatch.add(key);
 
         campgroundRows.push({
-          location: `SRID=4326;POINT(${cg.lng} ${cg.lat})`,
           name: cg.name,
           description: cg.description ?? null,
-          facility_type: cg.facilityType ?? "Campground",
-          agency_name: cg.agencyName ?? null,
-          is_reservable: cg.reservable ?? false,
-          recreation_gov_url: cg.url ?? null,
-          source_type: mapCampgroundSourceType(cg.agencyName),
+          latitude: cg.lat,
+          longitude: cg.lng,
+          kind: "established_campground",
+          sub_kind: "campground",
+          source: mapCampgroundSourceType(cg.agencyName),
+          source_external_id: null,
+          public_land_manager: cg.agencyName && cg.agencyName !== "Unknown" ? cg.agencyName : null,
+          land_type: "public",
+          amenities: {
+            reservation: cg.reservable ?? false,
+          },
+          extra: {
+            facility_type: cg.facilityType ?? "Campground",
+            recreation_gov_url: cg.url ?? null,
+          },
         });
       }
 
       if (campgroundRows.length > 0) {
         const { error: cgInsertErr, count: cgCount } = await db
-          .from("established_campgrounds")
+          .from("spots")
           .insert(campgroundRows, { count: "exact" });
 
         if (cgInsertErr) {
@@ -378,7 +402,9 @@ serve(async (req) => {
           return;
         }
         const key = `${sourceType}:${externalId}`;
-        if (existingRoadKeys.has(key) || seenRoadKeys.has(key)) {
+        // Within this batch dedup; existing-in-DB rows we'll upsert below
+        // so OSM tag bag, tracktype, smoothness etc. stay current.
+        if (seenRoadKeys.has(key)) {
           skippedRoads++;
           return;
         }
@@ -431,12 +457,18 @@ serve(async (req) => {
       }
 
       if (roadRows.length > 0) {
+        // Upsert on (source_type, external_id) so re-runs refresh OSM tag bag
+        // / tracktype / smoothness on existing rows instead of leaving stale
+        // tag-less data behind.
         const { error: roadInsertErr, count: roadCount } = await db
           .from("road_segments")
-          .insert(roadRows, { count: "exact" });
+          .upsert(roadRows, {
+            onConflict: "external_id",
+            count: "exact",
+          });
 
         if (roadInsertErr) {
-          console.error("Failed to insert roads:", roadInsertErr);
+          console.error("Failed to upsert roads:", roadInsertErr);
           return new Response(
             JSON.stringify({ error: roadInsertErr.message }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -444,6 +476,20 @@ serve(async (req) => {
         }
         insertedRoads = roadCount ?? roadRows.length;
       }
+    }
+
+    // Classify access difficulty for the spots we just wrote.
+    // Each spot inherits the worst nearby road's OSM-tag-driven difficulty
+    // (extreme/hard/moderate/easy). Logged-only on failure — saving the
+    // spots themselves matters more.
+    if (inserted > 0 || insertedCampgrounds > 0) {
+      const { error: clsErr } = await db.rpc('classify_spots_access_difficulty', {
+        p_south: bbox.south,
+        p_west: bbox.west,
+        p_north: bbox.north,
+        p_east: bbox.east,
+      });
+      if (clsErr) console.warn('classify_spots_access_difficulty failed:', clsErr.message);
     }
 
     // Record that we've analysed this region

@@ -19,6 +19,7 @@ import {
 } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { PotentialSpot } from '@/hooks/use-dispersed-roads';
+import { useSpotNaipImage } from '@/hooks/use-spot-naip-image';
 import type { Campsite } from '@/types/campsite';
 import type { SpotAIAnalysis } from './types';
 
@@ -64,6 +65,9 @@ export const SpotDetailPanel = ({
   const TypeIcon = selectedSpot.type === 'camp-site' ? Tent : selectedSpot.type === 'dead-end' ? MapPinLine : Path;
   const typeColor = selectedSpot.type === 'camp-site' ? 'text-wildviolet bg-wildviolet/10' : selectedSpot.type === 'dead-end' ? 'text-orange-600 bg-orange-500/10' : 'text-blue-600 bg-blue-500/10';
 
+  const { image: naipImage, loading: naipLoading } = useSpotNaipImage(selectedSpot.lat, selectedSpot.lng);
+  const naipYear = naipImage?.taken_at ? new Date(naipImage.taken_at).getFullYear() : null;
+
   // Consolidated tags (site-type tag is rendered separately under the title)
   const tags: { label: React.ReactNode; className: string; key: string }[] = [];
   if (selectedSpot.isOnMVUMRoad) tags.push({ key: 'mvum', label: 'USFS MVUM', className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' });
@@ -98,6 +102,32 @@ export const SpotDetailPanel = ({
           <ArrowLeft className="w-4 h-4" />
           Back to results
         </button>
+
+        {/* NAIP aerial chip — only shown when we have one for this spot */}
+        {(naipLoading || naipImage) && (
+          <div className="-mx-3 sm:-mx-4 md:-mx-6">
+            <div className="relative aspect-[4/3] bg-muted overflow-hidden">
+              {naipLoading && !naipImage && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <SpinnerGap className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {naipImage && (
+                <>
+                  <img
+                    src={naipImage.storage_url}
+                    alt="Aerial view"
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                  <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 text-white text-[10px] font-medium tracking-wide">
+                    NAIP{naipYear ? ` · ${naipYear}` : ''}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Hero: icon + (name/type on left, coords/actions on right) */}
         <div className="flex items-start gap-3">
@@ -144,6 +174,37 @@ export const SpotDetailPanel = ({
             </div>
           </div>
         </div>
+
+        {/* Access difficulty rating + the OSM tags that produced it */}
+        {selectedSpot.accessDifficulty && selectedSpot.accessDifficulty !== 'unknown' && (() => {
+          const d = selectedSpot.accessDifficulty;
+          const r = selectedSpot.accessRoad;
+          const styles: Record<string, { bar: string; label: string; bg: string }> = {
+            extreme:  { bar: 'bg-black',     label: 'Extreme access',  bg: 'bg-black/5 border-black/30' },
+            hard:     { bar: 'bg-black',     label: 'Hard access',     bg: 'bg-black/5 border-black/30' },
+            moderate: { bar: 'bg-orange-500', label: 'Moderate access', bg: 'bg-orange-50 border-orange-300 dark:bg-orange-900/20 dark:border-orange-700' },
+            easy:     { bar: 'bg-yellow-500', label: 'Easy access',     bg: 'bg-yellow-50 border-yellow-300 dark:bg-yellow-900/20 dark:border-yellow-700' },
+          };
+          const s = styles[d];
+          if (!s) return null;
+          return (
+            <div className={`px-3 py-2.5 rounded-lg border ${s.bg}`}>
+              <div className="flex items-center gap-2">
+                <span className={`inline-block w-2.5 h-2.5 rounded-full ${s.bar}`} />
+                <span className="text-sm font-semibold text-foreground">{s.label}</span>
+              </div>
+              {r && (r.road_name || r.tracktype || r.smoothness || r.surface) && (
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                  {r.road_name && <span><span className="font-medium text-foreground/80">Track</span> {r.road_name}</span>}
+                  {r.tracktype && <span><span className="font-medium text-foreground/80">Tracktype</span> {r.tracktype}</span>}
+                  {r.smoothness && <span><span className="font-medium text-foreground/80">Smoothness</span> {r.smoothness}</span>}
+                  {r.surface && <span><span className="font-medium text-foreground/80">Surface</span> {r.surface}</span>}
+                  {r.four_wd_only && <span className="font-medium text-foreground/80">4WD-only</span>}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Community confirmations */}
         {existingCampsiteForSpot && (

@@ -26,6 +26,9 @@ serve(async (req) => {
     const radius = parseFloat(url.searchParams.get("radius") || "10");
     const sourceType = url.searchParams.get("source_type") || null; // 'osm', 'mvum', or null for all
     const limit = parseInt(url.searchParams.get("limit") || "500");
+    // Map zoom — controls server-side simplification tolerance.
+    // Higher zoom = finer detail; default 14 = ~22m tolerance.
+    const zoom = parseInt(url.searchParams.get("zoom") || "14");
 
     if (!lat || !lng) {
       return new Response(
@@ -45,6 +48,7 @@ serve(async (req) => {
       p_radius_miles: radius,
       p_source_type: sourceType,
       p_limit: limit,
+      p_zoom: zoom,
     });
 
     if (error) {
