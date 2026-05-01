@@ -54,7 +54,7 @@ export const SpotResultsList = ({
 }: SpotResultsListProps) => {
   if (unifiedSpotList.length === 0) {
     return (
-      <div className="border border-dashed border-line bg-white/50 rounded-[14px] mx-4 my-4 px-6 py-12 text-center">
+      <div className="border border-dashed border-line dark:border-line-2 bg-white/50 dark:bg-paper/50 rounded-[14px] mx-4 my-4 px-6 py-12 text-center">
         <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 text-pine-6 mb-3">
           <Funnel className="w-5 h-5" weight="regular" />
         </div>
@@ -95,7 +95,7 @@ export const SpotResultsList = ({
               className={cn(
                 'group w-full text-left px-4 py-3 transition-colors flex items-start gap-3',
                 i > 0 && 'border-t border-line',
-                isSelected ? 'bg-pine-6/[0.06]' : 'hover:bg-white/60',
+                isSelected ? 'bg-pine-6/[0.06]' : 'hover:bg-white/60 dark:hover:bg-paper/60',
               )}
             >
               {/* Content column */}
@@ -187,7 +187,7 @@ const RowPill = ({
     variant === 'accent' ? 'bg-pine-6/[0.18] border-pine-6 text-pine-6' :
     variant === 'clay'   ? 'bg-clay/[0.14]  border-clay   text-clay' :
     variant === 'sage'   ? 'bg-sage/[0.18]  border-sage   text-sage' :
-                           'bg-white        border-line   text-ink';
+                           'bg-white dark:bg-paper border-line dark:border-line-2 text-ink';
   return (
     <span className={cn(
       'inline-flex items-center gap-1 px-2.5 py-[3px] rounded-full border text-[10px] font-mono font-semibold uppercase tracking-[0.12em]',

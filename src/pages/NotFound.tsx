@@ -11,7 +11,7 @@ const NotFound = () => {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-cream text-ink font-sans relative flex items-center justify-center px-6 overflow-hidden">
+    <div className="min-h-screen bg-cream dark:bg-paper text-ink font-sans relative flex items-center justify-center px-6 overflow-hidden">
       <TopoBg color="hsl(var(--paper))" opacity={0.55} scale={700} />
 
       <div className="relative max-w-[440px] text-center">
@@ -28,7 +28,7 @@ const NotFound = () => {
         <div className="mt-8 flex justify-center">
           <Link
             to="/"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-pine-6 text-cream text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors shadow-[0_1px_2px_rgba(29,34,24,.08)]"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-pine-6 text-cream dark:text-ink-pine text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors shadow-[0_1px_2px_rgba(29,34,24,.08)]"
           >
             <ArrowLeft className="w-3.5 h-3.5" weight="bold" />
             Back to home

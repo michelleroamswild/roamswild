@@ -140,7 +140,7 @@ const CampsiteDetail = () => {
   // === Loading state ===
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-cream text-ink font-sans relative flex items-center justify-center overflow-hidden">
+      <div className="min-h-screen bg-cream dark:bg-paper text-ink font-sans relative flex items-center justify-center overflow-hidden">
         <TopoBg color="hsl(var(--paper))" opacity={0.55} scale={700} />
         <div className="relative flex flex-col items-center gap-3">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/10">
@@ -155,9 +155,9 @@ const CampsiteDetail = () => {
   // === Not found state ===
   if (!campsite) {
     return (
-      <div className="min-h-screen bg-cream text-ink font-sans relative flex items-center justify-center p-6 overflow-hidden">
+      <div className="min-h-screen bg-cream dark:bg-paper text-ink font-sans relative flex items-center justify-center p-6 overflow-hidden">
         <TopoBg color="hsl(var(--paper))" opacity={0.55} scale={700} />
-        <div className="relative max-w-[420px] text-center bg-white border border-line rounded-[18px] p-8">
+        <div className="relative max-w-[420px] text-center bg-white dark:bg-paper-2 border border-line rounded-[18px] p-8">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 text-pine-6 mb-4">
             <Tent className="w-5 h-5" weight="regular" />
           </div>
@@ -170,7 +170,7 @@ const CampsiteDetail = () => {
           <div className="mt-6">
             <Link
               to="/campsites"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-pine-6 text-cream text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-pine-6 text-cream dark:text-ink-pine text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" weight="bold" />
               Back to campsites
@@ -187,7 +187,7 @@ const CampsiteDetail = () => {
   return (
     <div className="min-h-screen bg-paper text-ink font-sans">
       {/* Sticky cluster — back nav + edit/delete */}
-      <header className="sticky top-0 z-50 bg-cream/95 backdrop-blur-md border-b border-line">
+      <header className="sticky top-0 z-50 bg-cream/95 dark:bg-paper-2/95 backdrop-blur-md border-b border-line">
         <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-3 sm:py-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 sm:gap-4 min-w-0">
@@ -273,7 +273,7 @@ const CampsiteDetail = () => {
               ) : (
                 <>
                   {/* Intro card — same pattern as the trip detail "Your trip" header */}
-                  <div className="bg-white border border-line rounded-[14px] p-5">
+                  <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] p-5">
                     <Mono className="text-pine-6">Campsite</Mono>
                     <h1 className="text-[24px] sm:text-[28px] font-sans font-bold tracking-[-0.025em] text-ink leading-[1.1] mt-1">
                       {campsite.name}
@@ -288,7 +288,7 @@ const CampsiteDetail = () => {
                         <VisibilityIcon className="w-3 h-3" weight="regular" />
                         {visibilityMeta.label}
                       </span>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border bg-cream border-line text-ink-3 text-[10px] font-mono font-semibold uppercase tracking-[0.10em]">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border bg-cream dark:bg-paper-2 border-line text-ink-3 text-[10px] font-mono font-semibold uppercase tracking-[0.10em]">
                         {typeLabels[campsite.type]}
                       </span>
                     </div>
@@ -303,14 +303,14 @@ const CampsiteDetail = () => {
 
                   {/* Description */}
                   {campsite.description && (
-                    <div className="bg-white border border-line rounded-[14px] p-5">
+                    <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] p-5">
                       <Mono className="text-ink-2 block mb-2">Description</Mono>
                       <p className="text-[14px] text-ink leading-[1.55]">{campsite.description}</p>
                     </div>
                   )}
 
                   {/* Detail rows */}
-                  <div className="bg-white border border-line rounded-[14px] p-5 space-y-3.5">
+                  <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] p-5 space-y-3.5">
                     <Mono className="text-ink-2 block">Details</Mono>
                     {campsite.roadAccess && (
                       <DetailRow Icon={Car} label="Road access" value={roadAccessLabels[campsite.roadAccess]} />
@@ -349,7 +349,7 @@ const CampsiteDetail = () => {
 
             {/* Sticky bottom action bar */}
             {!isEditing && (
-              <div className="sticky bottom-0 border-t border-line bg-cream px-4 sm:px-6 py-3 flex items-center gap-2">
+              <div className="sticky bottom-0 border-t border-line bg-cream dark:bg-paper-2 px-4 sm:px-6 py-3 flex items-center gap-2">
                 <Pill
                   variant="solid-pine"
                   mono={false}
@@ -407,7 +407,7 @@ const DetailRow = ({
   value: string;
 }) => (
   <div className="flex items-start gap-3">
-    <div className="inline-flex items-center justify-center w-8 h-8 rounded-[8px] bg-cream text-ink-2 flex-shrink-0">
+    <div className="inline-flex items-center justify-center w-8 h-8 rounded-[8px] bg-cream dark:bg-paper-2 text-ink-2 flex-shrink-0">
       <Icon className="w-4 h-4" weight="regular" />
     </div>
     <div className="flex-1 min-w-0">
@@ -428,10 +428,10 @@ const EditForm = ({
   setForm: (f: Partial<CampsiteFormData>) => void;
 }) => {
   const inputClass =
-    'w-full h-10 px-3 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors';
+    'w-full h-10 px-3 rounded-[12px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors';
 
   return (
-    <div className="bg-white border border-line rounded-[14px] p-5 space-y-4">
+    <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] p-5 space-y-4">
       <Mono className="text-pine-6">Edit campsite</Mono>
 
       <Field label="Name">
@@ -493,7 +493,7 @@ const EditForm = ({
           value={form.description || ''}
           onChange={(e) => setForm({ ...form, description: e.target.value })}
           rows={3}
-          className="w-full px-3 py-2 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors resize-none"
+          className="w-full px-3 py-2 rounded-[12px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors resize-none"
         />
       </Field>
 
@@ -554,7 +554,7 @@ const EditForm = ({
           onChange={(e) => setForm({ ...form, notes: e.target.value })}
           rows={2}
           placeholder="Personal notes…"
-          className="w-full px-3 py-2 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors resize-none"
+          className="w-full px-3 py-2 rounded-[12px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors resize-none"
         />
       </Field>
     </div>
@@ -580,10 +580,10 @@ const FormSelect = ({
   children: React.ReactNode;
 }) => (
   <Select value={value} onValueChange={onChange}>
-    <SelectTrigger className="h-10 w-full px-3 rounded-[12px] border-line bg-white text-ink text-[14px] hover:border-ink-3 transition-colors">
+    <SelectTrigger className="h-10 w-full px-3 rounded-[12px] border-line bg-white dark:bg-paper-2 text-ink text-[14px] hover:border-ink-3 transition-colors">
       <SelectValue placeholder={placeholder} />
     </SelectTrigger>
-    <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink">
+    <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream dark:bg-paper-2 [&_[data-highlighted]]:text-ink">
       {children}
     </SelectContent>
   </Select>

@@ -40,7 +40,7 @@ export const EditLocationModal = ({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="sm:max-w-md border-line bg-white rounded-[18px]"
+        className="sm:max-w-md border-line bg-white dark:bg-paper-2 rounded-[18px]"
         onOpenAutoFocus={(e) => e.preventDefault()}
         onInteractOutside={(e) => {
           const target = e.target as HTMLElement;
@@ -63,7 +63,7 @@ export const EditLocationModal = ({
         </DialogHeader>
 
         <div className="space-y-4 mt-2">
-          <div className="px-3 py-2.5 bg-cream rounded-[12px] border border-line">
+          <div className="px-3 py-2.5 bg-cream dark:bg-paper-2 rounded-[12px] border border-line">
             <Mono className="text-ink-3 block">Current</Mono>
             <p className="text-[14px] font-sans font-semibold text-ink mt-0.5">{currentName}</p>
           </div>

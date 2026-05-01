@@ -24,7 +24,7 @@ export const DetailBody = ({ children }: { children: ReactNode }) => (
 // Sticky bottom action bar — cream surface with border-top + small drop
 // shadow so primary CTAs stay anchored as the body scrolls.
 export const DetailActions = ({ children }: { children: ReactNode }) => (
-  <div className="shrink-0 border-t border-line bg-cream px-[18px] py-3 space-y-2">
+  <div className="shrink-0 border-t border-line dark:border-line-2 bg-cream dark:bg-paper-2 px-[18px] py-3 space-y-2">
     {children}
   </div>
 );
@@ -87,7 +87,7 @@ export const CoordsStrip = ({
   copied: boolean;
   onCopy: () => void;
 }) => (
-  <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-[10px] border border-line bg-white">
+  <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-[10px] border border-line dark:border-line-2 bg-white dark:bg-paper">
     <Mono className="text-ink-3 truncate">
       {lat.toFixed(4)}, {lng.toFixed(4)}
     </Mono>
@@ -146,8 +146,8 @@ const TAG_STYLES: Record<DetailTagVariant, string> = {
   clay:  'bg-clay/[0.14]   border-clay   text-clay',
   ember: 'bg-ember/[0.14]  border-ember  text-ember',
   water: 'bg-water/[0.20]  border-water  text-ink-2',
-  ghost: 'bg-white         border-line   text-ink',
-  ink:   'bg-ink           border-ink    text-cream',
+  ghost: 'bg-white dark:bg-paper border-line dark:border-line-2 text-ink',
+  ink:   'bg-ink dark:bg-ink-pine border-ink dark:border-ink-pine text-cream',
 };
 
 export const DetailTag = ({

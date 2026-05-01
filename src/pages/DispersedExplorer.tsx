@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { useSearchParams, useLocation, Link } from 'react-router-dom';
-import { MapPin, MagnifyingGlass, Path, SpinnerGap, Tent, Drop, MapPinLine, Jeep, Funnel, ArrowRight, Plus, Minus } from '@phosphor-icons/react';
+import { MapPin, MagnifyingGlass, Path, SpinnerGap, Tent, Drop, MapPinLine, Jeep, Funnel, ArrowRight, Plus, Minus, Copy, CheckCircle } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import { LocationSelector, SelectedLocation } from '@/components/LocationSelector';
 import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
@@ -36,7 +36,7 @@ import { AccountAvatarMenu } from '@/components/AccountAvatarMenu';
 
 const DispersedExplorer = () => {
   const { isLoaded } = useGoogleMaps();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const routerLocation = useLocation();
   const navState = routerLocation.state as { lat?: number; lng?: number; name?: string } | null;
 
@@ -238,13 +238,80 @@ const DispersedExplorer = () => {
   // Selected established campground
   const [selectedCampground, setSelectedCampground] = useState<EstablishedCampground | null>(null);
 
-  // Handle URL parameters for initial location (e.g., from "Find camps near me")
+  // Handle URL parameters for initial location.
+  //   ?lat=&lng=&name=   — center the map (e.g. "Find camps near me")
+  //   ?spotId=<uuid>     — center the map AND open the detail panel for that
+  //                        specific spot. Deep-link target from homepage cards.
   useEffect(() => {
     if (initialLocationLoaded) return;
 
     const lat = searchParams.get('lat');
     const lng = searchParams.get('lng');
     const name = searchParams.get('name');
+    const spotId = searchParams.get('spotId');
+
+    if (spotId) {
+      // Fetch the row from the unified spots table and shape it into the
+      // PotentialSpot the detail panel expects. Most of the road/access fields
+      // live in `extra` JSONB on derived spots; we read what's there and let
+      // the detail panel skip sections for fields it doesn't find.
+      (async () => {
+        const { data, error } = await supabase
+          .from('spots')
+          .select(
+            'id, name, latitude, longitude, kind, source, public_land_manager, source_external_id, extra',
+          )
+          .eq('id', spotId)
+          .maybeSingle();
+        if (error || !data) {
+          console.warn('[deep-link] spot not found:', spotId, error);
+          setInitialLocationLoaded(true);
+          return;
+        }
+        type SpotRow = {
+          id: string;
+          name: string | null;
+          latitude: number | string;
+          longitude: number | string;
+          kind: string;
+          source: string;
+          public_land_manager: string | null;
+          source_external_id: string | null;
+          extra: Record<string, unknown> | null;
+        };
+        const row = data as unknown as SpotRow;
+        const parsedLat = typeof row.latitude === 'string' ? parseFloat(row.latitude) : row.latitude;
+        const parsedLng = typeof row.longitude === 'string' ? parseFloat(row.longitude) : row.longitude;
+        const extra = row.extra ?? {};
+        const reasons = Array.isArray((extra as { reasons?: unknown }).reasons)
+          ? ((extra as { reasons: string[] }).reasons)
+          : [];
+        const spot: PotentialSpot = {
+          id: row.id,
+          lat: parsedLat,
+          lng: parsedLng,
+          name: row.name || 'Dispersed Spot',
+          type: row.kind === 'established_campground' ? 'camp-site' : 'dead-end',
+          score: ((extra as { score?: number }).score) ?? 0,
+          reasons,
+          source: row.source as PotentialSpot['source'],
+          roadName: (extra as { road_name?: string }).road_name,
+          isOnMVUMRoad: row.public_land_manager === 'USFS',
+          isOnBLMRoad: row.public_land_manager === 'BLM',
+          isOnPublicLand: !!row.public_land_manager,
+          accessDifficulty:
+            ((extra as { access_difficulty?: PotentialSpot['accessDifficulty'] }).access_difficulty) ?? null,
+          accessRoad:
+            ((extra as { access_road?: PotentialSpot['accessRoad'] }).access_road) ?? null,
+        };
+        setSearchLocation({ lat: parsedLat, lng: parsedLng, name: spot.name });
+        setMapCenter({ lat: parsedLat, lng: parsedLng });
+        setMapZoom(15);
+        setSelectedSpot(spot);
+        setInitialLocationLoaded(true);
+      })();
+      return;
+    }
 
     if (lat && lng) {
       const parsedLat = parseFloat(lat);
@@ -263,6 +330,30 @@ const DispersedExplorer = () => {
     }
     setInitialLocationLoaded(true);
   }, [searchParams, initialLocationLoaded]);
+
+  // Mirror the currently-selected spot into the URL as ?spotId=<uuid>. Makes
+  // every spot a shareable deep-link — the user can copy the address bar and
+  // anyone who opens it lands on the same spot with the detail panel open.
+  // Uses replace:true so navigating between spots doesn't bloat history, and
+  // skips the sync until the initial-load effect has run so we don't fight it.
+  useEffect(() => {
+    if (!initialLocationLoaded) return;
+    const currentSpotId = searchParams.get('spotId');
+    const desiredSpotId = selectedSpot?.id ?? null;
+    if (currentSpotId === desiredSpotId) return;
+    const next = new URLSearchParams(searchParams);
+    if (desiredSpotId) {
+      next.set('spotId', desiredSpotId);
+      // Drop the lat/lng/name combo — they were the alternate "center map"
+      // entry path and are stale once we have a specific spot selected.
+      next.delete('lat');
+      next.delete('lng');
+      next.delete('name');
+    } else {
+      next.delete('spotId');
+    }
+    setSearchParams(next, { replace: true });
+  }, [selectedSpot?.id, initialLocationLoaded, searchParams, setSearchParams]);
 
   // Region cache: check if this area has been analysed before.
   // Hit → flip useDatabase=true so the database hook takes over.
@@ -1509,9 +1600,10 @@ const DispersedExplorer = () => {
       .filter((p): p is google.maps.LatLngLiteral => p !== null && isFinite(p.lat) && isFinite(p.lng));
   };
 
-  // Coordinates display for the desktop search bar (matches design's mono).
+  // Coordinates display for the desktop search bar — decimal degrees so it
+  // pastes straight into Google Maps when copied.
   const coordLabel = searchLocation
-    ? `${searchLocation.lat.toFixed(2)}${searchLocation.lat >= 0 ? 'N' : 'S'} · ${Math.abs(searchLocation.lng).toFixed(2)}${searchLocation.lng >= 0 ? 'E' : 'W'}`
+    ? `${searchLocation.lat.toFixed(5)}, ${searchLocation.lng.toFixed(5)}`
     : null;
   const placeLabel = searchLocation?.name?.split(',')[0]?.trim() || null;
 
@@ -1520,7 +1612,7 @@ const DispersedExplorer = () => {
       {/* === Mobile: global Header + search bar + view tabs === */}
       <div className="lg:hidden shrink-0">
         <Header showBorder />
-        <div className="p-3 pb-2 space-y-2 border-b border-line bg-cream">
+        <div className="p-3 pb-2 space-y-2 border-b border-line dark:border-line-2 bg-cream dark:bg-paper-2">
           <LocationSelector
             value={searchLocation}
             onChange={handleLocationChange}
@@ -1619,7 +1711,7 @@ const DispersedExplorer = () => {
           {!bulkPanOpen ? (
             <button
               onClick={() => setBulkPanOpen(true)}
-              className="absolute top-4 right-4 lg:relative lg:top-0 lg:right-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-line text-[11px] font-mono uppercase tracking-[0.10em] font-semibold text-ink-2 hover:text-ink hover:border-ink-3 shadow-[0_4px_12px_rgba(29,34,24,.10)] transition-colors"
+              className="absolute top-4 right-4 lg:relative lg:top-0 lg:right-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-paper-2 border border-line dark:border-line-2 text-[11px] font-mono uppercase tracking-[0.10em] font-semibold text-ink-2 hover:text-ink hover:border-ink-3 shadow-[0_4px_12px_rgba(29,34,24,.10)] transition-colors"
               title="Bulk auto-pan: walk a state grid and let the analysis pipeline run"
             >
               Bulk auto-pan
@@ -1650,7 +1742,7 @@ const DispersedExplorer = () => {
              stays collapsed; on results-arrival it auto-expands. */}
         <aside
           className={cn(
-            'hidden lg:flex absolute top-[88px] left-5 w-[330px] z-10 flex-col bg-cream border border-line rounded-[16px] shadow-[0_18px_44px_rgba(29,34,24,.14)] overflow-hidden transition-[max-height] duration-300 ease-out',
+            'hidden lg:flex absolute top-[88px] left-5 w-[330px] z-10 flex-col bg-cream dark:bg-paper-2 border border-line dark:border-line-2 rounded-[16px] shadow-[0_18px_44px_rgba(29,34,24,.14)] overflow-hidden transition-[max-height] duration-300 ease-out',
             filterCardOpen ? 'max-h-[calc(100vh-108px)]' : 'max-h-[60px]',
           )}
         >
@@ -1668,7 +1760,7 @@ const DispersedExplorer = () => {
               }
             }}
             aria-expanded={filterCardOpen}
-            className="shrink-0 px-[18px] py-4 flex items-center justify-between gap-2 cursor-pointer hover:bg-paper-2/40 transition-colors select-none"
+            className="shrink-0 px-[18px] py-4 flex items-center justify-between gap-2 cursor-pointer hover:bg-paper-2/40 dark:hover:bg-paper/40 transition-colors select-none"
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <Funnel className="w-4 h-4 text-ink flex-shrink-0" weight="regular" />
@@ -1735,7 +1827,7 @@ const DispersedExplorer = () => {
             )}
 
             {!searchLocation && !loading && (
-              <div className="border border-dashed border-line bg-white/50 rounded-[14px] px-5 py-10 text-center">
+              <div className="border border-dashed border-line dark:border-line-2 bg-white/50 dark:bg-paper/50 rounded-[14px] px-5 py-10 text-center">
                 <div className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-pine-6/10 text-pine-6 mb-3">
                   <MagnifyingGlass className="w-5 h-5" weight="regular" />
                 </div>
@@ -1764,7 +1856,7 @@ const DispersedExplorer = () => {
           {/* Sticky cache strip footer — surfaces freshness without burning
               filter real estate. */}
           {searchLocation && !loading && (
-            <div className="px-[18px] py-3 border-t border-line bg-cream">
+            <div className="px-[18px] py-3 border-t border-line dark:border-line-2 bg-cream dark:bg-paper-2">
               <CacheStrip
                 useDatabase={useDatabase}
                 lastAnalysedAt={lastAnalysedAt}
@@ -1782,9 +1874,9 @@ const DispersedExplorer = () => {
         {/* === RIGHT FLOATING CARD: Results / Detail panel === */}
         <aside
           className={cn(
-            'flex flex-col overflow-hidden bg-cream',
+            'flex flex-col overflow-hidden bg-cream dark:bg-paper-2',
             'lg:absolute lg:top-[88px] lg:right-5 lg:bottom-5 lg:w-[400px] lg:z-10',
-            'lg:border lg:border-line lg:rounded-[16px] lg:shadow-[0_18px_44px_rgba(29,34,24,.14)]',
+            'lg:border lg:border-line dark:lg:border-line-2 lg:rounded-[16px] lg:shadow-[0_18px_44px_rgba(29,34,24,.14)]',
             mobileView === 'list' ? 'flex-1' : 'hidden lg:flex',
           )}
         >
@@ -1876,7 +1968,7 @@ const DispersedExplorer = () => {
                 )}
 
                 {!searchLocation && !loading && (
-                  <div className="border border-dashed border-line bg-white/50 rounded-[14px] m-4 px-5 py-10 text-center">
+                  <div className="border border-dashed border-line dark:border-line-2 bg-white/50 dark:bg-paper/50 rounded-[14px] m-4 px-5 py-10 text-center">
                     <div className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-pine-6/10 text-pine-6 mb-3">
                       <MagnifyingGlass className="w-5 h-5" weight="regular" />
                     </div>
@@ -1965,7 +2057,7 @@ const CacheStrip = ({
     : null;
 
   return (
-    <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-[10px] border border-line bg-white">
+    <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-[10px] border border-line dark:border-line-2 bg-white dark:bg-paper">
       <div className="flex items-start gap-2 min-w-0">
         <span className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${dotClass}`} />
         <div className="flex flex-col min-w-0 leading-tight">
@@ -2006,11 +2098,12 @@ const ExploreHeaderPills = ({
 }) => {
   const { pathname } = useLocation();
   const isOn = (p: string) => (p === '/' ? pathname === '/' : pathname.startsWith(p));
+  const [copiedHeaderCoords, setCopiedHeaderCoords] = useState(false);
 
   return (
   <div className="hidden lg:block pointer-events-none">
     {/* Left pill — logo + nav links */}
-    <div className="absolute top-5 left-5 z-20 pointer-events-auto inline-flex items-center gap-2.5 px-3.5 py-2 bg-cream/95 backdrop-blur-md border border-line rounded-full shadow-[0_4px_12px_rgba(29,34,24,.08)]">
+    <div className="absolute top-5 left-5 z-20 pointer-events-auto inline-flex items-center gap-2.5 px-3.5 py-2 bg-cream/95 dark:bg-paper-2/95 backdrop-blur-md border border-line dark:border-line-2 rounded-full shadow-[0_4px_12px_rgba(29,34,24,.08)]">
       <Link to="/" className="inline-flex items-center gap-2 pl-0.5">
         <Jeep className="w-5 h-5 text-pine-6" weight="regular" />
         <span className="text-[14px] font-sans font-bold tracking-[-0.01em] text-ink">RoamsWild</span>
@@ -2024,7 +2117,7 @@ const ExploreHeaderPills = ({
     {/* Center pill — search bar with leading icon, input, mono coords,
         and a solid pine "Search" button (matches the design exactly). */}
     <div className="absolute top-5 left-1/2 -translate-x-1/2 z-20 pointer-events-auto w-[min(560px,calc(100vw-740px))] min-w-[380px]">
-      <div className="flex items-center gap-2.5 bg-cream border border-line rounded-[14px] shadow-[0_12px_32px_rgba(29,34,24,.12)] pl-3.5 pr-1.5 py-1.5">
+      <div className="flex items-center gap-2.5 bg-cream dark:bg-paper-2 border border-line dark:border-line-2 rounded-[14px] shadow-[0_12px_32px_rgba(29,34,24,.12)] pl-3.5 pr-1.5 py-1.5">
         <MagnifyingGlass className="w-4 h-4 text-ink-3 flex-shrink-0" weight="regular" />
         <div className="flex-1 min-w-0">
           {/* LocationSelector handles the actual Places autocomplete — strip
@@ -2042,13 +2135,29 @@ const ExploreHeaderPills = ({
           />
         </div>
         {coordLabel && (
-          <Mono className="text-ink-3 hidden xl:inline whitespace-nowrap">{coordLabel}</Mono>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(coordLabel);
+              setCopiedHeaderCoords(true);
+              setTimeout(() => setCopiedHeaderCoords(false), 2000);
+            }}
+            title="Copy coordinates — paste into Google Maps to open"
+            className="inline-flex items-center gap-1.5 font-mono text-[11px] tracking-[0.10em] text-ink-3 hover:text-ink transition-colors hidden xl:inline-flex whitespace-nowrap"
+          >
+            {copiedHeaderCoords ? (
+              <CheckCircle size={13} weight="fill" className="text-pine-6" />
+            ) : (
+              <Copy size={11} weight="regular" />
+            )}
+            {coordLabel}
+          </button>
         )}
         <button
           type="button"
           // Visual "Search" affordance — Places autocomplete already commits
           // selection on dropdown click, so this button is a no-op marker.
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-pine-6 text-cream text-[12px] font-sans font-semibold hover:bg-pine-5 transition-colors flex-shrink-0"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-pine-6 text-cream dark:text-ink-pine text-[12px] font-sans font-semibold hover:bg-pine-5 transition-colors flex-shrink-0"
           tabIndex={-1}
         >
           Search
@@ -2059,7 +2168,7 @@ const ExploreHeaderPills = ({
 
     {/* Right pill — place label + account menu (opens the same dropdown
         as the global Header's avatar). */}
-    <div className="absolute top-5 right-5 z-20 pointer-events-auto inline-flex items-center gap-2 pl-3 pr-1 py-1 bg-cream/95 backdrop-blur-md border border-line rounded-full shadow-[0_4px_12px_rgba(29,34,24,.08)]">
+    <div className="absolute top-5 right-5 z-20 pointer-events-auto inline-flex items-center gap-2 pl-3 pr-1 py-1 bg-cream/95 dark:bg-paper-2/95 backdrop-blur-md border border-line dark:border-line-2 rounded-full shadow-[0_4px_12px_rgba(29,34,24,.08)]">
       {placeLabel && <Mono className="text-ink-2">{placeLabel}</Mono>}
       <AccountAvatarMenu size="sm" />
     </div>
@@ -2083,8 +2192,8 @@ const NavLink = ({
     className={cn(
       'inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-sans font-semibold tracking-[-0.005em] transition-colors',
       active
-        ? 'bg-ink text-cream hover:bg-ink-2'
-        : 'text-ink hover:bg-ink/5',
+        ? 'bg-ink dark:bg-ink-pine text-cream hover:bg-ink-2'
+        : 'text-ink hover:bg-ink/5 dark:hover:bg-paper/40',
     )}
   >
     {children}

@@ -130,7 +130,7 @@ const RadioCard = ({
   return (
     <label
       className={cn(
-        'group flex items-start gap-4 p-4 rounded-[14px] border bg-white cursor-pointer transition-all',
+        'group flex items-start gap-4 p-4 rounded-[14px] border bg-white dark:bg-paper-2 cursor-pointer transition-all',
         'hover:border-ink-3/40',
         checked ? `${a.selectedBorder} ${a.selectedBg}` : 'border-line',
       )}
@@ -155,7 +155,7 @@ const RadioCard = ({
         'w-5 h-5 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-colors',
         checked ? a.dot : 'border-ink-3/40 bg-transparent',
       )}>
-        {checked && <span className="w-2 h-2 rounded-full bg-cream" />}
+        {checked && <span className="w-2 h-2 rounded-full bg-cream dark:bg-paper-2" />}
       </div>
     </label>
   );

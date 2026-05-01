@@ -406,3 +406,14 @@ verify_jwt = false
 # Proxies OSM /api/0.6/way/{id}/history.json + caches in osm_way_history
 [functions.osm-way-history]
 verify_jwt = false
+
+# Calls Anthropic with the service role key + writes back to
+# region_ai_enrichments. Caller-JWT verification disabled for the same
+# ES256-signing-key reason as the other internal-tool functions above.
+[functions.enrich-region]
+verify_jwt = false
+
+# Inserts spot IDs into naip_backfill_queue using the service role key. Same
+# ES256 caveat as the other internal-tool functions above.
+[functions.queue-naip-backfill]
+verify_jwt = false

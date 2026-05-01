@@ -134,7 +134,7 @@ export const SpotDetailPanel = ({
                   className="w-full h-full object-cover"
                   loading="lazy"
                 />
-                <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-ink/80 text-cream text-[10px] font-mono uppercase tracking-[0.10em] font-semibold">
+                <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-ink/80 dark:bg-ink-pine/80 text-cream text-[10px] font-mono uppercase tracking-[0.10em] font-semibold">
                   NAIP{naipYear ? ` · ${naipYear}` : ''}
                 </div>
               </>

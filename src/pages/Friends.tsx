@@ -134,11 +134,11 @@ const Friends = () => {
   };
 
   return (
-    <div className="bg-cream text-ink font-sans min-h-screen">
+    <div className="bg-cream dark:bg-paper text-ink font-sans min-h-screen">
       <Header />
 
       {/* === Hero strip — cream, page title + count + Add Friend CTA === */}
-      <section className="relative overflow-hidden bg-cream -mt-16 md:-mt-20">
+      <section className="relative overflow-hidden bg-cream dark:bg-paper-2 -mt-16 md:-mt-20">
         <div className="relative max-w-[1440px] mx-auto px-6 md:px-14 pt-28 md:pt-36 pb-10 md:pb-14">
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
@@ -174,7 +174,7 @@ const Friends = () => {
                   onClick={() => setActiveTab(key)}
                   className={cn(
                     'inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-sans font-semibold tracking-[-0.005em] transition-colors',
-                    active ? 'bg-ink text-cream hover:bg-ink-2' : 'text-ink hover:bg-ink/5'
+                    active ? 'bg-ink dark:bg-ink-pine text-cream hover:bg-ink-2' : 'text-ink hover:bg-ink/5'
                   )}
                 >
                   <Ico className="w-4 h-4" weight="regular" />
@@ -183,7 +183,7 @@ const Friends = () => {
                     <span className={cn(
                       'ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-semibold tracking-[0.05em]',
                       active
-                        ? 'bg-cream/20 text-cream'
+                        ? 'bg-cream/20 dark:bg-paper-2/20 text-cream'
                         : badgeAccent === 'clay'
                           ? 'bg-clay text-cream'
                           : 'bg-ink/10 text-ink-3'
@@ -284,7 +284,7 @@ const Friends = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-cream border-t border-line px-6 md:px-14 py-10 flex flex-wrap items-center justify-between gap-4">
+      <footer className="bg-cream dark:bg-paper-2 border-t border-line px-6 md:px-14 py-10 flex flex-wrap items-center justify-between gap-4">
         <Mono>ROAMSWILD · OFF-GRID CAMPING · 2026</Mono>
         <div className="flex flex-wrap gap-6 text-[13px] text-ink-3">
           <Link to="/about" className="hover:text-ink transition-colors">Field notes</Link>
@@ -317,7 +317,7 @@ const EmptyState = ({
   ctaLabel?: string;
   onCta?: () => void;
 }) => (
-  <div className="border border-line bg-white rounded-[18px] px-8 py-14 text-center">
+  <div className="border border-line bg-white dark:bg-paper-2 rounded-[18px] px-8 py-14 text-center">
     <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 mb-4">
       {icon}
     </div>

@@ -57,14 +57,14 @@ const STOP_TONES: Record<string, { bg: string; text: string; border: string; Ico
   hike: { bg: 'bg-sage/15',  text: 'text-sage',   border: 'border-sage/30', Icon: Mountains },
   gas:  { bg: 'bg-clay/15',  text: 'text-clay',   border: 'border-clay/30', Icon: GasPump },
   camp: { bg: 'bg-pine-6/12', text: 'text-pine-6', border: 'border-pine-6/30', Icon: Tent },
-  default: { bg: 'bg-cream', text: 'text-ink-3', border: 'border-line', Icon: MapPin },
+  default: { bg: 'bg-cream dark:bg-paper-2', text: 'text-ink-3', border: 'border-line', Icon: MapPin },
 };
 
 const RouteDetail = () => {
   return (
     <div className="min-h-screen bg-paper text-ink font-sans">
       {/* Sticky cream header */}
-      <header className="sticky top-0 z-50 bg-cream/95 backdrop-blur-md border-b border-line">
+      <header className="sticky top-0 z-50 bg-cream/95 dark:bg-paper-2/95 backdrop-blur-md border-b border-line">
         <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-3 sm:py-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 sm:gap-4 min-w-0">
@@ -113,7 +113,7 @@ const RouteDetail = () => {
         <div className="grid lg:grid-cols-5 gap-6">
           {/* Map */}
           <div className="lg:col-span-3 order-2 lg:order-1">
-            <div className="bg-white border border-line rounded-[14px] overflow-hidden h-[400px] lg:h-[calc(100vh-180px)] lg:sticky lg:top-24">
+            <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] overflow-hidden h-[400px] lg:h-[calc(100vh-180px)] lg:sticky lg:top-24">
               <div className="relative w-full h-full">
                 <RouteMap stops={routeStops} className="w-full h-full" showDirections />
 
@@ -165,7 +165,7 @@ const RouteDetail = () => {
           {/* Stops panel */}
           <div className="lg:col-span-2 order-1 lg:order-2 space-y-4">
             {/* Trip summary */}
-            <div className="bg-white border border-line rounded-[14px] p-4">
+            <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] p-4">
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-[24px] font-sans font-bold tracking-[-0.02em] text-ink leading-none">285</p>
@@ -204,7 +204,7 @@ const RouteDetail = () => {
                       )}
 
                       <div
-                        className="group bg-white border border-line rounded-[14px] hover:border-pine-6/40 transition-all cursor-pointer animate-fade-in"
+                        className="group bg-white dark:bg-paper-2 border border-line rounded-[14px] hover:border-pine-6/40 transition-all cursor-pointer animate-fade-in"
                         style={{ animationDelay: `${index * 100}ms` }}
                       >
                         <div className="p-4">
@@ -230,7 +230,7 @@ const RouteDetail = () => {
                                 </div>
                                 <button
                                   aria-label="More"
-                                  className="inline-flex items-center justify-center w-8 h-8 rounded-full text-ink-3 hover:text-ink hover:bg-cream transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+                                  className="inline-flex items-center justify-center w-8 h-8 rounded-full text-ink-3 hover:text-ink hover:bg-cream dark:hover:bg-paper-2 transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
                                 >
                                   <DotsThree className="w-4 h-4" weight="regular" />
                                 </button>

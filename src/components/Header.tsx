@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Jeep, List, SignOut, Tent, Moon, Sun, Users, Lock, CaretDown } from "@phosphor-icons/react";
+import { Jeep, List, SignOut, Tent, Moon, Sun, Users, Lock, CaretDown, MapPin, CheckCircle } from "@phosphor-icons/react";
 import { useFriends } from "@/context/FriendsContext";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -47,28 +47,6 @@ interface HeaderProps {
   showBorder?: boolean;
 }
 
-// Format a UserLocation into the design's compact mono label.
-// Example: { name: "Salt Lake City, UT, USA", lat: 40.76, lng: -111.89 }
-//   → "SLT · UT · 40.76N"
-const formatLocationLabel = (loc: UserLocation): string | null => {
-  if (!loc.name) {
-    const ns = loc.lat >= 0 ? 'N' : 'S';
-    return `${Math.abs(loc.lat).toFixed(2)}${ns}`;
-  }
-  const parts = loc.name.split(',').map((s) => s.trim());
-  const city = parts[0] || '';
-  const region = parts[1] || '';
-  const cityCode = city
-    .split(/\s+/)
-    .map((w) => w[0])
-    .join('')
-    .slice(0, 3)
-    .toUpperCase() || city.slice(0, 3).toUpperCase();
-  const ns = loc.lat >= 0 ? 'N' : 'S';
-  const latStr = `${Math.abs(loc.lat).toFixed(2)}${ns}`;
-  return [cityCode, region, latStr].filter(Boolean).join(' · ');
-};
-
 export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
   const { user, signOut } = useAuth();
   const { isDark, toggleTheme } = useTheme();
@@ -76,6 +54,7 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [headerLocation, setHeaderLocation] = useState<UserLocation | null>(null);
+  const [copiedHeaderCoords, setCopiedHeaderCoords] = useState(false);
   // True when the header strip overlaps any element marked `data-dark-band`.
   // Pages opt-in by putting `data-dark-band` on dark sections (e.g. the pine
   // band on the home page) and the header flips to a cream-on-dark palette.
@@ -142,31 +121,59 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
   ];
 
   const betaActive = isActive('/light-report') || isActive('/terrain-validation') || isActive('/photo-scout');
-  const locationLabel = headerLocation ? formatLocationLabel(headerLocation) : null;
+
+  // Once scrolled, the header gets its own translucent surface, so the
+  // `onDark` band-detection no longer applies — text is sitting on the
+  // header's bg, not the page band. Treat scrolled as a forced-light
+  // surface so all the conditional class branches resolve correctly.
+  const effectiveOnDark = scrolled ? false : onDark;
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-transparent">
+    <header
+      className={cn(
+        "sticky top-0 z-50 w-full transition-all duration-300 ease-out",
+        scrolled
+          ? "bg-cream/85 dark:bg-paper/85 backdrop-blur-md border-b border-line/60 dark:border-line-2/40 shadow-[0_1px_2px_rgba(29,34,24,.04)]"
+          : "bg-transparent border-b border-transparent",
+      )}
+    >
       <div className={cn(
-        "max-w-[1440px] mx-auto flex items-center justify-between px-4 md:px-14 transition-[height,padding] duration-200",
-        scrolled ? "h-12 md:h-14" : "h-16 md:h-20"
+        "max-w-[1440px] mx-auto relative flex items-center justify-between transition-all duration-300 ease-out",
+        scrolled ? "h-10 md:h-12 px-4 md:px-10" : "h-16 md:h-20 px-4 md:px-14",
       )}>
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-2 md:gap-2.5 group shrink-0">
-          <Jeep className={cn(
-            "text-pine-6 transition-all duration-200 group-hover:-translate-x-px",
-            scrolled ? "w-5 h-5" : "w-6 h-6"
-          )} weight="regular" />
+        {/* Logo — Jeep icon collapses out of layout on scroll (width + opacity)
+            so the bar reads as just the wordmark when condensed. */}
+        <Link
+          to="/"
+          className={cn(
+            "flex items-center group shrink-0 transition-[gap] duration-300 ease-out",
+            scrolled ? "gap-0" : "gap-2 md:gap-2.5",
+          )}
+        >
+          <Jeep
+            className={cn(
+              "text-pine-6 transition-all duration-300 ease-out group-hover:-translate-x-px overflow-hidden",
+              scrolled ? "w-0 h-0 opacity-0" : "w-6 h-6 opacity-100",
+            )}
+            weight="regular"
+          />
           <span className={cn(
-            "font-sans font-bold tracking-[-0.01em] transition-[color,font-size] duration-200",
-            scrolled ? "text-[14px]" : "text-base md:text-[16px]",
-            onDark ? "text-cream" : "text-ink"
+            "font-sans font-bold tracking-[-0.01em] transition-all duration-300 ease-out",
+            scrolled ? "text-[13px]" : "text-base md:text-[16px]",
+            effectiveOnDark ? "text-cream" : "text-ink",
           )}>
             RoamsWild
           </span>
         </Link>
 
-        {/* Desktop nav — solid pill active, transparent inactive. Inverts on dark bands. */}
-        <nav className="hidden md:flex items-center gap-1.5">
+        {/* Desktop nav — pinned to the visual center of the bar (absolute, not
+            flexed) so the link group is always page-centered regardless of how
+            wide the logo or right-side cluster are. Solid pill active,
+            transparent inactive. Inverts on dark bands. */}
+        <nav className={cn(
+          "hidden md:flex items-center absolute left-1/2 -translate-x-1/2 transition-all duration-300 ease-out",
+          scrolled ? "gap-1" : "gap-1.5",
+        )}>
           {primaryNav.map(({ path, label }) => {
             const active = isActive(path);
             return (
@@ -174,13 +181,14 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
                 key={path}
                 to={path}
                 className={cn(
-                  "px-4 py-2 rounded-full text-[13px] font-sans font-semibold tracking-[-0.005em] transition-colors",
+                  "rounded-full font-sans font-semibold tracking-[-0.005em] transition-all duration-300 ease-out",
+                  scrolled ? "px-3 py-1 text-[12px]" : "px-4 py-2 text-[13px]",
                   active
-                    ? onDark
-                      ? "bg-cream text-ink hover:bg-cream/90"
-                      : "bg-ink text-cream hover:bg-ink-2"
-                    : onDark
-                      ? "text-cream hover:bg-cream/10"
+                    ? effectiveOnDark
+                      ? "bg-cream dark:bg-paper-2 text-ink hover:bg-cream/90 dark:hover:bg-paper-2/90"
+                      : "bg-ink dark:bg-ink-pine text-cream hover:bg-ink-2"
+                    : effectiveOnDark
+                      ? "text-cream hover:bg-cream/10 dark:hover:bg-paper-2/10"
                       : "text-ink hover:bg-ink/5"
                 )}
               >
@@ -192,13 +200,14 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className={cn(
-                "inline-flex items-center gap-1 px-4 py-2 rounded-full text-[13px] font-sans font-semibold tracking-[-0.005em] transition-colors",
+                "inline-flex items-center gap-1 rounded-full font-sans font-semibold tracking-[-0.005em] transition-all duration-300 ease-out",
+                scrolled ? "px-3 py-1 text-[12px]" : "px-4 py-2 text-[13px]",
                 betaActive
-                  ? onDark
-                    ? "bg-cream text-ink hover:bg-cream/90"
-                    : "bg-ink text-cream hover:bg-ink-2"
-                  : onDark
-                    ? "text-cream hover:bg-cream/10"
+                  ? effectiveOnDark
+                    ? "bg-cream dark:bg-paper-2 text-ink hover:bg-cream/90 dark:hover:bg-paper-2/90"
+                    : "bg-ink dark:bg-ink-pine text-cream hover:bg-ink-2"
+                  : effectiveOnDark
+                    ? "text-cream hover:bg-cream/10 dark:hover:bg-paper-2/10"
                     : "text-ink hover:bg-ink/5"
               )}>
                 Beta
@@ -224,15 +233,39 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
         </nav>
 
         {/* Right — Mono location label + avatar */}
-        <div className="flex items-center gap-3 md:gap-3.5 shrink-0">
-          {locationLabel && (
-            <Mono
-              className={cn("hidden lg:inline transition-colors", onDark ? "text-cream/60" : "text-ink-3")}
-              size={11}
-            >
-              {locationLabel}
-            </Mono>
-          )}
+        <div className={cn(
+          "flex items-center shrink-0 transition-all duration-300 ease-out",
+          scrolled ? "gap-2 md:gap-2.5" : "gap-3 md:gap-3.5",
+        )}>
+          {/* Pin + decimal-degree coordinates of the user's current location.
+              Click to copy — pastes straight into Google Maps. */}
+          {headerLocation && (() => {
+            const coords = `${headerLocation.lat.toFixed(5)}, ${headerLocation.lng.toFixed(5)}`;
+            return (
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(coords);
+                  setCopiedHeaderCoords(true);
+                  setTimeout(() => setCopiedHeaderCoords(false), 2000);
+                }}
+                title="Copy coordinates — paste into Google Maps to open"
+                className={cn(
+                  "hidden lg:inline-flex items-center gap-1.5 font-mono text-[11px] tracking-[0.05em] transition-colors duration-300 ease-out",
+                  effectiveOnDark
+                    ? "text-cream/60 hover:text-cream"
+                    : "text-ink-3 hover:text-ink",
+                )}
+              >
+                {copiedHeaderCoords ? (
+                  <CheckCircle size={13} weight="fill" className="text-pine-6" />
+                ) : (
+                  <MapPin size={12} weight="fill" className="text-pine-6" />
+                )}
+                {coords}
+              </button>
+            );
+          })()}
 
           {/* Friends pending dot — only shown if there are requests */}
           {pendingRequestCount > 0 && (
@@ -250,8 +283,8 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
             <DropdownMenuTrigger asChild>
               <button
                 className={cn(
-                  "hidden md:inline-flex items-center justify-center rounded-full bg-pine-6 text-cream font-sans font-semibold tracking-[0.02em] hover:bg-pine-5 transition-all duration-200",
-                  scrolled ? "w-7 h-7 text-[10px]" : "w-[34px] h-[34px] text-[12px]"
+                  "hidden md:inline-flex items-center justify-center rounded-full bg-pine-6 text-cream dark:text-ink-pine font-sans font-semibold tracking-[0.02em] hover:bg-pine-5 transition-all duration-300 ease-out",
+                  scrolled ? "w-6 h-6 text-[9px]" : "w-[34px] h-[34px] text-[12px]"
                 )}
                 aria-label="Account menu"
               >
@@ -325,7 +358,7 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
             <SheetTrigger asChild>
               <button
-                className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-full bg-ink text-cream hover:bg-ink-2 transition-colors"
+                className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-full bg-ink dark:bg-ink-pine text-cream hover:bg-ink-2 transition-colors"
                 aria-label="Open menu"
               >
                 <List className="w-4 h-4" weight="regular" />
@@ -341,7 +374,7 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
 
               {/* User Info */}
               <div className="flex items-center gap-3 mt-6 pb-5 border-b border-line dark:border-line-2">
-                <div className="flex items-center justify-center w-10 h-10 rounded-full bg-pine-6 text-cream font-semibold text-[13px]">
+                <div className="flex items-center justify-center w-10 h-10 rounded-full bg-pine-6 text-cream dark:text-ink-pine font-semibold text-[13px]">
                   {initials}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -361,7 +394,7 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
                       onClick={closeMobileMenu}
                       className={cn(
                         "flex items-center justify-between px-4 py-3 rounded-full font-sans font-semibold text-[14px] transition-colors",
-                        active ? "bg-ink text-cream" : "text-ink hover:bg-ink/5"
+                        active ? "bg-ink dark:bg-ink-pine text-cream" : "text-ink hover:bg-ink/5"
                       )}
                     >
                       {label}
@@ -373,7 +406,7 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
                   onClick={closeMobileMenu}
                   className={cn(
                     "flex items-center px-4 py-3 rounded-full font-sans font-semibold text-[14px] transition-colors",
-                    isActive('/light-report') ? "bg-ink text-cream" : "text-ink hover:bg-ink/5"
+                    isActive('/light-report') ? "bg-ink dark:bg-ink-pine text-cream" : "text-ink hover:bg-ink/5"
                   )}
                 >
                   Light Report <Mono className="ml-2 text-clay">BETA</Mono>
@@ -383,7 +416,7 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
                   onClick={closeMobileMenu}
                   className={cn(
                     "flex items-center px-4 py-3 rounded-full font-sans font-semibold text-[14px] transition-colors",
-                    isActive('/terrain-validation') ? "bg-ink text-cream" : "text-ink hover:bg-ink/5"
+                    isActive('/terrain-validation') ? "bg-ink dark:bg-ink-pine text-cream" : "text-ink hover:bg-ink/5"
                   )}
                 >
                   Terrain Analysis <Mono className="ml-2 text-clay">BETA</Mono>
@@ -393,7 +426,7 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
                   onClick={closeMobileMenu}
                   className={cn(
                     "flex items-center justify-between px-4 py-3 rounded-full font-sans font-semibold text-[14px] transition-colors",
-                    isActive('/friends') ? "bg-ink text-cream" : "text-ink hover:bg-ink/5"
+                    isActive('/friends') ? "bg-ink dark:bg-ink-pine text-cream" : "text-ink hover:bg-ink/5"
                   )}
                 >
                   Friends
@@ -409,7 +442,7 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
                     onClick={closeMobileMenu}
                     className={cn(
                       "flex items-center px-4 py-3 rounded-full font-sans font-semibold text-[14px] transition-colors",
-                      isActive('/campsites') ? "bg-ink text-cream" : "text-ink hover:bg-ink/5"
+                      isActive('/campsites') ? "bg-ink dark:bg-ink-pine text-cream" : "text-ink hover:bg-ink/5"
                     )}
                   >
                     Campsites
@@ -421,7 +454,7 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
                     onClick={closeMobileMenu}
                     className={cn(
                       "flex items-center px-4 py-3 rounded-full font-sans font-semibold text-[14px] transition-colors",
-                      isActive('/admin') ? "bg-ink text-cream" : "text-ink hover:bg-ink/5"
+                      isActive('/admin') ? "bg-ink dark:bg-ink-pine text-cream" : "text-ink hover:bg-ink/5"
                     )}
                   >
                     Admin

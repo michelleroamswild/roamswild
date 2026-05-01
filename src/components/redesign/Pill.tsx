@@ -30,17 +30,25 @@ export interface PillProps {
 // Primary CTAs (`solid-*`) get a clear lift on hover: shadow + small upward
 // translate + a meaningful color shift. Active/pressed flattens back down.
 // Secondary variants keep a quieter hover so primary stays visually dominant.
+// Dark-mode notes:
+// In our dark palette `--ink` and `--cream` both resolve to light values
+// (they're text colours), and the pine ramp is inverted (pine-6 becomes
+// LIGHT). To preserve contrast on solid CTAs in dark mode we either flip
+// the text to a dark token (`ink-pine`) or swap the bg to a dark surface.
 const variantClasses: Record<PillVariant, string> = {
   'solid-ink':
-    'bg-ink text-cream border-ink shadow-[0_1px_2px_rgba(29,34,24,.08)] ' +
+    // Dark: bg flips to ink-pine (stays dark in both modes); text stays cream.
+    'bg-ink text-cream border-ink dark:bg-ink-pine dark:border-ink-pine shadow-[0_1px_2px_rgba(29,34,24,.08)] ' +
     'hover:bg-ink-2 hover:border-ink-2 hover:shadow-[0_10px_24px_rgba(29,34,24,.22)] hover:-translate-y-px ' +
     'active:translate-y-0 active:bg-ink-pine active:shadow-[0_1px_2px_rgba(29,34,24,.12)]',
   'solid-pine':
-    'bg-pine-6 text-cream border-pine-6 shadow-[0_1px_2px_rgba(29,34,24,.08)] ' +
+    // Dark: pine-6 becomes light sage; flip the text to a near-black so it stays legible.
+    'bg-pine-6 text-cream border-pine-6 dark:text-ink-pine shadow-[0_1px_2px_rgba(29,34,24,.08)] ' +
     'hover:bg-pine-5 hover:border-pine-5 hover:shadow-[0_10px_24px_rgba(58,74,42,.30)] hover:-translate-y-px ' +
     'active:translate-y-0 active:bg-pine-7 active:shadow-[0_1px_2px_rgba(29,34,24,.12)]',
   ghost:
-    'bg-transparent text-ink border-line-2 hover:bg-cream hover:border-ink-3 active:bg-paper-2',
+    // Dark: hover bg flips to paper-2 since `bg-cream` becomes light text colour, not surface.
+    'bg-transparent text-ink border-line-2 hover:bg-cream hover:border-ink-3 active:bg-paper-2 dark:hover:bg-paper-2 dark:active:bg-paper',
   accent:
     'bg-pine-6/10 text-pine-6 border-pine-6 hover:bg-pine-6/20 active:bg-pine-6/25',
   // Light solid pine fill — used for the quick-action pills under the hero
@@ -49,6 +57,8 @@ const variantClasses: Record<PillVariant, string> = {
     'bg-pine-1 text-pine-7 border-pine-2 hover:bg-pine-2 hover:border-pine-3 active:bg-pine-2/80',
   clay:
     'bg-clay/15 text-clay border-clay hover:bg-clay/25 active:bg-clay/30',
+  // `cream` is the on-dark-band variant — translucent off-white on dark pine.
+  // Stays the same in dark mode since the dark band is still pine-ink.
   cream:
     'bg-cream/10 text-cream border-cream/30 hover:bg-cream/20 hover:border-cream/50 active:bg-cream/25',
 };

@@ -68,7 +68,7 @@ export function AddFriendDialog({ isOpen, onClose, onSendRequest }: AddFriendDia
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md border-line bg-white rounded-[18px]">
+      <DialogContent className="sm:max-w-md border-line bg-white dark:bg-paper-2 rounded-[18px]">
         <DialogHeader>
           <Mono className="text-pine-6">Add friend</Mono>
           <DialogTitle className="font-sans font-semibold tracking-[-0.015em] text-ink text-[22px] leading-[1.15] mt-1">

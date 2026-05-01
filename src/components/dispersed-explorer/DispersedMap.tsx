@@ -403,7 +403,7 @@ export const DispersedMap = ({
             <div className="flex gap-1.5">
               <button
                 onClick={onOpenSaveFromMap}
-                className="flex-1 px-2.5 py-1 rounded-full bg-pine-6 text-cream text-[11px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 transition-colors"
+                className="flex-1 px-2.5 py-1 rounded-full bg-pine-6 text-cream dark:text-ink-pine text-[11px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 transition-colors"
               >
                 Save
               </button>
@@ -414,7 +414,7 @@ export const DispersedMap = ({
                     '_blank'
                   );
                 }}
-                className="flex-1 px-2.5 py-1 rounded-full bg-white text-ink-2 border border-line text-[11px] font-sans font-semibold tracking-[0.01em] hover:border-ink-3/50 hover:bg-cream transition-colors"
+                className="flex-1 px-2.5 py-1 rounded-full bg-white text-ink-2 border border-line text-[11px] font-sans font-semibold tracking-[0.01em] hover:border-ink-3/50 hover:bg-cream dark:hover:bg-paper-2 transition-colors"
               >
                 Open map
               </button>

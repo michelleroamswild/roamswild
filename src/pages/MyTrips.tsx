@@ -188,11 +188,11 @@ const MyTrips = () => {
   const totalCount = allTripsRaw.length;
 
   return (
-    <div className="bg-cream text-ink font-sans min-h-screen">
+    <div className="bg-cream dark:bg-paper text-ink font-sans min-h-screen">
       <Header />
 
       {/* === Hero strip — cream, page title + count + New Trip CTA === */}
-      <section className="relative overflow-hidden bg-cream -mt-16 md:-mt-20">
+      <section className="relative overflow-hidden bg-cream dark:bg-paper-2 -mt-16 md:-mt-20">
         <div className="relative max-w-[1440px] mx-auto px-6 md:px-14 pt-28 md:pt-36 pb-10 md:pb-14">
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
@@ -305,7 +305,7 @@ const MyTrips = () => {
                             <h3 className="text-[17px] font-sans font-semibold tracking-[-0.01em] text-ink truncate">
                               {trip.config.name || 'Untitled trip'}
                             </h3>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-pine-6 text-cream rounded-full text-[10px] font-mono font-semibold uppercase tracking-[0.10em]">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-pine-6 text-cream dark:text-ink-pine rounded-full text-[10px] font-mono font-semibold uppercase tracking-[0.10em]">
                               Day {dayNumber} of {totalDays}
                             </span>
                           </div>
@@ -362,7 +362,7 @@ const MyTrips = () => {
                   className={cn(
                     "inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-sans font-semibold tracking-[-0.005em] transition-colors",
                     activeTab === 'upcoming'
-                      ? 'bg-ink text-cream hover:bg-ink-2'
+                      ? 'bg-ink dark:bg-ink-pine text-cream hover:bg-ink-2'
                       : 'text-ink hover:bg-ink/5'
                   )}
                 >
@@ -371,7 +371,7 @@ const MyTrips = () => {
                   {upcomingTrips.length > 0 && (
                     <span className={cn(
                       "ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-semibold tracking-[0.05em]",
-                      activeTab === 'upcoming' ? 'bg-cream/20 text-cream' : 'bg-ink/10 text-ink-3'
+                      activeTab === 'upcoming' ? 'bg-cream/20 dark:bg-paper-2/20 text-cream' : 'bg-ink/10 text-ink-3'
                     )}>
                       {upcomingTrips.length}
                     </span>
@@ -382,7 +382,7 @@ const MyTrips = () => {
                   className={cn(
                     "inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-sans font-semibold tracking-[-0.005em] transition-colors",
                     activeTab === 'past'
-                      ? 'bg-ink text-cream hover:bg-ink-2'
+                      ? 'bg-ink dark:bg-ink-pine text-cream hover:bg-ink-2'
                       : 'text-ink hover:bg-ink/5'
                   )}
                 >
@@ -391,7 +391,7 @@ const MyTrips = () => {
                   {pastTrips.length > 0 && (
                     <span className={cn(
                       "ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-semibold tracking-[0.05em]",
-                      activeTab === 'past' ? 'bg-cream/20 text-cream' : 'bg-ink/10 text-ink-3'
+                      activeTab === 'past' ? 'bg-cream/20 dark:bg-paper-2/20 text-cream' : 'bg-ink/10 text-ink-3'
                     )}>
                       {pastTrips.length}
                     </span>
@@ -399,13 +399,13 @@ const MyTrips = () => {
                 </button>
               </div>
               <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
-                <SelectTrigger className="w-[180px] h-9 text-[13px] bg-white border-line rounded-full px-4 [&_svg]:opacity-100">
+                <SelectTrigger className="w-[180px] h-9 text-[13px] bg-white dark:bg-paper-2 border-line rounded-full px-4 [&_svg]:opacity-100">
                   <div className="flex items-center gap-2 text-ink">
                     <SortAscending className="w-4 h-4 text-ink-3" weight="regular" />
                     <SelectValue />
                   </div>
                 </SelectTrigger>
-                <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink">
+                <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream dark:bg-paper-2 [&_[data-highlighted]]:text-ink">
                   <SelectItem value="trip-date">Trip date</SelectItem>
                   <SelectItem value="name-asc">Name (A–Z)</SelectItem>
                   <SelectItem value="name-desc">Name (Z–A)</SelectItem>
@@ -465,7 +465,7 @@ const MyTrips = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-cream border-t border-line px-6 md:px-14 py-10 flex flex-wrap items-center justify-between gap-4">
+      <footer className="bg-cream dark:bg-paper-2 border-t border-line px-6 md:px-14 py-10 flex flex-wrap items-center justify-between gap-4">
         <Mono>ROAMSWILD · OFF-GRID CAMPING · 2026</Mono>
         <div className="flex flex-wrap gap-6 text-[13px] text-ink-3">
           <Link to="/about" className="hover:text-ink transition-colors">Field notes</Link>
@@ -578,7 +578,7 @@ const TripRow = ({
   return (
     <div
       onClick={onClick}
-      className="border border-line bg-white rounded-[14px] overflow-hidden cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(29,34,24,.10),0_3px_8px_rgba(29,34,24,.04)]"
+      className="border border-line dark:border-line-2 bg-white dark:bg-ink-pine rounded-[14px] overflow-hidden cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(29,34,24,.10),0_3px_8px_rgba(29,34,24,.04)]"
     >
       <div className="flex items-stretch">
         <div className={cn("w-1.5", accent)} />
@@ -707,7 +707,7 @@ const TripActionsMenu = ({
     <DropdownMenuContent
       align="end"
       onClick={(e) => e.stopPropagation()}
-      className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink"
+      className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream dark:bg-paper-2 [&_[data-highlighted]]:text-ink"
     >
       <DropdownMenuItem onClick={onMarkComplete} className="cursor-pointer text-[14px] text-ink">
         <CheckCircle
@@ -742,7 +742,7 @@ const EmptyState = ({
   ctaLabel?: string;
   onCta?: () => void;
 }) => (
-  <div className="border border-line bg-white rounded-[18px] px-8 py-14 text-center">
+  <div className="border border-line dark:border-line-2 bg-white dark:bg-ink-pine rounded-[18px] px-8 py-14 text-center">
     <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 mb-4">
       {icon}
     </div>

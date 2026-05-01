@@ -24,7 +24,7 @@ export const MobileViewTabs = ({ mobileView, onChange }: MobileViewTabsProps) =>
             onClick={() => onChange(key)}
             className={cn(
               'flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-full text-[13px] font-sans font-semibold tracking-[-0.005em] transition-colors',
-              active ? 'bg-ink text-cream hover:bg-ink-2' : 'text-ink hover:bg-ink/5',
+              active ? 'bg-ink dark:bg-ink-pine text-cream hover:bg-ink-2' : 'text-ink hover:bg-ink/5 dark:hover:bg-paper/40',
             )}
           >
             <Icon className="w-4 h-4" weight="regular" />

@@ -69,7 +69,7 @@ export function StepActivities({
               <div
                 key={id}
                 className={cn(
-                  'rounded-[14px] border bg-white transition-all',
+                  'rounded-[14px] border bg-white dark:bg-paper-2 transition-all',
                   selected ? `${a.selectedBorder} ${a.selectedBg}` : 'border-line hover:border-ink-3/40',
                 )}
               >
@@ -134,7 +134,7 @@ export function StepActivities({
               <label
                 key={id}
                 className={cn(
-                  'flex flex-col p-4 rounded-[14px] border bg-white cursor-pointer transition-all',
+                  'flex flex-col p-4 rounded-[14px] border bg-white dark:bg-paper-2 cursor-pointer transition-all',
                   selected ? `${a.selectedBorder} ${a.selectedBg}` : 'border-line hover:border-ink-3/40',
                 )}
               >
@@ -151,7 +151,7 @@ export function StepActivities({
                     'w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors',
                     selected ? a.dot : 'border-ink-3/40 bg-transparent',
                   )}>
-                    {selected && <span className="w-1.5 h-1.5 rounded-full bg-cream" />}
+                    {selected && <span className="w-1.5 h-1.5 rounded-full bg-cream dark:bg-paper-2" />}
                   </div>
                 </div>
                 <p className="text-[13px] text-ink-3 mt-1.5 leading-[1.45]">{description}</p>
@@ -175,7 +175,7 @@ const VehicleRadio = ({
   label: string;
 }) => (
   <label className={cn(
-    'flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] border bg-white cursor-pointer transition-colors',
+    'flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] border bg-white dark:bg-paper-2 cursor-pointer transition-colors',
     checked ? 'border-clay bg-clay/[0.06]' : 'border-line hover:border-ink-3/40',
   )}>
     <input type="radio" checked={checked} onChange={onChange} className="sr-only" />
@@ -183,7 +183,7 @@ const VehicleRadio = ({
       'w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors',
       checked ? 'border-clay bg-clay' : 'border-ink-3/40',
     )}>
-      {checked && <span className="w-1.5 h-1.5 rounded-full bg-cream" />}
+      {checked && <span className="w-1.5 h-1.5 rounded-full bg-cream dark:bg-paper-2" />}
     </div>
     <span className="text-[13px] text-ink">{label}</span>
   </label>

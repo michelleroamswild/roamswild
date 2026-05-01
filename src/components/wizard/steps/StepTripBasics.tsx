@@ -69,7 +69,7 @@ export function StepTripBasics({
           value={tripName}
           onChange={(e) => setTripName(e.target.value)}
           className={cn(
-            'w-full h-12 px-4 rounded-[14px] border bg-white text-ink text-[15px] outline-none placeholder:text-ink-3 transition-colors',
+            'w-full h-12 px-4 rounded-[14px] border bg-white dark:bg-paper-2 text-ink text-[15px] outline-none placeholder:text-ink-3 transition-colors',
             tripNameError ? 'border-ember focus:border-ember' : 'border-line focus:border-pine-6',
           )}
           autoFocus
@@ -110,7 +110,7 @@ export function StepTripBasics({
             >
               <span
                 className={cn(
-                  'inline-block h-5 w-5 rounded-full bg-cream transform transition-transform shadow-sm',
+                  'inline-block h-5 w-5 rounded-full bg-cream dark:bg-paper-2 transform transition-transform shadow-sm',
                   returnToStart ? 'translate-x-5' : 'translate-x-0.5',
                 )}
               />
@@ -148,7 +148,7 @@ export function StepTripBasics({
 
       {/* Duration */}
       <Field label="Trip duration" hint="">
-        <div className="border border-line bg-white rounded-[14px] p-5">
+        <div className="border border-line bg-white dark:bg-paper-2 rounded-[14px] p-5">
           <div className="flex items-end justify-between mb-4">
             <Mono className="text-ink-2">Days</Mono>
             <div className="flex items-baseline gap-1.5">

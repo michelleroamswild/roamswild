@@ -126,7 +126,7 @@ function SurpriseMeBanner({ surpriseMe }: { surpriseMe: NonNullable<LocationStat
               '_blank',
             );
           }}
-          className="w-full p-4 rounded-[12px] bg-white border border-line shadow-[0_1px_2px_rgba(29,34,24,.04)] hover:border-pine-6/40 hover:shadow-[0_8px_18px_rgba(29,34,24,.08)] transition-all text-left mb-4"
+          className="w-full p-4 rounded-[12px] bg-white dark:bg-paper-2 border border-line shadow-[0_1px_2px_rgba(29,34,24,.04)] hover:border-pine-6/40 hover:shadow-[0_8px_18px_rgba(29,34,24,.08)] transition-all text-left mb-4"
         >
           <div className="flex items-center justify-between mb-1.5">
             <Mono className="text-pine-6 inline-flex items-center gap-1.5">
@@ -291,7 +291,7 @@ const LocationDetail = () => {
 
   if (!location) {
     return (
-      <div className="min-h-screen bg-cream flex items-center justify-center p-6">
+      <div className="min-h-screen bg-cream dark:bg-paper flex items-center justify-center p-6">
         <div className="text-center max-w-sm">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-sage/15 text-sage mb-4">
             <MapPin className="w-6 h-6" weight="regular" />
@@ -303,7 +303,7 @@ const LocationDetail = () => {
           <p className="text-[14px] text-ink-3 mt-2">This location may have been removed.</p>
           <Link
             to="/"
-            className="mt-6 inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-pine-6 text-cream border border-pine-6 text-[12px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 hover:border-pine-5 transition-colors"
+            className="mt-6 inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-pine-6 text-cream dark:text-ink-pine border border-pine-6 text-[12px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 hover:border-pine-5 transition-colors"
           >
             Back to home
           </Link>
@@ -379,7 +379,7 @@ const LocationDetail = () => {
   return (
     <div className="min-h-screen bg-paper text-ink font-sans">
       {/* Sticky cream header */}
-      <header className="sticky top-0 z-50 bg-cream/95 backdrop-blur-md border-b border-line">
+      <header className="sticky top-0 z-50 bg-cream/95 dark:bg-paper-2/95 backdrop-blur-md border-b border-line">
         <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-3 sm:py-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 sm:gap-4 min-w-0">
@@ -475,7 +475,7 @@ const LocationDetail = () => {
                               '_blank',
                             )
                           }
-                          className="flex-1 px-2.5 py-1 rounded-full bg-pine-6 text-cream text-[11px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 transition-colors"
+                          className="flex-1 px-2.5 py-1 rounded-full bg-pine-6 text-cream dark:text-ink-pine text-[11px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 transition-colors"
                         >
                           Directions
                         </button>
@@ -515,7 +515,7 @@ const LocationDetail = () => {
           <div className="order-1 lg:order-2 bg-paper lg:h-[calc(100vh-73px)] lg:overflow-y-auto">
             <div className="px-4 sm:px-6 py-5 space-y-5">
               {/* Intro card */}
-              <div className="bg-white border border-line rounded-[14px] p-5">
+              <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] p-5">
                 <Mono className="text-pine-6">{location.type}</Mono>
                 <h2 className="text-[24px] sm:text-[28px] font-sans font-bold tracking-[-0.025em] text-ink leading-[1.1] mt-1">
                   {cleanedName}
@@ -653,7 +653,7 @@ const LocationDetail = () => {
                           setSelectedPhotoHotspot(hotspot);
                         }
                       }}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-[8px] hover:bg-cream transition-colors text-left"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-[8px] hover:bg-cream dark:hover:bg-paper-2 transition-colors text-left"
                     >
                       {hotspot.samplePhotoUrl ? (
                         <img
@@ -680,7 +680,7 @@ const LocationDetail = () => {
             </div>
 
             {/* Sticky bottom action bar */}
-            <div className="sticky bottom-0 border-t border-line bg-cream px-4 sm:px-6 py-3 flex items-center gap-2">
+            <div className="sticky bottom-0 border-t border-line bg-cream dark:bg-paper-2 px-4 sm:px-6 py-3 flex items-center gap-2">
               <Pill
                 variant="solid-pine"
                 mono={false}
@@ -760,7 +760,7 @@ const LocationDetail = () => {
           onClick={() => setSelectedPhotoHotspot(null)}
         >
           <div
-            className="bg-white border border-line rounded-[18px] shadow-[0_18px_44px_rgba(29,34,24,.16)] max-w-sm w-full p-5 animate-fade-in"
+            className="bg-white dark:bg-paper-2 border border-line rounded-[18px] shadow-[0_18px_44px_rgba(29,34,24,.16)] max-w-sm w-full p-5 animate-fade-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="inline-flex items-center justify-center w-10 h-10 rounded-[10px] bg-ember/15 text-ember mb-3">
@@ -864,7 +864,7 @@ const SectionCard = ({
 }) => {
   const tone = ACCENT_TONES[accent];
   return (
-    <div className="bg-white border border-line rounded-[14px] p-4 flex flex-col">
+    <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] p-4 flex flex-col">
       <div className="flex items-center gap-2 mb-3">
         <div
           className={cn(
@@ -906,7 +906,7 @@ const ListRow = ({
 }) => (
   <button
     onClick={onClick}
-    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-[8px] hover:bg-cream transition-colors text-left"
+    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-[8px] hover:bg-cream dark:hover:bg-paper-2 transition-colors text-left"
   >
     <div className="flex-1 min-w-0">
       <p className="text-[12px] font-sans font-semibold tracking-[-0.005em] text-ink truncate">
@@ -1000,7 +1000,7 @@ const ItineraryModal = ({
 }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center font-sans">
     <div className="absolute inset-0 bg-ink-pine/60 backdrop-blur-sm" onClick={onClose} />
-    <div className="relative bg-white border border-line rounded-[18px] shadow-[0_18px_44px_rgba(29,34,24,.16),0_3px_8px_rgba(29,34,24,.08)] w-full max-w-md mx-4 max-h-[90dvh] flex flex-col overflow-hidden animate-fade-in">
+    <div className="relative bg-white dark:bg-paper-2 border border-line rounded-[18px] shadow-[0_18px_44px_rgba(29,34,24,.16),0_3px_8px_rgba(29,34,24,.08)] w-full max-w-md mx-4 max-h-[90dvh] flex flex-col overflow-hidden animate-fade-in">
       {/* Header */}
       <div className="px-5 py-4 border-b border-line flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -1060,7 +1060,7 @@ const ItineraryModal = ({
                 <label
                   key={id}
                   className={cn(
-                    'flex items-start gap-3 p-3 rounded-[12px] border bg-white cursor-pointer transition-all',
+                    'flex items-start gap-3 p-3 rounded-[12px] border bg-white dark:bg-paper-2 cursor-pointer transition-all',
                     selected ? `${a.selectedBorder} ${a.selectedBg}` : 'border-line hover:border-ink-3/40',
                   )}
                 >
@@ -1174,7 +1174,7 @@ function RadioGroup<T extends string>({
             <label
               key={option.id}
               className={cn(
-                'flex items-center gap-3 p-3 rounded-[12px] border bg-white cursor-pointer transition-all',
+                'flex items-center gap-3 p-3 rounded-[12px] border bg-white dark:bg-paper-2 cursor-pointer transition-all',
                 selected ? `${a.selectedBorder} ${a.selectedBg}` : 'border-line hover:border-ink-3/40',
               )}
             >
@@ -1190,7 +1190,7 @@ function RadioGroup<T extends string>({
                   selected ? a.dot : 'border-ink-3/40 bg-transparent',
                 )}
               >
-                {selected && <span className="w-1.5 h-1.5 rounded-full bg-cream" />}
+                {selected && <span className="w-1.5 h-1.5 rounded-full bg-cream dark:bg-paper-2" />}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">

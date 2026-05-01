@@ -72,12 +72,12 @@ export function MapLocationPicker({ onSelectLocation, onCancel, initialCenter }:
   };
 
   const inputCls =
-    'w-full h-10 px-3 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors';
+    'w-full h-10 px-3 rounded-[12px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors';
 
   return (
     <div className="flex flex-col h-full bg-paper text-ink font-sans">
       {/* Search section */}
-      <div className="p-4 border-b border-line bg-cream space-y-2.5">
+      <div className="p-4 border-b border-line bg-cream dark:bg-paper-2 space-y-2.5">
         <Mono className="text-pine-6 inline-flex items-center gap-1.5">
           <MagnifyingGlass className="w-3 h-3" weight="regular" />
           Search for a location
@@ -122,7 +122,7 @@ export function MapLocationPicker({ onSelectLocation, onCancel, initialCenter }:
 
       {/* Selected location details */}
       {selectedLocation ? (
-        <div className="p-4 border-t border-line bg-cream space-y-3">
+        <div className="p-4 border-t border-line bg-cream dark:bg-paper-2 space-y-3">
           <div className="inline-flex items-center gap-1.5">
             <MapPin className="w-3.5 h-3.5 text-pine-6" weight="fill" />
             <Mono className="text-ink-2">
@@ -152,7 +152,7 @@ export function MapLocationPicker({ onSelectLocation, onCancel, initialCenter }:
           </div>
         </div>
       ) : (
-        <div className="p-4 border-t border-line bg-cream">
+        <div className="p-4 border-t border-line bg-cream dark:bg-paper-2">
           <Pill variant="ghost" mono={false} onClick={onCancel} className="!w-full !justify-center">
             Cancel
           </Pill>

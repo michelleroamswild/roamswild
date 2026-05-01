@@ -113,7 +113,7 @@ export function AddCampsiteModal({ isOpen, onClose, initialLat, initialLng }: Ad
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-lg border-line bg-white rounded-[18px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg border-line bg-white dark:bg-paper-2 rounded-[18px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <Mono className="text-pine-6 flex items-center gap-1.5">
             <Tent className="w-3.5 h-3.5" weight="regular" />
@@ -300,7 +300,7 @@ export function AddCampsiteModal({ isOpen, onClose, initialLat, initialLng }: Ad
 }
 
 const inputCls =
-  'w-full h-10 px-3 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors';
+  'w-full h-10 px-3 rounded-[12px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors';
 
 const Field = ({
   label,
@@ -332,10 +332,10 @@ const FormSelect = ({
   children: React.ReactNode;
 }) => (
   <Select value={value} onValueChange={onValueChange}>
-    <SelectTrigger className="h-10 rounded-[12px] border-line bg-white text-ink text-[14px] hover:border-ink-3 transition-colors">
+    <SelectTrigger className="h-10 rounded-[12px] border-line bg-white dark:bg-paper-2 text-ink text-[14px] hover:border-ink-3 transition-colors">
       <SelectValue placeholder={placeholder} />
     </SelectTrigger>
-    <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink">
+    <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream dark:bg-paper-2 [&_[data-highlighted]]:text-ink">
       {children}
     </SelectContent>
   </Select>
@@ -350,7 +350,7 @@ const ToggleRow = ({
   checked: boolean;
   onChange: (v: boolean) => void;
 }) => (
-  <label className="flex items-center justify-between px-3 py-2.5 rounded-[12px] border border-line bg-white cursor-pointer hover:border-ink-3/40 transition-colors">
+  <label className="flex items-center justify-between px-3 py-2.5 rounded-[12px] border border-line bg-white dark:bg-paper-2 cursor-pointer hover:border-ink-3/40 transition-colors">
     <span className="text-[14px] text-ink">{label}</span>
     <Switch checked={checked} onCheckedChange={onChange} />
   </label>

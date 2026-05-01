@@ -341,7 +341,7 @@ export function AlternativeCampsitesModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center font-sans">
       <div className="absolute inset-0 bg-ink-pine/60 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative bg-white border border-line rounded-[18px] shadow-[0_18px_44px_rgba(29,34,24,.16),0_3px_8px_rgba(29,34,24,.08)] w-full max-w-lg mx-4 max-h-[85vh] flex flex-col overflow-hidden animate-fade-in">
+      <div className="relative bg-white dark:bg-paper-2 border border-line rounded-[18px] shadow-[0_18px_44px_rgba(29,34,24,.16),0_3px_8px_rgba(29,34,24,.08)] w-full max-w-lg mx-4 max-h-[85vh] flex flex-col overflow-hidden animate-fade-in">
         {/* Header */}
         <div className="flex items-start justify-between p-5 border-b border-line gap-3">
           <div className="min-w-0">
@@ -382,7 +382,7 @@ export function AlternativeCampsitesModal({
               <Mono className="text-pine-6">Finding nearby campsites…</Mono>
             </div>
           ) : alternatives.length === 0 ? (
-            <div className="border border-dashed border-line bg-cream/40 rounded-[14px] px-6 py-12 text-center">
+            <div className="border border-dashed border-line bg-cream/40 dark:bg-paper-2/40 rounded-[14px] px-6 py-12 text-center">
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-sage/15 text-sage mb-3">
                 <Tent className="w-5 h-5" weight="regular" />
               </div>
@@ -398,7 +398,7 @@ export function AlternativeCampsitesModal({
                     key={campsite.id}
                     onClick={() => handleSelect(campsite)}
                     className={cn(
-                      'w-full text-left p-4 rounded-[14px] border bg-white transition-all',
+                      'w-full text-left p-4 rounded-[14px] border bg-white dark:bg-paper-2 transition-all',
                       selected
                         ? 'border-pine-6 ring-1 ring-pine-6/40 bg-pine-6/[0.04]'
                         : 'border-line hover:border-ink-3/40',
@@ -408,7 +408,7 @@ export function AlternativeCampsitesModal({
                       <div
                         className={cn(
                           'inline-flex items-center justify-center w-9 h-9 rounded-[10px] flex-shrink-0 transition-colors',
-                          selected ? 'bg-pine-6 text-cream' : 'bg-clay/15 text-clay',
+                          selected ? 'bg-pine-6 text-cream dark:text-ink-pine' : 'bg-clay/15 text-clay',
                         )}
                       >
                         {selected ? (
@@ -482,7 +482,7 @@ export function AlternativeCampsitesModal({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-line bg-cream">
+        <div className="px-5 py-3 border-t border-line bg-cream dark:bg-paper-2">
           <Mono className="text-ink-3 block text-center">Tap a campsite to swap it in</Mono>
         </div>
       </div>

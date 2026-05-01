@@ -110,12 +110,12 @@ export const DayCard = ({
   return (
     <div
       className={cn(
-        'border bg-white rounded-[14px] overflow-hidden transition-colors',
+        'border bg-white dark:bg-paper-2 rounded-[14px] overflow-hidden transition-colors',
         isActive ? 'border-pine-6 ring-1 ring-pine-6' : 'border-line',
       )}
     >
       {/* Day header — click to expand */}
-      <div className="hover:bg-cream/40 transition-colors">
+      <div className="hover:bg-cream/40 dark:hover:bg-paper-2/40 transition-colors">
         <div className="flex items-center justify-between p-3 sm:p-4 gap-2">
           <button
             onClick={onToggle}
@@ -124,7 +124,7 @@ export const DayCard = ({
             <div
               className={cn(
                 'inline-flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-full shrink-0 font-mono font-bold text-[13px] sm:text-[15px] tracking-[0.02em]',
-                isActive ? 'bg-pine-6 text-cream' : 'bg-pine-6/10 text-pine-6',
+                isActive ? 'bg-pine-6 text-cream dark:text-ink-pine' : 'bg-pine-6/10 text-pine-6',
               )}
             >
               {day.day}
@@ -219,7 +219,7 @@ export const DayCard = ({
               return (
                 <div
                   key={stop.id}
-                  className="p-4 hover:bg-cream/40 transition-colors border-b border-line last:border-b-0"
+                  className="p-4 hover:bg-cream/40 dark:hover:bg-paper-2/40 transition-colors border-b border-line last:border-b-0"
                 >
                   <div className="flex items-start gap-3">
                     <IconBlock Icon={Warning} bg="bg-clay/15" text="text-clay" />
@@ -246,7 +246,7 @@ export const DayCard = ({
             return (
               <div
                 key={stop.id}
-                className="p-4 hover:bg-cream/40 transition-colors border-b border-line last:border-b-0 group"
+                className="p-4 hover:bg-cream/40 dark:hover:bg-paper-2/40 transition-colors border-b border-line last:border-b-0 group"
               >
                 <div className="flex items-start gap-3">
                   <IconBlock Icon={Icon} bg={bg} text={text} />

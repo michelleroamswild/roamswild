@@ -29,7 +29,7 @@ export const AddDestinationModal = ({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="sm:max-w-md border-line bg-white rounded-[18px]"
+        className="sm:max-w-md border-line bg-white dark:bg-paper-2 rounded-[18px]"
         onOpenAutoFocus={(e) => e.preventDefault()}
         onInteractOutside={(e) => {
           const target = e.target as HTMLElement;

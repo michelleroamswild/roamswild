@@ -26,8 +26,8 @@ export const RegeneratingLoader = () => {
   const { Icon } = current;
 
   return (
-    <div className="fixed inset-0 z-[60] bg-cream/80 backdrop-blur-sm flex items-center justify-center">
-      <div className="bg-white border border-line rounded-[18px] px-10 py-9 shadow-[0_18px_44px_rgba(29,34,24,0.12)] flex flex-col items-center gap-5 max-w-[320px]">
+    <div className="fixed inset-0 z-[60] bg-cream/80 dark:bg-paper-2/80 backdrop-blur-sm flex items-center justify-center">
+      <div className="bg-white dark:bg-paper-2 border border-line rounded-[18px] px-10 py-9 shadow-[0_18px_44px_rgba(29,34,24,0.12)] flex flex-col items-center gap-5 max-w-[320px]">
         <div className="relative">
           <svg className="w-20 h-20 animate-spin" viewBox="0 0 50 50">
             <circle

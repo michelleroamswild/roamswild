@@ -115,7 +115,7 @@ export function SunsetConditionsDialog({ open, onOpenChange }: SunsetConditionsD
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         size="md"
-        className="max-h-[85vh] overflow-hidden flex flex-col border-line bg-white rounded-[18px] max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-none max-sm:max-h-none max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-0"
+        className="max-h-[85vh] overflow-hidden flex flex-col border-line bg-white dark:bg-paper-2 rounded-[18px] max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-none max-sm:max-h-none max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-0"
       >
         <DialogHeader>
           <Mono className="text-clay flex items-center gap-1.5">
@@ -254,7 +254,7 @@ export function SunsetConditionsDialog({ open, onOpenChange }: SunsetConditionsD
                 <div className="space-y-2">
                   <Mono className="text-ink-2 block">What to expect</Mono>
                   {topInsights.map((insight, i) => (
-                    <div key={i} className="flex items-start gap-2 p-3 rounded-[12px] border border-line bg-cream">
+                    <div key={i} className="flex items-start gap-2 p-3 rounded-[12px] border border-line bg-cream dark:bg-paper-2">
                       <ImpactIcon impact={insight.impact} />
                       <div className="min-w-0">
                         <p className="text-[14px] font-sans font-semibold text-ink">{insight.label}</p>
@@ -306,7 +306,7 @@ const MetricTile = ({
   const text =
     accent === 'water' ? 'text-water' : accent === 'sage' ? 'text-sage' : 'text-clay';
   return (
-    <div className="flex items-center gap-2 p-3 rounded-[12px] border border-line bg-cream">
+    <div className="flex items-center gap-2 p-3 rounded-[12px] border border-line bg-cream dark:bg-paper-2">
       <Icon className={cn('w-5 h-5 flex-shrink-0', text)} weight="fill" />
       <div className="min-w-0">
         <Mono className="text-ink-3 block">{label}</Mono>

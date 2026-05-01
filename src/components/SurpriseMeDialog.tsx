@@ -179,7 +179,7 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         size="md"
-        className="max-w-lg sm:max-h-[85vh] flex flex-col border-line bg-white rounded-[18px] max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-none max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-0"
+        className="max-w-lg sm:max-h-[85vh] flex flex-col border-line bg-white dark:bg-paper-2 rounded-[18px] max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-none max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-0"
         onInteractOutside={(e) => { if (showLocationFallback) e.preventDefault(); }}
       >
         <DialogHeader className="text-left shrink-0">
@@ -298,7 +298,7 @@ function ResultDisplay({
   nearestLocation: string | null;
 }) {
   const biome = result.region.primaryBiome;
-  const biomeColor = biome ? BIOME_COLORS[biome] : 'bg-cream text-ink-3';
+  const biomeColor = biome ? BIOME_COLORS[biome] : 'bg-cream dark:bg-paper-2 text-ink-3';
   const biomeIcon = biome ? BIOME_ICONS[biome] : <MapPin className="w-5 h-5" />;
   const displayName = cleanRegionName(result.region.name);
 
@@ -348,7 +348,7 @@ function ResultDisplay({
               '_blank',
             );
           }}
-          className="w-full p-4 rounded-[14px] border border-line bg-cream hover:border-pine-6 hover:bg-pine-6/[0.04] transition-all text-left animate-in fade-in duration-300"
+          className="w-full p-4 rounded-[14px] border border-line bg-cream dark:bg-paper-2 hover:border-pine-6 hover:bg-pine-6/[0.04] transition-all text-left animate-in fade-in duration-300"
         >
           <div className="flex items-center justify-between mb-2">
             <Mono className="text-pine-6 flex items-center gap-1.5">
@@ -370,7 +370,7 @@ function ResultDisplay({
           )}
         </button>
       ) : (
-        <div className="w-full p-4 rounded-[14px] border border-line bg-cream">
+        <div className="w-full p-4 rounded-[14px] border border-line bg-cream dark:bg-paper-2">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-5 h-5 rounded bg-line animate-pulse" />
             <div className="h-4 w-24 rounded bg-line animate-pulse" />
@@ -425,7 +425,7 @@ const StatTile = ({
   label: string;
   value: string;
 }) => (
-  <div className="flex items-center gap-2 p-3 rounded-[12px] border border-line bg-cream">
+  <div className="flex items-center gap-2 p-3 rounded-[12px] border border-line bg-cream dark:bg-paper-2">
     <Icon className="w-4 h-4 text-ink-3 flex-shrink-0" weight="regular" />
     <div className="min-w-0">
       <Mono className="text-ink-3 block">{label}</Mono>

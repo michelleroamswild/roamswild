@@ -211,7 +211,7 @@ export function StepDayBuilder({
             onInteractOutside={(e) => e.preventDefault()}
             onPointerDownOutside={(e) => e.preventDefault()}
           >
-            <SheetHeader className="p-4 border-b border-line bg-cream">
+            <SheetHeader className="p-4 border-b border-line bg-cream dark:bg-paper-2">
               <Mono className="text-pine-6 inline-flex items-center gap-1.5">
                 <MapTrifold className="w-3.5 h-3.5" weight="regular" />
                 Pick area on map
@@ -324,7 +324,7 @@ export function StepDayBuilder({
                     ) : (
                       <button
                         onClick={() => handleAddRecommendation(selectedMarker)}
-                        className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-pine-6 text-cream text-[12px] font-semibold tracking-[0.01em] hover:bg-pine-5 transition-colors"
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-pine-6 text-cream dark:text-ink-pine text-[12px] font-semibold tracking-[0.01em] hover:bg-pine-5 transition-colors"
                       >
                         <Plus className="w-3.5 h-3.5" weight="regular" />
                         Add to itinerary
@@ -337,7 +337,7 @@ export function StepDayBuilder({
 
             {loadingRecs && (
               <div className="absolute inset-0 bg-paper/40 flex items-center justify-center">
-                <div className="bg-white border border-line rounded-[14px] p-3.5 shadow-[0_8px_22px_rgba(29,34,24,.10)] flex items-center gap-2.5">
+                <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] p-3.5 shadow-[0_8px_22px_rgba(29,34,24,.10)] flex items-center gap-2.5">
                   <SpinnerGap className="w-4 h-4 animate-spin text-pine-6" />
                   <Mono className="text-pine-6">Finding recommendations…</Mono>
                 </div>
@@ -364,8 +364,8 @@ export function StepDayBuilder({
           </div>
 
           {/* Itinerary card */}
-          <div className="bg-white border border-line rounded-[14px] overflow-hidden">
-            <div className="px-4 py-3 border-b border-line bg-cream">
+          <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] overflow-hidden">
+            <div className="px-4 py-3 border-b border-line bg-cream dark:bg-paper-2">
               <Mono className="text-clay inline-flex items-center gap-1.5">
                 <Sun className="w-3 h-3" weight="regular" />
                 Day stops
@@ -394,7 +394,7 @@ export function StepDayBuilder({
                         onDragOver={(e) => handleDragOver(e, index)}
                         onDragEnd={handleDragEnd}
                         className={cn(
-                          'flex items-center gap-2 p-2.5 bg-cream rounded-[10px] border border-line transition-all cursor-move',
+                          'flex items-center gap-2 p-2.5 bg-cream dark:bg-paper-2 rounded-[10px] border border-line transition-all cursor-move',
                           draggedIndex === index ? 'opacity-50 border-pine-6' : 'hover:border-ink-3/40',
                         )}
                       >
@@ -425,14 +425,14 @@ export function StepDayBuilder({
             <div className="border-t border-line" />
 
             {/* Tonight's Camp */}
-            <div className="p-4 bg-cream/40">
+            <div className="p-4 bg-cream/40 dark:bg-paper-2/40">
               <Mono className="text-water inline-flex items-center gap-1.5 mb-2.5">
                 <Moon className="w-3 h-3" weight="regular" />
                 Tonight's camp
               </Mono>
 
               {campsite ? (
-                <div className="flex items-center gap-2.5 p-2.5 bg-white rounded-[10px] border border-line">
+                <div className="flex items-center gap-2.5 p-2.5 bg-white dark:bg-paper-2 rounded-[10px] border border-line">
                   <div className="w-9 h-9 rounded-[8px] bg-clay/15 text-clay flex items-center justify-center flex-shrink-0">
                     <Tent className="w-4 h-4" weight="regular" />
                   </div>
@@ -513,7 +513,7 @@ export function StepDayBuilder({
           onInteractOutside={(e) => e.preventDefault()}
           onPointerDownOutside={(e) => e.preventDefault()}
         >
-          <SheetHeader className="p-4 border-b border-line bg-cream">
+          <SheetHeader className="p-4 border-b border-line bg-cream dark:bg-paper-2">
             <Mono className="text-pine-6 inline-flex items-center gap-1.5">
               <MapTrifold className="w-3.5 h-3.5" weight="regular" />
               Add a stop
@@ -544,7 +544,7 @@ export function StepDayBuilder({
 
       {/* Change Area Dialog */}
       <Dialog open={isAreaChangeOpen} onOpenChange={setIsAreaChangeOpen}>
-        <DialogContent className="sm:max-w-md border-line bg-white rounded-[18px]">
+        <DialogContent className="sm:max-w-md border-line bg-white dark:bg-paper-2 rounded-[18px]">
           <DialogHeader>
             <Mono className="text-pine-6 inline-flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5" weight="regular" />
@@ -603,7 +603,7 @@ export function StepDayBuilder({
           onInteractOutside={(e) => e.preventDefault()}
           onPointerDownOutside={(e) => e.preventDefault()}
         >
-          <SheetHeader className="p-4 border-b border-line bg-cream">
+          <SheetHeader className="p-4 border-b border-line bg-cream dark:bg-paper-2">
             <Mono className="text-pine-6 inline-flex items-center gap-1.5">
               <MapTrifold className="w-3.5 h-3.5" weight="regular" />
               Pick area on map

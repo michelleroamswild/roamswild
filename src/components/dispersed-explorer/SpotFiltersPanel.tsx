@@ -136,7 +136,7 @@ const InlinePill = ({
     aria-pressed={active}
     className={cn(
       'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-mono uppercase tracking-[0.10em] font-semibold transition-colors',
-      active ? `${activeBg} ${activeBorder} ${activeText}` : 'bg-white border-line text-ink-3 hover:text-ink hover:border-ink-3',
+      active ? `${activeBg} ${activeBorder} ${activeText}` : 'bg-white dark:bg-paper border-line dark:border-line-2 text-ink-3 hover:text-ink hover:border-ink-3',
     )}
   >
     {Icon && <Icon className="w-3 h-3" weight="regular" />}

@@ -129,7 +129,7 @@ const Admin = () => {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-cream flex items-center justify-center">
+      <div className="min-h-screen bg-cream dark:bg-paper flex items-center justify-center">
         <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10">
           <SpinnerGap className="w-5 h-5 text-pine-6 animate-spin" />
         </div>
@@ -144,11 +144,11 @@ const Admin = () => {
   const usedCount = entries.filter((e) => e.used_at).length;
 
   return (
-    <div className="bg-cream text-ink font-sans min-h-screen">
+    <div className="bg-cream dark:bg-paper text-ink font-sans min-h-screen">
       <Header />
 
       {/* Hero strip */}
-      <section className="relative overflow-hidden bg-cream -mt-16 md:-mt-20">
+      <section className="relative overflow-hidden bg-cream dark:bg-paper-2 -mt-16 md:-mt-20">
         <div className="relative max-w-[1440px] mx-auto px-6 md:px-14 pt-28 md:pt-36 pb-10 md:pb-14">
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
@@ -184,10 +184,10 @@ const Admin = () => {
           </div>
 
           {/* Table */}
-          <div className="bg-white border border-line rounded-[18px] overflow-hidden">
+          <div className="bg-white dark:bg-paper-2 border border-line rounded-[18px] overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-cream border-b border-line">
+                <thead className="bg-cream dark:bg-paper-2 border-b border-line">
                   <tr>
                     <Th>Email</Th>
                     <Th>Joined</Th>
@@ -201,7 +201,7 @@ const Admin = () => {
                     <tr
                       key={entry.id}
                       className={cn(
-                        'hover:bg-cream/60 transition-colors',
+                        'hover:bg-cream/60 dark:hover:bg-paper-2/60 transition-colors',
                         idx !== entries.length - 1 && 'border-b border-line',
                       )}
                     >
@@ -230,12 +230,12 @@ const Admin = () => {
                       <td className="px-4 py-3.5">
                         {entry.invite_code ? (
                           <div className="inline-flex items-center gap-1.5">
-                            <code className="text-[12px] font-mono font-semibold tracking-[0.06em] bg-cream border border-line text-ink px-2 py-1 rounded-[8px]">
+                            <code className="text-[12px] font-mono font-semibold tracking-[0.06em] bg-cream dark:bg-paper-2 border border-line text-ink px-2 py-1 rounded-[8px]">
                               {entry.invite_code}
                             </code>
                             <button
                               onClick={() => handleCopyCode(entry.invite_code!)}
-                              className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-3 hover:text-ink hover:bg-cream transition-colors"
+                              className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-3 hover:text-ink hover:bg-cream dark:hover:bg-paper-2 transition-colors"
                               aria-label="Copy code"
                             >
                               {copiedCode === entry.invite_code ? (
@@ -356,7 +356,7 @@ const StatCard = ({
   };
   const t = tones[accent];
   return (
-    <div className="bg-white border border-line rounded-[14px] p-4 flex items-center gap-3">
+    <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] p-4 flex items-center gap-3">
       <div className={cn('w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0', t.bg, t.text)}>
         <Icon className="w-5 h-5" weight="regular" />
       </div>

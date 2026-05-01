@@ -404,7 +404,7 @@ export default function PhotoWeatherTest({ previewMode = false, initialLocation 
         <div className={previewMode ? 'max-w-xl mx-auto px-4 py-6' : 'flex-1 lg:w-1/2 overflow-y-auto'}>
           {/* Header */}
           {!previewMode ? (
-            <div className="sticky top-0 z-10 bg-cream/95 backdrop-blur-md border-b border-line px-4 sm:px-6 py-4">
+            <div className="sticky top-0 z-10 bg-cream/95 dark:bg-paper-2/95 backdrop-blur-md border-b border-line px-4 sm:px-6 py-4">
               <Mono className="text-pine-6 inline-flex items-center gap-1.5">
                 <Sparkle className="w-3.5 h-3.5" weight="regular" />
                 Light Report

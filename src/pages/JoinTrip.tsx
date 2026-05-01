@@ -31,7 +31,7 @@ interface ShareLinkInfo {
 // inside the same cream-with-topo backdrop and centered card so transitions
 // between states feel continuous.
 const JoinShell = ({ children }: { children: React.ReactNode }) => (
-  <div className="min-h-screen bg-cream text-ink font-sans relative flex items-center justify-center p-6 overflow-hidden">
+  <div className="min-h-screen bg-cream dark:bg-paper text-ink font-sans relative flex items-center justify-center p-6 overflow-hidden">
     <TopoBg color="hsl(var(--paper))" opacity={0.55} scale={700} />
     <div className="relative w-full max-w-[440px]">{children}</div>
   </div>
@@ -122,7 +122,7 @@ const JoinTrip = () => {
   if (loading) {
     return (
       <JoinShell>
-        <div className="bg-white border border-line rounded-[18px] p-10 text-center shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+        <div className="bg-white dark:bg-paper-2 border border-line rounded-[18px] p-10 text-center shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/10 mb-4">
             <SpinnerGap className="w-6 h-6 text-pine-6 animate-spin" />
           </div>
@@ -137,7 +137,7 @@ const JoinTrip = () => {
   if (error) {
     return (
       <JoinShell>
-        <div className="bg-white border border-line rounded-[18px] p-8 text-center shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+        <div className="bg-white dark:bg-paper-2 border border-line rounded-[18px] p-8 text-center shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-ember/15 text-ember mb-4">
             <WarningCircle className="w-6 h-6" weight="regular" />
           </div>
@@ -149,7 +149,7 @@ const JoinTrip = () => {
           <div className="mt-6 flex justify-center">
             <Link
               to="/"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-line bg-white text-ink text-[14px] font-sans font-semibold hover:border-ink-3 transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-line bg-white dark:bg-paper-2 text-ink text-[14px] font-sans font-semibold hover:border-ink-3 transition-colors"
             >
               Go home
             </Link>
@@ -163,7 +163,7 @@ const JoinTrip = () => {
   if (!user) {
     return (
       <JoinShell>
-        <div className="bg-white border border-line rounded-[18px] p-8 text-center shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+        <div className="bg-white dark:bg-paper-2 border border-line rounded-[18px] p-8 text-center shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/10 text-pine-6 mb-4">
             <Users className="w-6 h-6" weight="regular" />
           </div>
@@ -178,14 +178,14 @@ const JoinTrip = () => {
             <Link
               to="/login"
               state={{ returnTo: `/join/${token}` }}
-              className="inline-flex w-full items-center justify-center gap-2 px-5 py-2.5 rounded-[14px] bg-pine-6 text-cream text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors"
+              className="inline-flex w-full items-center justify-center gap-2 px-5 py-2.5 rounded-[14px] bg-pine-6 text-cream dark:text-ink-pine text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors"
             >
               Sign in
               <ArrowRight className="w-4 h-4" weight="bold" />
             </Link>
             <Link
               to="/"
-              className="inline-flex w-full items-center justify-center gap-2 px-5 py-2.5 rounded-[14px] border border-line bg-white text-ink text-[14px] font-sans font-semibold hover:border-ink-3 transition-colors"
+              className="inline-flex w-full items-center justify-center gap-2 px-5 py-2.5 rounded-[14px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] font-sans font-semibold hover:border-ink-3 transition-colors"
             >
               Go home
             </Link>
@@ -198,7 +198,7 @@ const JoinTrip = () => {
   // === Trip preview / accept state ===
   return (
     <JoinShell>
-      <div className="bg-white border border-line rounded-[18px] p-8 shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+      <div className="bg-white dark:bg-paper-2 border border-line rounded-[18px] p-8 shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
         <div className="text-center">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/10 text-pine-6 mb-4">
             <Compass className="w-6 h-6" weight="regular" />
@@ -214,14 +214,14 @@ const JoinTrip = () => {
 
         {/* Trip summary — 2 stat tiles */}
         <div className="mt-6 grid grid-cols-2 gap-3">
-          <div className="px-3 py-3 rounded-[12px] border border-line bg-cream text-center">
+          <div className="px-3 py-3 rounded-[12px] border border-line bg-cream dark:bg-paper-2 text-center">
             <Calendar className="w-4 h-4 text-pine-6 mx-auto" weight="regular" />
             <p className="text-[18px] font-sans font-bold tracking-[-0.015em] text-ink mt-1.5">
               {linkInfo?.daysCount} {linkInfo?.daysCount === 1 ? 'day' : 'days'}
             </p>
             <Mono className="text-ink-3 block mt-0.5">Duration</Mono>
           </div>
-          <div className="px-3 py-3 rounded-[12px] border border-line bg-cream text-center">
+          <div className="px-3 py-3 rounded-[12px] border border-line bg-cream dark:bg-paper-2 text-center">
             <Path className="w-4 h-4 text-clay mx-auto" weight="regular" />
             <p className="text-[18px] font-sans font-bold tracking-[-0.015em] text-ink mt-1.5">
               {linkInfo?.totalDistance}
@@ -238,7 +238,7 @@ const JoinTrip = () => {
               {linkInfo.destinations.map((dest, i) => (
                 <span
                   key={i}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-cream border border-line text-[12px] font-sans font-semibold text-ink"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-cream dark:bg-paper-2 border border-line text-[12px] font-sans font-semibold text-ink"
                 >
                   <MapPin className="w-3 h-3 text-pine-6" weight="regular" />
                   {dest}
@@ -249,7 +249,7 @@ const JoinTrip = () => {
         )}
 
         {/* Permission badge */}
-        <div className="mt-5 flex items-center justify-center gap-2 px-3 py-2.5 rounded-[12px] border border-line bg-cream">
+        <div className="mt-5 flex items-center justify-center gap-2 px-3 py-2.5 rounded-[12px] border border-line bg-cream dark:bg-paper-2">
           <Mono className="text-ink-3">You'll have</Mono>
           <span
             className={
@@ -284,7 +284,7 @@ const JoinTrip = () => {
           </Pill>
           <Link
             to="/"
-            className="inline-flex w-full items-center justify-center gap-2 px-5 py-2.5 rounded-[14px] border border-line bg-white text-ink text-[14px] font-sans font-semibold hover:border-ink-3 transition-colors"
+            className="inline-flex w-full items-center justify-center gap-2 px-5 py-2.5 rounded-[14px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] font-sans font-semibold hover:border-ink-3 transition-colors"
           >
             Maybe later
           </Link>

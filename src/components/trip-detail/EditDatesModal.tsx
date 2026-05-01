@@ -42,7 +42,7 @@ export const EditDatesModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md border-line bg-white rounded-[18px]">
+      <DialogContent className="sm:max-w-md border-line bg-white dark:bg-paper-2 rounded-[18px]">
         <DialogHeader>
           <Mono className="text-pine-6 flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5" weight="regular" />
@@ -77,7 +77,7 @@ export const EditDatesModal = ({
           </div>
 
           {startDate && endDate && (
-            <div className="p-4 bg-cream rounded-[12px] border border-line">
+            <div className="p-4 bg-cream dark:bg-paper-2 rounded-[12px] border border-line">
               <p className="text-[14px] text-ink">
                 <span className="font-sans font-semibold">{dur} days</span>{' '}
                 <span className="text-ink-3">from</span>{' '}

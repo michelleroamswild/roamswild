@@ -86,7 +86,7 @@ export function StepBuildMethod({ buildMethod, setBuildMethod }: StepBuildMethod
               type="button"
               onClick={() => setBuildMethod(id)}
               className={cn(
-                'relative flex flex-col items-start text-left p-6 rounded-[18px] border bg-white transition-all',
+                'relative flex flex-col items-start text-left p-6 rounded-[18px] border bg-white dark:bg-paper-2 transition-all',
                 'hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]',
                 selected ? `${accent.selectedBorder} ${accent.selectedBg}` : accent.border,
               )}

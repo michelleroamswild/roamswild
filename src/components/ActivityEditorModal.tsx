@@ -81,7 +81,7 @@ export function ActivityEditorModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center font-sans">
       <div className="absolute inset-0 bg-ink-pine/60 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative bg-white border border-line rounded-[18px] shadow-[0_18px_44px_rgba(29,34,24,.16),0_3px_8px_rgba(29,34,24,.08)] w-full max-w-md mx-4 max-h-[90dvh] flex flex-col overflow-hidden">
+      <div className="relative bg-white dark:bg-paper-2 border border-line rounded-[18px] shadow-[0_18px_44px_rgba(29,34,24,.16),0_3px_8px_rgba(29,34,24,.08)] w-full max-w-md mx-4 max-h-[90dvh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-5 py-4 border-b border-line flex items-start justify-between gap-3">
           <div>
@@ -112,7 +112,7 @@ export function ActivityEditorModal({
                   <div
                     key={id}
                     className={cn(
-                      'rounded-[14px] border bg-white transition-all',
+                      'rounded-[14px] border bg-white dark:bg-paper-2 transition-all',
                       selected ? `${a.selectedBorder} ${a.selectedBg}` : 'border-line hover:border-ink-3/40',
                     )}
                   >
@@ -176,7 +176,7 @@ export function ActivityEditorModal({
                   <label
                     key={id}
                     className={cn(
-                      'flex items-center gap-3 p-3 rounded-[12px] border bg-white cursor-pointer transition-all',
+                      'flex items-center gap-3 p-3 rounded-[12px] border bg-white dark:bg-paper-2 cursor-pointer transition-all',
                       selected ? `${a.selectedBorder} ${a.selectedBg}` : 'border-line hover:border-ink-3/40',
                     )}
                   >
@@ -191,7 +191,7 @@ export function ActivityEditorModal({
                       'w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors',
                       selected ? a.dot : 'border-ink-3/40 bg-transparent',
                     )}>
-                      {selected && <span className="w-1.5 h-1.5 rounded-full bg-cream" />}
+                      {selected && <span className="w-1.5 h-1.5 rounded-full bg-cream dark:bg-paper-2" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">{label}</div>
@@ -228,7 +228,7 @@ const VehicleRadio = ({
   label: string;
 }) => (
   <label className={cn(
-    'flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] border bg-white cursor-pointer transition-colors',
+    'flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] border bg-white dark:bg-paper-2 cursor-pointer transition-colors',
     checked ? 'border-clay bg-clay/[0.06]' : 'border-line hover:border-ink-3/40',
   )}>
     <input type="radio" checked={checked} onChange={onChange} className="sr-only" />
@@ -236,7 +236,7 @@ const VehicleRadio = ({
       'w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors',
       checked ? 'border-clay bg-clay' : 'border-ink-3/40',
     )}>
-      {checked && <span className="w-1.5 h-1.5 rounded-full bg-cream" />}
+      {checked && <span className="w-1.5 h-1.5 rounded-full bg-cream dark:bg-paper-2" />}
     </div>
     <span className="text-[13px] text-ink">{label}</span>
   </label>

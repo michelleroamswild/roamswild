@@ -81,7 +81,7 @@ export const ItineraryPanel = ({
       <div className="px-4 sm:px-6 pt-5 pb-5 space-y-5">
         {/* Trip header — wrapped in a card on the paper sidebar so it reads
             as a contained intro section rather than a flat band. */}
-        <div className="bg-white border border-line rounded-[14px] p-5">
+        <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] p-5">
           <Mono className="text-pine-6">Your trip</Mono>
           <h1 className="text-[24px] sm:text-[32px] font-sans font-bold tracking-[-0.025em] text-ink leading-[1.1] mt-1">
             {tripConfig.name || 'My trip'}

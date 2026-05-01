@@ -213,7 +213,7 @@ export function EntryPointSelector({
       <div ref={placesContainerRef} style={{ position: 'absolute', visibility: 'hidden', width: 0, height: 0 }} />
 
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col border-line bg-white rounded-[18px]">
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col border-line bg-white dark:bg-paper-2 rounded-[18px]">
           <DialogHeader>
             <Mono className="text-pine-6 flex items-center gap-1.5">
               <NavigationArrow className="w-3.5 h-3.5" weight="regular" />
@@ -252,7 +252,7 @@ export function EntryPointSelector({
                       key={entryPoint.placeId}
                       type="button"
                       onClick={() => handleSelect(entryPoint)}
-                      className="group w-full flex items-start gap-3 p-3 rounded-[12px] border border-line bg-white text-left transition-all hover:border-pine-6 hover:bg-pine-6/[0.04]"
+                      className="group w-full flex items-start gap-3 p-3 rounded-[12px] border border-line bg-white dark:bg-paper-2 text-left transition-all hover:border-pine-6 hover:bg-pine-6/[0.04]"
                     >
                       <div className={
                         isVC

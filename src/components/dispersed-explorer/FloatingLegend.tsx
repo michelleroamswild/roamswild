@@ -46,7 +46,7 @@ export const FloatingLegend = ({
     <Popover>
       <PopoverTrigger asChild>
         <button
-          className="absolute bottom-4 left-4 z-10 w-11 h-11 rounded-full bg-white border border-line shadow-[0_8px_22px_rgba(29,34,24,.12),0_2px_4px_rgba(29,34,24,.06)] flex items-center justify-center hover:bg-cream transition-colors"
+          className="absolute bottom-4 left-4 z-10 w-11 h-11 rounded-full bg-white dark:bg-paper-2 border border-line dark:border-line-2 shadow-[0_8px_22px_rgba(29,34,24,.12),0_2px_4px_rgba(29,34,24,.06)] flex items-center justify-center hover:bg-cream dark:hover:bg-paper transition-colors"
           aria-label="Show legend"
         >
           <MapTrifold className="w-4 h-4 text-ink" weight="regular" />
@@ -56,7 +56,7 @@ export const FloatingLegend = ({
         side="top"
         align="start"
         sideOffset={8}
-        className="w-72 p-4 rounded-[14px] border-line bg-white"
+        className="w-72 p-4 rounded-[14px] border-line dark:border-line-2 bg-white dark:bg-paper-2"
       >
         <div className="space-y-5">
           <div className="flex items-center gap-2">
@@ -77,7 +77,7 @@ export const FloatingLegend = ({
                     aria-pressed={on}
                     className={cn(
                       'flex items-center gap-2 px-1.5 py-1 rounded-md transition-colors text-left',
-                      on ? 'bg-cream' : 'opacity-40 hover:opacity-100 hover:bg-cream/60',
+                      on ? 'bg-cream dark:bg-paper' : 'opacity-40 hover:opacity-100 hover:bg-cream/60 dark:hover:bg-paper/60',
                     )}
                   >
                     <div className={cn('w-3.5 h-3.5 rounded-[3px] border', a.fill, a.stroke)} />

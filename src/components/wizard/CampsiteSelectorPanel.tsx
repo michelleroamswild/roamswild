@@ -64,7 +64,7 @@ export function CampsiteSelectorPanel({
   };
 
   const inputCls =
-    'w-full h-10 pl-9 pr-3 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors';
+    'w-full h-10 pl-9 pr-3 rounded-[12px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors';
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -74,7 +74,7 @@ export function CampsiteSelectorPanel({
         onInteractOutside={(e) => e.preventDefault()}
         onPointerDownOutside={(e) => e.preventDefault()}
       >
-        <SheetHeader className="p-4 border-b border-line bg-cream">
+        <SheetHeader className="p-4 border-b border-line bg-cream dark:bg-paper-2">
           <Mono className="text-pine-6 inline-flex items-center gap-1.5">
             <Tent className="w-3.5 h-3.5" weight="regular" />
             Select campsite
@@ -93,12 +93,12 @@ export function CampsiteSelectorPanel({
           className="flex-1 flex flex-col"
         >
           <div className="px-4 pt-3">
-            <TabsList className="w-full bg-cream rounded-full p-1 h-auto border border-line">
+            <TabsList className="w-full bg-cream dark:bg-paper-2 rounded-full p-1 h-auto border border-line">
               <TabsTrigger
                 value="search"
                 className={cn(
                   'flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-full text-[12px] font-sans font-semibold tracking-[0.01em] transition-colors',
-                  'data-[state=active]:bg-ink data-[state=active]:text-cream data-[state=active]:shadow-[0_1px_2px_rgba(29,34,24,.08)]',
+                  'data-[state=active]:bg-ink dark:data-[state=active]:bg-ink-pine data-[state=active]:text-cream data-[state=active]:shadow-[0_1px_2px_rgba(29,34,24,.08)]',
                   'data-[state=inactive]:text-ink-3 data-[state=inactive]:hover:text-ink',
                 )}
               >
@@ -109,7 +109,7 @@ export function CampsiteSelectorPanel({
                 value="map"
                 className={cn(
                   'flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-full text-[12px] font-sans font-semibold tracking-[0.01em] transition-colors',
-                  'data-[state=active]:bg-ink data-[state=active]:text-cream data-[state=active]:shadow-[0_1px_2px_rgba(29,34,24,.08)]',
+                  'data-[state=active]:bg-ink dark:data-[state=active]:bg-ink-pine data-[state=active]:text-cream data-[state=active]:shadow-[0_1px_2px_rgba(29,34,24,.08)]',
                   'data-[state=inactive]:text-ink-3 data-[state=inactive]:hover:text-ink',
                 )}
               >
@@ -152,7 +152,7 @@ export function CampsiteSelectorPanel({
                   <button
                     key={campground.id}
                     onClick={() => handleSelectCampground(campground)}
-                    className="w-full flex items-center gap-3 p-3 bg-white rounded-[14px] border border-line hover:border-pine-6/40 hover:bg-pine-6/[0.04] transition-all text-left"
+                    className="w-full flex items-center gap-3 p-3 bg-white dark:bg-paper-2 rounded-[14px] border border-line hover:border-pine-6/40 hover:bg-pine-6/[0.04] transition-all text-left"
                   >
                     <div className="w-10 h-10 rounded-[10px] bg-clay/15 text-clay flex items-center justify-center flex-shrink-0">
                       <Tent className="w-5 h-5" weight="regular" />

@@ -195,7 +195,7 @@ const Landing = () => {
       <div className={cn(
         "rounded-[18px] p-5 inline-flex items-center gap-3 max-w-md",
         onDark
-          ? "bg-cream/10 border border-cream/30 text-cream"
+          ? "bg-cream/10 dark:bg-paper-2/10 border border-cream/30 text-cream"
           : "bg-pine-6/10 border border-pine-6/40 text-ink"
       )}>
         <CheckCircle className={cn("w-7 h-7 flex-shrink-0", onDark ? "text-cream" : "text-pine-6")} weight="fill" />
@@ -211,8 +211,8 @@ const Landing = () => {
         <div className={cn(
           "flex items-center gap-2 rounded-[18px] pl-5 pr-2 py-2 transition-colors",
           onDark
-            ? "bg-cream/10 border border-cream/25 focus-within:border-cream/50"
-            : "bg-white border border-line focus-within:border-pine-6 shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]",
+            ? "bg-cream/10 dark:bg-paper-2/10 border border-cream/25 focus-within:border-cream/50"
+            : "bg-white dark:bg-paper-2 border border-line focus-within:border-pine-6 shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]",
           emailError && (onDark ? "border-clay" : "border-ember")
         )}>
           <input
@@ -234,8 +234,8 @@ const Landing = () => {
             className={cn(
               "inline-flex items-center gap-2 px-5 py-2.5 rounded-[14px] text-[13px] font-sans font-semibold transition-colors disabled:opacity-50",
               onDark
-                ? "bg-cream text-ink hover:bg-cream/90"
-                : "bg-pine-6 text-cream hover:bg-pine-5"
+                ? "bg-cream dark:bg-paper-2 text-ink hover:bg-cream/90 dark:hover:bg-paper-2/90"
+                : "bg-pine-6 text-cream dark:text-ink-pine hover:bg-pine-5"
             )}
           >
             {waitlistLoading ? (
@@ -280,7 +280,7 @@ const Landing = () => {
   );
 
   return (
-    <div className="bg-cream text-ink font-sans min-h-screen">
+    <div className="bg-cream dark:bg-paper text-ink font-sans min-h-screen">
       {/* === Custom landing nav — transparent over the cream hero === */}
       <header className="absolute top-0 left-0 right-0 z-50">
         <div className="max-w-[1440px] mx-auto flex items-center justify-between h-16 md:h-20 px-4 md:px-14">
@@ -297,7 +297,7 @@ const Landing = () => {
             </Link>
             <Link
               to="/login"
-              className="px-4 py-2 rounded-full text-[13px] font-sans font-semibold tracking-[-0.005em] bg-ink text-cream hover:bg-ink-2 transition-colors"
+              className="px-4 py-2 rounded-full text-[13px] font-sans font-semibold tracking-[-0.005em] bg-ink dark:bg-ink-pine text-cream hover:bg-ink-2 transition-colors"
             >
               Sign in
             </Link>
@@ -306,7 +306,7 @@ const Landing = () => {
       </header>
 
       {/* === BAND 1 — cream hero with topo, split layout === */}
-      <section className="relative overflow-x-clip overflow-y-visible bg-cream pt-24 md:pt-32 pb-0 z-10">
+      <section className="relative overflow-x-clip overflow-y-visible bg-cream dark:bg-paper-2 pt-24 md:pt-32 pb-0 z-10">
         <TopoBg color="hsl(var(--paper))" opacity={0.55} scale={700} />
 
         <div className="relative max-w-[1440px] mx-auto px-4 md:px-14 pb-0">
@@ -429,7 +429,7 @@ const Landing = () => {
             {features.map((feature, index) => (
               <div
                 key={index}
-                className="group bg-white border border-line rounded-[18px] p-6 transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(29,34,24,.10),0_3px_8px_rgba(29,34,24,.04)]"
+                className="group bg-white dark:bg-paper-2 border border-line rounded-[18px] p-6 transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(29,34,24,.10),0_3px_8px_rgba(29,34,24,.04)]"
               >
                 <div className={cn(
                   'w-12 h-12 rounded-[14px] flex items-center justify-center mb-4 transition-transform group-hover:scale-105',
@@ -528,7 +528,7 @@ const Landing = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-cream border-t border-line px-6 md:px-14 py-10 flex flex-wrap items-center justify-between gap-4">
+      <footer className="bg-cream dark:bg-paper-2 border-t border-line px-6 md:px-14 py-10 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <Jeep className="w-5 h-5 text-pine-6" weight="regular" />
           <Mono>ROAMSWILD · OFF-GRID CAMPING · 2026</Mono>

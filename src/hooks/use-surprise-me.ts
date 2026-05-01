@@ -109,7 +109,11 @@ interface UseSurpriseMeReturn {
   loading: boolean;
   error: string | null;
   result: SurpriseMeSuccessResponse | null;
-  getSurprise: (lat: number, lng: number) => Promise<SurpriseMeResponse>;
+  getSurprise: (
+    lat: number,
+    lng: number,
+    overrides?: { maxDistanceMiles?: number; minDistanceMiles?: number },
+  ) => Promise<SurpriseMeResponse>;
   clearResult: () => void;
   recordClick: () => Promise<void>;
   recordSaveToTrip: () => Promise<void>;
@@ -127,7 +131,11 @@ export function useSurpriseMe(options: UseSurpriseMeOptions = {}): UseSurpriseMe
   const [historyId, setHistoryId] = useState<string | null>(null);
 
   const getSurprise = useCallback(
-    async (lat: number, lng: number, overrides?: { maxDistanceMiles?: number }): Promise<SurpriseMeResponse> => {
+    async (
+      lat: number,
+      lng: number,
+      overrides?: { maxDistanceMiles?: number; minDistanceMiles?: number },
+    ): Promise<SurpriseMeResponse> => {
       setLoading(true);
       setError(null);
       setResult(null);
@@ -139,7 +147,7 @@ export function useSurpriseMe(options: UseSurpriseMeOptions = {}): UseSurpriseMe
           userLat: lat,
           userLng: lng,
           maxDistanceMiles: overrides?.maxDistanceMiles ?? options.maxDistanceMiles ?? 500,
-          minDistanceMiles: options.minDistanceMiles ?? 0,
+          minDistanceMiles: overrides?.minDistanceMiles ?? options.minDistanceMiles ?? 0,
         };
 
         // Only add optional fields if they have values

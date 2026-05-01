@@ -34,7 +34,7 @@ export function WizardNavigation({
   const nextDisabled = !canProceed || isSubmitting;
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 z-50 bg-cream/95 backdrop-blur-md border-t border-line">
+    <footer className="fixed bottom-0 left-0 right-0 z-50 bg-cream/95 dark:bg-paper-2/95 backdrop-blur-md border-t border-line">
       <div className="max-w-[1440px] mx-auto px-4 md:px-14 py-3.5 flex items-center justify-between gap-3">
         <Pill
           variant="ghost"

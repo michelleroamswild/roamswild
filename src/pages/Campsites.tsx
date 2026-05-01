@@ -241,7 +241,7 @@ const Campsites = () => {
           <div className="bg-paper lg:h-[calc(100vh-80px)] lg:overflow-y-auto">
             <div className="px-5 py-6 space-y-5">
               {/* Page intro card — same pattern as the trip detail "Your trip" header */}
-              <div className="bg-white border border-line rounded-[14px] p-5">
+              <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <Mono className="text-pine-6">My campsites</Mono>
@@ -281,7 +281,7 @@ const Campsites = () => {
                       onClick={() => handleTabChange(key)}
                       className={cn(
                         'inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-sans font-semibold tracking-[-0.005em] transition-colors',
-                        active ? 'bg-ink text-cream hover:bg-ink-2' : 'text-ink hover:bg-ink/5',
+                        active ? 'bg-ink dark:bg-ink-pine text-cream hover:bg-ink-2' : 'text-ink hover:bg-ink/5',
                       )}
                     >
                       {Icon && <Icon className="w-3.5 h-3.5" weight="regular" />}
@@ -290,7 +290,7 @@ const Campsites = () => {
                         <span className={cn(
                           'ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-semibold tracking-[0.05em]',
                           active
-                            ? 'bg-cream/20 text-cream'
+                            ? 'bg-cream/20 dark:bg-paper-2/20 text-cream'
                             : badgeAccent === 'sage'
                               ? 'bg-sage/15 text-sage'
                               : badgeAccent === 'pine'
@@ -313,7 +313,7 @@ const Campsites = () => {
                     placeholder="Search campsites…"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full h-10 pl-10 pr-4 rounded-[14px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
+                    className="w-full h-10 pl-10 pr-4 rounded-[14px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
                   />
                 </div>
 
@@ -366,8 +366,8 @@ const Campsites = () => {
                     className={cn(
                       'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[12px] font-mono uppercase tracking-[0.10em] font-semibold transition-colors',
                       filterHasNotes
-                        ? 'bg-pine-6 border-pine-6 text-cream'
-                        : 'bg-white border-line text-ink-3 hover:text-ink hover:border-ink-3',
+                        ? 'bg-pine-6 border-pine-6 text-cream dark:text-ink-pine'
+                        : 'bg-white dark:bg-paper-2 border-line text-ink-3 hover:text-ink hover:border-ink-3',
                     )}
                   >
                     <NoteBlank className="w-3 h-3" weight="regular" />
@@ -388,8 +388,8 @@ const Campsites = () => {
                           className={cn(
                             'inline-flex items-center px-2.5 py-1 rounded-full border text-[11px] font-mono uppercase tracking-[0.10em] font-semibold transition-colors',
                             on
-                              ? 'bg-pine-6 border-pine-6 text-cream'
-                              : 'bg-white border-line text-ink-3 hover:text-ink hover:border-ink-3',
+                              ? 'bg-pine-6 border-pine-6 text-cream dark:text-ink-pine'
+                              : 'bg-white dark:bg-paper-2 border-line text-ink-3 hover:text-ink hover:border-ink-3',
                           )}
                         >
                           {tag}
@@ -472,7 +472,7 @@ const Campsites = () => {
       </main>
 
       {/* Footer */}
-      <footer className="bg-cream border-t border-line px-6 md:px-14 py-10 flex flex-wrap items-center justify-between gap-4">
+      <footer className="bg-cream dark:bg-paper-2 border-t border-line px-6 md:px-14 py-10 flex flex-wrap items-center justify-between gap-4">
         <Mono>ROAMSWILD · OFF-GRID CAMPING · 2026</Mono>
         <div className="flex flex-wrap gap-6 text-[13px] text-ink-3">
           <Link to="/about" className="hover:text-ink transition-colors">Field notes</Link>
@@ -515,11 +515,11 @@ const FilterSelect = ({
   children: React.ReactNode;
 }) => (
   <Select value={value} onValueChange={onChange}>
-    <SelectTrigger className="inline-flex items-center gap-1.5 h-8 w-auto px-3 py-1.5 rounded-full border border-line bg-white text-ink text-[12px] font-mono uppercase tracking-[0.10em] font-semibold hover:border-ink-3 transition-colors [&>svg]:opacity-60">
+    <SelectTrigger className="inline-flex items-center gap-1.5 h-8 w-auto px-3 py-1.5 rounded-full border border-line bg-white dark:bg-paper-2 text-ink text-[12px] font-mono uppercase tracking-[0.10em] font-semibold hover:border-ink-3 transition-colors [&>svg]:opacity-60">
       {LeadingIcon && <LeadingIcon className="w-3 h-3 text-ink-3" weight="regular" />}
       <SelectValue placeholder={placeholder} />
     </SelectTrigger>
-    <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink">
+    <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream dark:bg-paper-2 [&_[data-highlighted]]:text-ink">
       {children}
     </SelectContent>
   </Select>
@@ -545,7 +545,7 @@ const CampsiteRow = ({
   return (
     <div
       onClick={onClick}
-      className="group border border-line bg-white rounded-[14px] overflow-hidden cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(29,34,24,.10),0_3px_8px_rgba(29,34,24,.04)]"
+      className="group border border-line bg-white dark:bg-paper-2 rounded-[14px] overflow-hidden cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(29,34,24,.10),0_3px_8px_rgba(29,34,24,.04)]"
     >
       <div className="flex items-stretch">
         {/* Left accent bar — pine for public, ink-3 for private */}
@@ -659,7 +659,7 @@ const BadgePill = ({
     variant === 'pine'  ? 'bg-pine-6/10 text-pine-6 border-pine-6/30' :
     variant === 'sage'  ? 'bg-sage/15  text-sage   border-sage/30' :
     variant === 'clay'  ? 'bg-clay/15  text-clay   border-clay/40' :
-                          'bg-cream    text-ink-3  border-line';
+                          'bg-cream dark:bg-paper-2    text-ink-3  border-line';
   return (
     <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-mono font-semibold uppercase tracking-[0.10em]', styles)}>
       {children}

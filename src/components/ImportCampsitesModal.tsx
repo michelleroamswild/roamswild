@@ -254,7 +254,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-md border-line bg-white rounded-[18px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md border-line bg-white dark:bg-paper-2 rounded-[18px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <Mono className="text-pine-6 flex items-center gap-1.5">
             <UploadSimple className="w-3.5 h-3.5" weight="regular" />
@@ -267,7 +267,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
 
         <div className="space-y-5 mt-2">
           {/* Instructions */}
-          <div className="px-3.5 py-3 rounded-[12px] border border-line bg-cream">
+          <div className="px-3.5 py-3 rounded-[12px] border border-line bg-cream dark:bg-paper-2">
             <Mono className="text-ink-2 mb-1.5 block">From Google Maps</Mono>
             <ol className="space-y-1 text-[13px] text-ink-3 list-decimal list-inside">
               <li>
@@ -293,7 +293,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
             <div
               className={cn(
                 'border border-dashed rounded-[14px] p-6 text-center cursor-pointer transition-colors',
-                selectedFile ? 'border-pine-6 bg-pine-6/[0.04]' : 'border-line hover:border-ink-3/40 hover:bg-cream',
+                selectedFile ? 'border-pine-6 bg-pine-6/[0.04]' : 'border-line hover:border-ink-3/40 hover:bg-cream dark:hover:bg-paper-2',
               )}
               onClick={() => fileInputRef.current?.click()}
             >
@@ -307,7 +307,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
 
               {selectedFile ? (
                 <div className="flex items-center justify-center gap-2">
-                  <div className="inline-flex items-center justify-center w-8 h-8 rounded-[10px] bg-pine-6 text-cream">
+                  <div className="inline-flex items-center justify-center w-8 h-8 rounded-[10px] bg-pine-6 text-cream dark:text-ink-pine">
                     <FileIcon className="w-4 h-4" weight="regular" />
                   </div>
                   <span className="text-[14px] font-sans font-semibold text-ink truncate max-w-[260px]">
@@ -367,10 +367,10 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
             <div className="space-y-1.5">
               <Mono className="text-ink-2 block">Visibility for imported campsites</Mono>
               <Select value={visibility} onValueChange={(v) => setVisibility(v as CampsiteVisibility)}>
-                <SelectTrigger className="h-10 rounded-[12px] border-line bg-white text-ink text-[14px] hover:border-ink-3 transition-colors">
+                <SelectTrigger className="h-10 rounded-[12px] border-line bg-white dark:bg-paper-2 text-ink text-[14px] hover:border-ink-3 transition-colors">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink">
+                <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream dark:bg-paper-2 [&_[data-highlighted]]:text-ink">
                   <SelectItem value="private">Just me</SelectItem>
                   <SelectItem value="friends">Friends only</SelectItem>
                   <SelectItem value="public">Public</SelectItem>

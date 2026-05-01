@@ -372,7 +372,7 @@ const DayDetail = () => {
     <div className="min-h-screen bg-paper text-ink font-sans">
       {/* Header — mirrors the TripDetail header shape but with a day-number
           badge sitting between the back button and the title. */}
-      <header className="sticky top-0 z-50 bg-cream/95 backdrop-blur-md border-b border-line">
+      <header className="sticky top-0 z-50 bg-cream/95 dark:bg-paper-2/95 backdrop-blur-md border-b border-line">
         <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-3 sm:py-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 sm:gap-4 min-w-0">
@@ -496,7 +496,7 @@ const DayDetail = () => {
               {/* Day intro card — same pattern as "Your trip" on the trip
                   detail. White card on paper, mono eyebrow + sans bold route
                   title + supporting paragraph + mono-cap stat row with divider. */}
-              <div className="bg-white border border-line rounded-[14px] p-5">
+              <div className="bg-white dark:bg-paper-2 border border-line rounded-[14px] p-5">
                 <Mono className="text-pine-6">
                   Day {dayNum} of {generatedTrip.days.length}
                 </Mono>
@@ -594,7 +594,7 @@ const DayDetail = () => {
                       const isLast = index === day.stops.length - 1;
                       return (
                         <div key={stop.id} className="relative">
-                          <div className="border border-line bg-white rounded-[14px] p-4 group hover:border-ink-3/40 transition-colors">
+                          <div className="border border-line bg-white dark:bg-paper-2 rounded-[14px] p-4 group hover:border-ink-3/40 transition-colors">
                             <div className="flex items-start gap-3">
                               <IconBlock Icon={Icon} bg={bg} text={text} />
 

@@ -75,8 +75,8 @@ function parseCoordinates(input: string): { lat: number; lng: number } | null {
 
 const iconBtnCls = (compact: boolean) =>
   cn(
-    'inline-flex items-center justify-center rounded-full border border-line bg-white text-ink-2',
-    'hover:border-ink-3/50 hover:bg-cream transition-colors disabled:opacity-50',
+    'inline-flex items-center justify-center rounded-full border border-line bg-white dark:bg-paper-2 text-ink-2',
+    'hover:border-ink-3/50 hover:bg-cream dark:hover:bg-paper-2 transition-colors disabled:opacity-50',
     compact ? 'h-8 px-2' : 'h-10 px-2.5',
   );
 
@@ -248,7 +248,7 @@ export function LocationSelector({
           <button
             onClick={handleClear}
             aria-label="Clear"
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 inline-flex items-center justify-center w-6 h-6 rounded-full text-ink-3 hover:text-ink hover:bg-cream transition-colors"
+            className="absolute right-2 top-1/2 transform -translate-y-1/2 inline-flex items-center justify-center w-6 h-6 rounded-full text-ink-3 hover:text-ink hover:bg-cream dark:hover:bg-paper-2 transition-colors"
           >
             <X className={iconSize} weight="regular" />
           </button>
@@ -303,7 +303,7 @@ export function LocationSelector({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
-                  className="w-64 rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink"
+                  className="w-64 rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream dark:bg-paper-2 [&_[data-highlighted]]:text-ink"
                 >
                   <DropdownMenuLabel>
                     <Mono className="text-ink-2">Saved locations</Mono>
@@ -337,7 +337,7 @@ export function LocationSelector({
           <button
             onClick={handleCoordinateSubmit}
             className={cn(
-              'inline-flex items-center justify-center rounded-full bg-pine-6 text-cream border border-pine-6 hover:bg-pine-5 hover:border-pine-5 transition-colors px-3 font-sans font-semibold text-[12px] tracking-[0.01em]',
+              'inline-flex items-center justify-center rounded-full bg-pine-6 text-cream dark:text-ink-pine border border-pine-6 hover:bg-pine-5 hover:border-pine-5 transition-colors px-3 font-sans font-semibold text-[12px] tracking-[0.01em]',
               compact ? 'h-8' : 'h-10',
             )}
           >

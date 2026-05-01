@@ -98,7 +98,7 @@ export const ResultsStatsRow = ({
               <Mono className={cn('mt-1.5 block', t.text)}>{t.label}</Mono>
             </div>
           </TooltipTrigger>
-          <TooltipContent className="rounded-[10px] border-line bg-white">
+          <TooltipContent className="rounded-[10px] border-line bg-white dark:bg-paper-2">
             <p className="font-sans font-semibold text-ink text-[13px]">{t.tooltipTitle}</p>
             <p className="text-[12px] text-ink-3 mt-0.5">{t.tooltipBody}</p>
           </TooltipContent>

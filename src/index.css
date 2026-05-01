@@ -514,6 +514,35 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   padding: 0 !important;
 }
 
+/* === Google Maps controls — Pine + Paper restyle ===
+ * Tints the map-type pill and tones down the round button shadows.
+ * Keeps Google's default layout / DOM structure so the zoom and
+ * fullscreen clusters render normally.
+ *
+ * The Google logo (.gm-style-cc) and "Map data / Terms" attribution
+ * MUST stay visible per Maps Platform TOS — we don't touch those. */
+
+/* Map-type control (Map / Satellite / Hybrid / Terrain toggle) */
+.gm-style-mtc > button,
+.gm-style-mtc-bbw > button {
+  font-family: "Manrope", sans-serif !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;
+}
+
+/* Active map type — flip to ink fill so it matches our nav active style */
+.gm-style-mtc > button[aria-checked="true"],
+.gm-style-mtc-bbw > button[aria-checked="true"] {
+  background-color: hsl(var(--ink)) !important;
+  color: hsl(var(--cream)) !important;
+}
+
+.dark .gm-style-mtc > button[aria-checked="true"],
+.dark .gm-style-mtc-bbw > button[aria-checked="true"] {
+  background-color: hsl(var(--ink-pine)) !important;
+  color: hsl(var(--cream)) !important;
+}
+
 /* === View Transitions API — smooth crossfade between routes ===
  * Triggered via document.startViewTransition() in src/components/RouteTransition.tsx
  * on every route change. Falls back gracefully on unsupported browsers (no

@@ -170,7 +170,7 @@ function TripActionButton({ suggestion }: { suggestion: TripSuggestion }) {
       onClick={handleClick}
       disabled={generating}
       className={cn(
-        'mt-2 w-full flex items-center justify-center gap-1.5 px-4 py-2 min-h-[40px] rounded-full bg-pine-6 text-cream border border-pine-6 text-[12px] font-sans font-semibold tracking-[0.01em]',
+        'mt-2 w-full flex items-center justify-center gap-1.5 px-4 py-2 min-h-[40px] rounded-full bg-pine-6 text-cream dark:text-ink-pine border border-pine-6 text-[12px] font-sans font-semibold tracking-[0.01em]',
         'hover:bg-pine-5 hover:border-pine-5 transition-colors disabled:opacity-50',
       )}
     >
@@ -198,8 +198,8 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         className={cn(
           'max-w-[85%] rounded-[14px] px-3.5 py-2.5 text-[13px] leading-[1.55] font-sans',
           isUser
-            ? 'bg-pine-6 text-cream rounded-br-[6px]'
-            : 'bg-cream border border-line text-ink rounded-bl-[6px]',
+            ? 'bg-pine-6 text-cream dark:text-ink-pine rounded-br-[6px]'
+            : 'bg-cream dark:bg-paper border border-line dark:border-line-2 text-ink rounded-bl-[6px]',
         )}
       >
         <FormattedText text={msg.content} />
@@ -228,7 +228,7 @@ function ChatMessages() {
       ))}
       {isLoading && (
         <div className="flex justify-start">
-          <div className="bg-cream border border-line rounded-[14px] rounded-bl-[6px] px-4 py-3">
+          <div className="bg-cream dark:bg-paper border border-line dark:border-line-2 rounded-[14px] rounded-bl-[6px] px-4 py-3">
             <SpinnerGap className="w-4 h-4 text-pine-6 animate-spin" />
           </div>
         </div>
@@ -260,7 +260,7 @@ function StarterPrompts() {
             <button
               key={prompt.label}
               onClick={() => sendMessage(prompt.label)}
-              className="w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-[12px] border border-line bg-white hover:border-ink-3/40 hover:bg-cream transition-colors text-left"
+              className="w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-[12px] border border-line dark:border-line-2 bg-white dark:bg-paper hover:border-ink-3/40 hover:bg-cream dark:hover:bg-paper-2 transition-colors text-left"
             >
               <div className={cn('w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0', tone.bg, tone.text)}>
                 <prompt.icon className="w-4 h-4" weight="regular" />
@@ -302,7 +302,7 @@ function ChatInput() {
   };
 
   return (
-    <div className="border-t border-line bg-cream px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <div className="border-t border-line dark:border-line-2 bg-cream dark:bg-paper-2 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <div className="flex items-end gap-2">
         <textarea
           ref={textareaRef}
@@ -314,12 +314,12 @@ function ChatInput() {
           onKeyDown={handleKeyDown}
           placeholder="Ask me anything…"
           rows={1}
-          className="flex-1 resize-none bg-white border border-line rounded-[12px] px-3 py-2.5 text-[14px] text-ink font-sans min-h-[40px] placeholder:text-ink-3 outline-none focus:border-pine-6 transition-colors"
+          className="flex-1 resize-none bg-white dark:bg-paper border border-line dark:border-line-2 rounded-[12px] px-3 py-2.5 text-[14px] text-ink font-sans min-h-[40px] placeholder:text-ink-3 outline-none focus:border-pine-6 transition-colors"
         />
         <button
           onClick={handleSend}
           disabled={!input.trim() || isLoading}
-          className="flex-shrink-0 w-10 h-10 rounded-[12px] bg-pine-6 text-cream flex items-center justify-center disabled:opacity-40 transition-colors hover:bg-pine-5"
+          className="flex-shrink-0 w-10 h-10 rounded-[12px] bg-pine-6 text-cream dark:text-ink-pine flex items-center justify-center disabled:opacity-40 transition-colors hover:bg-pine-5"
           aria-label="Send"
         >
           <PaperPlaneRight className="w-4 h-4" weight="regular" />
@@ -351,13 +351,14 @@ export function ChatAssistant() {
 
   return (
     <>
-      {/* Floating button */}
+      {/* Floating button — text-cream stays light in both modes; in dark mode flip
+          to ink-pine so the icon stays legible against the lightened pine-6. */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
           className={cn(
             'fixed bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.5rem))] right-4 sm:right-6 z-40',
-            'w-14 h-14 rounded-full bg-pine-6 text-cream',
+            'w-14 h-14 rounded-full bg-pine-6 text-cream dark:text-ink-pine',
             'shadow-[0_10px_28px_rgba(58,74,42,.32)] hover:shadow-[0_14px_36px_rgba(58,74,42,.40)] hover:bg-pine-5 hover:scale-[1.04]',
             'transition-all flex items-center justify-center',
           )}
@@ -369,9 +370,9 @@ export function ChatAssistant() {
 
       {/* Desktop panel */}
       {!isMobile && isOpen && (
-        <div className="fixed bottom-6 right-6 z-40 w-96 max-h-[600px] h-[calc(100vh-8rem)] rounded-[18px] shadow-[0_24px_56px_rgba(29,34,24,.20),0_4px_12px_rgba(29,34,24,.10)] bg-paper border border-line flex flex-col overflow-hidden font-sans">
+        <div className="fixed bottom-6 right-6 z-40 w-96 max-h-[600px] h-[calc(100vh-8rem)] rounded-[18px] shadow-[0_24px_56px_rgba(29,34,24,.20),0_4px_12px_rgba(29,34,24,.10)] bg-paper border border-line dark:border-line-2 flex flex-col overflow-hidden font-sans">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-line bg-cream">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-line dark:border-line-2 bg-cream dark:bg-paper-2">
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-7 h-7 rounded-[8px] bg-pine-6/12 text-pine-6 flex items-center justify-center flex-shrink-0">
                 <Mountains className="w-4 h-4" weight="regular" />
@@ -396,7 +397,7 @@ export function ChatAssistant() {
       {/* Mobile drawer */}
       {isMobile && (
         <Drawer open={isOpen} onOpenChange={setIsOpen}>
-          <DrawerContent className="h-[85dvh] max-h-[85dvh] bg-paper border-line">
+          <DrawerContent className="h-[85dvh] max-h-[85dvh] bg-paper border-line dark:border-line-2">
             <DrawerHeader className="sr-only">
               <DrawerTitle>Basecamp Chat</DrawerTitle>
             </DrawerHeader>

@@ -7,7 +7,7 @@ export default function SurpriseMePreview() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-cream flex items-center justify-center px-4 font-sans">
+    <div className="min-h-screen bg-cream dark:bg-paper flex items-center justify-center px-4 font-sans">
       <div className="text-center">
         <Mono className="text-clay block mb-2">Preview</Mono>
         <h1 className="text-[24px] font-sans font-bold tracking-[-0.02em] text-ink mb-5">

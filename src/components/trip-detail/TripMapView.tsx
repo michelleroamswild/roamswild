@@ -197,7 +197,7 @@ export const TripMapView = ({
                       '_blank',
                     )
                   }
-                  className="w-full px-3 py-1.5 rounded-full bg-pine-6 text-cream text-[12px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 transition-colors"
+                  className="w-full px-3 py-1.5 rounded-full bg-pine-6 text-cream dark:text-ink-pine text-[12px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 transition-colors"
                 >
                   Get directions
                 </button>

@@ -39,7 +39,7 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-cream text-ink font-sans flex">
+    <div className="min-h-screen bg-cream dark:bg-paper text-ink font-sans flex">
       <AuthSidePanel
         photo={heroPhoto}
         headline={<>Your next adventure<br />starts here.</>}
@@ -57,7 +57,7 @@ const Login = () => {
             </span>
           </Link>
 
-          <div className="bg-white border border-line rounded-[18px] p-8 shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+          <div className="bg-white dark:bg-paper-2 border border-line rounded-[18px] p-8 shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
             <Mono className="text-pine-6">Welcome back</Mono>
             <h1 className="font-sans font-bold tracking-[-0.025em] text-ink text-[28px] leading-[1.1] mt-2">
               Sign in to your account.
@@ -107,7 +107,7 @@ const Login = () => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full inline-flex items-center justify-center gap-2 h-12 px-5 rounded-[14px] bg-pine-6 text-cream text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors disabled:opacity-50"
+                className="w-full inline-flex items-center justify-center gap-2 h-12 px-5 rounded-[14px] bg-pine-6 text-cream dark:text-ink-pine text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors disabled:opacity-50"
               >
                 {isLoading ? (
                   <>

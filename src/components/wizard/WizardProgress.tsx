@@ -40,9 +40,9 @@ export function WizardProgress({ steps, currentStep }: WizardProgressProps) {
               <div
                 className={cn(
                   "w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-mono font-bold transition-all duration-200",
-                  isDone && "bg-pine-6 text-cream",
-                  isCurrent && "bg-ink text-cream ring-4 ring-ink/10",
-                  !isDone && !isCurrent && "bg-white border border-line text-ink-3",
+                  isDone && "bg-pine-6 text-cream dark:text-ink-pine",
+                  isCurrent && "bg-ink dark:bg-ink-pine text-cream ring-4 ring-ink/10",
+                  !isDone && !isCurrent && "bg-white dark:bg-paper-2 border border-line text-ink-3",
                 )}
               >
                 {isDone ? <Check className="w-3.5 h-3.5" weight="bold" /> : index + 1}

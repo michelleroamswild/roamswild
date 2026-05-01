@@ -56,7 +56,7 @@ const HikeCard = ({ scoredHike, rank }: { scoredHike: ScoredHike; rank: number }
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${hike.location.lat},${hike.location.lng}`, '_blank');
 
   return (
-    <div className="p-4 rounded-[14px] border border-line bg-white">
+    <div className="p-4 rounded-[14px] border border-line bg-white dark:bg-paper-2">
       {/* Header — rank, name, distance/elevation, score */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -183,7 +183,7 @@ export function BestHikesTodayDialog({ open, onOpenChange }: BestHikesTodayDialo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         size="md"
-        className="max-h-[85vh] overflow-hidden flex flex-col border-line bg-white rounded-[18px] max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-none max-sm:max-h-none max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-0"
+        className="max-h-[85vh] overflow-hidden flex flex-col border-line bg-white dark:bg-paper-2 rounded-[18px] max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-none max-sm:max-h-none max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-0"
         onInteractOutside={(e) => { if (locationError) e.preventDefault(); }}
       >
         <DialogHeader>

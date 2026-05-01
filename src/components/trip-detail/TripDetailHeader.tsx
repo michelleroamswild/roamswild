@@ -39,7 +39,7 @@ export const TripDetailHeader = ({
 }: TripDetailHeaderProps) => {
   return (
     <header
-      className="bg-cream/95 backdrop-blur-md border-b border-line"
+      className="bg-cream/95 dark:bg-paper-2/95 backdrop-blur-md border-b border-line"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
     >
       <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-3 sm:py-4">

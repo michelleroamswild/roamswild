@@ -106,9 +106,9 @@ export function FriendCard({
 
   return (
     <>
-      <div className="border border-line bg-white rounded-[14px] p-5 flex items-center gap-4 transition-colors hover:border-ink-3/40">
+      <div className="border border-line bg-white dark:bg-paper-2 rounded-[14px] p-5 flex items-center gap-4 transition-colors hover:border-ink-3/40">
         {/* Avatar */}
-        <div className="w-11 h-11 rounded-full bg-pine-6 text-cream font-sans font-semibold text-[12px] tracking-[0.02em] inline-flex items-center justify-center flex-shrink-0">
+        <div className="w-11 h-11 rounded-full bg-pine-6 text-cream dark:text-ink-pine font-sans font-semibold text-[12px] tracking-[0.02em] inline-flex items-center justify-center flex-shrink-0">
           {getInitials()}
         </div>
 
@@ -213,7 +213,7 @@ export function FriendCard({
 
       {/* Confirm Remove Dialog */}
       <AlertDialog open={confirmDialog === 'remove'} onOpenChange={() => setConfirmDialog(null)}>
-        <AlertDialogContent className="border-line bg-white rounded-[18px]">
+        <AlertDialogContent className="border-line bg-white dark:bg-paper-2 rounded-[18px]">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-sans font-semibold tracking-[-0.01em] text-ink">
               Remove friend
@@ -224,7 +224,7 @@ export function FriendCard({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full border-line text-ink hover:bg-cream">
+            <AlertDialogCancel className="rounded-full border-line text-ink hover:bg-cream dark:hover:bg-paper-2">
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
@@ -239,7 +239,7 @@ export function FriendCard({
 
       {/* Confirm Block Dialog */}
       <AlertDialog open={confirmDialog === 'block'} onOpenChange={() => setConfirmDialog(null)}>
-        <AlertDialogContent className="border-line bg-white rounded-[18px]">
+        <AlertDialogContent className="border-line bg-white dark:bg-paper-2 rounded-[18px]">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-sans font-semibold tracking-[-0.01em] text-ink">
               Block user
@@ -250,7 +250,7 @@ export function FriendCard({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full border-line text-ink hover:bg-cream">
+            <AlertDialogCancel className="rounded-full border-line text-ink hover:bg-cream dark:hover:bg-paper-2">
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction

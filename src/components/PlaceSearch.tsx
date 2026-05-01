@@ -16,7 +16,7 @@ interface PlaceSearchProps {
 // same input chrome as the auth forms / wizard fields: h-12, rounded-[14px],
 // line border that turns pine on focus, ink-3 placeholder.
 const inputClass =
-  'w-full h-12 pl-11 pr-4 rounded-[14px] border border-line bg-white text-ink text-[15px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors';
+  'w-full h-12 pl-11 pr-4 rounded-[14px] border border-line bg-white dark:bg-paper-2 text-ink text-[15px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors';
 
 export function PlaceSearch({
   onPlaceSelect,

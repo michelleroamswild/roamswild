@@ -25,7 +25,7 @@ export const TripTimelineStrip = ({
   if (!tripConfig.startLocation && !tripConfig.baseLocation) return null;
 
   return (
-    <div className="bg-cream border-b border-line">
+    <div className="bg-cream dark:bg-paper-2 border-b border-line">
       <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-3">
         <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
           {/* Start */}
@@ -118,7 +118,7 @@ const Stop = ({
       onClick={onClick}
       className={cn(
         CHIP_BASE,
-        'group flex-shrink-0 text-ink hover:bg-white transition-colors',
+        'group flex-shrink-0 text-ink hover:bg-white dark:hover:bg-paper-2 transition-colors',
       )}
     >
       {Icon ? (

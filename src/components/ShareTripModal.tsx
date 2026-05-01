@@ -114,7 +114,7 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md border-line bg-white rounded-[18px]">
+      <DialogContent className="sm:max-w-md border-line bg-white dark:bg-paper-2 rounded-[18px]">
         <DialogHeader>
           <Mono className="text-pine-6 flex items-center gap-1.5">
             <UserPlus className="w-3.5 h-3.5" weight="regular" />
@@ -136,7 +136,7 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
-                className="flex-1 h-10 px-3 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
+                className="flex-1 h-10 px-3 rounded-[12px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
               />
               <PermissionSelect value={permission} onChange={setPermission} />
             </div>
@@ -180,7 +180,7 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
                 {shareLinks.map((link) => (
                   <div
                     key={link.id}
-                    className="flex items-center justify-between px-3 py-2 rounded-[10px] border border-line bg-cream"
+                    className="flex items-center justify-between px-3 py-2 rounded-[10px] border border-line bg-cream dark:bg-paper-2"
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <LinkIcon className="w-3.5 h-3.5 text-ink-3 flex-shrink-0" weight="regular" />
@@ -190,7 +190,7 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
                       <button
                         onClick={() => handleCopyLink(link.token, link.id)}
                         aria-label="Copy link"
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-3 hover:text-ink hover:bg-white transition-colors"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-3 hover:text-ink hover:bg-white dark:hover:bg-paper-2 transition-colors"
                       >
                         {copiedLinkId === link.id ? (
                           <Check className="w-3.5 h-3.5 text-pine-6" weight="bold" />
@@ -220,10 +220,10 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
                 {collaborators.map((collab) => (
                   <div
                     key={collab.id}
-                    className="flex items-center justify-between px-3 py-2 rounded-[10px] border border-line bg-cream"
+                    className="flex items-center justify-between px-3 py-2 rounded-[10px] border border-line bg-cream dark:bg-paper-2"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-pine-6 text-cream inline-flex items-center justify-center text-[11px] font-sans font-semibold tracking-[0.02em] flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-pine-6 text-cream dark:text-ink-pine inline-flex items-center justify-center text-[11px] font-sans font-semibold tracking-[0.02em] flex-shrink-0">
                         {(collab.name ?? collab.email).slice(0, 2).toUpperCase()}
                       </div>
                       <div className="min-w-0">
@@ -237,7 +237,7 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
                     </div>
                     <div className="flex items-center gap-0.5 flex-shrink-0">
                       {collab.permission === 'owner' ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full border border-line bg-cream text-ink-2 text-[10px] font-mono uppercase tracking-[0.10em] font-semibold">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full border border-line bg-cream dark:bg-paper-2 text-ink-2 text-[10px] font-mono uppercase tracking-[0.10em] font-semibold">
                           Owner
                         </span>
                       ) : (
@@ -279,13 +279,13 @@ const PermissionSelect = ({
     <SelectTrigger
       className={
         compact
-          ? 'h-7 w-[72px] px-2.5 rounded-full border-line bg-white text-ink text-[11px] font-mono uppercase tracking-[0.10em] font-semibold hover:border-ink-3 transition-colors'
-          : 'h-10 w-[88px] px-3 rounded-[12px] border-line bg-white text-ink text-[14px] hover:border-ink-3 transition-colors'
+          ? 'h-7 w-[72px] px-2.5 rounded-full border-line bg-white dark:bg-paper-2 text-ink text-[11px] font-mono uppercase tracking-[0.10em] font-semibold hover:border-ink-3 transition-colors'
+          : 'h-10 w-[88px] px-3 rounded-[12px] border-line bg-white dark:bg-paper-2 text-ink text-[14px] hover:border-ink-3 transition-colors'
       }
     >
       <SelectValue />
     </SelectTrigger>
-    <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink">
+    <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream dark:bg-paper-2 [&_[data-highlighted]]:text-ink">
       <SelectItem value="edit">Edit</SelectItem>
       <SelectItem value="view">View</SelectItem>
     </SelectContent>

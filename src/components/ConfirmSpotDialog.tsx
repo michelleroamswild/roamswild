@@ -60,7 +60,7 @@ export function ConfirmSpotDialog({ spot, open, onOpenChange, onConfirmed, exist
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md border-line bg-white rounded-[18px]">
+      <DialogContent className="sm:max-w-md border-line bg-white dark:bg-paper-2 rounded-[18px]">
         <DialogHeader>
           <Mono className="text-pine-6 flex items-center gap-1.5">
             <CheckCircle className="w-3.5 h-3.5" weight="regular" />
@@ -106,7 +106,7 @@ export function ConfirmSpotDialog({ spot, open, onOpenChange, onConfirmed, exist
           <>
             <div className="space-y-4">
               {/* Location info card */}
-              <div className="px-3 py-3 bg-cream border border-line rounded-[12px]">
+              <div className="px-3 py-3 bg-cream dark:bg-paper-2 border border-line rounded-[12px]">
                 <div className="flex items-start gap-3">
                   <MapPin className="w-4 h-4 text-pine-6 mt-0.5 flex-shrink-0" weight="regular" />
                   <div className="flex-1 min-w-0">
@@ -141,10 +141,10 @@ export function ConfirmSpotDialog({ spot, open, onOpenChange, onConfirmed, exist
                   Road access
                 </Mono>
                 <Select value={roadAccess} onValueChange={(v) => setRoadAccess(v as RoadAccess)}>
-                  <SelectTrigger className="h-10 rounded-[12px] border-line bg-white text-ink text-[14px] hover:border-ink-3 transition-colors">
+                  <SelectTrigger className="h-10 rounded-[12px] border-line bg-white dark:bg-paper-2 text-ink text-[14px] hover:border-ink-3 transition-colors">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink">
+                  <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream dark:bg-paper-2 [&_[data-highlighted]]:text-ink">
                     <SelectItem value="2wd">2WD accessible</SelectItem>
                     <SelectItem value="4wd_easy">4WD easy</SelectItem>
                     <SelectItem value="4wd_moderate">4WD moderate</SelectItem>
@@ -161,7 +161,7 @@ export function ConfirmSpotDialog({ spot, open, onOpenChange, onConfirmed, exist
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Any helpful details about this spot…"
                   rows={3}
-                  className="w-full px-3 py-2 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors resize-none"
+                  className="w-full px-3 py-2 rounded-[12px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors resize-none"
                 />
               </div>
 

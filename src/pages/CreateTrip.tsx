@@ -659,9 +659,9 @@ const CreateTrip = () => {
   const isDayBuilderStep = currentStepId?.startsWith('day-');
 
   return (
-    <div className={isDayBuilderStep ? "h-screen bg-cream text-ink font-sans flex flex-col overflow-hidden" : "min-h-screen bg-cream text-ink font-sans"}>
+    <div className={isDayBuilderStep ? "h-screen bg-cream dark:bg-paper text-ink font-sans flex flex-col overflow-hidden" : "min-h-screen bg-cream text-ink font-sans"}>
       {/* Header — cream surface, mono meta + sans title, close pill on the right */}
-      <header className={`${isDayBuilderStep ? '' : 'sticky top-0'} z-50 bg-cream/95 backdrop-blur-md border-b border-line`}>
+      <header className={`${isDayBuilderStep ? '' : 'sticky top-0'} z-50 bg-cream/95 dark:bg-paper-2/95 backdrop-blur-md border-b border-line`}>
         <div className="max-w-[1440px] mx-auto px-4 md:px-14 py-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4 min-w-0">
@@ -735,7 +735,7 @@ const CreateTrip = () => {
 
       {/* Restore Draft Dialog */}
       <Dialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
-        <DialogContent className="border-line bg-white rounded-[18px]">
+        <DialogContent className="border-line bg-white dark:bg-paper-2 rounded-[18px]">
           <DialogHeader>
             <Mono className="text-pine-6">Draft found</Mono>
             <DialogTitle className="font-sans font-semibold tracking-[-0.015em] text-ink text-[22px] leading-[1.15] mt-1">

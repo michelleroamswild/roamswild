@@ -50,7 +50,7 @@ export const AccountAvatarMenu = ({ size = 'default', className }: AccountAvatar
         <button
           aria-label="Account menu"
           className={cn(
-            'inline-flex items-center justify-center rounded-full bg-pine-6 text-cream font-sans font-semibold tracking-[0.02em] hover:bg-pine-5 transition-colors',
+            'inline-flex items-center justify-center rounded-full bg-pine-6 text-cream dark:text-ink-pine font-sans font-semibold tracking-[0.02em] hover:bg-pine-5 transition-colors',
             size === 'sm' ? 'w-7 h-7 text-[11px]' : 'w-[34px] h-[34px] text-[12px]',
             className,
           )}

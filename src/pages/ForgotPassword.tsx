@@ -34,7 +34,7 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="min-h-screen bg-cream text-ink font-sans relative flex items-center justify-center p-6 overflow-hidden">
+    <div className="min-h-screen bg-cream dark:bg-paper text-ink font-sans relative flex items-center justify-center p-6 overflow-hidden">
       <TopoBg color="hsl(var(--paper))" opacity={0.55} scale={700} />
       <div className="relative w-full max-w-[420px]">
         <Link to="/" className="flex items-center justify-center gap-2.5 mb-8">
@@ -44,7 +44,7 @@ const ForgotPassword = () => {
           </span>
         </Link>
 
-        <div className="bg-white border border-line rounded-[18px] p-8 shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+        <div className="bg-white dark:bg-paper-2 border border-line rounded-[18px] p-8 shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
           {success ? (
             <div className="text-center">
               <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/10 text-pine-6 mb-4">
@@ -62,7 +62,7 @@ const ForgotPassword = () => {
               </p>
               <Link
                 to="/login"
-                className="mt-6 inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-full text-[13px] font-sans font-semibold bg-ink text-cream hover:bg-ink-2 transition-colors"
+                className="mt-6 inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-full text-[13px] font-sans font-semibold bg-ink dark:bg-ink-pine text-cream hover:bg-ink-2 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" weight="bold" />
                 Back to sign in
@@ -100,7 +100,7 @@ const ForgotPassword = () => {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full inline-flex items-center justify-center gap-2 h-12 px-5 rounded-[14px] bg-pine-6 text-cream text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors disabled:opacity-50"
+                  className="w-full inline-flex items-center justify-center gap-2 h-12 px-5 rounded-[14px] bg-pine-6 text-cream dark:text-ink-pine text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors disabled:opacity-50"
                 >
                   {isLoading ? (
                     <>

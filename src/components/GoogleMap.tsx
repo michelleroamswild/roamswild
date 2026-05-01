@@ -119,7 +119,7 @@ export function GoogleMap({ center, zoom = 10, children, className, onClick, onL
 
   if (loadError) {
     return (
-      <div className="flex items-center justify-center h-full bg-cream font-sans">
+      <div className="flex items-center justify-center h-full bg-cream dark:bg-paper-2 font-sans">
         <p className="text-[12px] font-mono font-semibold uppercase tracking-[0.12em] text-ember">Error loading maps</p>
       </div>
     );
@@ -127,7 +127,7 @@ export function GoogleMap({ center, zoom = 10, children, className, onClick, onL
 
   if (!isLoaded) {
     return (
-      <div className="flex items-center justify-center h-full bg-cream animate-pulse font-sans">
+      <div className="flex items-center justify-center h-full bg-cream dark:bg-paper-2 animate-pulse font-sans">
         <p className="text-[12px] font-mono font-semibold uppercase tracking-[0.12em] text-pine-6">Loading map…</p>
       </div>
     );

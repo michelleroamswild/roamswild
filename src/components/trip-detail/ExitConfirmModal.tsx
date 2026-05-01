@@ -24,7 +24,7 @@ export const ExitConfirmModal = ({
 }: ExitConfirmModalProps) => {
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md border-line bg-white rounded-[18px]">
+      <DialogContent className="sm:max-w-md border-line bg-white dark:bg-paper-2 rounded-[18px]">
         <DialogHeader>
           <Mono className="text-clay flex items-center gap-1.5">
             <Warning className="w-3.5 h-3.5" weight="regular" />

@@ -4,7 +4,7 @@ Fetch a NAIP aerial imagery chip for a single spot and store it in R2.
 
 Single-spot smoke test for the NAIP backfill pipeline. Reads NAIP COGs from
 Microsoft Planetary Computer (free, no requester-pays), crops a ~500m square
-chip with rio-tiler, draws a Phosphor MapPin at the spot's lat/lng, encodes
+chip with rio-tiler, draws a small white dot at the spot's lat/lng, encodes
 JPEG, and uploads to a Cloudflare R2 bucket.
 
 Setup (once):
@@ -137,166 +137,45 @@ def find_naip_item(lat, lng, max_attempts=4):
     raise last_err
 
 
-def _arc_to_points(x1, y1, rx, ry, rot_deg, large_arc, sweep, x2, y2, n=28):
-    """Convert SVG endpoint-parameterized arc to polyline points (excludes start, includes end).
-    Implements the W3C SVG 1.1 F.6.5/F.6.6 algorithm."""
-    if rx == 0 or ry == 0 or (x1 == x2 and y1 == y2):
-        return [(x2, y2)]
-    phi = math.radians(rot_deg)
-    cp, sp = math.cos(phi), math.sin(phi)
-    dx, dy = (x1 - x2) / 2, (y1 - y2) / 2
-    x1p =  cp * dx + sp * dy
-    y1p = -sp * dx + cp * dy
-    rx, ry = abs(rx), abs(ry)
-    rxs, rys = rx * rx, ry * ry
-    x1ps, y1ps = x1p * x1p, y1p * y1p
-    radii_check = x1ps / rxs + y1ps / rys
-    if radii_check > 1:
-        s = math.sqrt(radii_check)
-        rx *= s
-        ry *= s
-        rxs, rys = rx * rx, ry * ry
-    sign = -1 if large_arc == sweep else 1
-    sq = max(0.0, (rxs * rys - rxs * y1ps - rys * x1ps) / (rxs * y1ps + rys * x1ps))
-    coef = sign * math.sqrt(sq)
-    cxp =  coef * (rx * y1p) / ry
-    cyp = -coef * (ry * x1p) / rx
-    cx = cp * cxp - sp * cyp + (x1 + x2) / 2
-    cy = sp * cxp + cp * cyp + (y1 + y2) / 2
-
-    def ang(ux, uy, vx, vy):
-        nrm = math.sqrt(ux * ux + uy * uy) * math.sqrt(vx * vx + vy * vy)
-        d = ux * vx + uy * vy
-        a = math.acos(max(-1.0, min(1.0, d / nrm)))
-        return -a if (ux * vy - uy * vx) < 0 else a
-
-    theta1 = ang(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry)
-    dtheta = ang((x1p - cxp) / rx, (y1p - cyp) / ry,
-                 (-x1p - cxp) / rx, (-y1p - cyp) / ry)
-    if not sweep and dtheta > 0:
-        dtheta -= 2 * math.pi
-    elif sweep and dtheta < 0:
-        dtheta += 2 * math.pi
-
-    pts = []
-    for i in range(1, n + 1):
-        t = theta1 + dtheta * (i / n)
-        x = cp * rx * math.cos(t) - sp * ry * math.sin(t) + cx
-        y = sp * rx * math.cos(t) + cp * ry * math.sin(t) + cy
-        pts.append((x, y))
-    return pts
-
-
-def _bezier_to_points(x0, y0, x1, y1, x2, y2, x3, y3, n=22):
-    pts = []
-    for i in range(1, n + 1):
-        t = i / n
-        u = 1 - t
-        x = u**3 * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t**3 * x3
-        y = u**3 * y0 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t**3 * y3
-        pts.append((x, y))
-    return pts
-
-
-def _phosphor_mappin_fill_polygons():
-    """Trace the Phosphor MapPin (weight='fill') SVG path. Returns
-    (outer_polygon, inner_hole_polygon) in the source 256x256 viewBox.
-
-    Path source: @phosphor-icons/react/dist/defs/MapPin.es.js, 'fill' weight."""
-    pen = (128.0, 16.0)
-    outer = [pen]
-
-    # a 88.1 88.1 0 0 0 -88 88   (relative)
-    end = (pen[0] - 88, pen[1] + 88)
-    outer.extend(_arc_to_points(pen[0], pen[1], 88.1, 88.1, 0, 0, 0, end[0], end[1]))
-    pen = end
-    # c 0 75.3, 80 132.17, 83.41 134.55   (relative)
-    end = (pen[0] + 83.41, pen[1] + 134.55)
-    outer.extend(_bezier_to_points(
-        pen[0], pen[1],
-        pen[0] + 0,    pen[1] + 75.3,
-        pen[0] + 80,   pen[1] + 132.17,
-        end[0],        end[1]))
-    pen = end
-    # a 8 8 0 0 0 9.18 0   (relative)
-    end = (pen[0] + 9.18, pen[1])
-    outer.extend(_arc_to_points(pen[0], pen[1], 8, 8, 0, 0, 0, end[0], end[1]))
-    pen = end
-    # C 136 236.17, 216 179.3, 216 104   (absolute)
-    end = (216.0, 104.0)
-    outer.extend(_bezier_to_points(pen[0], pen[1], 136, 236.17, 216, 179.3, end[0], end[1]))
-    pen = end
-    # A 88.1 88.1 0 0 0 128 16   (absolute)
-    end = (128.0, 16.0)
-    outer.extend(_arc_to_points(pen[0], pen[1], 88.1, 88.1, 0, 0, 0, end[0], end[1]))
-
-    # m 0 56  (relative move from current 128,16 → 128,72)
-    pen = (128.0, 72.0)
-    inner = [pen]
-    # a 32 32 0 1 1 -32 32  (relative, large_arc=1, sweep=1)
-    end = (pen[0] - 32, pen[1] + 32)
-    inner.extend(_arc_to_points(pen[0], pen[1], 32, 32, 0, 1, 1, end[0], end[1]))
-    pen = end
-    # A 32 32 0 0 1 128 72  (absolute)
-    end = (128.0, 72.0)
-    inner.extend(_arc_to_points(pen[0], pen[1], 32, 32, 0, 0, 1, end[0], end[1]))
-
-    return outer, inner
-
-
-# Cached polygons in 256x256 viewbox space — pin tip at (128, 238.55)
-_MAPPIN_OUTER, _MAPPIN_INNER = _phosphor_mappin_fill_polygons()
-_MAPPIN_TIP = (128.0, 238.55)
-
-
-def draw_pin(pil_img, color=(234, 67, 53), border=(255, 255, 255)):
-    """Render the Phosphor MapPin (fill weight) centered with its tip at the
-    image center. Defaults to classic Google-Maps red with a white border.
-    Supersampled for clean anti-aliased edges."""
+def draw_pin(pil_img, color=(255, 255, 255)):
+    """Draw a small white dot with a soft drop shadow at the image center.
+    Replaces the old Phosphor MapPin overlay — simpler reads better against
+    varied terrain, and there's nothing to misalign."""
     SS = 4
     base = pil_img.convert('RGBA')
     W, H = base.size
 
-    # Pin scale: choose total icon height in display px, scale 256x256 → that
-    icon_h = max(36, min(W, H) // 22)
-    scale = (icon_h / 256.0) * SS
+    # Dot diameter scales with the chip — small enough to feel like a precision
+    # marker, large enough to be visible at thumbnail size.
+    dot_d = max(14, min(W, H) // 48)
+    radius_ss = (dot_d * SS) / 2
     sw, sh = W * SS, H * SS
+    cx, cy = sw / 2, sh / 2
 
-    # Translate so the pin tip lands on the image center
-    tx = sw / 2 - _MAPPIN_TIP[0] * scale
-    ty = sh / 2 - _MAPPIN_TIP[1] * scale
-    outer = [(x * scale + tx, y * scale + ty) for x, y in _MAPPIN_OUTER]
-    inner = [(x * scale + tx, y * scale + ty) for x, y in _MAPPIN_INNER]
-
-    # White border: dilate the outer silhouette by ~3 display px so the visible
-    # ring outside the red fill reads cleanly on any terrain
-    border_disp_px = 2
-    kernel = border_disp_px * SS * 2 + 1
-    base_mask = Image.new('L', (sw, sh), 0)
-    ImageDraw.Draw(base_mask).polygon(outer, fill=255)
-    border_mask = base_mask.filter(ImageFilter.MaxFilter(kernel))
-    border_layer = Image.new('RGBA', (sw, sh), border + (0,))
-    border_layer.putalpha(border_mask)
-
-    # Pin layer: red fill with inner head hole punched (same Phosphor look)
-    pin_mask = Image.new('L', (sw, sh), 0)
-    md = ImageDraw.Draw(pin_mask)
-    md.polygon(outer, fill=255)
-    md.polygon(inner, fill=0)
-    pin_layer = Image.new('RGBA', (sw, sh), color + (0,))
-    pin_layer.putalpha(pin_mask)
-
-    # Drop shadow: blurred dilated silhouette
-    shadow_mask = border_mask.point(lambda v: int(v * 0.55))
-    shadow_mask = shadow_mask.filter(ImageFilter.GaussianBlur(radius=SS * 2))
+    # Drop shadow — slightly larger, blurred, offset down a hair.
     shadow_layer = Image.new('RGBA', (sw, sh), (0, 0, 0, 0))
+    shadow_mask = Image.new('L', (sw, sh), 0)
+    sd = ImageDraw.Draw(shadow_mask)
+    shadow_pad = SS * 2
+    sd.ellipse(
+        (cx - radius_ss - shadow_pad, cy - radius_ss - shadow_pad,
+         cx + radius_ss + shadow_pad, cy + radius_ss + shadow_pad),
+        fill=140,
+    )
+    shadow_mask = shadow_mask.filter(ImageFilter.GaussianBlur(radius=SS * 2.5))
     shadow_layer.putalpha(shadow_mask)
     shadow_off = Image.new('RGBA', (sw, sh), (0, 0, 0, 0))
-    shadow_off.paste(shadow_layer, (0, int(SS * 1.5)), shadow_layer)
+    shadow_off.paste(shadow_layer, (0, int(SS * 1.2)), shadow_layer)
 
-    # Compose: shadow → white border → red pin
-    composed_ss = Image.alpha_composite(shadow_off, border_layer)
-    composed_ss = Image.alpha_composite(composed_ss, pin_layer)
+    # White dot.
+    dot_layer = Image.new('RGBA', (sw, sh), (0, 0, 0, 0))
+    dd = ImageDraw.Draw(dot_layer)
+    dd.ellipse(
+        (cx - radius_ss, cy - radius_ss, cx + radius_ss, cy + radius_ss),
+        fill=color + (255,),
+    )
+
+    composed_ss = Image.alpha_composite(shadow_off, dot_layer)
     composed = composed_ss.resize((W, H), Image.LANCZOS)
     return Image.alpha_composite(base, composed).convert('RGB')
 

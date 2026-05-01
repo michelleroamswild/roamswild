@@ -31,12 +31,12 @@ const getInitials = (name?: string, email?: string): string => {
 // Hash userId to one of the Pine + Paper accent tokens for consistent avatar colors.
 const getAvatarColor = (userId: string): string => {
   const colors = [
-    'bg-pine-6 text-cream',
+    'bg-pine-6 text-cream dark:text-ink-pine',
     'bg-sage text-cream',
     'bg-water text-cream',
     'bg-clay text-cream',
     'bg-ember text-cream',
-    'bg-ink text-cream',
+    'bg-ink dark:bg-ink-pine text-cream',
   ];
 
   let hash = 0;
@@ -97,7 +97,7 @@ export function CollaboratorAvatars({
           <Tooltip>
             <TooltipTrigger asChild>
               <div
-                className={`${sizeClasses[size]} bg-cream border border-line rounded-full flex items-center justify-center text-ink-2 font-sans font-semibold tracking-[0.02em] cursor-default`}
+                className={`${sizeClasses[size]} bg-cream dark:bg-paper-2 border border-line rounded-full flex items-center justify-center text-ink-2 font-sans font-semibold tracking-[0.02em] cursor-default`}
               >
                 +{remainingCount}
               </div>

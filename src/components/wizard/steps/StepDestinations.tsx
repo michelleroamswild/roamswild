@@ -154,7 +154,7 @@ export function StepDestinations({
               placeholder="Name (optional)"
               value={manualName}
               onChange={(e) => setManualName(e.target.value)}
-              className="w-full h-11 px-4 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
+              className="w-full h-11 px-4 rounded-[12px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
             />
             <div className="flex gap-2">
               <input
@@ -163,7 +163,7 @@ export function StepDestinations({
                 placeholder="Lat (e.g. 36.8529)"
                 value={manualLat}
                 onChange={(e) => setManualLat(e.target.value)}
-                className="flex-1 h-11 px-4 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
+                className="flex-1 h-11 px-4 rounded-[12px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
               />
               <input
                 type="number"
@@ -171,7 +171,7 @@ export function StepDestinations({
                 placeholder="Lng (e.g. -111.3803)"
                 value={manualLng}
                 onChange={(e) => setManualLng(e.target.value)}
-                className="flex-1 h-11 px-4 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
+                className="flex-1 h-11 px-4 rounded-[12px] border border-line bg-white dark:bg-paper-2 text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
               />
             </div>
             <Pill
@@ -212,7 +212,7 @@ export function StepDestinations({
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragEnd={handleDragEnd}
                   className={cn(
-                    'flex items-center gap-3 p-3 bg-white border rounded-[12px] cursor-move transition-all',
+                    'flex items-center gap-3 p-3 bg-white dark:bg-paper-2 border rounded-[12px] cursor-move transition-all',
                     dragging ? 'opacity-50 border-pine-6' : 'border-line hover:border-ink-3/40',
                   )}
                 >
@@ -232,7 +232,7 @@ export function StepDestinations({
                       type="button"
                       onClick={(e) => { e.stopPropagation(); if (canDecrease) handleDestinationDaysChange(dest.id, currentDays - 1); }}
                       disabled={!canDecrease}
-                      className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-line bg-white text-ink hover:border-ink-3 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-line bg-white dark:bg-paper-2 text-ink hover:border-ink-3 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       aria-label="Decrease days"
                     >
                       <Minus className="w-3 h-3" weight="bold" />
@@ -244,7 +244,7 @@ export function StepDestinations({
                       type="button"
                       onClick={(e) => { e.stopPropagation(); if (canIncrease) handleDestinationDaysChange(dest.id, currentDays + 1); }}
                       disabled={!canIncrease}
-                      className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-line bg-white text-ink hover:border-ink-3 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-line bg-white dark:bg-paper-2 text-ink hover:border-ink-3 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       aria-label="Increase days"
                     >
                       <Plus className="w-3 h-3" weight="bold" />
@@ -278,7 +278,7 @@ export function StepDestinations({
       <Sheet open={isMapPickerOpen} onOpenChange={setIsMapPickerOpen}>
         <SheetContent
           side="right"
-          className="w-full sm:max-w-xl p-0 bg-cream border-line"
+          className="w-full sm:max-w-xl p-0 bg-cream dark:bg-paper-2 border-line"
           onInteractOutside={(e) => e.preventDefault()}
           onPointerDownOutside={(e) => e.preventDefault()}
         >
