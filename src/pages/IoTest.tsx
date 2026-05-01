@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Marker, MarkerClusterer } from '@react-google-maps/api';
 import { GoogleMap } from '@/components/GoogleMap';
 import { useGoogleMaps } from '@/components/GoogleMapsProvider';
-import { ThumbsDown, ThumbsUp, X } from '@phosphor-icons/react';
+import { ThumbsDown, ThumbsUp, X, FloppyDisk, ArrowCounterClockwise, FlagBanner, DownloadSimple, Eraser } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
+import { Mono } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 // DB row from the unified `spots` table
 interface SpotRow {
@@ -112,12 +114,12 @@ interface Layer {
 }
 
 const LAYERS: Layer[] = [
-  { key: 'camping',     label: 'Dispersed',   kinds: ['dispersed_camping'], color: '#d97706' },
-  { key: 'established', label: 'Established', kinds: ['established_campground'], color: '#16a34a' },
-  { key: 'stealth',     label: 'Informal',    kinds: ['informal_camping'],  color: '#9ca3af' },
-  { key: 'water',       label: 'Water',       kinds: ['water'],             color: '#0ea5e9' },
-  { key: 'showers',     label: 'Showers',     kinds: ['shower'],            color: '#14b8a6' },
-  { key: 'laundromats', label: 'Laundromats', kinds: ['laundromat'],        color: '#8b5cf6' },
+  { key: 'camping',     label: 'Dispersed',   kinds: ['dispersed_camping'],     color: '#b08856' }, // clay
+  { key: 'established', label: 'Established', kinds: ['established_campground'],color: '#3a4a2a' }, // pine
+  { key: 'stealth',     label: 'Informal',    kinds: ['informal_camping'],      color: '#5a5d52' }, // ink-3
+  { key: 'water',       label: 'Water',       kinds: ['water'],                 color: '#3a7aa0' }, // water
+  { key: 'showers',     label: 'Showers',     kinds: ['shower'],                color: '#7a9156' }, // sage
+  { key: 'laundromats', label: 'Laundromats', kinds: ['laundromat'],            color: '#b05028' }, // ember
 ];
 
 const layerForKind = (kind: string): LayerKey | null => {
@@ -160,7 +162,7 @@ const ACCESS_LABEL: Record<string, string> = {
 };
 
 const AGENCY_COLOR: Record<string, string> = {
-  BLM: '#d97706', USFS: '#16a34a', NPS: '#7c2d12', SLB: '#2563eb',
+  BLM: '#b08856', USFS: '#3a4a2a', NPS: '#7a6a9e', SLB: '#3a7aa0',
 };
 
 const FLAGS_STORAGE_KEY = 'iotest-review-flags-v1';
@@ -404,49 +406,74 @@ export default function IoTest() {
     reader.readAsText(file);
   };
 
+  const ctlBtn = (active: boolean) =>
+    cn(
+      'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-sans font-semibold tracking-[0.01em] transition-colors border',
+      active
+        ? 'bg-ink text-cream border-ink'
+        : 'bg-white text-ink-2 border-line hover:border-ink-3/50 hover:bg-cream',
+    );
+
+  const accentCtlBtn = (tone: 'pine' | 'clay' | 'ember' | 'water') => {
+    const tones: Record<typeof tone, string> = {
+      pine: 'bg-pine-6 text-cream border-pine-6 hover:bg-pine-5 hover:border-pine-5',
+      clay: 'bg-clay text-cream border-clay hover:bg-clay/90',
+      ember: 'bg-ember text-cream border-ember hover:bg-ember/90',
+      water: 'bg-water text-cream border-water hover:bg-water/90',
+    };
+    return cn(
+      'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-sans font-semibold tracking-[0.01em] transition-colors border',
+      tones[tone],
+    );
+  };
+
   return (
-    <div className="h-screen w-screen flex flex-col">
-      <div className="shrink-0 border-b border-border bg-background px-4 py-2 flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h1 className="text-lg font-semibold">IO Test — community_spots</h1>
-          <p className="text-xs text-muted-foreground">
-            {error ? `Error: ${error}` : (
-              reviewMode
-                ? `Review: ${totalLoaded} remaining · 👍 ${approved.size} · 👎 ${flagged.size} · ✕ ${removed.size}`
-                : `${totalLoaded} rows from cloud Supabase`
+    <div className="h-screen w-screen flex flex-col bg-paper text-ink font-sans">
+      <div className="shrink-0 border-b border-line bg-cream px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+        <div className="min-w-0">
+          <Mono className="text-pine-6 inline-flex items-center gap-1.5">
+            <FlagBanner className="w-3 h-3" weight="regular" />
+            IO Test · community_spots
+          </Mono>
+          <p className="text-[12px] text-ink-3 mt-0.5">
+            {error ? (
+              <span className="text-ember">Error: {error}</span>
+            ) : reviewMode ? (
+              <>
+                Review · <span className="font-sans font-semibold text-ink">{totalLoaded}</span> remaining ·{' '}
+                <span className="text-pine-6">👍 {approved.size}</span> ·{' '}
+                <span className="text-ember">👎 {flagged.size}</span> ·{' '}
+                <span className="text-ink-3">✕ {removed.size}</span>
+              </>
+            ) : (
+              <>
+                <span className="font-sans font-semibold text-ink">{totalLoaded}</span> rows from cloud Supabase
+              </>
             )}
           </p>
         </div>
-        <div className="flex items-center gap-3 text-xs flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <button
             onClick={() => setReviewMode((v) => !v)}
-            className={`px-2 py-1 rounded border font-medium transition-colors ${
-              reviewMode ? 'border-orange-400 bg-orange-100 text-orange-800' : 'border-border bg-muted/40'
-            }`}
+            className={ctlBtn(reviewMode)}
             title="Show only entries flagged as possibly weird by the Stage 22 scan"
           >
-            {reviewMode ? `Review ON (${reviewKeys.size})` : `Review OFF (${reviewKeys.size})`}
+            <FlagBanner className="w-3 h-3" weight="regular" />
+            Review {reviewMode ? 'on' : 'off'} ({reviewKeys.size})
           </button>
           <button
             onClick={() => setSatellite((v) => !v)}
-            className={`px-2 py-1 rounded border font-medium ${
-              satellite ? 'border-blue-400 bg-blue-100 text-blue-800' : 'border-border bg-muted/40'
-            }`}
+            className={ctlBtn(satellite)}
             title="Toggle satellite map"
           >
             {satellite ? 'Satellite' : 'Map'}
           </button>
-          <button
-            onClick={backupAll}
-            className="px-2 py-1 rounded border border-border bg-muted/40 font-medium"
-            title="Backup all review state to a file"
-          >
+          <button onClick={backupAll} className={ctlBtn(false)} title="Backup all review state to a file">
+            <FloppyDisk className="w-3 h-3" weight="regular" />
             Backup
           </button>
-          <label
-            className="px-2 py-1 rounded border border-border bg-muted/40 font-medium cursor-pointer"
-            title="Restore review state from a backup file"
-          >
+          <label className={cn(ctlBtn(false), 'cursor-pointer')} title="Restore review state from a backup file">
+            <ArrowCounterClockwise className="w-3 h-3" weight="regular" />
             Restore
             <input
               type="file"
@@ -459,21 +486,16 @@ export default function IoTest() {
               }}
             />
           </label>
-          {(approved.size + flagged.size + removed.size) > 0 && (
-            <button
-              onClick={clearAllMarks}
-              className="px-2 py-1 rounded border border-border bg-muted/40 font-medium"
-              title="Clear all 👍/👎/✕ marks from local storage"
-            >
+          {approved.size + flagged.size + removed.size > 0 && (
+            <button onClick={clearAllMarks} className={ctlBtn(false)} title="Clear all 👍/👎/✕ marks">
+              <Eraser className="w-3 h-3" weight="regular" />
               Clear marks
             </button>
           )}
           {approved.size > 0 && (
             <button
               onClick={() => setShowApproved((v) => !v)}
-              className={`px-2 py-1 rounded border font-medium ${
-                showApproved ? 'border-green-400 bg-green-100 text-green-800' : 'border-border bg-muted/40'
-              }`}
+              className={showApproved ? accentCtlBtn('pine') : ctlBtn(false)}
               title="Toggle visibility of approved entries"
             >
               {showApproved ? `Showing 👍 ${approved.size}` : `👍 ${approved.size} hidden`}
@@ -482,29 +504,21 @@ export default function IoTest() {
           {removed.size > 0 && (
             <button
               onClick={() => setShowRemoved((v) => !v)}
-              className={`px-2 py-1 rounded border font-medium ${
-                showRemoved ? 'border-gray-500 bg-gray-200 text-gray-900' : 'border-border bg-muted/40'
-              }`}
+              className={showRemoved ? ctlBtn(true) : ctlBtn(false)}
               title="Toggle visibility of removed entries"
             >
               {showRemoved ? `Showing ✕ ${removed.size}` : `✕ ${removed.size} hidden`}
             </button>
           )}
           {flagged.size > 0 && (
-            <button
-              onClick={exportFlags}
-              className="px-2 py-1 rounded border border-red-400 bg-red-50 text-red-800 font-medium"
-              title="Download the flagged-list JSON"
-            >
+            <button onClick={exportFlags} className={accentCtlBtn('ember')} title="Download the flagged-list JSON">
+              <DownloadSimple className="w-3 h-3" weight="regular" />
               Export 👎 {flagged.size}
             </button>
           )}
           {removed.size > 0 && (
-            <button
-              onClick={exportRemoved}
-              className="px-2 py-1 rounded border border-gray-500 bg-gray-100 text-gray-900 font-medium"
-              title="Download the removed-list JSON (use this to delete from DB later)"
-            >
+            <button onClick={exportRemoved} className={ctlBtn(false)} title="Download the removed-list JSON">
+              <DownloadSimple className="w-3 h-3" weight="regular" />
               Export ✕ {removed.size}
             </button>
           )}
@@ -515,13 +529,14 @@ export default function IoTest() {
               <button
                 key={layer.key}
                 onClick={() => setEnabled((p) => ({ ...p, [layer.key]: !p[layer.key] }))}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded border transition-colors ${
-                  on ? 'border-border bg-muted/40' : 'border-transparent bg-transparent opacity-50'
-                }`}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-sans font-semibold tracking-[0.01em] transition-colors border',
+                  on ? 'bg-white border-line text-ink' : 'bg-transparent border-transparent text-ink-3 opacity-60',
+                )}
               >
                 <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: layer.color }} />
-                <span className="font-medium">{layer.label}</span>
-                <span className="text-muted-foreground">({count})</span>
+                <span>{layer.label}</span>
+                <Mono className={on ? 'text-ink-3' : 'text-ink-3/70'}>({count})</Mono>
               </button>
             );
           })}
@@ -563,9 +578,11 @@ export default function IoTest() {
         </div>
 
         {/* Side panel: full list of visible spots */}
-        <div className="w-[560px] max-w-[45vw] shrink-0 border-l border-border bg-background flex flex-col">
-          <div className="shrink-0 border-b border-border px-4 py-2 text-sm text-muted-foreground">
-            {totalLoaded} entries · click a row to focus on map
+        <div className="w-[560px] max-w-[45vw] shrink-0 border-l border-line bg-paper flex flex-col">
+          <div className="shrink-0 border-b border-line bg-cream px-4 py-2.5">
+            <Mono className="text-ink-3">
+              {totalLoaded} entries · click a row to focus on map
+            </Mono>
           </div>
           <div ref={listScrollRef} className="flex-1 overflow-y-auto">
             {visibleSpots.map((s) => {
@@ -578,87 +595,92 @@ export default function IoTest() {
                   key={s._key}
                   ref={(el) => { itemRefs.current[s._key] = el; }}
                   onClick={() => handleSelectFromList(s)}
-                  className={`px-4 py-3 border-b border-border cursor-pointer transition-colors ${
-                    isSelected ? 'bg-orange-50 dark:bg-orange-950/20' : 'hover:bg-muted/40'
-                  } ${isFlagged ? 'opacity-60' : ''} ${isApproved ? 'opacity-50' : ''} ${
-                    isRemoved ? 'opacity-40 line-through' : ''
-                  }`}
+                  className={cn(
+                    'px-4 py-3 border-b border-line cursor-pointer transition-colors',
+                    isSelected ? 'bg-clay/[0.06]' : 'hover:bg-cream',
+                    isFlagged && 'opacity-60',
+                    isApproved && 'opacity-50',
+                    isRemoved && 'opacity-40 line-through',
+                  )}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-base leading-snug break-words">
+                      <p className="text-[15px] font-sans font-semibold tracking-[-0.01em] text-ink leading-snug break-words">
                         {displayName(s)}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1 uppercase tracking-wide">
+                      <Mono className="text-ink-3 mt-1 block">
                         {s.kind.replace(/_/g, ' ')}
                         {s.sub_kind && ` · ${s.sub_kind.replace(/_/g, ' ')}`}
                         {s.public_land_manager && ` · ${s.public_land_manager}`}
                         {s.source !== 'community' && ` · ${s.source}`}
-                      </p>
+                      </Mono>
                     </div>
-                    <div className="shrink-0 flex items-center gap-1">
+                    <div className="shrink-0 flex items-center gap-0.5">
                       <button
                         onClick={(e) => { e.stopPropagation(); toggleApproved(s._key); }}
-                        className={`p-1.5 rounded transition-colors ${
+                        className={cn(
+                          'inline-flex items-center justify-center w-9 h-9 rounded-full transition-colors',
                           isApproved
-                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                            : 'text-muted-foreground hover:text-green-700 hover:bg-green-50'
-                        }`}
+                            ? 'bg-pine-6/15 text-pine-6 hover:bg-pine-6/25'
+                            : 'text-ink-3 hover:text-pine-6 hover:bg-pine-6/10',
+                        )}
                         title={isApproved ? 'Unapprove' : 'Mark good — removes from list'}
                         aria-label="Toggle approve"
                       >
-                        <ThumbsUp className="w-5 h-5" weight={isApproved ? 'fill' : 'regular'} />
+                        <ThumbsUp className="w-4 h-4" weight={isApproved ? 'fill' : 'regular'} />
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); toggleFlag(s._key); }}
-                        className={`p-1.5 rounded transition-colors ${
+                        className={cn(
+                          'inline-flex items-center justify-center w-9 h-9 rounded-full transition-colors',
                           isFlagged
-                            ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                            : 'text-muted-foreground hover:text-red-700 hover:bg-red-50'
-                        }`}
+                            ? 'bg-ember/15 text-ember hover:bg-ember/25'
+                            : 'text-ink-3 hover:text-ember hover:bg-ember/10',
+                        )}
                         title={isFlagged ? 'Unflag' : 'Flag for re-review'}
                         aria-label="Toggle flag"
                       >
-                        <ThumbsDown className="w-5 h-5" weight={isFlagged ? 'fill' : 'regular'} />
+                        <ThumbsDown className="w-4 h-4" weight={isFlagged ? 'fill' : 'regular'} />
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); toggleRemoved(s._key); }}
-                        className={`p-1.5 rounded transition-colors ${
+                        className={cn(
+                          'inline-flex items-center justify-center w-9 h-9 rounded-full transition-colors',
                           isRemoved
-                            ? 'bg-gray-200 text-gray-900 hover:bg-gray-300'
-                            : 'text-muted-foreground hover:text-gray-900 hover:bg-gray-100'
-                        }`}
+                            ? 'bg-ink/15 text-ink hover:bg-ink/25'
+                            : 'text-ink-3 hover:text-ink hover:bg-ink/5',
+                        )}
                         title={isRemoved ? 'Undo remove' : 'Mark for deletion from DB'}
                         aria-label="Toggle remove"
                       >
-                        <X className="w-5 h-5" weight={isRemoved ? 'bold' : 'regular'} />
+                        <X className="w-4 h-4" weight={isRemoved ? 'bold' : 'regular'} />
                       </button>
                     </div>
                   </div>
-                  {/* Unified amenity badges — render whatever's set */}
+
                   <AmenityRow spot={s} />
 
                   {s.description && (
                     <div className="mt-2">
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Summary</p>
-                      <p className="text-sm text-foreground/90 leading-relaxed">
-                        {s.description}
-                      </p>
+                      <Mono className="text-ink-3 block">Summary</Mono>
+                      <p className="text-[13px] text-ink leading-[1.55] mt-0.5">{s.description}</p>
                     </div>
                   )}
-                  {isSelected && (s.name_original && s.name_original !== s.name) && (
-                    <p className="text-xs text-muted-foreground/70 mt-2 italic">
-                      orig name: {s.name_original}
-                    </p>
+                  {isSelected && s.name_original && s.name_original !== s.name && (
+                    <Mono className="text-ink-3 mt-2 block italic">orig name: {s.name_original}</Mono>
                   )}
                 </div>
               );
             })}
             {visibleSpots.length === 0 && (
-              <div className="text-sm text-muted-foreground text-center mt-8 px-4 space-y-2">
-                <p>No entries to show.</p>
-                <p className="text-xs">
-                  Toggle a layer in the header (Dispersed / Informal / Water / Showers / Laundromats) to start. Or turn on Review / Misclass mode for a smaller subset.
+              <div className="text-center py-12 px-6">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-sage/15 text-sage mb-2.5">
+                  <FlagBanner className="w-5 h-5" weight="regular" />
+                </div>
+                <p className="text-[14px] font-sans font-semibold text-ink">No entries to show</p>
+                <p className="text-[12px] text-ink-3 mt-1.5 max-w-[280px] mx-auto leading-[1.5]">
+                  Toggle a layer in the header (Dispersed / Informal / Water / Showers / Laundromats) to start. Or
+                  turn on Review mode for a smaller subset.
                 </p>
               </div>
             )}
@@ -718,7 +740,7 @@ function formatVehicle(v: string): string {
 
 function formatCell(c: ImportedSpot['cell_service']): { text: string; cls: string } | null {
   if (!c) return null;
-  if (c.none) return { text: 'No cell', cls: 'bg-gray-100 text-gray-500' };
+  if (c.none) return { text: 'No cell', cls: 'bg-cream text-ink-3 border border-line' };
   const parts: string[] = [];
   for (const [provider, bars] of Object.entries(c)) {
     if (provider === 'none') continue;
@@ -726,15 +748,28 @@ function formatCell(c: ImportedSpot['cell_service']): { text: string; cls: strin
     parts.push(typeof bars === 'number' ? `${label} ${bars}` : label);
   }
   if (parts.length === 0) return null;
-  return { text: `Cell: ${parts.join(', ')}`, cls: 'bg-purple-100 text-purple-800' };
+  return { text: `Cell: ${parts.join(', ')}`, cls: 'bg-water/15 text-water' };
 }
 
 function AmenityBadge({ label, value }: { label: string; value: boolean | string | null | undefined }) {
   if (value == null) return null;
   let display: string;
   let cls: string;
-  if (value === true) { display = label; cls = 'bg-green-100 text-green-800'; }
-  else if (value === false) { display = `No ${label.toLowerCase()}`; cls = 'bg-gray-100 text-gray-500'; }
-  else { display = `${label}: ${value}`; cls = 'bg-blue-100 text-blue-800'; }
-  return <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>{display}</span>;
+  if (value === true) {
+    display = label;
+    cls = 'bg-pine-6/12 text-pine-6';
+  } else if (value === false) {
+    display = `No ${label.toLowerCase()}`;
+    cls = 'bg-cream text-ink-3 border border-line';
+  } else {
+    display = `${label}: ${value}`;
+    cls = 'bg-clay/15 text-clay';
+  }
+  return (
+    <span
+      className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-[0.06em] font-semibold ${cls}`}
+    >
+      {display}
+    </span>
+  );
 }

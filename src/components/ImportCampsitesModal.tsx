@@ -1,61 +1,48 @@
 import { useState, useRef } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { SpinnerGap, UploadSimple, File, CheckCircle, WarningCircle } from '@phosphor-icons/react';
+  SpinnerGap,
+  UploadSimple,
+  File as FileIcon,
+  CheckCircle,
+  WarningCircle,
+  ArrowSquareOut,
+} from '@phosphor-icons/react';
 import { useCampsites } from '@/context/CampsitesContext';
 import { useGoogleMaps } from '@/components/GoogleMapsProvider';
 import { CampsiteVisibility, ParsedImportLocation } from '@/types/campsite';
 import { toast } from 'sonner';
+import { Mono, Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
-// Reverse geocode to get state from coordinates
 async function getStateFromCoords(lat: number, lng: number): Promise<string | undefined> {
   return new Promise((resolve) => {
     if (!window.google?.maps?.Geocoder) {
       resolve(undefined);
       return;
     }
-
     const geocoder = new window.google.maps.Geocoder();
-    geocoder.geocode(
-      { location: { lat, lng } },
-      (results, status) => {
-        if (status === 'OK' && results && results.length > 0) {
-          // Look for administrative_area_level_1 (state)
-          for (const result of results) {
-            for (const component of result.address_components) {
-              if (component.types.includes('administrative_area_level_1')) {
-                resolve(component.short_name); // e.g., "CA", "UT", "NV"
-                return;
-              }
+    geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+      if (status === 'OK' && results && results.length > 0) {
+        for (const result of results) {
+          for (const component of result.address_components) {
+            if (component.types.includes('administrative_area_level_1')) {
+              resolve(component.short_name);
+              return;
             }
           }
         }
-        resolve(undefined);
       }
-    );
+      resolve(undefined);
+    });
   });
 }
 
-// Extract lat/lng from a string (URL or text)
 function extractCoords(text: string): { lat: number; lng: number } | null {
   if (!text) return null;
 
-  // Pattern 1: /@lat,lng,zoom (e.g., /@37.7749,-122.4194,15z)
-  const atPattern = /@(-?\d+\.?\d*),(-?\d+\.?\d*)/;
-  const atMatch = text.match(atPattern);
+  const atMatch = text.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
   if (atMatch) {
     const lat = parseFloat(atMatch[1]);
     const lng = parseFloat(atMatch[2]);
@@ -64,9 +51,7 @@ function extractCoords(text: string): { lat: number; lng: number } | null {
     }
   }
 
-  // Pattern 2: ?q=lat,lng or &q=lat,lng
-  const qPattern = /[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/;
-  const qMatch = text.match(qPattern);
+  const qMatch = text.match(/[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
   if (qMatch) {
     const lat = parseFloat(qMatch[1]);
     const lng = parseFloat(qMatch[2]);
@@ -75,9 +60,7 @@ function extractCoords(text: string): { lat: number; lng: number } | null {
     }
   }
 
-  // Pattern 3: /place/lat,lng or /search/lat,lng
-  const placePattern = /\/(place|search)\/(-?\d+\.?\d*),(-?\d+\.?\d*)/;
-  const placeMatch = text.match(placePattern);
+  const placeMatch = text.match(/\/(place|search)\/(-?\d+\.?\d*),(-?\d+\.?\d*)/);
   if (placeMatch) {
     const lat = parseFloat(placeMatch[2]);
     const lng = parseFloat(placeMatch[3]);
@@ -86,9 +69,7 @@ function extractCoords(text: string): { lat: number; lng: number } | null {
     }
   }
 
-  // Pattern 4: Standalone coordinates like "37.7749, -122.4194" or "37.7749,-122.4194"
-  const coordPattern = /(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/;
-  const coordMatch = text.match(coordPattern);
+  const coordMatch = text.match(/(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/);
   if (coordMatch) {
     const lat = parseFloat(coordMatch[1]);
     const lng = parseFloat(coordMatch[2]);
@@ -100,31 +81,24 @@ function extractCoords(text: string): { lat: number; lng: number } | null {
   return null;
 }
 
-// Parse CSV/TSV text into rows (handles both comma and tab delimiters)
 function parseCSV(text: string): Record<string, string>[] {
-  const lines = text.split(/\r?\n/).filter(line => line.trim());
+  const lines = text.split(/\r?\n/).filter((line) => line.trim());
   if (lines.length < 2) return [];
 
-  // Detect delimiter (tab or comma) from first line
   const firstLine = lines[0];
   const delimiter = firstLine.includes('\t') ? '\t' : ',';
 
-  // Parse row - handle quoted values
   const parseRow = (line: string): string[] => {
     const values: string[] = [];
     let current = '';
     let inQuotes = false;
-
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === delimiter && !inQuotes) {
+      if (char === '"') inQuotes = !inQuotes;
+      else if (char === delimiter && !inQuotes) {
         values.push(current.trim());
         current = '';
-      } else {
-        current += char;
-      }
+      } else current += char;
     }
     values.push(current.trim());
     return values;
@@ -132,19 +106,15 @@ function parseCSV(text: string): Record<string, string>[] {
 
   const headers = parseRow(lines[0]);
   const rows: Record<string, string>[] = [];
-
   for (let i = 1; i < lines.length; i++) {
     const values = parseRow(lines[i]);
     const row: Record<string, string> = {};
     headers.forEach((header, index) => {
-      // Store with lowercase key for consistent access
       row[header.toLowerCase()] = values[index] || '';
-      // Also store original for backwards compatibility
       row[header] = values[index] || '';
     });
     rows.push(row);
   }
-
   return rows;
 }
 
@@ -171,9 +141,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
     setParseError(null);
     setSkippedEntries([]);
     setVisibility('private');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleClose = () => {
@@ -199,18 +167,16 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
         return;
       }
 
-      // Check for required columns
       const firstRow = rows[0];
       if (!('Title' in firstRow) || !('URL' in firstRow)) {
         setParseError('Invalid CSV format. Expected columns: Title, URL');
         return;
       }
 
-      // Parse each row and extract coordinates from URL
       const locations: ParsedImportLocation[] = [];
       const skipped: { title: string; reason: string }[] = [];
-
       let unnamedCount = 0;
+
       for (const row of rows) {
         const title = row.Title?.trim();
         const url = row.URL?.trim();
@@ -218,23 +184,18 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
         const comment = row.comment?.trim();
         const tagsRaw = row.tags?.trim();
 
-        // Parse tags - split by semicolon or comma and clean up
         const tags = tagsRaw
-          ? tagsRaw.split(/[;,]/).map(t => t.trim()).filter(t => t.length > 0)
+          ? tagsRaw.split(/[;,]/).map((t) => t.trim()).filter((t) => t.length > 0)
           : undefined;
 
-        // Try URL first, then fall back to title for coordinates
         let coords = extractCoords(url || '');
-        if (!coords) {
-          coords = extractCoords(title || '');
-        }
+        if (!coords) coords = extractCoords(title || '');
 
         if (!coords) {
-          skipped.push({ title: title || '(empty title)', reason: 'No coordinates found' });
+          skipped.push({ title: title || '(empty title)', reason: 'No coordinates' });
           continue;
         }
 
-        // Use title or generate a default name
         let name = title;
         if (!name) {
           unnamedCount++;
@@ -261,7 +222,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
 
       setParsedData(locations);
     } catch {
-      setParseError('Failed to parse CSV file. Please ensure it\'s a valid Google Takeout export.');
+      setParseError('Failed to parse CSV. Please ensure it is a valid Google Takeout export.');
     }
   };
 
@@ -270,19 +231,17 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
 
     setIsImporting(true);
 
-    // Fetch states for each location if Google Maps is loaded
     let locationsWithState = parsedData;
     if (googleMapsLoaded) {
       locationsWithState = await Promise.all(
         parsedData.map(async (location) => {
           const state = await getStateFromCoords(location.lat, location.lng);
           return { ...location, state };
-        })
+        }),
       );
     }
 
     const importedCount = await importFromCSV(locationsWithState, visibility);
-
     setIsImporting(false);
 
     if (importedCount > 0) {
@@ -294,34 +253,48 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent size="md">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+      <DialogContent className="sm:max-w-md border-line bg-white rounded-[18px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UploadSimple className="w-5 h-5 text-primary" />
-            Import from Google
+          <Mono className="text-pine-6 flex items-center gap-1.5">
+            <UploadSimple className="w-3.5 h-3.5" weight="regular" />
+            Import places
+          </Mono>
+          <DialogTitle className="font-sans font-semibold tracking-[-0.015em] text-ink text-[20px] leading-[1.15] mt-1">
+            Bring in your saved spots.
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-5 mt-2">
           {/* Instructions */}
-          <div className="text-sm text-muted-foreground space-y-2">
-            <p>Import your saved places from Google Maps:</p>
-            <ol className="list-decimal list-inside space-y-1 text-xs">
-              <li>Go to <a href="https://takeout.google.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google Takeout</a></li>
+          <div className="px-3.5 py-3 rounded-[12px] border border-line bg-cream">
+            <Mono className="text-ink-2 mb-1.5 block">From Google Maps</Mono>
+            <ol className="space-y-1 text-[13px] text-ink-3 list-decimal list-inside">
+              <li>
+                Open{' '}
+                <a
+                  href="https://takeout.google.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-pine-6 inline-flex items-center gap-0.5 hover:underline"
+                >
+                  Google Takeout <ArrowSquareOut className="w-3 h-3" weight="regular" />
+                </a>
+              </li>
               <li>Select "Saved" under Google Maps</li>
-              <li>Download and extract the ZIP file</li>
-              <li>Upload the CSV file below</li>
+              <li>Download and extract the ZIP</li>
+              <li>Upload the CSV below</li>
             </ol>
           </div>
 
           {/* File Upload */}
-          <div className="space-y-2">
-            <Label>Select File</Label>
+          <div className="space-y-1.5">
+            <Mono className="text-ink-2 block">CSV file</Mono>
             <div
-              className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-                selectedFile ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-              }`}
+              className={cn(
+                'border border-dashed rounded-[14px] p-6 text-center cursor-pointer transition-colors',
+                selectedFile ? 'border-pine-6 bg-pine-6/[0.04]' : 'border-line hover:border-ink-3/40 hover:bg-cream',
+              )}
               onClick={() => fileInputRef.current?.click()}
             >
               <input
@@ -334,91 +307,105 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
 
               {selectedFile ? (
                 <div className="flex items-center justify-center gap-2">
-                  <File className="w-5 h-5 text-primary" />
-                  <span className="text-sm font-medium">{selectedFile.name}</span>
+                  <div className="inline-flex items-center justify-center w-8 h-8 rounded-[10px] bg-pine-6 text-cream">
+                    <FileIcon className="w-4 h-4" weight="regular" />
+                  </div>
+                  <span className="text-[14px] font-sans font-semibold text-ink truncate max-w-[260px]">
+                    {selectedFile.name}
+                  </span>
                 </div>
               ) : (
-                <div>
-                  <UploadSimple className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Click to select a CSV file
-                  </p>
-                </div>
+                <>
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-sage/15 text-sage mb-2.5">
+                    <UploadSimple className="w-5 h-5" weight="regular" />
+                  </div>
+                  <p className="text-[13px] text-ink-3">Click to select a CSV file</p>
+                </>
               )}
             </div>
           </div>
 
-          {/* Parse Result */}
+          {/* Errors */}
           {parseError && (
-            <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
-              <WarningCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>{parseError}</span>
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-[12px] border border-ember/30 bg-ember/[0.06]">
+              <WarningCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-ember" weight="regular" />
+              <p className="text-[13px] text-ember leading-[1.5]">{parseError}</p>
             </div>
           )}
 
           {parsedData && (
-            <div className="flex items-start gap-2 p-3 bg-primary/10 border border-primary/20 rounded-lg text-primary text-sm">
-              <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>Found {parsedData.length} locations ready to import</span>
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-[12px] border border-pine-6/30 bg-pine-6/[0.06]">
+              <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-pine-6" weight="regular" />
+              <p className="text-[13px] text-pine-6 leading-[1.5]">
+                Found <span className="font-sans font-semibold">{parsedData.length}</span> locations ready to import
+              </p>
             </div>
           )}
 
           {skippedEntries.length > 0 && (
-            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm">
-              <div className="flex items-center gap-2 text-amber-600 font-medium mb-2">
-                <WarningCircle className="w-4 h-4" />
-                <span>{skippedEntries.length} entries will be skipped</span>
+            <div className="px-3 py-2.5 rounded-[12px] border border-clay/30 bg-clay/[0.06]">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <WarningCircle className="w-3.5 h-3.5 text-clay" weight="regular" />
+                <Mono className="text-clay">{skippedEntries.length} entries skipped</Mono>
               </div>
               <div className="max-h-32 overflow-y-auto space-y-1">
                 {skippedEntries.map((entry, index) => (
-                  <div key={index} className="text-xs text-muted-foreground flex justify-between">
+                  <div
+                    key={index}
+                    className="flex justify-between text-[12px] text-ink-3"
+                  >
                     <span className="truncate mr-2">{entry.title}</span>
-                    <span className="text-amber-600 flex-shrink-0">{entry.reason}</span>
+                    <span className="text-clay flex-shrink-0">{entry.reason}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Visibility Selection */}
+          {/* Visibility */}
           {parsedData && (
-            <div className="space-y-2">
-              <Label>Visibility for imported campsites</Label>
+            <div className="space-y-1.5">
+              <Mono className="text-ink-2 block">Visibility for imported campsites</Mono>
               <Select value={visibility} onValueChange={(v) => setVisibility(v as CampsiteVisibility)}>
-                <SelectTrigger>
+                <SelectTrigger className="h-10 rounded-[12px] border-line bg-white text-ink text-[14px] hover:border-ink-3 transition-colors">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="private">Private (just me)</SelectItem>
+                <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink">
+                  <SelectItem value="private">Just me</SelectItem>
                   <SelectItem value="friends">Friends only</SelectItem>
-                  <SelectItem value="public">Public (everyone)</SelectItem>
+                  <SelectItem value="public">Public</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                You can change visibility for individual campsites later
-              </p>
+              <p className="text-[12px] text-ink-3">You can change visibility per campsite later.</p>
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button type="button" variant="ghost" onClick={handleClose}>
+          <div className="flex items-center gap-2 pt-3 border-t border-line">
+            <Pill variant="ghost" mono={false} onClick={handleClose} className="!flex-1 !justify-center">
               Cancel
-            </Button>
-            <Button
-              variant="primary"
+            </Pill>
+            <Pill
+              variant="solid-pine"
+              mono={false}
               onClick={handleImport}
-              disabled={!parsedData || isImporting}
+              className={cn(
+                '!flex-1 !justify-center',
+                (!parsedData || isImporting) && 'opacity-50 pointer-events-none',
+              )}
             >
               {isImporting ? (
                 <>
-                  <SpinnerGap className="w-4 h-4 mr-2 animate-spin" />
-                  Importing...
+                  <SpinnerGap className="w-3.5 h-3.5 animate-spin" />
+                  Importing…
                 </>
               ) : (
-                `Import ${parsedData?.length || 0} Campsites`
+                <>
+                  <UploadSimple className="w-3.5 h-3.5" weight="regular" />
+                  Import {parsedData?.length || 0}
+                </>
               )}
-            </Button>
+            </Pill>
           </div>
         </div>
       </DialogContent>

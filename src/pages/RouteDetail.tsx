@@ -1,262 +1,279 @@
-import { ArrowLeft, Path, Clock, Mountains, Tent, GasPump, MapPin, Plus, DotsSixVertical, DotsThree, NavigationArrow, ShareNetwork, DownloadSimple, Star } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Link } from "react-router-dom";
-import { RouteMap } from "@/components/RouteMap";
-import { RouteStop } from "@/types/maps";
+import {
+  ArrowLeft,
+  Path,
+  Clock,
+  Mountains,
+  Tent,
+  GasPump,
+  MapPin,
+  Plus,
+  DotsSixVertical,
+  DotsThree,
+  NavigationArrow,
+  ShareNetwork,
+  DownloadSimple,
+  Star,
+} from '@phosphor-icons/react';
+import { Link } from 'react-router-dom';
+import { RouteMap } from '@/components/RouteMap';
+import { RouteStop } from '@/types/maps';
+import { Mono, Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 const routeStops: RouteStop[] = [
   {
     id: 1,
-    name: "Lone Pine Creek Trail",
-    type: "hike",
-    duration: "3h hike",
-    distance: "0 mi",
-    description: "Scenic mountain trail with creek views",
-    elevation: "6,500 ft",
-    coordinates: { lat: 36.6062, lng: -118.0631 }
+    name: 'Lone Pine Creek Trail',
+    type: 'hike',
+    duration: '3h hike',
+    distance: '0 mi',
+    description: 'Scenic mountain trail with creek views',
+    elevation: '6,500 ft',
+    coordinates: { lat: 36.6062, lng: -118.0631 },
   },
   {
     id: 2,
-    name: "Mobil Gas Station",
-    type: "gas",
-    duration: "15 min",
-    distance: "12 mi",
-    description: "Last gas before Alabama Hills",
-    elevation: "3,800 ft",
-    coordinates: { lat: 36.5996, lng: -118.0558 }
+    name: 'Mobil Gas Station',
+    type: 'gas',
+    duration: '15 min',
+    distance: '12 mi',
+    description: 'Last gas before Alabama Hills',
+    elevation: '3,800 ft',
+    coordinates: { lat: 36.5996, lng: -118.0558 },
   },
   {
     id: 3,
-    name: "Alabama Hills BLM",
-    type: "camp",
-    duration: "Overnight",
-    distance: "28 mi",
-    description: "Free dispersed camping with stunning rock formations",
-    elevation: "4,400 ft",
-    coordinates: { lat: 36.6089, lng: -118.1061 }
+    name: 'Alabama Hills BLM',
+    type: 'camp',
+    duration: 'Overnight',
+    distance: '28 mi',
+    description: 'Free dispersed camping with stunning rock formations',
+    elevation: '4,400 ft',
+    coordinates: { lat: 36.6089, lng: -118.1061 },
   },
 ];
 
-const getIcon = (type: string) => {
-  switch (type) {
-    case "hike":
-      return Mountains;
-    case "gas":
-      return GasPump;
-    case "camp":
-      return Tent;
-    default:
-      return MapPin;
-  }
-};
-
-const getTypeStyles = (type: string) => {
-  switch (type) {
-    case "hike":
-      return "bg-primary/10 text-primary border-primary/20";
-    case "gas":
-      return "bg-terracotta/10 text-terracotta border-terracotta/20";
-    case "camp":
-      return "bg-forest-light/20 text-forest border-forest/20";
-    default:
-      return "bg-muted text-muted-foreground border-border";
-  }
+const STOP_TONES: Record<string, { bg: string; text: string; border: string; Icon: typeof Mountains }> = {
+  hike: { bg: 'bg-sage/15',  text: 'text-sage',   border: 'border-sage/30', Icon: Mountains },
+  gas:  { bg: 'bg-clay/15',  text: 'text-clay',   border: 'border-clay/30', Icon: GasPump },
+  camp: { bg: 'bg-pine-6/12', text: 'text-pine-6', border: 'border-pine-6/30', Icon: Tent },
+  default: { bg: 'bg-cream', text: 'text-ink-3', border: 'border-line', Icon: MapPin },
 };
 
 const RouteDetail = () => {
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="container px-4 md:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/">
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <ArrowLeft className="w-5 h-5" />
-                </Button>
+    <div className="min-h-screen bg-paper text-ink font-sans">
+      {/* Sticky cream header */}
+      <header className="sticky top-0 z-50 bg-cream/95 backdrop-blur-md border-b border-line">
+        <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+              <Link
+                to="/"
+                aria-label="Back home"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors shrink-0"
+              >
+                <ArrowLeft className="w-4 h-4" weight="regular" />
               </Link>
-              <div>
-                <h1 className="text-xl font-display font-bold text-foreground">Eastern Sierra Loop</h1>
-                <p className="text-sm text-muted-foreground">3 stops • 285 miles</p>
+              <div className="min-w-0">
+                <Mono className="text-pine-6 inline-flex items-center gap-1.5">
+                  <Path className="w-3 h-3" weight="regular" />
+                  Route · 3 stops · 285 mi
+                </Mono>
+                <h1 className="text-[16px] sm:text-[20px] font-sans font-bold tracking-[-0.01em] text-ink truncate mt-0.5">
+                  Eastern Sierra Loop
+                </h1>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <Star className="w-5 h-5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <ShareNetwork className="w-5 h-5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <DownloadSimple className="w-5 h-5" />
-              </Button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                aria-label="Save route"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors"
+              >
+                <Star className="w-4 h-4" weight="regular" />
+              </button>
+              <button
+                aria-label="Share route"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors"
+              >
+                <ShareNetwork className="w-4 h-4" weight="regular" />
+              </button>
+              <button
+                aria-label="Download route"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors"
+              >
+                <DownloadSimple className="w-4 h-4" weight="regular" />
+              </button>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="container px-4 md:px-6 py-6">
+      <main className="max-w-[1440px] mx-auto px-4 md:px-8 py-6">
         <div className="grid lg:grid-cols-5 gap-6">
-          {/* Map Section */}
+          {/* Map */}
           <div className="lg:col-span-3 order-2 lg:order-1">
-            <Card className="overflow-hidden h-[400px] lg:h-[calc(100vh-180px)] lg:sticky lg:top-24">
+            <div className="bg-white border border-line rounded-[14px] overflow-hidden h-[400px] lg:h-[calc(100vh-180px)] lg:sticky lg:top-24">
               <div className="relative w-full h-full">
-                {/* Google Maps with route */}
-                <RouteMap
-                  stops={routeStops}
-                  className="w-full h-full"
-                  showDirections={true}
-                />
+                <RouteMap stops={routeStops} className="w-full h-full" showDirections />
 
                 {/* Route info overlay */}
                 <div className="absolute bottom-4 left-4 right-4 z-10">
-                  <div className="bg-card/95 backdrop-blur-sm rounded-xl border border-border p-4 shadow-lg">
-                    <div className="flex items-center justify-between flex-wrap gap-4">
-                      <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-2">
-                          <Path className="w-4 h-4 text-terracotta" />
-                          <span className="font-semibold text-foreground">285 mi</span>
+                  <div className="bg-white/95 backdrop-blur-md border border-line rounded-[14px] shadow-[0_8px_22px_rgba(29,34,24,.10)] p-3.5">
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                      <div className="flex items-center gap-4">
+                        <div className="inline-flex items-center gap-1.5">
+                          <Path className="w-3.5 h-3.5 text-pine-6" weight="regular" />
+                          <span className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">285 mi</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-foreground">5h 30m</span>
+                        <div className="inline-flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-ink-3" weight="regular" />
+                          <span className="text-[14px] text-ink">5h 30m</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Mountains className="w-4 h-4 text-primary" />
-                          <span className="text-foreground">+4,200 ft</span>
+                        <div className="inline-flex items-center gap-1.5">
+                          <Mountains className="w-3.5 h-3.5 text-sage" weight="regular" />
+                          <span className="text-[14px] text-ink">+4,200 ft</span>
                         </div>
                       </div>
-                      <Button
-                        variant="primary"
-                        size="sm"
+                      <Pill
+                        variant="solid-pine"
+                        sm
+                        mono={false}
                         onClick={() => {
-                          // Open Google Maps with directions
-                          const waypoints = routeStops.slice(1, -1).map(s => `${s.coordinates.lat},${s.coordinates.lng}`).join('|');
+                          const waypoints = routeStops
+                            .slice(1, -1)
+                            .map((s) => `${s.coordinates.lat},${s.coordinates.lng}`)
+                            .join('|');
                           const origin = `${routeStops[0].coordinates.lat},${routeStops[0].coordinates.lng}`;
                           const dest = `${routeStops[routeStops.length - 1].coordinates.lat},${routeStops[routeStops.length - 1].coordinates.lng}`;
-                          window.open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&waypoints=${waypoints}`, '_blank');
+                          window.open(
+                            `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&waypoints=${waypoints}`,
+                            '_blank',
+                          );
                         }}
                       >
-                        <NavigationArrow className="w-4 h-4 mr-2" />
-                        Start Navigation
-                      </Button>
+                        <NavigationArrow className="w-3.5 h-3.5" weight="regular" />
+                        Start navigation
+                      </Pill>
                     </div>
                   </div>
                 </div>
               </div>
-            </Card>
+            </div>
           </div>
 
-          {/* Stops Panel */}
+          {/* Stops panel */}
           <div className="lg:col-span-2 order-1 lg:order-2 space-y-4">
-            {/* Trip Summary */}
-            <Card className="bg-gradient-card">
-              <CardContent className="p-4">
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">285</p>
-                    <p className="text-xs text-muted-foreground">Total Miles</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">5.5h</p>
-                    <p className="text-xs text-muted-foreground">Drive Time</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">2</p>
-                    <p className="text-xs text-muted-foreground">Days</p>
-                  </div>
+            {/* Trip summary */}
+            <div className="bg-white border border-line rounded-[14px] p-4">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-[24px] font-sans font-bold tracking-[-0.02em] text-ink leading-none">285</p>
+                  <Mono className="text-ink-3 mt-1 block">Total miles</Mono>
                 </div>
-              </CardContent>
-            </Card>
+                <div>
+                  <p className="text-[24px] font-sans font-bold tracking-[-0.02em] text-ink leading-none">5.5h</p>
+                  <Mono className="text-ink-3 mt-1 block">Drive time</Mono>
+                </div>
+                <div>
+                  <p className="text-[24px] font-sans font-bold tracking-[-0.02em] text-ink leading-none">2</p>
+                  <Mono className="text-ink-3 mt-1 block">Days</Mono>
+                </div>
+              </div>
+            </div>
 
-            {/* Route Stops */}
-            <div className="space-y-3">
+            {/* Stops list */}
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-display font-semibold text-foreground">Route Stops</h2>
-                <Button variant="ghost" size="sm" className="text-primary">
-                  <Plus className="w-4 h-4 mr-1" />
-                  Add Stop
-                </Button>
+                <Mono className="text-ink-2">Route stops</Mono>
+                <Pill variant="ghost" sm mono={false}>
+                  <Plus className="w-3 h-3" weight="regular" />
+                  Add stop
+                </Pill>
               </div>
 
               <div className="space-y-2">
                 {routeStops.map((stop, index) => {
-                  const Icon = getIcon(stop.type);
-                  const typeStyles = getTypeStyles(stop.type);
-                  
+                  const tone = STOP_TONES[stop.type] || STOP_TONES.default;
+                  const Icon = tone.Icon;
+
                   return (
                     <div key={stop.id} className="relative">
-                      {/* Connection line */}
                       {index < routeStops.length - 1 && (
-                        <div className="absolute left-[27px] top-[72px] w-0.5 h-[calc(100%-40px)] bg-border" />
+                        <div className="absolute left-[31px] top-[68px] w-0.5 h-[calc(100%-40px)] bg-line" />
                       )}
-                      
-                      <Card className="group hover:border-primary/30 transition-all duration-200 cursor-pointer animate-fade-in" style={{ animationDelay: `${index * 100}ms` }}>
-                        <CardContent className="p-4">
+
+                      <div
+                        className="group bg-white border border-line rounded-[14px] hover:border-pine-6/40 transition-all cursor-pointer animate-fade-in"
+                        style={{ animationDelay: `${index * 100}ms` }}
+                      >
+                        <div className="p-4">
                           <div className="flex items-start gap-3">
-                            {/* Drag handle */}
-                            <div className="flex flex-col items-center gap-1 pt-1">
-                              <DotsSixVertical className="w-4 h-4 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+                            <div className="flex flex-col items-center gap-1 pt-2">
+                              <DotsSixVertical
+                                className="w-4 h-4 text-ink-3 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab"
+                                weight="regular"
+                              />
                             </div>
-                            
-                            {/* Stop icon */}
-                            <div className={`flex items-center justify-center w-11 h-11 rounded-xl border ${typeStyles}`}>
-                              <Icon className="w-5 h-5" />
+
+                            <div className={cn('inline-flex items-center justify-center w-10 h-10 rounded-[10px] border', tone.bg, tone.text, tone.border)}>
+                              <Icon className="w-5 h-5" weight="regular" />
                             </div>
-                            
-                            {/* Stop details */}
+
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <h3 className="font-medium text-foreground">{stop.name}</h3>
-                                  <p className="text-sm text-muted-foreground mt-0.5">{stop.description}</p>
+                                <div className="min-w-0">
+                                  <h3 className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">
+                                    {stop.name}
+                                  </h3>
+                                  <p className="text-[13px] text-ink-3 mt-0.5 leading-[1.5]">{stop.description}</p>
                                 </div>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <DotsThree className="w-4 h-4" />
-                                </Button>
+                                <button
+                                  aria-label="More"
+                                  className="inline-flex items-center justify-center w-8 h-8 rounded-full text-ink-3 hover:text-ink hover:bg-cream transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+                                >
+                                  <DotsThree className="w-4 h-4" weight="regular" />
+                                </button>
                               </div>
-                              
-                              <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                                <span className="flex items-center gap-1">
-                                  <Path className="w-3 h-3" />
+
+                              <div className="flex items-center gap-3 mt-2 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
+                                <span className="inline-flex items-center gap-1">
+                                  <Path className="w-3 h-3" weight="regular" />
                                   {stop.distance}
                                 </span>
-                                <span className="flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
+                                <span className="inline-flex items-center gap-1">
+                                  <Clock className="w-3 h-3" weight="regular" />
                                   {stop.duration}
                                 </span>
-                                <span className="flex items-center gap-1">
-                                  <Mountains className="w-3 h-3" />
+                                <span className="inline-flex items-center gap-1">
+                                  <Mountains className="w-3 h-3" weight="regular" />
                                   {stop.elevation}
                                 </span>
                               </div>
                             </div>
                           </div>
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
               </div>
 
-              {/* Add stop button */}
-              <Button variant="outline" className="w-full border-dashed">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Another Stop
-              </Button>
+              <Pill variant="ghost" mono={false} className="!w-full !justify-center !border-dashed">
+                <Plus className="w-3.5 h-3.5" weight="regular" />
+                Add another stop
+              </Pill>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-3 pt-4">
-              <Button variant="primary" size="lg" className="flex-1">
-                <NavigationArrow className="w-4 h-4 mr-2" />
-                Start Trip
-              </Button>
-              <Button variant="outline" size="lg">
-                Edit Route
-              </Button>
+            {/* Actions */}
+            <div className="flex items-center gap-2 pt-4">
+              <Pill variant="solid-pine" mono={false} className="!flex-1 !justify-center">
+                <NavigationArrow className="w-3.5 h-3.5" weight="regular" />
+                Start trip
+              </Pill>
+              <Pill variant="ghost" mono={false}>
+                Edit route
+              </Pill>
             </div>
           </div>
         </div>

@@ -1,7 +1,26 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Camera, Sun, SunHorizon, CloudSun, ArrowsClockwise, Compass, Moon, Mountains, SunDim, Star, Check, X, Question } from '@phosphor-icons/react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import {
+  Camera,
+  Sun,
+  SunHorizon,
+  CloudSun,
+  ArrowsClockwise,
+  Compass,
+  Moon,
+  Mountains,
+  SunDim,
+  Star,
+  Check,
+  X,
+  Question,
+  Sparkle,
+  CloudArrowDown,
+  Drop,
+  Wind,
+  Eye,
+  ThermometerSimple,
+  Mountains as MountainsIcon,
+} from '@phosphor-icons/react';
 import { LocationSelector, SelectedLocation } from '@/components/LocationSelector';
 import { Header } from '@/components/Header';
 import { GoogleMap } from '@/components/GoogleMap';
@@ -9,9 +28,9 @@ import { Marker } from '@react-google-maps/api';
 import { formatTime, getSunTimes, formatAzimuth, SunTimes } from '@/utils/sunCalc';
 import { analyzeHorizonProfile, getElevation, HorizonProfile } from '@/utils/terrainVisibility';
 import { analyzePhotoConditions, PhotoForecast, OpenMeteoHourly } from '@/utils/photoConditionsAnalyzer';
-import { analyzePhotoSpots, fetchNearbyFeatures, RecommendedSpot, PhotoFeature } from '@/utils/photoSpotAnalyzer';
 import { analyzeTerrainFeatures, TerrainFeature } from '@/utils/terrainPhotoAnalyzer';
-import { searchGooglePhotoSpots, GooglePhotoSpot } from '@/utils/googlePlacesPhotoSpots';
+import { Mono, Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 type SunEventType = 'sunrise' | 'sunset';
 
@@ -25,7 +44,6 @@ interface DayForecast {
   sunsetForecast: PhotoForecast | null;
 }
 
-// Open-Meteo response types
 interface OpenMeteoResponse {
   current?: {
     time: string;
@@ -66,65 +84,37 @@ interface OpenMeteoResponse {
   };
 }
 
-// WMO Weather interpretation codes
 const WMO_CODES: Record<number, string> = {
-  0: 'Clear sky',
-  1: 'Mainly clear',
-  2: 'Partly cloudy',
-  3: 'Overcast',
-  45: 'Foggy',
-  48: 'Depositing rime fog',
-  51: 'Light drizzle',
-  53: 'Moderate drizzle',
-  55: 'Dense drizzle',
-  56: 'Light freezing drizzle',
-  57: 'Dense freezing drizzle',
-  61: 'Slight rain',
-  63: 'Moderate rain',
-  65: 'Heavy rain',
-  66: 'Light freezing rain',
-  67: 'Heavy freezing rain',
-  71: 'Slight snow',
-  73: 'Moderate snow',
-  75: 'Heavy snow',
-  77: 'Snow grains',
-  80: 'Slight rain showers',
-  81: 'Moderate rain showers',
-  82: 'Violent rain showers',
-  85: 'Slight snow showers',
-  86: 'Heavy snow showers',
-  95: 'Thunderstorm',
-  96: 'Thunderstorm with slight hail',
-  99: 'Thunderstorm with heavy hail',
+  0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
+  45: 'Foggy', 48: 'Depositing rime fog',
+  51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle',
+  56: 'Light freezing drizzle', 57: 'Dense freezing drizzle',
+  61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
+  66: 'Light freezing rain', 67: 'Heavy freezing rain',
+  71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow', 77: 'Snow grains',
+  80: 'Slight rain showers', 81: 'Moderate rain showers', 82: 'Violent rain showers',
+  85: 'Slight snow showers', 86: 'Heavy snow showers',
+  95: 'Thunderstorm', 96: 'Thunderstorm with slight hail', 99: 'Thunderstorm with heavy hail',
 };
 
-function getWeatherDescription(code: number): string {
-  return WMO_CODES[code] || `Unknown (${code})`;
-}
+// Quality → accent token mapping (Pine + Paper)
+type Rating = 'excellent' | 'good' | 'fair' | 'poor' | 'unknown';
 
-// Helper to get quality icon for a forecast
+const RATING_TONES: Record<Rating, { bg: string; border: string; text: string; solid: string; chip: string }> = {
+  excellent: { bg: 'bg-pine-6/[0.06]', border: 'border-pine-6/30', text: 'text-pine-6', solid: 'bg-pine-6 text-cream', chip: 'bg-pine-6/12 text-pine-6' },
+  good:      { bg: 'bg-water/[0.06]',  border: 'border-water/30',  text: 'text-water',  solid: 'bg-water text-cream',  chip: 'bg-water/15 text-water' },
+  fair:      { bg: 'bg-clay/[0.06]',   border: 'border-clay/30',   text: 'text-clay',   solid: 'bg-clay text-cream',   chip: 'bg-clay/15 text-clay' },
+  poor:      { bg: 'bg-ember/[0.06]',  border: 'border-ember/30',  text: 'text-ember',  solid: 'bg-ember text-cream',  chip: 'bg-ember/15 text-ember' },
+  unknown:   { bg: 'bg-cream',         border: 'border-line',      text: 'text-ink-3',  solid: 'bg-ink-3 text-cream',  chip: 'bg-cream text-ink-3' },
+};
+
 function getQualityIcon(forecast: PhotoForecast | null, size: number = 16) {
-  if (!forecast) return <Question className="text-gray-400" style={{ width: size, height: size }} />;
+  if (!forecast) return <Question className="text-ink-3" style={{ width: size, height: size }} />;
   switch (forecast.rating) {
-    case 'excellent':
-      return <Star weight="fill" className="text-green-500" style={{ width: size, height: size }} />;
-    case 'good':
-      return <Check weight="bold" className="text-blue-500" style={{ width: size, height: size }} />;
-    case 'fair':
-      return <Sun className="text-amber-500" style={{ width: size, height: size }} />;
-    case 'poor':
-      return <X weight="bold" className="text-red-400" style={{ width: size, height: size }} />;
-  }
-}
-
-// Helper to get quality color class
-function getQualityColor(overall: string | undefined): string {
-  switch (overall) {
-    case 'excellent': return 'bg-green-100 border-green-300 text-green-800';
-    case 'good': return 'bg-blue-100 border-blue-300 text-blue-800';
-    case 'fair': return 'bg-amber-100 border-amber-300 text-amber-800';
-    case 'poor': return 'bg-red-100 border-red-300 text-red-800';
-    default: return 'bg-gray-100 border-gray-300 text-gray-600';
+    case 'excellent': return <Star weight="fill" className="text-pine-6" style={{ width: size, height: size }} />;
+    case 'good':      return <Check weight="bold" className="text-water" style={{ width: size, height: size }} />;
+    case 'fair':      return <Sun className="text-clay" style={{ width: size, height: size }} />;
+    case 'poor':      return <X weight="bold" className="text-ember" style={{ width: size, height: size }} />;
   }
 }
 
@@ -137,7 +127,6 @@ export default function PhotoWeatherTest({ previewMode = false, initialLocation 
   const [location, setLocation] = useState<SelectedLocation | null>(initialLocation);
   const [openMeteoData, setOpenMeteoData] = useState<OpenMeteoResponse | null>(null);
   const [openMeteoLoading, setOpenMeteoLoading] = useState(false);
-  const [openMeteoError, setOpenMeteoError] = useState<string | null>(null);
   const [horizonProfile, setHorizonProfile] = useState<HorizonProfile | null>(null);
   const [horizonLoading, setHorizonLoading] = useState(false);
   const [horizonError, setHorizonError] = useState<string | null>(null);
@@ -145,33 +134,18 @@ export default function PhotoWeatherTest({ previewMode = false, initialLocation 
   const [activeTab, setActiveTab] = useState<SunEventType>('sunset');
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
 
-  // Photo spots (OSM)
-  const [photoSpots, setPhotoSpots] = useState<RecommendedSpot[]>([]);
-  const [photoSpotsLoading, setPhotoSpotsLoading] = useState(false);
-  const [photoSpotsError, setPhotoSpotsError] = useState<string | null>(null);
-
-  // Terrain features
   const [terrainFeatures, setTerrainFeatures] = useState<TerrainFeature[]>([]);
   const [terrainLoading, setTerrainLoading] = useState(false);
   const [terrainError, setTerrainError] = useState<string | null>(null);
 
-  // Google Places spots
-  const [googleSpots, setGoogleSpots] = useState<GooglePhotoSpot[]>([]);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleError, setGoogleError] = useState<string | null>(null);
-
-  // Fetch Open-Meteo data when location changes
+  // Open-Meteo
   useEffect(() => {
     if (!location) return;
-
     const fetchOpenMeteo = async () => {
       setOpenMeteoLoading(true);
-      setOpenMeteoError(null);
-
       try {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
         const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
         const response = await fetch(
           `${supabaseUrl}/functions/v1/openmeteo-proxy?lat=${location.lat}&lng=${location.lng}`,
           {
@@ -180,33 +154,25 @@ export default function PhotoWeatherTest({ previewMode = false, initialLocation 
               'apikey': anonKey,
               'Content-Type': 'application/json',
             },
-          }
+          },
         );
-
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
-        }
-
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
         const data = await response.json();
         setOpenMeteoData(data);
       } catch (err) {
         console.error('Open-Meteo fetch error:', err);
-        setOpenMeteoError(err instanceof Error ? err.message : 'Failed to fetch');
       } finally {
         setOpenMeteoLoading(false);
       }
     };
-
     fetchOpenMeteo();
   }, [location]);
 
-  // Calculate sun times using SunCalc (moved up so we can use it for horizon analysis)
   const sunTimes = useMemo(() => {
     if (!location) return null;
     return getSunTimes(location.lat, location.lng, new Date());
   }, [location]);
 
-  // Calculate multi-day forecast (7 days)
   const multiDayForecast = useMemo((): DayForecast[] => {
     if (!location || !openMeteoData?.hourly?.time) return [];
 
@@ -216,19 +182,18 @@ export default function PhotoWeatherTest({ previewMode = false, initialLocation 
     for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
       const date = new Date(now);
       date.setDate(date.getDate() + dayOffset);
-      date.setHours(12, 0, 0, 0); // Noon of that day
+      date.setHours(12, 0, 0, 0);
 
       const dayTimes = getSunTimes(location.lat, location.lng, date);
       const dateStr = date.toDateString();
 
-      // Find hourly indices for sunrise and sunset
       let sunriseIndex: number | null = null;
       let sunsetIndex: number | null = null;
 
       const sunriseHour = dayTimes.sunrise.getHours();
       const sunsetHour = dayTimes.sunset.getHours();
 
-      openMeteoData.hourly.time.forEach((t, i) => {
+      openMeteoData.hourly!.time.forEach((t, i) => {
         const d = new Date(t);
         if (d.toDateString() === dateStr) {
           if (d.getHours() === sunriseHour) sunriseIndex = i;
@@ -236,119 +201,58 @@ export default function PhotoWeatherTest({ previewMode = false, initialLocation 
         }
       });
 
-      // Analyze conditions for sunrise and sunset
       let sunriseForecast: PhotoForecast | null = null;
       let sunsetForecast: PhotoForecast | null = null;
 
       if (sunriseIndex !== null && openMeteoData.hourly) {
-        sunriseForecast = analyzePhotoConditions(
-          openMeteoData.hourly as OpenMeteoHourly,
-          sunriseIndex,
-          undefined // No terrain analysis for multi-day quick view
-        );
+        sunriseForecast = analyzePhotoConditions(openMeteoData.hourly as OpenMeteoHourly, sunriseIndex, undefined);
       }
-
       if (sunsetIndex !== null && openMeteoData.hourly) {
-        sunsetForecast = analyzePhotoConditions(
-          openMeteoData.hourly as OpenMeteoHourly,
-          sunsetIndex,
-          undefined
-        );
+        sunsetForecast = analyzePhotoConditions(openMeteoData.hourly as OpenMeteoHourly, sunsetIndex, undefined);
       }
 
-      // Create date label
       let dateLabel: string;
-      if (dayOffset === 0) {
-        dateLabel = 'Today';
-      } else if (dayOffset === 1) {
-        dateLabel = 'Tomorrow';
-      } else {
-        dateLabel = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-      }
+      if (dayOffset === 0) dateLabel = 'Today';
+      else if (dayOffset === 1) dateLabel = 'Tomorrow';
+      else dateLabel = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
-      forecasts.push({
-        date,
-        dateLabel,
-        sunTimes: dayTimes,
-        sunriseIndex,
-        sunsetIndex,
-        sunriseForecast,
-        sunsetForecast,
-      });
+      forecasts.push({ date, dateLabel, sunTimes: dayTimes, sunriseIndex, sunsetIndex, sunriseForecast, sunsetForecast });
     }
-
     return forecasts;
   }, [location, openMeteoData]);
 
-  // Determine which day to show based on whether we've passed the event
-  // Keep showing today's event for a few hours after it occurs
   const getEffectiveDayIndex = useMemo(() => {
     if (multiDayForecast.length === 0) return 0;
-
     const now = new Date();
     const todayForecast = multiDayForecast[0];
-    const hoursAfterToKeepShowing = 3; // Show tonight's sunset for 3 hours after
+    const hoursAfter = 3;
 
     if (activeTab === 'sunrise') {
-      const sunriseTime = todayForecast.sunTimes.sunrise;
-      const cutoffTime = new Date(sunriseTime.getTime() + hoursAfterToKeepShowing * 60 * 60 * 1000);
-      // If past the cutoff (3 hours after sunrise), default to tomorrow
-      if (now > cutoffTime) {
-        return selectedDayIndex === 0 ? 1 : selectedDayIndex;
-      }
+      const cutoffTime = new Date(todayForecast.sunTimes.sunrise.getTime() + hoursAfter * 60 * 60 * 1000);
+      if (now > cutoffTime) return selectedDayIndex === 0 ? 1 : selectedDayIndex;
     } else {
-      const sunsetTime = todayForecast.sunTimes.sunset;
-      const cutoffTime = new Date(sunsetTime.getTime() + hoursAfterToKeepShowing * 60 * 60 * 1000);
-      // If past the cutoff (3 hours after sunset), default to tomorrow
-      if (now > cutoffTime) {
-        return selectedDayIndex === 0 ? 1 : selectedDayIndex;
-      }
+      const cutoffTime = new Date(todayForecast.sunTimes.sunset.getTime() + hoursAfter * 60 * 60 * 1000);
+      if (now > cutoffTime) return selectedDayIndex === 0 ? 1 : selectedDayIndex;
     }
-
     return selectedDayIndex;
   }, [multiDayForecast, activeTab, selectedDayIndex]);
 
-  // Get the selected day's forecast
   const selectedDayForecast = multiDayForecast[getEffectiveDayIndex] || null;
   const selectedSunTimes = selectedDayForecast?.sunTimes || sunTimes;
 
-  // Fetch horizon profile when location and selected sun times are available
+  // Horizon
   useEffect(() => {
     if (!location || !selectedSunTimes) return;
-
     const fetchHorizonProfile = async () => {
       setHorizonLoading(true);
       setHorizonError(null);
-
       try {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
         const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-        // First get observer elevation
-        const observerElevation = await getElevation(
-          location.lat,
-          location.lng,
-          supabaseUrl,
-          anonKey
-        );
-
-        // Analyze horizon along the appropriate azimuth (sunrise or sunset)
-        const azimuth = activeTab === 'sunrise'
-          ? selectedSunTimes.sunriseAzimuth
-          : selectedSunTimes.sunsetAzimuth;
-
-        const profile = await analyzeHorizonProfile(
-          location.lat,
-          location.lng,
-          observerElevation,
-          azimuth,
-          0, // sun altitude at horizon
-          supabaseUrl,
-          anonKey,
-          30, // check 30km out
-          15  // 15 sample points
-        );
-
+        const observerElevation = await getElevation(location.lat, location.lng, supabaseUrl, anonKey);
+        const azimuth = activeTab === 'sunrise' ? selectedSunTimes.sunriseAzimuth : selectedSunTimes.sunsetAzimuth;
+        const profile = await analyzeHorizonProfile(location.lat, location.lng, observerElevation, azimuth, 0, supabaseUrl, anonKey, 30, 15);
         setHorizonProfile(profile);
       } catch (err) {
         console.error('Horizon profile error:', err);
@@ -357,111 +261,35 @@ export default function PhotoWeatherTest({ previewMode = false, initialLocation 
         setHorizonLoading(false);
       }
     };
-
     fetchHorizonProfile();
   }, [location, selectedSunTimes, activeTab]);
 
-
-  // Get the hourly index for the selected day's event (sunrise or sunset)
   const selectedEventIndex = useMemo(() => {
     if (!selectedDayForecast) return null;
-    return activeTab === 'sunrise'
-      ? selectedDayForecast.sunriseIndex
-      : selectedDayForecast.sunsetIndex;
+    return activeTab === 'sunrise' ? selectedDayForecast.sunriseIndex : selectedDayForecast.sunsetIndex;
   }, [selectedDayForecast, activeTab]);
 
-  // Compute photo forecast for the selected day/event with terrain analysis
   useEffect(() => {
     if (!openMeteoData?.hourly || selectedEventIndex === null || selectedEventIndex < 0) {
       setPhotoForecast(null);
       return;
     }
-
-    const forecast = analyzePhotoConditions(
-      openMeteoData.hourly as OpenMeteoHourly,
-      selectedEventIndex,
-      horizonProfile ?? undefined
-    );
+    const forecast = analyzePhotoConditions(openMeteoData.hourly as OpenMeteoHourly, selectedEventIndex, horizonProfile ?? undefined);
     setPhotoForecast(forecast);
   }, [openMeteoData, selectedEventIndex, horizonProfile]);
 
-  // Fetch and analyze photo spots when location and sun times are available
+  // Terrain features
   useEffect(() => {
     if (!location || !selectedSunTimes) return;
-
-    const fetchAndAnalyzeSpots = async () => {
-      setPhotoSpotsLoading(true);
-      setPhotoSpotsError(null);
-
-      try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-        // Fetch nearby features from OSM via our proxy
-        const features = await fetchNearbyFeatures(
-          location.lat,
-          location.lng,
-          15, // 15km radius
-          supabaseUrl,
-          anonKey
-        );
-
-        // Get the sun azimuth for the active event
-        const sunAzimuth = activeTab === 'sunrise'
-          ? selectedSunTimes.sunriseAzimuth
-          : selectedSunTimes.sunsetAzimuth;
-        const isSunrise = activeTab === 'sunrise';
-
-        // Analyze spots based on sun position
-        const spots = analyzePhotoSpots(
-          location.lat,
-          location.lng,
-          features,
-          sunAzimuth,
-          isSunrise
-        );
-
-        // Only keep top spots (score >= 40)
-        const topSpots = spots.filter(s => s.overallScore >= 40).slice(0, 10);
-        setPhotoSpots(topSpots);
-      } catch (err) {
-        console.error('Photo spots error:', err);
-        setPhotoSpotsError(err instanceof Error ? err.message : 'Failed to fetch photo spots');
-      } finally {
-        setPhotoSpotsLoading(false);
-      }
-    };
-
-    fetchAndAnalyzeSpots();
-  }, [location, selectedSunTimes, activeTab]);
-
-  // Fetch terrain features when location and sun times are available
-  useEffect(() => {
-    if (!location || !selectedSunTimes) return;
-
     const fetchTerrainFeatures = async () => {
       setTerrainLoading(true);
       setTerrainError(null);
-
       try {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
         const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-        const sunAzimuth = activeTab === 'sunrise'
-          ? selectedSunTimes.sunriseAzimuth
-          : selectedSunTimes.sunsetAzimuth;
+        const sunAzimuth = activeTab === 'sunrise' ? selectedSunTimes.sunriseAzimuth : selectedSunTimes.sunsetAzimuth;
         const isSunrise = activeTab === 'sunrise';
-
-        const features = await analyzeTerrainFeatures(
-          location.lat,
-          location.lng,
-          sunAzimuth,
-          isSunrise,
-          10, // 10km radius
-          supabaseUrl,
-          anonKey
-        );
-
+        const features = await analyzeTerrainFeatures(location.lat, location.lng, sunAzimuth, isSunrise, 10, supabaseUrl, anonKey);
         setTerrainFeatures(features);
       } catch (err) {
         console.error('Terrain analysis error:', err);
@@ -470,82 +298,40 @@ export default function PhotoWeatherTest({ previewMode = false, initialLocation 
         setTerrainLoading(false);
       }
     };
-
     fetchTerrainFeatures();
   }, [location, selectedSunTimes, activeTab]);
 
-  // Fetch Google Places when location changes
-  useEffect(() => {
-    if (!location) return;
-
-    const fetchGooglePlaces = async () => {
-      setGoogleLoading(true);
-      setGoogleError(null);
-
-      try {
-        const spots = await searchGooglePhotoSpots(
-          location.lat,
-          location.lng,
-          15 // 15km radius
-        );
-        setGoogleSpots(spots);
-      } catch (err) {
-        console.error('Google Places error:', err);
-        setGoogleError(err instanceof Error ? err.message : 'Failed to fetch places');
-      } finally {
-        setGoogleLoading(false);
-      }
-    };
-
-    fetchGooglePlaces();
-  }, [location]);
-
-  // Calculate recommended shoot window based on conditions
   const getShootWindow = useMemo(() => {
     if (!selectedSunTimes || !photoForecast) return null;
-
     const isSunrise = activeTab === 'sunrise';
-
-    // For sunrise: use morning golden hour and civil dawn
-    // For sunset: use evening golden hour and civil dusk
     const goldenStart = isSunrise
       ? new Date(selectedSunTimes.goldenHourMorning.start)
       : new Date(selectedSunTimes.goldenHourEvening.start);
-    const sunEvent = isSunrise
-      ? new Date(selectedSunTimes.sunrise)
-      : new Date(selectedSunTimes.sunset);
+    const sunEvent = isSunrise ? new Date(selectedSunTimes.sunrise) : new Date(selectedSunTimes.sunset);
     const twilightEnd = isSunrise
       ? new Date(selectedSunTimes.goldenHourMorning.end)
       : new Date(selectedSunTimes.civilDusk);
 
-    // Default window
     let windowStart = goldenStart;
     let windowEnd = twilightEnd;
-
-    // Peak times differ for sunrise vs sunset
     let peakStart: Date;
     let peakEnd: Date;
 
     if (isSunrise) {
-      // For sunrise: peak is around sunrise time
-      peakStart = new Date(sunEvent.getTime() - 15 * 60000); // 15 min before sunrise
-      peakEnd = new Date(sunEvent.getTime() + 20 * 60000); // 20 min after
+      peakStart = new Date(sunEvent.getTime() - 15 * 60000);
+      peakEnd = new Date(sunEvent.getTime() + 20 * 60000);
     } else {
-      // For sunset: peak is around sunset time
-      peakStart = new Date(sunEvent.getTime() - 20 * 60000); // 20 min before sunset
-      peakEnd = new Date(sunEvent.getTime() + 15 * 60000); // 15 min after
+      peakStart = new Date(sunEvent.getTime() - 20 * 60000);
+      peakEnd = new Date(sunEvent.getTime() + 15 * 60000);
     }
 
     let afterglowEnd: Date | null = null;
-
-    // High clouds extend the afterglow window (colors persist 15-30 min)
     const hasHighClouds = photoForecast.clouds.high >= 20;
     if (hasHighClouds && !isSunrise) {
-      afterglowEnd = new Date(sunEvent.getTime() + 30 * 60000); // 30 min afterglow
+      afterglowEnd = new Date(sunEvent.getTime() + 30 * 60000);
       windowEnd = new Date(Math.max(twilightEnd.getTime(), afterglowEnd.getTime()));
     }
 
-    // Adjust based on timing recommendation
     const timingRec = photoForecast.timing.recommendation.toLowerCase();
     if (timingRec.includes('early')) {
       windowEnd = new Date(sunEvent.getTime() + 5 * 60000);
@@ -560,22 +346,18 @@ export default function PhotoWeatherTest({ previewMode = false, initialLocation 
       afterglowEnd = new Date(sunEvent.getTime() + 30 * 60000);
     }
 
-    // If terrain blocks low sun, shift window
     if (horizonProfile && horizonProfile.effectiveHorizon > 4) {
       const minutesLost = horizonProfile.sunsetLostMinutes;
       if (isSunrise) {
-        // For sunrise, terrain delays when you first see sun
         peakStart = new Date(peakStart.getTime() + minutesLost * 60000);
         peakEnd = new Date(peakEnd.getTime() + Math.floor(minutesLost / 2) * 60000);
       } else {
-        // For sunset, terrain causes earlier loss of sun
         windowStart = new Date(goldenStart.getTime() - 10 * 60000);
         peakStart = new Date(peakStart.getTime() - minutesLost * 60000);
         peakEnd = new Date(peakEnd.getTime() - Math.floor(minutesLost / 2) * 60000);
       }
     }
 
-    // If low clouds block horizon, focus on higher sun
     if (photoForecast.clouds.low > 50) {
       if (isSunrise) {
         peakStart = new Date(sunEvent.getTime() + 20 * 60000);
@@ -587,26 +369,23 @@ export default function PhotoWeatherTest({ previewMode = false, initialLocation 
     }
 
     return {
-      windowStart,
-      windowEnd,
-      peakStart,
-      peakEnd,
-      afterglowEnd,
-      hasHighClouds,
-      isSunrise,
+      windowStart, windowEnd, peakStart, peakEnd, afterglowEnd, hasHighClouds, isSunrise,
       duration: Math.round((windowEnd.getTime() - windowStart.getTime()) / 60000),
     };
   }, [selectedSunTimes, photoForecast, horizonProfile, activeTab]);
 
-  const mapCenter = useMemo(() => (
-    location ? { lat: location.lat, lng: location.lng } : { lat: 38.5, lng: -109.5 }
-  ), [location]);
+  const mapCenter = useMemo(
+    () => (location ? { lat: location.lat, lng: location.lng } : { lat: 38.5, lng: -109.5 }),
+    [location],
+  );
+
+  const ratingTone = (rating: Rating | undefined) => RATING_TONES[rating || 'unknown'];
 
   return (
-    <div className={previewMode ? "min-h-screen bg-background" : "h-screen bg-background flex flex-col overflow-hidden"}>
+    <div className={cn(previewMode ? 'min-h-screen bg-paper text-ink font-sans' : 'h-screen bg-paper text-ink font-sans flex flex-col overflow-hidden')}>
       {!previewMode && <Header showBorder />}
 
-      <div className={previewMode ? "" : "flex-1 flex overflow-hidden"}>
+      <div className={previewMode ? '' : 'flex-1 flex overflow-hidden'}>
         {/* Map — left half (desktop only, hidden in preview) */}
         {!previewMode && (
           <div className="hidden lg:block lg:w-1/2 relative">
@@ -616,1173 +395,852 @@ export default function PhotoWeatherTest({ previewMode = false, initialLocation 
               className="w-full h-full"
               options={{ mapTypeId: 'satellite' }}
             >
-              {location && (
-                <Marker position={{ lat: location.lat, lng: location.lng }} title={location.name} />
-              )}
+              {location && <Marker position={{ lat: location.lat, lng: location.lng }} title={location.name} />}
             </GoogleMap>
           </div>
         )}
 
-        {/* Content */}
-        <div className={previewMode ? "max-w-xl mx-auto" : "flex-1 lg:w-1/2 overflow-y-auto"}>
-          {/* Search header */}
+        {/* Content panel */}
+        <div className={previewMode ? 'max-w-xl mx-auto px-4 py-6' : 'flex-1 lg:w-1/2 overflow-y-auto'}>
+          {/* Header */}
           {!previewMode ? (
-            <div className="sticky top-0 z-10 bg-background border-b px-6 py-5">
-              <h1 className="text-2xl font-display font-bold mb-4">The Light Report</h1>
+            <div className="sticky top-0 z-10 bg-cream/95 backdrop-blur-md border-b border-line px-4 sm:px-6 py-4">
+              <Mono className="text-pine-6 inline-flex items-center gap-1.5">
+                <Sparkle className="w-3.5 h-3.5" weight="regular" />
+                Light Report
+              </Mono>
+              <h1 className="text-[24px] sm:text-[28px] font-sans font-bold tracking-[-0.02em] text-ink leading-[1.1] mt-1 mb-3">
+                Plan the perfect golden hour.
+              </h1>
               <LocationSelector
                 value={location}
                 onChange={setLocation}
-                placeholder="Search for a location..."
-                showMyLocation={true}
-                showSavedLocations={true}
-                showCoordinates={true}
-                compact={true}
-                coordinatesDisplay={location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : undefined}
+                placeholder="Search for a location…"
+                showMyLocation
+                showSavedLocations
+                showCoordinates
+                compact
+                coordinatesDisplay={
+                  location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : undefined
+                }
               />
             </div>
           ) : (
-            <div className="px-4 pt-8 pb-4">
-              <h1 className="text-2xl font-display font-bold">The Light Report</h1>
-              <p className="text-sm text-muted-foreground mt-1">{location?.name}</p>
+            <div className="mb-5">
+              <Mono className="text-pine-6 inline-flex items-center gap-1.5">
+                <Sparkle className="w-3.5 h-3.5" weight="regular" />
+                Light Report
+              </Mono>
+              <h1 className="text-[28px] font-sans font-bold tracking-[-0.025em] text-ink leading-[1.1] mt-1">
+                Plan the perfect golden hour.
+              </h1>
+              {location?.name && (
+                <p className="text-[14px] text-ink-3 mt-2">{location.name}</p>
+              )}
             </div>
           )}
 
-          <main className="px-4 py-4 space-y-4">
-        {/* Sunrise/Sunset Tabs */}
-        {location && (
-          <div className="mb-6">
-            {/* Tab Buttons */}
-            <div className="flex gap-1 p-1 bg-muted rounded-lg mb-4">
-              <button
-                onClick={() => { setActiveTab('sunrise'); setSelectedDayIndex(0); }}
-                className={`flex-1 py-2.5 px-4 rounded-md font-medium flex items-center justify-center gap-2 transition-all text-sm ${
-                  activeTab === 'sunrise'
-                    ? 'bg-foreground text-background shadow-sm'
-                    : 'text-muted-foreground'
-                }`}
-              >
-                <SunDim className="w-4 h-4" />
-                Sunrise
-              </button>
-              <button
-                onClick={() => { setActiveTab('sunset'); setSelectedDayIndex(0); }}
-                className={`flex-1 py-2.5 px-4 rounded-md font-medium flex items-center justify-center gap-2 transition-all text-sm ${
-                  activeTab === 'sunset'
-                    ? 'bg-foreground text-background shadow-sm'
-                    : 'text-muted-foreground'
-                }`}
-              >
-                <SunHorizon className="w-4 h-4" />
-                Sunset
-              </button>
-            </div>
-
-            {/* Multi-Day Forecast Bar */}
-            {multiDayForecast.length > 0 && (
-              <div>
-                <div className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">
-                  7-Day Forecast
-                </div>
-                <div className="grid grid-cols-7 gap-1">
-                  {multiDayForecast.map((day, index) => {
-                    const forecast = activeTab === 'sunrise' ? day.sunriseForecast : day.sunsetForecast;
-                    const isSelected = index === getEffectiveDayIndex;
-                    const hoursAfterToKeepShowing = 3;
-                    const eventTime = activeTab === 'sunrise' ? day.sunTimes.sunrise : day.sunTimes.sunset;
-                    const cutoffTime = new Date(eventTime.getTime() + hoursAfterToKeepShowing * 60 * 60 * 1000);
-                    const isPast = index === 0 && new Date() > cutoffTime;
-
-                    return (
-                      <button
-                        key={index}
-                        onClick={() => setSelectedDayIndex(index)}
-                        disabled={isPast}
-                        className={`p-2 rounded-lg text-center transition-all ${
-                          isSelected
-                            ? 'bg-foreground text-background'
-                            : isPast
-                            ? 'opacity-30 cursor-not-allowed'
-                            : 'hover:bg-muted cursor-pointer'
-                        }`}
-                      >
-                        <div className="text-[10px] font-medium truncate">
-                          {day.dateLabel}
-                        </div>
-                        <div className="flex justify-center my-1">
-                          {getQualityIcon(forecast, 18)}
-                        </div>
-                        <div className={`text-[10px] ${isSelected ? 'text-background/80' : 'text-muted-foreground'}`}>
-                          {formatTime(activeTab === 'sunrise' ? day.sunTimes.sunrise : day.sunTimes.sunset)}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* PHOTOGRAPHY FORECAST */}
-        {photoForecast && selectedSunTimes && (
-          <div className="mb-6 space-y-4">
-            {/* Score + Headline */}
-            <div className="flex items-center gap-4">
-              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl shrink-0 ${
-                photoForecast.rating === 'excellent' ? 'bg-accentdark' :
-                photoForecast.rating === 'good' ? 'bg-primary' :
-                photoForecast.rating === 'fair' ? 'bg-amber-500' :
-                'bg-muted-foreground'
-              }`}>
-                {photoForecast.score}
-              </div>
-              <div>
-                <p className="font-display font-bold text-lg">{photoForecast.headline}</p>
-                <p className="text-sm text-muted-foreground">
-                  {selectedDayForecast?.dateLabel || 'Today'} • {formatTime(activeTab === 'sunrise' ? selectedSunTimes.sunrise : selectedSunTimes.sunset)} • {formatAzimuth(activeTab === 'sunrise' ? selectedSunTimes.sunriseAzimuth : selectedSunTimes.sunsetAzimuth)}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-
-              {/* Shoot Window Recommendation */}
-              {getShootWindow && (
-                <div className="p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg border border-orange-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xl">📸</span>
-                    <span className="font-semibold">Recommended Shoot Window</span>
-                    <span className="text-xs text-muted-foreground ml-auto">
-                      ~{getShootWindow.duration} min
-                    </span>
-                  </div>
-
-                  {/* Timeline visualization */}
-                  <div className="relative h-8 bg-gradient-to-r from-amber-200 via-orange-300 to-purple-300 rounded-full mb-3 overflow-hidden">
-                    {/* Peak window highlight */}
-                    <div
-                      className="absolute h-full bg-green-400/60 border-x-2 border-green-600"
-                      style={{
-                        left: `${((getShootWindow.peakStart.getTime() - getShootWindow.windowStart.getTime()) / (getShootWindow.windowEnd.getTime() - getShootWindow.windowStart.getTime())) * 100}%`,
-                        width: `${((getShootWindow.peakEnd.getTime() - getShootWindow.peakStart.getTime()) / (getShootWindow.windowEnd.getTime() - getShootWindow.windowStart.getTime())) * 100}%`,
-                      }}
-                    />
-                    {/* Sun event marker */}
-                    <div
-                      className="absolute top-0 bottom-0 w-0.5 bg-red-600"
-                      style={{
-                        left: `${(((activeTab === 'sunrise' ? selectedSunTimes.sunrise : selectedSunTimes.sunset).getTime() - getShootWindow.windowStart.getTime()) / (getShootWindow.windowEnd.getTime() - getShootWindow.windowStart.getTime())) * 100}%`,
-                      }}
-                    />
-                  </div>
-
-                  {/* Times */}
-                  <div className="grid grid-cols-3 text-xs">
-                    <div>
-                      <div className="text-muted-foreground">Arrive by</div>
-                      <div className="font-bold text-base">{formatTime(getShootWindow.windowStart)}</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-green-700 font-medium">Peak Color</div>
-                      <div className="font-bold text-base text-green-800">
-                        {formatTime(getShootWindow.peakStart)} - {formatTime(getShootWindow.peakEnd)}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-muted-foreground">Pack up</div>
-                      <div className="font-bold text-base">{formatTime(getShootWindow.windowEnd)}</div>
-                    </div>
-                  </div>
-
-                  {/* Timing tips */}
-                  <div className="mt-3 pt-2 border-t border-orange-200 text-xs space-y-1">
-                    {photoForecast.timing.recommendation !== 'flexible' && (
-                      <div className="text-orange-800">
-                        💡 {photoForecast.timing.reason}
-                      </div>
-                    )}
-                    {getShootWindow.hasHighClouds && getShootWindow.afterglowEnd && (
-                      <div className="text-purple-700">
-                        ✨ High clouds present — afterglow colors may persist until {formatTime(getShootWindow.afterglowEnd)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Score Breakdown */}
-              <div className="space-y-2.5">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Score Breakdown</div>
-                {photoForecast.insights.map((insight, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <div className="w-20 text-xs text-muted-foreground">{insight.factor}</div>
-                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-accentdark"
-                        style={{ width: `${insight.score}%` }}
-                      />
-                    </div>
-                    <div className="w-8 text-xs text-right font-mono text-muted-foreground">
-                      {insight.score}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Factor Details */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                {photoForecast.insights.map((insight, i) => (
-                  <div
-                    key={i}
-                    className="p-2.5 rounded-lg bg-muted/50"
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium text-foreground">{insight.factor}</span>
-                      <span className="text-xs text-muted-foreground">{insight.value}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {insight.description}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Cloud Layers */}
-              <div>
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Cloud Layers</div>
-                <div className="grid grid-cols-4 gap-2 text-center">
-                  <div className="p-2.5 rounded-lg bg-muted/50">
-                    <div className="text-[10px] text-muted-foreground uppercase">High</div>
-                    <div className={`text-lg font-bold ${
-                      photoForecast.clouds.high >= 20 && photoForecast.clouds.high <= 60
-                        ? 'text-accentdark' : 'text-foreground'
-                    }`}>
-                      {Math.round(photoForecast.clouds.high)}%
-                    </div>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-muted/50">
-                    <div className="text-[10px] text-muted-foreground uppercase">Mid</div>
-                    <div className={`text-lg font-bold ${
-                      photoForecast.clouds.mid >= 20 && photoForecast.clouds.mid <= 50
-                        ? 'text-accentdark' : 'text-foreground'
-                    }`}>
-                      {Math.round(photoForecast.clouds.mid)}%
-                    </div>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-muted/50">
-                    <div className="text-[10px] text-muted-foreground uppercase">Low</div>
-                    <div className={`text-lg font-bold ${
-                      photoForecast.clouds.low < 30 ? 'text-accentdark' :
-                      photoForecast.clouds.low < 50 ? 'text-amber-600' :
-                      'text-red-500'
-                    }`}>
-                      {Math.round(photoForecast.clouds.low)}%
-                    </div>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-muted/50">
-                    <div className="text-[10px] text-muted-foreground uppercase">Total</div>
-                    <div className="text-lg font-bold text-foreground">
-                      {Math.round(photoForecast.clouds.total)}%
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Conditions */}
-              {photoForecast.conditions.isClearing && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="font-medium text-green-800">🌤️ Post-Storm Clearing</div>
-                  <div className="text-sm text-green-700">Exceptional color potential as skies clear!</div>
-                </div>
-              )}
-
-              {/* Atmospheric Conditions */}
-              <div>
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Atmosphere</div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
-                    <span className="text-muted-foreground">Visibility</span>
-                    <span className="font-bold text-sm">{photoForecast.atmosphere.visibility.toFixed(0)} km</span>
-                  </div>
-                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
-                    <span className="text-muted-foreground">Humidity</span>
-                    <span className="font-bold text-sm">{Math.round(photoForecast.atmosphere.humidity)}%</span>
-                  </div>
-                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
-                    <span className="text-muted-foreground">Aerosols</span>
-                    <span className="font-bold text-sm">{photoForecast.atmosphere.aod !== null ? photoForecast.atmosphere.aod.toFixed(2) : 'N/A'}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
-                    <span className="text-muted-foreground">Precipitation</span>
-                    <span className="font-bold text-sm">{photoForecast.conditions.precipitation}%</span>
-                  </div>
+          <main className={cn('space-y-5', !previewMode && 'px-4 sm:px-6 py-5')}>
+            {/* Sunrise / Sunset tabs + 7-day forecast */}
+            {location && (
+              <div className="bg-white border border-line rounded-[14px] p-4 space-y-4">
+                {/* Tab Buttons */}
+                <div className="flex gap-1 p-1 bg-cream rounded-full">
+                  <TabButton active={activeTab === 'sunrise'} onClick={() => { setActiveTab('sunrise'); setSelectedDayIndex(0); }}>
+                    <SunDim className="w-3.5 h-3.5" weight="regular" />
+                    Sunrise
+                  </TabButton>
+                  <TabButton active={activeTab === 'sunset'} onClick={() => { setActiveTab('sunset'); setSelectedDayIndex(0); }}>
+                    <SunHorizon className="w-3.5 h-3.5" weight="regular" />
+                    Sunset
+                  </TabButton>
                 </div>
 
-                {/* Fog/Mist Alert */}
-                {photoForecast.conditions.fogRisk && (
-                  <div className="mt-2 p-2 bg-blue-50 rounded-lg text-xs text-blue-800 flex items-center gap-2">
-                    <span>🌁</span>
-                    <span>Temperature near dew point — fog or mist may form, creating moody atmosphere</span>
+                {/* 7-day grid */}
+                {multiDayForecast.length > 0 && (
+                  <div>
+                    <Mono className="text-ink-3 mb-2 block">7-day outlook</Mono>
+                    <div className="grid grid-cols-7 gap-1">
+                      {multiDayForecast.map((day, index) => {
+                        const forecast = activeTab === 'sunrise' ? day.sunriseForecast : day.sunsetForecast;
+                        const isSelected = index === getEffectiveDayIndex;
+                        const eventTime = activeTab === 'sunrise' ? day.sunTimes.sunrise : day.sunTimes.sunset;
+                        const cutoffTime = new Date(eventTime.getTime() + 3 * 60 * 60 * 1000);
+                        const isPast = index === 0 && new Date() > cutoffTime;
+
+                        return (
+                          <button
+                            key={index}
+                            onClick={() => setSelectedDayIndex(index)}
+                            disabled={isPast}
+                            className={cn(
+                              'p-2 rounded-[10px] text-center transition-all border',
+                              isSelected
+                                ? 'bg-ink text-cream border-ink'
+                                : isPast
+                                  ? 'opacity-30 cursor-not-allowed border-line'
+                                  : 'border-line hover:border-ink-3 hover:bg-cream cursor-pointer',
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                'text-[10px] font-mono uppercase tracking-[0.08em] font-semibold truncate',
+                                isSelected ? 'text-cream/80' : 'text-ink-3',
+                              )}
+                            >
+                              {day.dateLabel}
+                            </div>
+                            <div className="flex justify-center my-1.5">{getQualityIcon(forecast, 16)}</div>
+                            <div
+                              className={cn(
+                                'text-[11px] font-sans font-semibold',
+                                isSelected ? 'text-cream' : 'text-ink',
+                              )}
+                            >
+                              {formatTime(activeTab === 'sunrise' ? day.sunTimes.sunrise : day.sunTimes.sunset)}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-        )}
+            )}
 
-        {/* Recommended Photo Spots - hidden */}
-        {false && location && selectedSunTimes && (
-          <Card className="mb-6 border-purple-200">
-            <CardHeader className="pb-2 bg-muted/30">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Camera className="w-5 h-5 text-purple-600" />
-                Recommended Photo Spots
-                <span className="text-xs font-normal text-muted-foreground ml-2">
-                  Within 15 km • Based on {activeTab} direction
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {photoSpotsLoading && (
-                <div className="flex items-center gap-2 text-muted-foreground py-4">
-                  <ArrowsClockwise className="w-4 h-4 animate-spin" />
-                  Finding nearby photo spots...
-                </div>
-              )}
-
-              {photoSpotsError && (
-                <div className="text-red-600 text-sm py-4">
-                  Error: {photoSpotsError}
-                </div>
-              )}
-
-              {!photoSpotsLoading && !photoSpotsError && photoSpots.length === 0 && (
-                <div className="text-muted-foreground text-sm py-4">
-                  No recommended photo spots found in this area for the current sun direction.
-                </div>
-              )}
-
-              {!photoSpotsLoading && photoSpots.length > 0 && (
-                <div className="space-y-3">
-                  {photoSpots.map((spot, index) => (
+            {/* Photography forecast hero + breakdown */}
+            {photoForecast && selectedSunTimes && (
+              <div className="space-y-5">
+                {/* Hero score card */}
+                <div
+                  className={cn(
+                    'rounded-[14px] border p-5',
+                    ratingTone(photoForecast.rating).bg,
+                    ratingTone(photoForecast.rating).border,
+                  )}
+                >
+                  <div className="flex items-center gap-4">
                     <div
-                      key={`${spot.feature.type}-${spot.feature.id}`}
-                      className={`p-3 rounded-lg border ${
-                        spot.overallScore >= 75 ? 'bg-green-50 border-green-200' :
-                        spot.overallScore >= 55 ? 'bg-blue-50 border-blue-200' :
-                        'bg-amber-50 border-amber-200'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center text-white ${
-                              spot.overallScore >= 75 ? 'bg-green-500' :
-                              spot.overallScore >= 55 ? 'bg-blue-500' :
-                              'bg-amber-500'
-                            }`}>
-                              {index + 1}
-                            </span>
-                            <div>
-                              <div className="font-medium">
-                                {spot.feature.name || `Unnamed ${spot.feature.featureType}`}
-                              </div>
-                              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                                <span className="capitalize">{spot.feature.featureType}</span>
-                                <span>•</span>
-                                <span>{spot.distance.toFixed(1)} km {spot.bearingLabel}</span>
-                                {spot.feature.elevation && (
-                                  <>
-                                    <span>•</span>
-                                    <span>{spot.feature.elevation}m</span>
-                                  </>
-                                )}
-                                <span>•</span>
-                                <span className="font-mono text-[10px]">
-                                  {spot.feature.lat.toFixed(5)}, {spot.feature.lng.toFixed(5)}
-                                </span>
-                                <span>•</span>
-                                <a
-                                  href={`https://www.google.com/maps/search/?api=1&query=${spot.feature.lat},${spot.feature.lng}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 hover:text-blue-800 hover:underline"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  View on Map
-                                </a>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="mt-2 text-sm">
-                            {spot.recommendation}
-                          </div>
-
-                          {/* Top opportunity details */}
-                          {spot.topOpportunity && (
-                            <div className="mt-2 p-2 bg-white/60 rounded text-xs">
-                              <div className="flex items-center gap-2">
-                                <span className={`px-2 py-0.5 rounded-full font-medium ${
-                                  spot.topOpportunity.type === 'reflection' ? 'bg-blue-100 text-blue-700' :
-                                  spot.topOpportunity.type === 'alpenglow' ? 'bg-pink-100 text-pink-700' :
-                                  spot.topOpportunity.type === 'silhouette' ? 'bg-purple-100 text-purple-700' :
-                                  spot.topOpportunity.type === 'viewpoint' ? 'bg-green-100 text-green-700' :
-                                  'bg-amber-100 text-amber-700'
-                                }`}>
-                                  {spot.topOpportunity.type.replace('_', ' ')}
-                                </span>
-                                <span className="text-muted-foreground">
-                                  {spot.topOpportunity.shootingDirectionLabel}
-                                </span>
-                              </div>
-                              <div className="mt-1 text-muted-foreground">
-                                {spot.topOpportunity.description}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Arrival tip */}
-                          {spot.arrivalTip && (
-                            <div className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
-                              <span>💡</span>
-                              {spot.arrivalTip}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Score badge */}
-                        <div className={`px-3 py-1 rounded-full text-sm font-bold text-white ${
-                          spot.overallScore >= 75 ? 'bg-green-500' :
-                          spot.overallScore >= 55 ? 'bg-blue-500' :
-                          'bg-amber-500'
-                        }`}>
-                          {spot.overallScore}
-                        </div>
-                      </div>
-
-                      {/* Additional opportunities */}
-                      {spot.opportunities.length > 1 && (
-                        <div className="mt-2 pt-2 border-t border-white/50">
-                          <div className="text-xs text-muted-foreground">
-                            Also good for:{' '}
-                            {spot.opportunities.slice(1, 3).map((opp, i) => (
-                              <span key={opp.type}>
-                                {i > 0 && ', '}
-                                {opp.type.replace('_', ' ')} ({opp.score})
-                              </span>
-                            ))}
-                          </div>
-                        </div>
+                      className={cn(
+                        'w-16 h-16 rounded-[14px] flex items-center justify-center font-sans font-bold text-[26px] shrink-0',
+                        ratingTone(photoForecast.rating).solid,
                       )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Terrain-Based Photo Spots */}
-        {location && selectedSunTimes && (
-          <Card className="mb-6">
-            <CardHeader className="pb-2 bg-muted/30">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Mountains className="w-5 h-5 text-orange-600" />
-                Terrain Analysis
-                <span className="text-xs font-normal text-muted-foreground ml-2">
-                  Features catching {activeTab} light
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {terrainLoading && (
-                <div className="flex items-center gap-2 text-muted-foreground py-4">
-                  <ArrowsClockwise className="w-4 h-4 animate-spin" />
-                  Analyzing terrain for photogenic features...
-                </div>
-              )}
-
-              {terrainError && (
-                <div className="text-red-600 text-sm py-4">
-                  Error: {terrainError}
-                </div>
-              )}
-
-              {!terrainLoading && !terrainError && terrainFeatures.length === 0 && (
-                <div className="text-muted-foreground text-sm py-4">
-                  No accessible terrain features found. This area may be flat, or interesting features lack nearby trail/road access.
-                </div>
-              )}
-
-              {!terrainLoading && terrainFeatures.length > 0 && (
-                <div className="space-y-3">
-                  {terrainFeatures.map((feature, index) => (
-                    <div
-                      key={`terrain-${index}`}
-                      className={`p-3 rounded-lg border ${
-                        feature.score >= 75 ? 'bg-orange-50 border-orange-200' :
-                        feature.score >= 60 ? 'bg-amber-50 border-amber-200' :
-                        'bg-yellow-50 border-yellow-200'
-                      }`}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                              feature.featureType === 'cliff' ? 'bg-red-100 text-red-700' :
-                              feature.featureType === 'ridge' ? 'bg-purple-100 text-purple-700' :
-                              feature.featureType === 'peak' ? 'bg-blue-100 text-blue-700' :
-                              feature.featureType === 'slope' ? 'bg-green-100 text-green-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {feature.featureType}
-                            </span>
-                            <span className="text-sm font-medium">
-                              {feature.aspectLabel}
-                            </span>
-                            {feature.curvature === 'convex' && (
-                              <span className="text-xs text-orange-600">Convex</span>
-                            )}
-                            {feature.accessible ? (
-                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                feature.accessType === 'road' ? 'bg-green-100 text-green-700' :
-                                feature.accessType === 'track' ? 'bg-lime-100 text-lime-700' :
-                                'bg-emerald-100 text-emerald-700'
-                              }`}>
-                                {feature.accessType} {feature.accessDistance}m
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-600">
-                                No trail access
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
-                            <span>{feature.distanceKm.toFixed(1)} km {feature.bearingLabel}</span>
-                            <span>•</span>
-                            <span>{Math.round(feature.elevation)}m elev</span>
-                            <span>•</span>
-                            <span>{feature.slopeCategory} slope ({Math.round(feature.slope)}°)</span>
-                            <span>•</span>
-                            <span className="font-mono text-[10px]">
-                              {feature.lat.toFixed(5)}, {feature.lng.toFixed(5)}
-                            </span>
-                            <span>•</span>
-                            <a
-                              href={`https://www.google.com/maps/search/?api=1&query=${feature.lat},${feature.lng}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline"
-                            >
-                              Map
-                            </a>
-                          </div>
-
-                          <div className="mt-2 text-sm">
-                            {feature.recommendation}
-                          </div>
-
-                          <div className="mt-1 text-xs text-orange-700 font-medium">
-                            {feature.lightingWindow}
-                          </div>
-                        </div>
-
-                        <div className={`px-3 py-1 rounded-full text-sm font-bold text-white ${
-                          feature.score >= 75 ? 'bg-orange-500' :
-                          feature.score >= 60 ? 'bg-amber-500' :
-                          'bg-yellow-500'
-                        }`}>
-                          {feature.score}
-                        </div>
-                      </div>
+                      {photoForecast.score}
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Google Places Photo Spots - hidden */}
-        {false && location && (
-          <Card className="mb-6">
-            <CardHeader className="pb-2 bg-muted/30">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Compass className="w-5 h-5 text-blue-600" />
-                Scenic Viewpoints
-                <span className="text-xs font-normal text-muted-foreground ml-2">
-                  From Google Places
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {googleLoading && (
-                <div className="flex items-center gap-2 text-muted-foreground py-4">
-                  <ArrowsClockwise className="w-4 h-4 animate-spin" />
-                  Searching for scenic locations...
-                </div>
-              )}
-
-              {googleError && (
-                <div className="text-red-600 text-sm py-4">
-                  Error: {googleError}
-                </div>
-              )}
-
-              {!googleLoading && !googleError && googleSpots.length === 0 && (
-                <div className="text-muted-foreground text-sm py-4">
-                  No scenic viewpoints found nearby.
-                </div>
-              )}
-
-              {!googleLoading && googleSpots.length > 0 && (
-                <div className="space-y-3">
-                  {googleSpots.slice(0, 8).map((spot) => (
-                    <div
-                      key={spot.placeId}
-                      className={`p-3 rounded-lg border ${
-                        spot.score >= 75 ? 'bg-blue-50 border-blue-200' :
-                        spot.score >= 60 ? 'bg-sky-50 border-sky-200' :
-                        'bg-slate-50 border-slate-200'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                              spot.category === 'viewpoint' ? 'bg-green-100 text-green-700' :
-                              spot.category === 'nature' ? 'bg-emerald-100 text-emerald-700' :
-                              spot.category === 'park' ? 'bg-lime-100 text-lime-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {spot.category}
-                            </span>
-                            <span className="font-medium">{spot.name}</span>
-                          </div>
-
-                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
-                            <span>{spot.distanceKm.toFixed(1)} km {spot.bearingLabel}</span>
-                            {spot.rating && (
-                              <>
-                                <span>•</span>
-                                <span className="text-amber-600">★ {spot.rating.toFixed(1)}</span>
-                                <span className="text-muted-foreground">({spot.userRatingsTotal})</span>
-                              </>
-                            )}
-                            <span>•</span>
-                            <span className="font-mono text-[10px]">
-                              {spot.lat.toFixed(5)}, {spot.lng.toFixed(5)}
-                            </span>
-                            <span>•</span>
-                            <a
-                              href={`https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline"
-                            >
-                              View on Map
-                            </a>
-                          </div>
-
-                          {spot.vicinity && (
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {spot.vicinity}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className={`px-3 py-1 rounded-full text-sm font-bold text-white ${
-                          spot.score >= 75 ? 'bg-blue-500' :
-                          spot.score >= 60 ? 'bg-sky-500' :
-                          'bg-slate-500'
-                        }`}>
-                          {spot.score}
-                        </div>
-                      </div>
+                    <div className="min-w-0">
+                      <Mono className={ratingTone(photoForecast.rating).text}>
+                        {photoForecast.rating?.toUpperCase() || 'CONDITIONS'}
+                      </Mono>
+                      <p className="text-[18px] font-sans font-bold tracking-[-0.015em] text-ink leading-[1.2] mt-0.5">
+                        {photoForecast.headline}
+                      </p>
+                      <Mono className="text-ink-3 mt-1.5 block">
+                        {selectedDayForecast?.dateLabel || 'Today'} ·{' '}
+                        {formatTime(activeTab === 'sunrise' ? selectedSunTimes.sunrise : selectedSunTimes.sunset)} ·{' '}
+                        {formatAzimuth(activeTab === 'sunrise' ? selectedSunTimes.sunriseAzimuth : selectedSunTimes.sunsetAzimuth)}
+                      </Mono>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Loading state for photo forecast */}
-        {location && !photoForecast && (openMeteoLoading || horizonLoading) && (
-          <Card className="mb-6">
-            <CardContent className="py-8 text-center text-muted-foreground flex items-center justify-center gap-2">
-              <ArrowsClockwise className="w-5 h-5 animate-spin" />
-              Analyzing photography conditions...
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Sun Position & Twilight Card - Full Width */}
-        {location && selectedSunTimes && (
-          <Card className="mb-6">
-            <CardHeader className="pb-2 bg-muted/30">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Sun className="w-5 h-5 text-amber-500" />
-                Sun Position & Twilight
-                <span className="text-xs font-normal text-muted-foreground ml-2">
-                  {selectedDayForecast?.dateLabel || 'Today'}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <div className="grid md:grid-cols-3 gap-6">
-                {/* Sunrise Info */}
-                <div className={`space-y-2 p-3 rounded-lg ${activeTab === 'sunrise' ? 'bg-orange-50 ring-2 ring-orange-300' : ''}`}>
-                  <h3 className="font-medium text-sm flex items-center gap-2">
-                    <SunDim className="w-4 h-4 text-orange-400" />
-                    Sunrise
-                  </h3>
-                  <div className="text-2xl font-bold">{formatTime(selectedSunTimes.sunrise)}</div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Compass className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Azimuth:</span>
-                    <span className="font-medium">{formatAzimuth(selectedSunTimes.sunriseAzimuth)}</span>
                   </div>
                 </div>
 
-                {/* Sunset Info */}
-                <div className={`space-y-2 p-3 rounded-lg ${activeTab === 'sunset' ? 'bg-orange-50 ring-2 ring-orange-300' : ''}`}>
-                  <h3 className="font-medium text-sm flex items-center gap-2">
-                    <SunHorizon className="w-4 h-4 text-orange-500" />
-                    Sunset
-                  </h3>
-                  <div className="text-2xl font-bold">{formatTime(selectedSunTimes.sunset)}</div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Compass className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Azimuth:</span>
-                    <span className="font-medium">{formatAzimuth(selectedSunTimes.sunsetAzimuth)}</span>
+                {/* Recommended shoot window */}
+                {getShootWindow && (
+                  <div className="bg-white border border-line rounded-[14px] p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <Mono className="text-clay inline-flex items-center gap-1.5">
+                        <Camera className="w-3.5 h-3.5" weight="regular" />
+                        Recommended shoot window
+                      </Mono>
+                      <Mono className="text-ink-3">~{getShootWindow.duration} min</Mono>
+                    </div>
+
+                    {/* Timeline */}
+                    <div className="relative h-9 rounded-full mb-4 overflow-hidden border border-line bg-gradient-to-r from-clay/30 via-ember/30 to-water/40">
+                      {/* Peak window highlight */}
+                      <div
+                        className="absolute h-full bg-pine-6/60 border-x border-pine-7"
+                        style={{
+                          left: `${
+                            ((getShootWindow.peakStart.getTime() - getShootWindow.windowStart.getTime()) /
+                              (getShootWindow.windowEnd.getTime() - getShootWindow.windowStart.getTime())) *
+                            100
+                          }%`,
+                          width: `${
+                            ((getShootWindow.peakEnd.getTime() - getShootWindow.peakStart.getTime()) /
+                              (getShootWindow.windowEnd.getTime() - getShootWindow.windowStart.getTime())) *
+                            100
+                          }%`,
+                        }}
+                      />
+                      {/* Sun event marker */}
+                      <div
+                        className="absolute top-0 bottom-0 w-0.5 bg-ember"
+                        style={{
+                          left: `${
+                            (((activeTab === 'sunrise' ? selectedSunTimes.sunrise : selectedSunTimes.sunset).getTime() -
+                              getShootWindow.windowStart.getTime()) /
+                              (getShootWindow.windowEnd.getTime() - getShootWindow.windowStart.getTime())) *
+                            100
+                          }%`,
+                        }}
+                      />
+                    </div>
+
+                    {/* 3-up times */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <TimeBlock label="Arrive by" value={formatTime(getShootWindow.windowStart)} />
+                      <TimeBlock
+                        label="Peak color"
+                        value={`${formatTime(getShootWindow.peakStart)} – ${formatTime(getShootWindow.peakEnd)}`}
+                        accent="pine"
+                        align="center"
+                      />
+                      <TimeBlock label="Pack up" value={formatTime(getShootWindow.windowEnd)} align="right" />
+                    </div>
+
+                    {/* Tips */}
+                    {(photoForecast.timing.recommendation !== 'flexible' ||
+                      (getShootWindow.hasHighClouds && getShootWindow.afterglowEnd)) && (
+                      <div className="mt-4 pt-3 border-t border-line space-y-1.5">
+                        {photoForecast.timing.recommendation !== 'flexible' && (
+                          <p className="text-[12px] text-clay leading-[1.5] inline-flex items-start gap-1.5">
+                            <Sparkle className="w-3 h-3 mt-0.5 shrink-0" weight="regular" />
+                            {photoForecast.timing.reason}
+                          </p>
+                        )}
+                        {getShootWindow.hasHighClouds && getShootWindow.afterglowEnd && (
+                          <p className="text-[12px] text-water leading-[1.5] inline-flex items-start gap-1.5">
+                            <Sparkle className="w-3 h-3 mt-0.5 shrink-0" weight="regular" />
+                            High clouds — afterglow may persist until {formatTime(getShootWindow.afterglowEnd)}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Score breakdown bars */}
+                <div className="bg-white border border-line rounded-[14px] p-5">
+                  <Mono className="text-ink-2 mb-3 block">Score breakdown</Mono>
+                  <div className="space-y-2.5">
+                    {photoForecast.insights.map((insight, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <div className="w-20 text-[12px] text-ink-3 font-sans">{insight.factor}</div>
+                        <div className="flex-1 h-1.5 bg-cream rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-pine-6"
+                            style={{ width: `${insight.score}%` }}
+                          />
+                        </div>
+                        <div className="w-8 text-[11px] text-right font-mono text-ink-3">{insight.score}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Factor cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4 pt-4 border-t border-line">
+                    {photoForecast.insights.map((insight, i) => (
+                      <div key={i} className="px-3 py-2.5 rounded-[10px] bg-cream border border-line">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[13px] font-sans font-semibold tracking-[-0.005em] text-ink">
+                            {insight.factor}
+                          </span>
+                          <Mono className="text-ink-3 shrink-0">{insight.value}</Mono>
+                        </div>
+                        <p className="text-[12px] text-ink-3 mt-1 leading-[1.5]">{insight.description}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                {/* Solar Noon */}
-                <div className="space-y-2 p-3">
-                  <h3 className="font-medium text-sm flex items-center gap-2">
-                    <Sun className="w-4 h-4 text-yellow-500" />
-                    Solar Noon
-                  </h3>
-                  <div className="text-2xl font-bold">{formatTime(selectedSunTimes.solarNoon)}</div>
-                </div>
-              </div>
+                {/* Cloud layers + atmosphere */}
+                <div className="bg-white border border-line rounded-[14px] p-5 space-y-5">
+                  <div>
+                    <Mono className="text-ink-2 mb-2.5 block inline-flex items-center gap-1.5">
+                      <CloudArrowDown className="w-3 h-3" weight="regular" />
+                      Cloud layers
+                    </Mono>
+                    <div className="grid grid-cols-4 gap-2">
+                      <CloudTile
+                        label="High"
+                        value={photoForecast.clouds.high}
+                        good={photoForecast.clouds.high >= 20 && photoForecast.clouds.high <= 60}
+                      />
+                      <CloudTile
+                        label="Mid"
+                        value={photoForecast.clouds.mid}
+                        good={photoForecast.clouds.mid >= 20 && photoForecast.clouds.mid <= 50}
+                      />
+                      <CloudTile
+                        label="Low"
+                        value={photoForecast.clouds.low}
+                        warn={photoForecast.clouds.low >= 30 && photoForecast.clouds.low < 50}
+                        bad={photoForecast.clouds.low >= 50}
+                      />
+                      <CloudTile label="Total" value={photoForecast.clouds.total} />
+                    </div>
+                  </div>
 
-              {/* Twilight Times - show based on active tab */}
-              <div className="mt-6 pt-4 border-t">
-                <h3 className="font-medium text-sm mb-3 flex items-center gap-2">
-                  <Moon className="w-4 h-4 text-indigo-400" />
-                  {activeTab === 'sunrise' ? 'Morning Twilight Phases' : 'Evening Twilight Phases'}
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  {activeTab === 'sunrise' ? (
-                    <>
-                      <div className="p-3 bg-indigo-50 rounded-lg">
-                        <div className="text-xs text-muted-foreground mb-1">Astronomical Dawn</div>
-                        <div className="font-medium">{formatTime(selectedSunTimes.astronomicalDawn)}</div>
-                        <div className="text-xs text-muted-foreground mt-1">Sun -18° to -12°</div>
-                      </div>
-                      <div className="p-3 bg-blue-50 rounded-lg">
-                        <div className="text-xs text-muted-foreground mb-1">Nautical Dawn</div>
-                        <div className="font-medium">{formatTime(selectedSunTimes.nauticalDawn)}</div>
-                        <div className="text-xs text-muted-foreground mt-1">Sun -12° to -6°</div>
-                      </div>
-                      <div className="p-3 bg-amber-50 rounded-lg">
-                        <div className="text-xs text-muted-foreground mb-1">Civil Dawn</div>
-                        <div className="font-medium">{formatTime(selectedSunTimes.civilDawn)}</div>
-                        <div className="text-xs text-muted-foreground mt-1">Sun -6° to 0°</div>
-                      </div>
-                      <div className="p-3 bg-orange-50 rounded-lg">
-                        <div className="text-xs text-muted-foreground mb-1">Golden Hour</div>
-                        <div className="font-medium">{formatTime(selectedSunTimes.goldenHourMorning.start)}</div>
-                        <div className="text-xs text-muted-foreground">to {formatTime(selectedSunTimes.goldenHourMorning.end)}</div>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="p-3 bg-orange-50 rounded-lg">
-                        <div className="text-xs text-muted-foreground mb-1">Golden Hour</div>
-                        <div className="font-medium">{formatTime(selectedSunTimes.goldenHourEvening.start)}</div>
-                        <div className="text-xs text-muted-foreground">to {formatTime(selectedSunTimes.goldenHourEvening.end)}</div>
-                      </div>
-                      <div className="p-3 bg-amber-50 rounded-lg">
-                        <div className="text-xs text-muted-foreground mb-1">Civil Twilight</div>
-                        <div className="font-medium">{formatTime(selectedSunTimes.sunset)}</div>
-                        <div className="text-xs text-muted-foreground">to {formatTime(selectedSunTimes.civilDusk)}</div>
-                        <div className="text-xs text-muted-foreground mt-1">Sun 0° to -6°</div>
-                      </div>
-                      <div className="p-3 bg-blue-50 rounded-lg">
-                        <div className="text-xs text-muted-foreground mb-1">Nautical Twilight</div>
-                        <div className="font-medium">{formatTime(selectedSunTimes.civilDusk)}</div>
-                        <div className="text-xs text-muted-foreground">to {formatTime(selectedSunTimes.nauticalDusk)}</div>
-                        <div className="text-xs text-muted-foreground mt-1">Sun -6° to -12°</div>
-                      </div>
-                      <div className="p-3 bg-indigo-50 rounded-lg">
-                        <div className="text-xs text-muted-foreground mb-1">Astronomical</div>
-                        <div className="font-medium">{formatTime(selectedSunTimes.nauticalDusk)}</div>
-                        <div className="text-xs text-muted-foreground">to {formatTime(selectedSunTimes.astronomicalDusk)}</div>
-                        <div className="text-xs text-muted-foreground mt-1">Sun -12° to -18°</div>
-                      </div>
-                    </>
+                  {/* Conditions alert */}
+                  {photoForecast.conditions.isClearing && (
+                    <div className="px-3.5 py-3 rounded-[10px] border border-pine-6/30 bg-pine-6/[0.06]">
+                      <Mono className="text-pine-6 inline-flex items-center gap-1.5">
+                        <CloudSun className="w-3 h-3" weight="regular" />
+                        Post-storm clearing
+                      </Mono>
+                      <p className="text-[13px] text-ink-2 mt-1 leading-[1.5]">
+                        Exceptional color potential as skies clear.
+                      </p>
+                    </div>
                   )}
+
+                  {/* Atmosphere */}
+                  <div>
+                    <Mono className="text-ink-2 mb-2.5 block">Atmosphere</Mono>
+                    <div className="grid grid-cols-2 gap-2">
+                      <AtmoTile Icon={Eye} label="Visibility" value={`${photoForecast.atmosphere.visibility.toFixed(0)} km`} />
+                      <AtmoTile Icon={Drop} label="Humidity" value={`${Math.round(photoForecast.atmosphere.humidity)}%`} />
+                      <AtmoTile
+                        Icon={ThermometerSimple}
+                        label="Aerosols"
+                        value={photoForecast.atmosphere.aod !== null ? photoForecast.atmosphere.aod.toFixed(2) : 'N/A'}
+                      />
+                      <AtmoTile Icon={Wind} label="Precipitation" value={`${photoForecast.conditions.precipitation}%`} />
+                    </div>
+
+                    {photoForecast.conditions.fogRisk && (
+                      <div className="mt-2.5 px-3 py-2.5 rounded-[10px] bg-water/[0.08] border border-water/30">
+                        <Mono className="text-water inline-flex items-center gap-1.5">
+                          <Drop className="w-3 h-3" weight="regular" />
+                          Fog/mist possible
+                        </Mono>
+                        <p className="text-[12px] text-ink-2 mt-1 leading-[1.5]">
+                          Temperature near dew point — fog or mist may form, creating moody atmosphere.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+            )}
 
-              {/* Blue Hour */}
-              <div className="mt-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg">
-                <div className="text-sm">
-                  <span className="font-medium">Blue Hour ({activeTab === 'sunrise' ? 'Morning' : 'Evening'}):</span>
-                  <span className="ml-2">
+            {/* Terrain analysis */}
+            {location && selectedSunTimes && (
+              <div className="bg-white border border-line rounded-[14px] p-5">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <Mono className="text-pine-6 inline-flex items-center gap-1.5">
+                    <Mountains className="w-3.5 h-3.5" weight="regular" />
+                    Terrain analysis
+                  </Mono>
+                  <Mono className="text-ink-3">Catching {activeTab} light</Mono>
+                </div>
+
+                {terrainLoading && (
+                  <div className="flex flex-col items-center py-8 gap-2">
+                    <ArrowsClockwise className="w-5 h-5 text-pine-6 animate-spin" />
+                    <Mono className="text-pine-6">Analyzing terrain features…</Mono>
+                  </div>
+                )}
+
+                {terrainError && (
+                  <div className="px-3 py-2.5 rounded-[10px] border border-ember/30 bg-ember/[0.06]">
+                    <p className="text-[13px] text-ember leading-[1.5]">{terrainError}</p>
+                  </div>
+                )}
+
+                {!terrainLoading && !terrainError && terrainFeatures.length === 0 && (
+                  <div className="text-center py-8">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-sage/15 text-sage mb-2.5">
+                      <Mountains className="w-5 h-5" weight="regular" />
+                    </div>
+                    <Mono className="text-ink-3">No terrain features found</Mono>
+                    <p className="text-[12px] text-ink-3 mt-1">This area may be flat or features lack trail access.</p>
+                  </div>
+                )}
+
+                {!terrainLoading && terrainFeatures.length > 0 && (
+                  <div className="space-y-2">
+                    {terrainFeatures.map((feature, index) => (
+                      <TerrainFeatureRow key={`terrain-${index}`} feature={feature} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Loading state */}
+            {location && !photoForecast && (openMeteoLoading || horizonLoading) && (
+              <div className="bg-white border border-line rounded-[14px] py-12 text-center">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 mb-2.5">
+                  <ArrowsClockwise className="w-5 h-5 text-pine-6 animate-spin" />
+                </div>
+                <Mono className="text-pine-6">Analyzing photography conditions…</Mono>
+              </div>
+            )}
+
+            {/* Sun position & twilight */}
+            {location && selectedSunTimes && (
+              <div className="bg-white border border-line rounded-[14px] p-5">
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <Mono className="text-clay inline-flex items-center gap-1.5">
+                    <Sun className="w-3.5 h-3.5" weight="regular" />
+                    Sun position &amp; twilight
+                  </Mono>
+                  <Mono className="text-ink-3">{selectedDayForecast?.dateLabel || 'Today'}</Mono>
+                </div>
+
+                <div className="grid sm:grid-cols-3 gap-3">
+                  <SunBlock
+                    Icon={SunDim}
+                    label="Sunrise"
+                    time={formatTime(selectedSunTimes.sunrise)}
+                    azimuth={formatAzimuth(selectedSunTimes.sunriseAzimuth)}
+                    active={activeTab === 'sunrise'}
+                  />
+                  <SunBlock
+                    Icon={SunHorizon}
+                    label="Sunset"
+                    time={formatTime(selectedSunTimes.sunset)}
+                    azimuth={formatAzimuth(selectedSunTimes.sunsetAzimuth)}
+                    active={activeTab === 'sunset'}
+                  />
+                  <SunBlock
+                    Icon={Sun}
+                    label="Solar noon"
+                    time={formatTime(selectedSunTimes.solarNoon)}
+                  />
+                </div>
+
+                {/* Twilight phases */}
+                <div className="mt-5 pt-4 border-t border-line">
+                  <Mono className="text-ink-2 mb-3 inline-flex items-center gap-1.5">
+                    <Moon className="w-3 h-3" weight="regular" />
+                    {activeTab === 'sunrise' ? 'Morning twilight phases' : 'Evening twilight phases'}
+                  </Mono>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {activeTab === 'sunrise' ? (
+                      <>
+                        <PhaseTile accent="pine" label="Astronomical dawn" time={formatTime(selectedSunTimes.astronomicalDawn)} sub="Sun -18° to -12°" />
+                        <PhaseTile accent="water" label="Nautical dawn" time={formatTime(selectedSunTimes.nauticalDawn)} sub="Sun -12° to -6°" />
+                        <PhaseTile accent="clay" label="Civil dawn" time={formatTime(selectedSunTimes.civilDawn)} sub="Sun -6° to 0°" />
+                        <PhaseTile accent="ember" label="Golden hour" time={formatTime(selectedSunTimes.goldenHourMorning.start)} sub={`to ${formatTime(selectedSunTimes.goldenHourMorning.end)}`} />
+                      </>
+                    ) : (
+                      <>
+                        <PhaseTile accent="ember" label="Golden hour" time={formatTime(selectedSunTimes.goldenHourEvening.start)} sub={`to ${formatTime(selectedSunTimes.goldenHourEvening.end)}`} />
+                        <PhaseTile accent="clay" label="Civil twilight" time={formatTime(selectedSunTimes.sunset)} sub={`to ${formatTime(selectedSunTimes.civilDusk)}`} />
+                        <PhaseTile accent="water" label="Nautical twilight" time={formatTime(selectedSunTimes.civilDusk)} sub={`to ${formatTime(selectedSunTimes.nauticalDusk)}`} />
+                        <PhaseTile accent="pine" label="Astronomical" time={formatTime(selectedSunTimes.nauticalDusk)} sub={`to ${formatTime(selectedSunTimes.astronomicalDusk)}`} />
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Blue hour */}
+                <div className="mt-4 px-3.5 py-3 rounded-[10px] border border-water/30 bg-water/[0.08]">
+                  <Mono className="text-water inline-flex items-center gap-1.5">
+                    <Moon className="w-3 h-3" weight="regular" />
+                    Blue hour ({activeTab === 'sunrise' ? 'morning' : 'evening'})
+                  </Mono>
+                  <p className="text-[13px] text-ink mt-1">
                     {activeTab === 'sunrise'
-                      ? `${formatTime(selectedSunTimes.blueHourMorning.start)} - ${formatTime(selectedSunTimes.blueHourMorning.end)}`
-                      : `${formatTime(selectedSunTimes.blueHourEvening.start)} - ${formatTime(selectedSunTimes.blueHourEvening.end)}`
-                    }
-                  </span>
-                  <span className="text-muted-foreground ml-2">(best for moody, cool-toned photos)</span>
+                      ? `${formatTime(selectedSunTimes.blueHourMorning.start)} – ${formatTime(selectedSunTimes.blueHourMorning.end)}`
+                      : `${formatTime(selectedSunTimes.blueHourEvening.start)} – ${formatTime(selectedSunTimes.blueHourEvening.end)}`}
+                  </p>
+                  <p className="text-[12px] text-ink-3 mt-0.5">Best for moody, cool-toned photos.</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        )}
+            )}
 
-        {/* Terrain Visibility Card */}
-        {location && selectedSunTimes && (
-          <Card className="mb-6">
-            <CardHeader className="pb-2 bg-muted/30">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Mountains className="w-5 h-5 text-green-600" />
-                {activeTab === 'sunrise' ? 'Sunrise' : 'Sunset'} Terrain Visibility
-                <span className="text-xs font-normal text-muted-foreground ml-2">
-                  {formatAzimuth(activeTab === 'sunrise' ? selectedSunTimes.sunriseAzimuth : selectedSunTimes.sunsetAzimuth)}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {horizonLoading && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <ArrowsClockwise className="w-4 h-4 animate-spin" />
-                  Analyzing terrain along {activeTab} azimuth...
+            {/* Terrain visibility */}
+            {location && selectedSunTimes && (
+              <div className="bg-white border border-line rounded-[14px] p-5">
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <Mono className="text-sage inline-flex items-center gap-1.5">
+                    <MountainsIcon className="w-3.5 h-3.5" weight="regular" />
+                    {activeTab === 'sunrise' ? 'Sunrise' : 'Sunset'} terrain visibility
+                  </Mono>
+                  <Mono className="text-ink-3">
+                    {formatAzimuth(activeTab === 'sunrise' ? selectedSunTimes.sunriseAzimuth : selectedSunTimes.sunsetAzimuth)}
+                  </Mono>
                 </div>
-              )}
 
-              {horizonError && (
-                <div className="text-red-600 text-sm">
-                  Error: {horizonError}
-                </div>
-              )}
-
-              {horizonProfile && !horizonLoading && (
-                <div className="space-y-4">
-                  {/* Quality Assessment */}
-                  <div className={`p-4 rounded-lg ${
-                    horizonProfile.quality === 'clear' ? 'bg-green-50 border border-green-200' :
-                    horizonProfile.quality === 'minimal' ? 'bg-green-50 border border-green-200' :
-                    horizonProfile.quality === 'low' ? 'bg-blue-50 border border-blue-200' :
-                    horizonProfile.quality === 'moderate' ? 'bg-amber-50 border border-amber-200' :
-                    horizonProfile.quality === 'significant' ? 'bg-orange-50 border border-orange-200' :
-                    'bg-red-50 border border-red-200'
-                  }`}>
-                    <div className="flex items-start gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                        horizonProfile.quality === 'clear' || horizonProfile.quality === 'minimal' ? 'bg-green-500' :
-                        horizonProfile.quality === 'low' ? 'bg-blue-500' :
-                        horizonProfile.quality === 'moderate' ? 'bg-amber-500' :
-                        horizonProfile.quality === 'significant' ? 'bg-orange-500' :
-                        'bg-red-500'
-                      }`}>
-                        {horizonProfile.effectiveHorizon.toFixed(0)}°
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-semibold">{horizonProfile.qualityLabel}</div>
-                        <div className="text-sm text-muted-foreground">{horizonProfile.qualityDescription}</div>
-                      </div>
-                    </div>
+                {horizonLoading && (
+                  <div className="flex items-center gap-2 text-ink-3 py-2">
+                    <ArrowsClockwise className="w-4 h-4 animate-spin" />
+                    <Mono>Analyzing terrain along {activeTab} azimuth…</Mono>
                   </div>
+                )}
 
-                  {/* Impact Stats */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                    <div className="p-3 bg-muted/50 rounded text-center">
-                      <div className="text-xs text-muted-foreground">Effective Horizon</div>
-                      <div className="font-bold text-lg">{horizonProfile.effectiveHorizon.toFixed(1)}°</div>
-                    </div>
-                    <div className="p-3 bg-muted/50 rounded text-center">
-                      <div className="text-xs text-muted-foreground">Sunset Lost</div>
-                      <div className="font-bold text-lg">~{horizonProfile.sunsetLostMinutes} min</div>
-                    </div>
-                    <div className="p-3 bg-muted/50 rounded text-center">
-                      <div className="text-xs text-muted-foreground">Golden Hour</div>
-                      <div className="font-bold text-lg">{Math.round(horizonProfile.goldenHourVisible)}%</div>
-                      <div className="text-xs text-muted-foreground">visible</div>
-                    </div>
-                    <div className="p-3 bg-muted/50 rounded text-center">
-                      <div className="text-xs text-muted-foreground">Your Elevation</div>
-                      <div className="font-bold text-lg">{Math.round(horizonProfile.observerElevation)}m</div>
-                    </div>
+                {horizonError && (
+                  <div className="px-3 py-2.5 rounded-[10px] border border-ember/30 bg-ember/[0.06]">
+                    <p className="text-[13px] text-ember leading-[1.5]">{horizonError}</p>
                   </div>
+                )}
 
-                  {/* Horizon Profile Visualization */}
-                  <div className="mt-4">
-                    <div className="text-xs text-muted-foreground mb-2">
-                      Terrain profile looking {formatAzimuth(horizonProfile.azimuth)} (sunset direction)
-                    </div>
-                    <div className="h-32 bg-gradient-to-b from-orange-200 via-orange-100 to-amber-50 rounded-lg relative overflow-hidden">
-                      {/* Sun path indicator - shows where sun will be at different times */}
-                      <div className="absolute right-4 top-2 flex flex-col gap-1 text-xs">
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                          <span className="text-orange-700">6° (30 min before)</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 rounded-full bg-orange-400" />
-                          <span className="text-orange-700">0° (sunset)</span>
-                        </div>
-                      </div>
-                      {/* Terrain profile */}
-                      <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        {/* Golden hour zone (0-6°) */}
-                        <rect x="0" y="20" width="100" height="30" fill="rgba(255, 200, 100, 0.2)" />
-                        {/* Terrain fill */}
-                        <path
-                          d={`M 0 100 ${horizonProfile.points.map((p, i) => {
-                            const x = ((i + 1) / horizonProfile.points.length) * 100;
-                            // Scale: 0° at y=50, each degree = 5 units
-                            const y = 100 - (50 + p.angularElevation * 5);
-                            return `L ${x} ${Math.max(0, Math.min(100, y))}`;
-                          }).join(' ')} L 100 100 Z`}
-                          fill="rgba(34, 139, 34, 0.7)"
-                          stroke="rgb(22, 101, 22)"
-                          strokeWidth="0.5"
-                        />
-                        {/* Horizon line (0°) */}
-                        <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(255,150,0,0.5)" strokeWidth="1" />
-                        {/* 6° line (golden hour start) */}
-                        <line x1="0" y1="20" x2="100" y2="20" stroke="rgba(255,200,0,0.3)" strokeDasharray="3,3" />
-                      </svg>
-                      {/* Labels */}
-                      <div className="absolute bottom-1 left-2 text-xs text-muted-foreground">You</div>
-                      <div className="absolute bottom-1 right-2 text-xs text-muted-foreground">30 km</div>
-                      <div className="absolute left-2 text-xs text-orange-600" style={{ top: '48%' }}>0°</div>
-                      <div className="absolute left-2 text-xs text-amber-600" style={{ top: '18%' }}>6°</div>
-                    </div>
-                  </div>
+                {horizonProfile && !horizonLoading && (
+                  <div className="space-y-4">
+                    {/* Quality assessment */}
+                    <HorizonQualityCard horizonProfile={horizonProfile} />
 
-                  {/* Elevation points detail */}
-                  <details className="text-xs">
-                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                      View terrain sample points
-                    </summary>
-                    <div className="mt-2 grid grid-cols-3 gap-1">
-                      {horizonProfile.points.map((p, i) => (
-                        <div key={i} className="p-1 bg-muted/30 rounded text-center">
-                          <div className="font-medium">{p.distance.toFixed(1)} km</div>
-                          <div className="text-muted-foreground">{Math.round(p.elevation)} m</div>
-                          <div className={p.angularElevation > 0 ? 'text-amber-600' : 'text-green-600'}>
-                            {p.angularElevation.toFixed(2)}°
+                    {/* Stats */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <ImpactStat label="Effective horizon" value={`${horizonProfile.effectiveHorizon.toFixed(1)}°`} />
+                      <ImpactStat label="Sunset lost" value={`~${horizonProfile.sunsetLostMinutes} min`} />
+                      <ImpactStat
+                        label="Golden hour"
+                        value={`${Math.round(horizonProfile.goldenHourVisible)}%`}
+                        sub="visible"
+                      />
+                      <ImpactStat label="Your elevation" value={`${Math.round(horizonProfile.observerElevation)} m`} />
+                    </div>
+
+                    {/* Horizon profile SVG visualization */}
+                    <div>
+                      <Mono className="text-ink-3 mb-2 block">
+                        Terrain profile looking {formatAzimuth(horizonProfile.azimuth)}
+                      </Mono>
+                      <div className="h-32 bg-gradient-to-b from-clay/30 via-clay/15 to-cream rounded-[12px] relative overflow-hidden border border-line">
+                        <div className="absolute right-3 top-2 flex flex-col gap-1">
+                          <div className="inline-flex items-center gap-1">
+                            <div className="w-2.5 h-2.5 rounded-full bg-clay" />
+                            <Mono className="text-clay">6° (30 min before)</Mono>
+                          </div>
+                          <div className="inline-flex items-center gap-1">
+                            <div className="w-2.5 h-2.5 rounded-full bg-ember" />
+                            <Mono className="text-ember">0° (sunset)</Mono>
                           </div>
                         </div>
-                      ))}
+                        <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                          <rect x="0" y="20" width="100" height="30" fill="rgba(176, 136, 90, 0.18)" />
+                          <path
+                            d={`M 0 100 ${horizonProfile.points
+                              .map((p, i) => {
+                                const x = ((i + 1) / horizonProfile.points.length) * 100;
+                                const y = 100 - (50 + p.angularElevation * 5);
+                                return `L ${x} ${Math.max(0, Math.min(100, y))}`;
+                              })
+                              .join(' ')} L 100 100 Z`}
+                            fill="rgba(58, 74, 42, 0.55)"
+                            stroke="rgb(58, 74, 42)"
+                            strokeWidth="0.5"
+                          />
+                          <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(176,80,40,0.6)" strokeWidth="1" />
+                          <line x1="0" y1="20" x2="100" y2="20" stroke="rgba(176,136,90,0.55)" strokeDasharray="3,3" />
+                        </svg>
+                        <Mono className="absolute bottom-1 left-2 text-ink-3">You</Mono>
+                        <Mono className="absolute bottom-1 right-2 text-ink-3">30 km</Mono>
+                        <Mono className="absolute left-2 text-ember" style={{ top: '46%' }}>0°</Mono>
+                        <Mono className="absolute left-2 text-clay" style={{ top: '16%' }}>6°</Mono>
+                      </div>
                     </div>
-                  </details>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
-        {/* Loading State */}
-        {openMeteoLoading && (
-          <Card className="mb-6">
-            <CardContent className="py-8 text-center text-muted-foreground flex items-center justify-center gap-2">
-              <ArrowsClockwise className="w-5 h-5 animate-spin" />
-              Loading weather data...
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Open-Meteo Data - hidden (duplicate of above) */}
-        {false && location && !openMeteoLoading && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-blue-600 flex items-center gap-2">
-              <CloudSun className="w-5 h-5" />
-              Weather Data
-            </h2>
-
-              {openMeteoError && (
-                <Card className="border-red-200 bg-red-50">
-                  <CardContent className="py-4 text-red-700 text-sm">
-                    Error: {openMeteoError}
-                  </CardContent>
-                </Card>
-              )}
-
-              {openMeteoData && (
-                <>
-                  {/* Sun Times from Open-Meteo */}
-                  {openMeteoData.daily && (
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <Sun className="w-4 h-4 text-amber-500" />
-                          Sun Times
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <p className="text-muted-foreground text-xs">Sunrise</p>
-                          <p className="font-medium">
-                            {new Date(openMeteoData.daily.sunrise[0]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground text-xs">Sunset</p>
-                          <p className="font-medium">
-                            {new Date(openMeteoData.daily.sunset[0]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Current Conditions */}
-                  {openMeteoData.current && (
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">Current Conditions</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2 text-sm">
-                        <div className="p-2 bg-blue-50 rounded text-blue-800 font-medium">
-                          {getWeatherDescription(openMeteoData.current.weather_code)}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div>Cloud Cover: <span className="font-medium">{openMeteoData.current.cloud_cover}%</span></div>
-                          <div>Temp: <span className="font-medium">{Math.round(openMeteoData.current.temperature_2m * 9/5 + 32)}°F</span></div>
-                          <div>Humidity: <span className="font-medium">{openMeteoData.current.relative_humidity_2m}%</span></div>
-                          <div>Wind: <span className="font-medium">{Math.round(openMeteoData.current.wind_speed_10m * 0.621)} mph</span></div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Cloud Layers - THE KEY DATA */}
-                  {openMeteoData.hourly && selectedEventIndex !== null && selectedEventIndex >= 0 && (
-                    <Card className="border-blue-200">
-                      <CardHeader className="pb-2 bg-muted/30">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          {activeTab === 'sunrise' ? (
-                            <SunDim className="w-4 h-4 text-orange-500" />
-                          ) : (
-                            <SunHorizon className="w-4 h-4 text-orange-500" />
-                          )}
-                          Cloud Layers at {activeTab === 'sunrise' ? 'Sunrise' : 'Sunset'}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-4 space-y-3">
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-muted-foreground">High Clouds (&gt;6km)</span>
-                            <span className="font-medium text-green-600">
-                              {openMeteoData.hourly.cloud_cover_high[selectedEventIndex]}%
+                    {/* Sample points */}
+                    <details className="group">
+                      <summary className="cursor-pointer inline-flex items-center gap-1.5 select-none">
+                        <Mono className="text-ink-3 group-hover:text-ink transition-colors">
+                          View terrain sample points
+                        </Mono>
+                      </summary>
+                      <div className="mt-3 grid grid-cols-3 gap-1.5">
+                        {horizonProfile.points.map((p, i) => (
+                          <div key={i} className="px-2 py-1.5 bg-cream border border-line rounded-[8px] text-center">
+                            <p className="text-[11px] font-sans font-semibold text-ink">{p.distance.toFixed(1)} km</p>
+                            <Mono className="text-ink-3 block">{Math.round(p.elevation)} m</Mono>
+                            <span
+                              className={cn(
+                                'text-[10px] font-mono font-semibold uppercase tracking-[0.06em]',
+                                p.angularElevation > 0 ? 'text-clay' : 'text-pine-6',
+                              )}
+                            >
+                              {p.angularElevation.toFixed(2)}°
                             </span>
                           </div>
-                          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-green-500 rounded-full"
-                              style={{ width: `${openMeteoData.hourly.cloud_cover_high[selectedEventIndex]}%` }}
-                            />
-                          </div>
-                          <p className="text-xs text-muted-foreground">Best for color - catches light</p>
-                        </div>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                )}
+              </div>
+            )}
 
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-muted-foreground">Mid Clouds (2-6km)</span>
-                            <span className="font-medium text-amber-600">
-                              {openMeteoData.hourly.cloud_cover_mid[selectedEventIndex]}%
-                            </span>
-                          </div>
-                          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-amber-500 rounded-full"
-                              style={{ width: `${openMeteoData.hourly.cloud_cover_mid[selectedEventIndex]}%` }}
-                            />
-                          </div>
-                          <p className="text-xs text-muted-foreground">Can add drama and texture</p>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-muted-foreground">Low Clouds (&lt;2km)</span>
-                            <span className="font-medium text-red-600">
-                              {openMeteoData.hourly.cloud_cover_low[selectedEventIndex]}%
-                            </span>
-                          </div>
-                          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-red-500 rounded-full"
-                              style={{ width: `${openMeteoData.hourly.cloud_cover_low[selectedEventIndex]}%` }}
-                            />
-                          </div>
-                          <p className="text-xs text-muted-foreground">May block direct sunlight</p>
-                        </div>
-
-                        <div className="pt-2 border-t text-xs text-muted-foreground">
-                          Total cloud cover: <span className="font-medium">{openMeteoData.hourly.cloud_cover[selectedEventIndex]}%</span>
-                          {' | '}
-                          Visibility: <span className="font-medium">{(openMeteoData.hourly.visibility[selectedEventIndex] / 1000).toFixed(1)} km</span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Hourly Around Event */}
-                  {openMeteoData.hourly && selectedDayForecast && (
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">
-                          Hourly ({activeTab === 'sunrise' ? '5am - 9am' : '4pm - 8pm'})
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-1 text-xs">
-                          {openMeteoData.hourly.time
-                            .map((time, i) => ({ time, i }))
-                            .filter(({ time }) => {
-                              const d = new Date(time);
-                              const hour = d.getHours();
-                              const isSameDay = d.toDateString() === selectedDayForecast.date.toDateString();
-                              if (activeTab === 'sunrise') {
-                                return isSameDay && hour >= 5 && hour <= 9;
-                              } else {
-                                return isSameDay && hour >= 16 && hour <= 20;
-                              }
-                            })
-                            .map(({ time, i }) => (
-                              <div key={time} className={`flex items-center gap-2 p-1.5 rounded ${i === selectedEventIndex ? 'bg-orange-100' : 'bg-muted/30'}`}>
-                                <span className="font-medium w-14">
-                                  {new Date(time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                                </span>
-                                <span className="text-muted-foreground">{getWeatherDescription(openMeteoData.hourly!.weather_code[i])}</span>
-                                <span className="ml-auto">
-                                  H:{openMeteoData.hourly!.cloud_cover_high[i]}%
-                                  M:{openMeteoData.hourly!.cloud_cover_mid[i]}%
-                                  L:{openMeteoData.hourly!.cloud_cover_low[i]}%
-                                </span>
-                              </div>
-                            ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                </>
-              )}
-          </div>
-        )}
+            {/* Empty state when no location */}
+            {!location && !previewMode && (
+              <div className="bg-white border border-line rounded-[14px] py-12 px-6 flex flex-col items-center text-center">
+                <div className="flex items-center justify-center w-14 h-14 rounded-full bg-clay/15 text-clay mb-3">
+                  <Sparkle className="w-6 h-6" weight="regular" />
+                </div>
+                <Mono className="text-clay block">Choose a location</Mono>
+                <p className="text-[14px] text-ink-3 mt-2 max-w-xs">
+                  Search for a place above to see sunset and sunrise photography conditions.
+                </p>
+              </div>
+            )}
           </main>
         </div>
       </div>
     </div>
   );
 }
+
+// ====== Helpers ======
+
+const TabButton = ({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) => (
+  <button
+    onClick={onClick}
+    className={cn(
+      'flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-4 rounded-full text-[12px] font-sans font-semibold tracking-[0.01em] transition-colors',
+      active ? 'bg-ink text-cream shadow-[0_1px_2px_rgba(29,34,24,.08)]' : 'text-ink-3 hover:text-ink',
+    )}
+  >
+    {children}
+  </button>
+);
+
+const TimeBlock = ({
+  label,
+  value,
+  accent,
+  align = 'left',
+}: {
+  label: string;
+  value: string;
+  accent?: 'pine';
+  align?: 'left' | 'center' | 'right';
+}) => (
+  <div className={cn(align === 'center' && 'text-center', align === 'right' && 'text-right')}>
+    <Mono className={cn('block', accent === 'pine' ? 'text-pine-6' : 'text-ink-3')}>{label}</Mono>
+    <p
+      className={cn(
+        'text-[15px] font-sans font-bold tracking-[-0.005em] mt-0.5',
+        accent === 'pine' ? 'text-pine-6' : 'text-ink',
+      )}
+    >
+      {value}
+    </p>
+  </div>
+);
+
+const CloudTile = ({
+  label,
+  value,
+  good,
+  warn,
+  bad,
+}: {
+  label: string;
+  value: number;
+  good?: boolean;
+  warn?: boolean;
+  bad?: boolean;
+}) => {
+  const tone = good ? 'text-pine-6' : bad ? 'text-ember' : warn ? 'text-clay' : 'text-ink';
+  return (
+    <div className="px-3 py-2.5 rounded-[10px] bg-cream border border-line text-center">
+      <Mono className="text-ink-3 block">{label}</Mono>
+      <p className={cn('text-[18px] font-sans font-bold tracking-[-0.01em] mt-0.5', tone)}>
+        {Math.round(value)}%
+      </p>
+    </div>
+  );
+};
+
+const AtmoTile = ({
+  Icon,
+  label,
+  value,
+}: {
+  Icon: typeof Eye;
+  label: string;
+  value: string;
+}) => (
+  <div className="flex items-center justify-between px-3 py-2.5 rounded-[10px] bg-cream border border-line">
+    <div className="inline-flex items-center gap-1.5 min-w-0">
+      <Icon className="w-3.5 h-3.5 text-ink-3 shrink-0" weight="regular" />
+      <Mono className="text-ink-3 truncate">{label}</Mono>
+    </div>
+    <span className="text-[13px] font-sans font-semibold tracking-[-0.005em] text-ink shrink-0">{value}</span>
+  </div>
+);
+
+const SunBlock = ({
+  Icon,
+  label,
+  time,
+  azimuth,
+  active,
+}: {
+  Icon: typeof SunDim;
+  label: string;
+  time: string;
+  azimuth?: string;
+  active?: boolean;
+}) => (
+  <div
+    className={cn(
+      'rounded-[12px] border p-3.5 transition-all',
+      active ? 'bg-clay/[0.06] border-clay/40' : 'bg-cream border-line',
+    )}
+  >
+    <Mono className={cn('inline-flex items-center gap-1.5', active ? 'text-clay' : 'text-ink-3')}>
+      <Icon className="w-3 h-3" weight="regular" />
+      {label}
+    </Mono>
+    <p className="text-[22px] font-sans font-bold tracking-[-0.015em] text-ink mt-1 leading-none">{time}</p>
+    {azimuth && (
+      <div className="mt-1.5 inline-flex items-center gap-1">
+        <Compass className="w-3 h-3 text-ink-3" weight="regular" />
+        <Mono className="text-ink-3">{azimuth}</Mono>
+      </div>
+    )}
+  </div>
+);
+
+const PhaseTile = ({
+  accent,
+  label,
+  time,
+  sub,
+}: {
+  accent: 'pine' | 'water' | 'clay' | 'ember';
+  label: string;
+  time: string;
+  sub: string;
+}) => {
+  const tones: Record<typeof accent, { bg: string; border: string; text: string }> = {
+    pine:  { bg: 'bg-pine-6/[0.06]', border: 'border-pine-6/30', text: 'text-pine-6' },
+    water: { bg: 'bg-water/[0.06]',  border: 'border-water/30',  text: 'text-water' },
+    clay:  { bg: 'bg-clay/[0.06]',   border: 'border-clay/30',   text: 'text-clay' },
+    ember: { bg: 'bg-ember/[0.06]',  border: 'border-ember/30',  text: 'text-ember' },
+  };
+  const t = tones[accent];
+  return (
+    <div className={cn('px-3 py-2.5 rounded-[10px] border', t.bg, t.border)}>
+      <Mono className={t.text}>{label}</Mono>
+      <p className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink mt-0.5">{time}</p>
+      <Mono className="text-ink-3 mt-0.5 block">{sub}</Mono>
+    </div>
+  );
+};
+
+const ImpactStat = ({ label, value, sub }: { label: string; value: string; sub?: string }) => (
+  <div className="px-3 py-2.5 rounded-[10px] bg-cream border border-line text-center">
+    <Mono className="text-ink-3 block">{label}</Mono>
+    <p className="text-[18px] font-sans font-bold tracking-[-0.01em] text-ink mt-0.5 leading-none">{value}</p>
+    {sub && <Mono className="text-ink-3 mt-1 block">{sub}</Mono>}
+  </div>
+);
+
+const HORIZON_QUALITY_TONES: Record<
+  string,
+  { bg: string; border: string; chip: string }
+> = {
+  clear:       { bg: 'bg-pine-6/[0.06]', border: 'border-pine-6/30', chip: 'bg-pine-6 text-cream' },
+  minimal:     { bg: 'bg-pine-6/[0.06]', border: 'border-pine-6/30', chip: 'bg-pine-6 text-cream' },
+  low:         { bg: 'bg-water/[0.06]',  border: 'border-water/30',  chip: 'bg-water text-cream' },
+  moderate:    { bg: 'bg-clay/[0.06]',   border: 'border-clay/30',   chip: 'bg-clay text-cream' },
+  significant: { bg: 'bg-ember/[0.06]',  border: 'border-ember/30',  chip: 'bg-ember text-cream' },
+  blocked:     { bg: 'bg-ember/[0.10]',  border: 'border-ember/40',  chip: 'bg-ember text-cream' },
+};
+
+const HorizonQualityCard = ({ horizonProfile }: { horizonProfile: HorizonProfile }) => {
+  const tone = HORIZON_QUALITY_TONES[horizonProfile.quality] || HORIZON_QUALITY_TONES.clear;
+  return (
+    <div className={cn('px-4 py-3.5 rounded-[12px] border', tone.bg, tone.border)}>
+      <div className="flex items-start gap-3">
+        <div className={cn('w-11 h-11 rounded-[10px] flex items-center justify-center font-sans font-bold text-[13px] shrink-0', tone.chip)}>
+          {horizonProfile.effectiveHorizon.toFixed(0)}°
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">
+            {horizonProfile.qualityLabel}
+          </p>
+          <p className="text-[12px] text-ink-3 mt-0.5 leading-[1.5]">{horizonProfile.qualityDescription}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const TERRAIN_FEATURE_TONES: Record<string, string> = {
+  cliff:  'bg-ember/15 text-ember',
+  ridge:  'bg-pine-6/12 text-pine-6',
+  peak:   'bg-water/15 text-water',
+  slope:  'bg-sage/15 text-sage',
+  default: 'bg-cream text-ink-3',
+};
+
+const TerrainFeatureRow = ({ feature }: { feature: TerrainFeature }) => {
+  const featureTone = TERRAIN_FEATURE_TONES[feature.featureType] || TERRAIN_FEATURE_TONES.default;
+  const scoreTone =
+    feature.score >= 75 ? 'bg-pine-6 text-cream' : feature.score >= 60 ? 'bg-clay text-cream' : 'bg-ink-3 text-cream';
+  const accessTone = feature.accessible
+    ? feature.accessType === 'road'
+      ? 'bg-pine-6/12 text-pine-6'
+      : feature.accessType === 'track'
+        ? 'bg-sage/15 text-sage'
+        : 'bg-water/15 text-water'
+    : 'bg-ember/15 text-ember';
+
+  return (
+    <div className="px-3.5 py-3 rounded-[12px] bg-cream border border-line">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-[0.10em] font-semibold', featureTone)}>
+              {feature.featureType}
+            </span>
+            <span className="text-[13px] font-sans font-semibold tracking-[-0.005em] text-ink">
+              {feature.aspectLabel}
+            </span>
+            {feature.curvature === 'convex' && (
+              <Mono className="text-clay">Convex</Mono>
+            )}
+            <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-[0.10em] font-semibold', accessTone)}>
+              {feature.accessible ? `${feature.accessType} ${feature.accessDistance}m` : 'No access'}
+            </span>
+          </div>
+
+          <div className="text-[12px] text-ink-3 mt-1.5 inline-flex items-center gap-1.5 flex-wrap">
+            <span>{feature.distanceKm.toFixed(1)} km {feature.bearingLabel}</span>
+            <span className="text-line">·</span>
+            <span>{Math.round(feature.elevation)} m</span>
+            <span className="text-line">·</span>
+            <span>{feature.slopeCategory} ({Math.round(feature.slope)}°)</span>
+            <span className="text-line">·</span>
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${feature.lat},${feature.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-pine-6 hover:underline"
+            >
+              Map
+            </a>
+          </div>
+
+          <p className="text-[13px] text-ink mt-2 leading-[1.5]">{feature.recommendation}</p>
+          <Mono className="text-clay mt-1 inline-flex items-center gap-1">
+            <Sparkle className="w-3 h-3" weight="regular" />
+            {feature.lightingWindow}
+          </Mono>
+        </div>
+
+        <div className={cn('px-2.5 py-1 rounded-full text-[12px] font-sans font-bold tracking-[-0.005em] shrink-0', scoreTone)}>
+          {feature.score}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Re-export for compatibility (in case anything imports it)
+export { WMO_CODES };

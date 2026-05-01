@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Compass, Users, SpinnerGap, WarningCircle, Calendar, Path, MapPin } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  Compass,
+  Users,
+  SpinnerGap,
+  WarningCircle,
+  Calendar,
+  Path,
+  MapPin,
+  ArrowRight,
+} from '@phosphor-icons/react';
 import { useTrip } from '@/context/TripContext';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getTripUrl } from '@/utils/slugify';
+import { Mono, Pill, TopoBg } from '@/components/redesign';
 
 interface ShareLinkInfo {
   tripId: string;
@@ -18,6 +26,16 @@ interface ShareLinkInfo {
   totalDistance: string;
   destinations: string[];
 }
+
+// Shell wrapper — every state (loading / error / sign-in / accept) renders
+// inside the same cream-with-topo backdrop and centered card so transitions
+// between states feel continuous.
+const JoinShell = ({ children }: { children: React.ReactNode }) => (
+  <div className="min-h-screen bg-cream text-ink font-sans relative flex items-center justify-center p-6 overflow-hidden">
+    <TopoBg color="hsl(var(--paper))" opacity={0.55} scale={700} />
+    <div className="relative w-full max-w-[440px]">{children}</div>
+  </div>
+);
 
 const JoinTrip = () => {
   const { token } = useParams<{ token: string }>();
@@ -30,7 +48,7 @@ const JoinTrip = () => {
   const [error, setError] = useState<string | null>(null);
   const [linkInfo, setLinkInfo] = useState<ShareLinkInfo | null>(null);
 
-  // Fetch share link info using security definer function
+  // Fetch share link info via security-definer RPC.
   useEffect(() => {
     const fetchLinkInfo = async () => {
       if (!token) {
@@ -40,9 +58,22 @@ const JoinTrip = () => {
       }
 
       try {
-        // Use the security definer function to get trip preview
-        const { data, error } = await supabase
-          .rpc('get_trip_preview_by_token', { share_token: token });
+        const { data: rawData, error } = await supabase.rpc('get_trip_preview_by_token', {
+          share_token: token,
+        });
+
+        // RPC returns a Json blob; widen via typed cast rather than `as any`.
+        const data = rawData as
+          | {
+              trip_id?: string;
+              trip_name?: string;
+              permission?: 'view' | 'edit';
+              owner_name?: string;
+              days_count?: number;
+              total_distance?: string;
+              destinations?: Array<{ name?: string } | string>;
+            }
+          | null;
 
         if (error || !data) {
           console.error('Error fetching trip preview:', error);
@@ -52,15 +83,14 @@ const JoinTrip = () => {
         }
 
         const destinations = data.destinations || [];
-
         setLinkInfo({
-          tripId: data.trip_id,
-          tripName: data.trip_name || 'Untitled Trip',
-          permission: data.permission as 'view' | 'edit',
+          tripId: data.trip_id || '',
+          tripName: data.trip_name || 'Untitled trip',
+          permission: data.permission || 'view',
           ownerName: data.owner_name || undefined,
           daysCount: data.days_count || 0,
           totalDistance: data.total_distance || '0 mi',
-          destinations: destinations.slice(0, 3).map((d: any) => d.name || d),
+          destinations: destinations.slice(0, 3).map((d) => (typeof d === 'string' ? d : d.name || '')),
         });
       } catch (err) {
         console.error('Error fetching link info:', err);
@@ -75,7 +105,6 @@ const JoinTrip = () => {
 
   const handleJoin = async () => {
     if (!token) return;
-
     setJoining(true);
     const result = await joinTripByLink(token);
     setJoining(false);
@@ -83,159 +112,185 @@ const JoinTrip = () => {
     if (result.error) {
       toast.error(result.error);
     } else if (result.tripId) {
-      toast.success('You now have access to this trip!');
-      // Load the trip into context before navigating
+      toast.success('You now have access to this trip');
       loadSavedTrip(result.tripId);
       navigate(getTripUrl(linkInfo?.tripName));
     }
   };
 
+  // === Loading state ===
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex items-center gap-3 text-muted-foreground">
-          <SpinnerGap className="w-6 h-6 animate-spin" />
-          <span>Loading trip details...</span>
+      <JoinShell>
+        <div className="bg-white border border-line rounded-[18px] p-10 text-center shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/10 mb-4">
+            <SpinnerGap className="w-6 h-6 text-pine-6 animate-spin" />
+          </div>
+          <Mono className="text-pine-6">Loading trip</Mono>
+          <p className="text-[14px] text-ink-3 mt-2">Pulling trip details…</p>
         </div>
-      </div>
+      </JoinShell>
     );
   }
 
+  // === Error state ===
   if (error) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="max-w-md w-full">
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <WarningCircle className="w-8 h-8 text-destructive" />
-              </div>
-              <h2 className="text-xl font-bold text-foreground mb-2">Unable to Join Trip</h2>
-              <p className="text-muted-foreground mb-6">{error}</p>
-              <Link to="/">
-                <Button variant="outline">Go to Home</Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="max-w-md w-full">
-          <CardHeader className="text-center">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Users className="w-8 h-8 text-primary" />
-            </div>
-            <CardTitle>Sign In to Join Trip</CardTitle>
-            <CardDescription>
-              You need to be signed in to join "{linkInfo?.tripName}"
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <Link to="/auth" state={{ returnTo: `/join/${token}` }}>
-                <Button variant="primary" className="w-full">Sign In</Button>
-              </Link>
-              <Link to="/">
-                <Button variant="outline" className="w-full">Go to Home</Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="max-w-md w-full">
-        <CardHeader className="text-center">
-          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Compass className="w-8 h-8 text-primary" />
+      <JoinShell>
+        <div className="bg-white border border-line rounded-[18px] p-8 text-center shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-ember/15 text-ember mb-4">
+            <WarningCircle className="w-6 h-6" weight="regular" />
           </div>
-          <CardTitle className="text-2xl">{linkInfo?.tripName}</CardTitle>
-          {linkInfo?.ownerName && (
-            <CardDescription>Shared by {linkInfo.ownerName}</CardDescription>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Trip Summary */}
-          <div className="grid grid-cols-2 gap-4 text-center">
-            <div className="p-3 bg-secondary/50 rounded-lg">
-              <Calendar className="w-5 h-5 text-primary mx-auto mb-1" />
-              <p className="font-semibold text-foreground">{linkInfo?.daysCount} days</p>
-              <p className="text-xs text-muted-foreground">Duration</p>
-            </div>
-            <div className="p-3 bg-secondary/50 rounded-lg">
-              <Path className="w-5 h-5 text-terracotta mx-auto mb-1" />
-              <p className="font-semibold text-foreground">{linkInfo?.totalDistance}</p>
-              <p className="text-xs text-muted-foreground">Total Distance</p>
-            </div>
-          </div>
-
-          {/* Destinations */}
-          {linkInfo?.destinations && linkInfo.destinations.length > 0 && (
-            <div>
-              <p className="text-sm font-medium text-foreground mb-2">Destinations</p>
-              <div className="flex flex-wrap gap-2">
-                {linkInfo.destinations.map((dest, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center gap-1 px-2 py-1 bg-secondary/50 rounded-full text-xs text-muted-foreground"
-                  >
-                    <MapPin className="w-3 h-3" />
-                    {dest}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Permission Badge */}
-          <div className="flex items-center justify-center gap-2 p-3 bg-primary/5 rounded-lg">
-            <span className="text-sm text-muted-foreground">You'll have</span>
-            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-              linkInfo?.permission === 'edit'
-                ? 'bg-emerald-500/10 text-emerald-600'
-                : 'bg-blue-500/10 text-blue-600'
-            }`}>
-              {linkInfo?.permission === 'edit' ? 'Edit Access' : 'View Only'}
-            </span>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="space-y-3">
-            <Button
-              variant="primary"
-              className="w-full"
-              onClick={handleJoin}
-              disabled={joining}
+          <Mono className="text-ember">Unable to join</Mono>
+          <h1 className="text-[24px] font-sans font-bold tracking-[-0.025em] text-ink leading-[1.1] mt-2">
+            This share link doesn't work.
+          </h1>
+          <p className="text-[14px] text-ink-3 mt-3 leading-[1.55]">{error}</p>
+          <div className="mt-6 flex justify-center">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-line bg-white text-ink text-[14px] font-sans font-semibold hover:border-ink-3 transition-colors"
             >
-              {joining ? (
-                <>
-                  <SpinnerGap className="w-4 h-4 mr-2 animate-spin" />
-                  Joining...
-                </>
-              ) : (
-                <>
-                  <Users className="w-4 h-4 mr-2" />
-                  Join This Trip
-                </>
-              )}
-            </Button>
-            <Link to="/">
-              <Button variant="outline" className="w-full">
-                Maybe Later
-              </Button>
+              Go home
             </Link>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </JoinShell>
+    );
+  }
+
+  // === Sign-in required state ===
+  if (!user) {
+    return (
+      <JoinShell>
+        <div className="bg-white border border-line rounded-[18px] p-8 text-center shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/10 text-pine-6 mb-4">
+            <Users className="w-6 h-6" weight="regular" />
+          </div>
+          <Mono className="text-pine-6">Sign in to join</Mono>
+          <h1 className="text-[24px] font-sans font-bold tracking-[-0.025em] text-ink leading-[1.1] mt-2">
+            "{linkInfo?.tripName}"
+          </h1>
+          <p className="text-[14px] text-ink-3 mt-3 leading-[1.55]">
+            You need a RoamsWild account to join this trip.
+          </p>
+          <div className="mt-6 space-y-2">
+            <Link
+              to="/login"
+              state={{ returnTo: `/join/${token}` }}
+              className="inline-flex w-full items-center justify-center gap-2 px-5 py-2.5 rounded-[14px] bg-pine-6 text-cream text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors"
+            >
+              Sign in
+              <ArrowRight className="w-4 h-4" weight="bold" />
+            </Link>
+            <Link
+              to="/"
+              className="inline-flex w-full items-center justify-center gap-2 px-5 py-2.5 rounded-[14px] border border-line bg-white text-ink text-[14px] font-sans font-semibold hover:border-ink-3 transition-colors"
+            >
+              Go home
+            </Link>
+          </div>
+        </div>
+      </JoinShell>
+    );
+  }
+
+  // === Trip preview / accept state ===
+  return (
+    <JoinShell>
+      <div className="bg-white border border-line rounded-[18px] p-8 shadow-[0_18px_44px_rgba(29,34,24,.08),0_3px_8px_rgba(29,34,24,.04)]">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/10 text-pine-6 mb-4">
+            <Compass className="w-6 h-6" weight="regular" />
+          </div>
+          <Mono className="text-pine-6">Trip invitation</Mono>
+          <h1 className="text-[26px] font-sans font-bold tracking-[-0.025em] text-ink leading-[1.1] mt-2">
+            {linkInfo?.tripName}
+          </h1>
+          {linkInfo?.ownerName && (
+            <p className="text-[13px] text-ink-3 mt-2">Shared by {linkInfo.ownerName}</p>
+          )}
+        </div>
+
+        {/* Trip summary — 2 stat tiles */}
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <div className="px-3 py-3 rounded-[12px] border border-line bg-cream text-center">
+            <Calendar className="w-4 h-4 text-pine-6 mx-auto" weight="regular" />
+            <p className="text-[18px] font-sans font-bold tracking-[-0.015em] text-ink mt-1.5">
+              {linkInfo?.daysCount} {linkInfo?.daysCount === 1 ? 'day' : 'days'}
+            </p>
+            <Mono className="text-ink-3 block mt-0.5">Duration</Mono>
+          </div>
+          <div className="px-3 py-3 rounded-[12px] border border-line bg-cream text-center">
+            <Path className="w-4 h-4 text-clay mx-auto" weight="regular" />
+            <p className="text-[18px] font-sans font-bold tracking-[-0.015em] text-ink mt-1.5">
+              {linkInfo?.totalDistance}
+            </p>
+            <Mono className="text-ink-3 block mt-0.5">Distance</Mono>
+          </div>
+        </div>
+
+        {/* Destinations */}
+        {linkInfo?.destinations && linkInfo.destinations.length > 0 && (
+          <div className="mt-5">
+            <Mono className="text-ink-2 block mb-2">Destinations</Mono>
+            <div className="flex flex-wrap gap-1.5">
+              {linkInfo.destinations.map((dest, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-cream border border-line text-[12px] font-sans font-semibold text-ink"
+                >
+                  <MapPin className="w-3 h-3 text-pine-6" weight="regular" />
+                  {dest}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Permission badge */}
+        <div className="mt-5 flex items-center justify-center gap-2 px-3 py-2.5 rounded-[12px] border border-line bg-cream">
+          <Mono className="text-ink-3">You'll have</Mono>
+          <span
+            className={
+              linkInfo?.permission === 'edit'
+                ? 'inline-flex items-center px-2 py-0.5 rounded-full border border-pine-6/40 bg-pine-6/10 text-pine-6 text-[10px] font-mono font-semibold uppercase tracking-[0.10em]'
+                : 'inline-flex items-center px-2 py-0.5 rounded-full border border-water/40 bg-water/15 text-water text-[10px] font-mono font-semibold uppercase tracking-[0.10em]'
+            }
+          >
+            {linkInfo?.permission === 'edit' ? 'Edit access' : 'View only'}
+          </span>
+        </div>
+
+        {/* Action pills */}
+        <div className="mt-6 space-y-2">
+          <Pill
+            variant="solid-pine"
+            mono={false}
+            onClick={handleJoin}
+            className={`!w-full !justify-center ${joining ? 'opacity-50 pointer-events-none' : ''}`}
+          >
+            {joining ? (
+              <>
+                <SpinnerGap className="w-4 h-4 animate-spin" />
+                Joining…
+              </>
+            ) : (
+              <>
+                <Users className="w-4 h-4" weight="regular" />
+                Join this trip
+              </>
+            )}
+          </Pill>
+          <Link
+            to="/"
+            className="inline-flex w-full items-center justify-center gap-2 px-5 py-2.5 rounded-[14px] border border-line bg-white text-ink text-[14px] font-sans font-semibold hover:border-ink-3 transition-colors"
+          >
+            Maybe later
+          </Link>
+        </div>
+      </div>
+    </JoinShell>
   );
 };
 

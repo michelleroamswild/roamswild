@@ -13,10 +13,12 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <SpinnerGap className="w-8 h-8 text-primary animate-spin" />
-          <p className="text-muted-foreground">Loading...</p>
+      <div className="min-h-screen bg-cream flex items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-3">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10">
+            <SpinnerGap className="w-5 h-5 text-pine-6 animate-spin" />
+          </div>
+          <p className="text-[12px] font-mono font-semibold uppercase tracking-[0.12em] text-pine-6">Loading…</p>
         </div>
       </div>
     );

@@ -31,6 +31,7 @@ import { DispersedMap } from '@/components/dispersed-explorer/DispersedMap';
 import type { UnifiedSpot } from '@/components/dispersed-explorer/types';
 import { Mono } from '@/components/redesign';
 import { cn } from '@/lib/utils';
+import { AccountAvatarMenu } from '@/components/AccountAvatarMenu';
 
 
 const DispersedExplorer = () => {
@@ -1513,14 +1514,6 @@ const DispersedExplorer = () => {
     ? `${searchLocation.lat.toFixed(2)}${searchLocation.lat >= 0 ? 'N' : 'S'} · ${Math.abs(searchLocation.lng).toFixed(2)}${searchLocation.lng >= 0 ? 'E' : 'W'}`
     : null;
   const placeLabel = searchLocation?.name?.split(',')[0]?.trim() || null;
-  const userName = user?.user_metadata?.name as string | undefined;
-  const userEmail = user?.email;
-  const initials = (() => {
-    const src = userName || userEmail || '';
-    const parts = src.split(/\s+/);
-    if (parts.length >= 2 && parts[0] && parts[1]) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return src.slice(0, 2).toUpperCase() || '··';
-  })();
 
   return (
     <div className="h-screen bg-paper text-ink font-sans flex flex-col overflow-hidden">
@@ -1647,7 +1640,6 @@ const DispersedExplorer = () => {
         <ExploreHeaderPills
           coordLabel={coordLabel}
           placeLabel={placeLabel}
-          initials={initials}
           searchLocation={searchLocation}
           onSearchChange={handleLocationChange}
         />
@@ -2004,16 +1996,18 @@ const CacheStrip = ({
 const ExploreHeaderPills = ({
   coordLabel,
   placeLabel,
-  initials,
   searchLocation,
   onSearchChange,
 }: {
   coordLabel: string | null;
   placeLabel: string | null;
-  initials: string;
   searchLocation: SelectedLocation | null;
   onSearchChange: (loc: SelectedLocation) => void;
-}) => (
+}) => {
+  const { pathname } = useLocation();
+  const isOn = (p: string) => (p === '/' ? pathname === '/' : pathname.startsWith(p));
+
+  return (
   <div className="hidden lg:block pointer-events-none">
     {/* Left pill — logo + nav links */}
     <div className="absolute top-5 left-5 z-20 pointer-events-auto inline-flex items-center gap-2.5 px-3.5 py-2 bg-cream/95 backdrop-blur-md border border-line rounded-full shadow-[0_4px_12px_rgba(29,34,24,.08)]">
@@ -2022,9 +2016,9 @@ const ExploreHeaderPills = ({
         <span className="text-[14px] font-sans font-bold tracking-[-0.01em] text-ink">RoamsWild</span>
       </Link>
       <span className="w-px h-3.5 bg-line mx-1" />
-      <NavLink to="/dispersed" active>Explore</NavLink>
-      <NavLink to="/my-trips">Trips</NavLink>
-      <NavLink to="/saved">Saved</NavLink>
+      <NavLink to="/dispersed" active={isOn('/dispersed')}>Explore</NavLink>
+      <NavLink to="/my-trips"  active={isOn('/my-trips')}>Trips</NavLink>
+      <NavLink to="/saved"     active={isOn('/saved')}>Saved</NavLink>
     </div>
 
     {/* Center pill — search bar with leading icon, input, mono coords,
@@ -2063,16 +2057,18 @@ const ExploreHeaderPills = ({
       </div>
     </div>
 
-    {/* Right pill — place label + avatar */}
+    {/* Right pill — place label + account menu (opens the same dropdown
+        as the global Header's avatar). */}
     <div className="absolute top-5 right-5 z-20 pointer-events-auto inline-flex items-center gap-2 pl-3 pr-1 py-1 bg-cream/95 backdrop-blur-md border border-line rounded-full shadow-[0_4px_12px_rgba(29,34,24,.08)]">
       {placeLabel && <Mono className="text-ink-2">{placeLabel}</Mono>}
-      <div className="w-7 h-7 rounded-full bg-pine-6 text-cream inline-flex items-center justify-center text-[11px] font-sans font-semibold tracking-[0.02em]">
-        {initials}
-      </div>
+      <AccountAvatarMenu size="sm" />
     </div>
   </div>
-);
+  );
+};
 
+// Same active treatment as the global Header (solid-ink fill with cream
+// text) so the active-page indicator looks identical across both navs.
 const NavLink = ({
   to,
   active,
@@ -2085,8 +2081,10 @@ const NavLink = ({
   <Link
     to={to}
     className={cn(
-      'text-[12px] font-sans font-semibold tracking-[-0.005em] px-1.5 py-0.5 transition-colors',
-      active ? 'text-pine-6' : 'text-ink-3 hover:text-ink',
+      'inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-sans font-semibold tracking-[-0.005em] transition-colors',
+      active
+        ? 'bg-ink text-cream hover:bg-ink-2'
+        : 'text-ink hover:bg-ink/5',
     )}
   >
     {children}

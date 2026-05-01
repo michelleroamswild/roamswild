@@ -15,6 +15,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { FeatureGate } from "@/components/FeatureGate";
 import { SpinnerGap } from "@phosphor-icons/react";
 import Index from "./pages/Index";
+import { RouteTransition } from "@/components/RouteTransition";
 import Landing from "./pages/Landing";
 import RouteDetail from "./pages/RouteDetail";
 import LocationDetail from "./pages/LocationDetail";
@@ -49,10 +50,12 @@ const HomeRoute = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <SpinnerGap className="w-8 h-8 text-primary animate-spin" />
-          <p className="text-muted-foreground">Loading...</p>
+      <div className="min-h-screen bg-cream flex items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-3">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10">
+            <SpinnerGap className="w-5 h-5 text-pine-6 animate-spin" />
+          </div>
+          <p className="text-[12px] font-mono font-semibold uppercase tracking-[0.12em] text-pine-6">Loading…</p>
         </div>
       </div>
     );
@@ -76,6 +79,7 @@ const App = () => (
               <Toaster />
               <Sonner />
               <BrowserRouter>
+                <RouteTransition>
                 <Routes>
                   {/* Public routes */}
                   <Route path="/login" element={<Login />} />
@@ -129,6 +133,7 @@ const App = () => (
                   {/* Catch-all */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
+                </RouteTransition>
                 <ChatAssistant />
               </BrowserRouter>
             </TooltipProvider>

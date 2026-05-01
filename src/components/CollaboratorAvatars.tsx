@@ -1,4 +1,3 @@
-import { Users } from '@phosphor-icons/react';
 import {
   Tooltip,
   TooltipContent,
@@ -7,6 +6,7 @@ import {
 } from './ui/tooltip';
 import { Collaborator } from '@/context/TripContext';
 import { useAuth } from '@/context/AuthContext';
+import { Mono } from '@/components/redesign';
 
 interface CollaboratorAvatarsProps {
   collaborators: Collaborator[];
@@ -28,16 +28,15 @@ const getInitials = (name?: string, email?: string): string => {
   return '?';
 };
 
-// Generate a consistent color based on user ID using site accent colors
+// Hash userId to one of the Pine + Paper accent tokens for consistent avatar colors.
 const getAvatarColor = (userId: string): string => {
   const colors = [
-    'bg-pinesoft',
-    'bg-aquateal',
-    'bg-skyblue',
-    'bg-lavenderslate',
-    'bg-softamber',
-    'bg-blushorchid',
-    'bg-terracotta',
+    'bg-pine-6 text-cream',
+    'bg-sage text-cream',
+    'bg-water text-cream',
+    'bg-clay text-cream',
+    'bg-ember text-cream',
+    'bg-ink text-cream',
   ];
 
   let hash = 0;
@@ -78,18 +77,18 @@ export function CollaboratorAvatars({
           <Tooltip key={collab.id}>
             <TooltipTrigger asChild>
               <div
-                className={`${sizeClasses[size]} ${getAvatarColor(collab.userId)} rounded-full flex items-center justify-center text-white font-extrabold tracking-wide cursor-default`}
+                className={`${sizeClasses[size]} ${getAvatarColor(collab.userId)} rounded-full flex items-center justify-center font-sans font-semibold tracking-[0.02em] cursor-default`}
               >
                 {getInitials(collab.name, collab.email)}
               </div>
             </TooltipTrigger>
             <TooltipContent>
-              <p className="font-medium">
+              <p className="text-[13px] font-sans font-semibold tracking-[-0.005em] text-ink">
                 {collab.userId === user?.id ? 'You' : (collab.name || collab.email)}
               </p>
-              <p className="text-xs text-muted-foreground capitalize">
+              <Mono className="text-ink-3 mt-0.5 block capitalize">
                 {collab.permission === 'owner' ? 'Owner' : `${collab.permission} access`}
-              </p>
+              </Mono>
             </TooltipContent>
           </Tooltip>
         ))}
@@ -98,13 +97,15 @@ export function CollaboratorAvatars({
           <Tooltip>
             <TooltipTrigger asChild>
               <div
-                className={`${sizeClasses[size]} bg-muted rounded-full flex items-center justify-center text-muted-foreground font-extrabold tracking-wide cursor-default`}
+                className={`${sizeClasses[size]} bg-cream border border-line rounded-full flex items-center justify-center text-ink-2 font-sans font-semibold tracking-[0.02em] cursor-default`}
               >
                 +{remainingCount}
               </div>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{remainingCount} more collaborator{remainingCount > 1 ? 's' : ''}</p>
+              <p className="text-[13px] font-sans text-ink">
+                {remainingCount} more collaborator{remainingCount > 1 ? 's' : ''}
+              </p>
             </TooltipContent>
           </Tooltip>
         )}

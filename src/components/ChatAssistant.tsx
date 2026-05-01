@@ -25,12 +25,20 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/components/ui/drawer';
+import { Mono } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
-const STARTER_PROMPTS = [
-  { icon: Compass, label: "What's a good hike for today?" },
-  { icon: Mountains, label: 'Help me plan a trip' },
-  { icon: Tent, label: 'Find a campsite near Moab' },
+const STARTER_PROMPTS: Array<{ icon: typeof Compass; label: string; accent: 'sage' | 'pine' | 'clay' }> = [
+  { icon: Compass, label: "What's a good hike for today?", accent: 'sage' },
+  { icon: Mountains, label: 'Help me plan a trip', accent: 'pine' },
+  { icon: Tent, label: 'Find a campsite near Moab', accent: 'clay' },
 ];
+
+const ACCENT_TONES: Record<'sage' | 'pine' | 'clay', { bg: string; text: string }> = {
+  sage: { bg: 'bg-sage/15', text: 'text-sage' },
+  pine: { bg: 'bg-pine-6/12', text: 'text-pine-6' },
+  clay: { bg: 'bg-clay/15', text: 'text-clay' },
+};
 
 function InlineFormatted({ text }: { text: string }) {
   const parts = text.split(/\*\*(.+?)\*\*/g);
@@ -41,7 +49,7 @@ function InlineFormatted({ text }: { text: string }) {
           <strong key={i} className="font-semibold">{part}</strong>
         ) : (
           <span key={i}>{part}</span>
-        )
+        ),
       )}
     </>
   );
@@ -92,7 +100,7 @@ async function geocodePlace(query: string): Promise<TripDestination | null> {
         } else {
           resolve(null);
         }
-      }
+      },
     );
   });
 }
@@ -106,12 +114,10 @@ function TripActionButton({ suggestion }: { suggestion: TripSuggestion }) {
 
   const handleClick = useCallback(async () => {
     setGenerating(true);
-    toast.loading('Generating your trip...', { id: 'chat-trip' });
+    toast.loading('Generating your trip…', { id: 'chat-trip' });
 
     try {
-      const geocoded = await Promise.all(
-        suggestion.destinations.map((name) => geocodePlace(name))
-      );
+      const geocoded = await Promise.all(suggestion.destinations.map((name) => geocodePlace(name)));
       const destinations = geocoded.filter((d): d is TripDestination => d !== null);
 
       if (destinations.length === 0) {
@@ -121,9 +127,7 @@ function TripActionButton({ suggestion }: { suggestion: TripSuggestion }) {
       }
 
       const startDest = destinations[0];
-      const tripDestinations = destinations.slice(1).length > 0
-        ? destinations.slice(1)
-        : destinations;
+      const tripDestinations = destinations.slice(1).length > 0 ? destinations.slice(1) : destinations;
 
       const config: TripConfig = {
         name: suggestion.name,
@@ -147,7 +151,7 @@ function TripActionButton({ suggestion }: { suggestion: TripSuggestion }) {
 
       if (trip) {
         setGeneratedTrip(trip);
-        toast.success('Trip created!', { id: 'chat-trip', description: suggestion.name });
+        toast.success('Trip created', { id: 'chat-trip', description: suggestion.name });
         setIsOpen(false);
         navigate(getTripUrl(trip.config.name));
       } else {
@@ -165,17 +169,20 @@ function TripActionButton({ suggestion }: { suggestion: TripSuggestion }) {
     <button
       onClick={handleClick}
       disabled={generating}
-      className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-70"
+      className={cn(
+        'mt-2 w-full flex items-center justify-center gap-1.5 px-4 py-2 min-h-[40px] rounded-full bg-pine-6 text-cream border border-pine-6 text-[12px] font-sans font-semibold tracking-[0.01em]',
+        'hover:bg-pine-5 hover:border-pine-5 transition-colors disabled:opacity-50',
+      )}
     >
       {generating ? (
         <>
-          <SpinnerGap className="w-4 h-4 animate-spin" />
-          Generating trip...
+          <SpinnerGap className="w-3.5 h-3.5 animate-spin" />
+          Generating trip…
         </>
       ) : (
         <>
-          <RocketLaunch className="w-4 h-4" weight="fill" />
-          Let's go!
+          <RocketLaunch className="w-3.5 h-3.5" weight="regular" />
+          Let's go
         </>
       )}
     </button>
@@ -188,11 +195,12 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
       <div
-        className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+        className={cn(
+          'max-w-[85%] rounded-[14px] px-3.5 py-2.5 text-[13px] leading-[1.55] font-sans',
           isUser
-            ? 'bg-primary text-primary-foreground rounded-br-md'
-            : 'bg-muted text-foreground rounded-bl-md'
-        }`}
+            ? 'bg-pine-6 text-cream rounded-br-[6px]'
+            : 'bg-cream border border-line text-ink rounded-bl-[6px]',
+        )}
       >
         <FormattedText text={msg.content} />
       </div>
@@ -220,8 +228,8 @@ function ChatMessages() {
       ))}
       {isLoading && (
         <div className="flex justify-start">
-          <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
-            <SpinnerGap className="w-4 h-4 text-muted-foreground animate-spin" />
+          <div className="bg-cream border border-line rounded-[14px] rounded-bl-[6px] px-4 py-3">
+            <SpinnerGap className="w-4 h-4 text-pine-6 animate-spin" />
           </div>
         </div>
       )}
@@ -235,26 +243,32 @@ function StarterPrompts() {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 text-center">
-      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-        <Mountains className="w-6 h-6 text-primary" />
+      <div className="w-12 h-12 rounded-full bg-pine-6/10 flex items-center justify-center mb-3">
+        <Mountains className="w-6 h-6 text-pine-6" weight="regular" />
       </div>
-      <h3 className="font-display font-semibold text-foreground mb-1">
-        Hey! I'm Basecamp
+      <Mono className="text-pine-6 block">Basecamp</Mono>
+      <h3 className="font-sans font-bold tracking-[-0.015em] text-[18px] text-ink mt-1">
+        Hey! I'm your trip planner.
       </h3>
-      <p className="text-sm text-muted-foreground mb-6">
-        Your trip planning assistant. What can I help with?
+      <p className="text-[13px] text-ink-3 mt-1.5 max-w-[260px]">
+        What can I help you plan today?
       </p>
-      <div className="w-full space-y-2">
-        {STARTER_PROMPTS.map((prompt) => (
-          <button
-            key={prompt.label}
-            onClick={() => sendMessage(prompt.label)}
-            className="w-full flex items-center gap-3 px-4 py-3 min-h-[44px] rounded-xl border border-border bg-card hover:bg-muted/50 transition-colors text-left"
-          >
-            <prompt.icon className="w-5 h-5 text-primary flex-shrink-0" />
-            <span className="text-sm text-foreground">{prompt.label}</span>
-          </button>
-        ))}
+      <div className="w-full space-y-2 mt-5">
+        {STARTER_PROMPTS.map((prompt) => {
+          const tone = ACCENT_TONES[prompt.accent];
+          return (
+            <button
+              key={prompt.label}
+              onClick={() => sendMessage(prompt.label)}
+              className="w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-[12px] border border-line bg-white hover:border-ink-3/40 hover:bg-cream transition-colors text-left"
+            >
+              <div className={cn('w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0', tone.bg, tone.text)}>
+                <prompt.icon className="w-4 h-4" weight="regular" />
+              </div>
+              <span className="text-[13px] font-sans text-ink leading-[1.4]">{prompt.label}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -288,7 +302,7 @@ function ChatInput() {
   };
 
   return (
-    <div className="border-t border-border px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <div className="border-t border-line bg-cream px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <div className="flex items-end gap-2">
         <textarea
           ref={textareaRef}
@@ -298,16 +312,17 @@ function ChatInput() {
             handleInput();
           }}
           onKeyDown={handleKeyDown}
-          placeholder="Ask me anything..."
+          placeholder="Ask me anything…"
           rows={1}
-          className="flex-1 resize-none bg-muted rounded-xl px-3.5 py-2.5 text-sm min-h-[40px] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="flex-1 resize-none bg-white border border-line rounded-[12px] px-3 py-2.5 text-[14px] text-ink font-sans min-h-[40px] placeholder:text-ink-3 outline-none focus:border-pine-6 transition-colors"
         />
         <button
           onClick={handleSend}
           disabled={!input.trim() || isLoading}
-          className="flex-shrink-0 w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-40 transition-opacity hover:bg-primary/90"
+          className="flex-shrink-0 w-10 h-10 rounded-[12px] bg-pine-6 text-cream flex items-center justify-center disabled:opacity-40 transition-colors hover:bg-pine-5"
+          aria-label="Send"
         >
-          <PaperPlaneRight className="w-4 h-4" weight="fill" />
+          <PaperPlaneRight className="w-4 h-4" weight="regular" />
         </button>
       </div>
     </div>
@@ -315,11 +330,11 @@ function ChatInput() {
 }
 
 function ChatPanel() {
-  const { messages, clearMessages } = useChatContext();
+  const { messages } = useChatContext();
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-paper">
       {hasMessages ? <ChatMessages /> : <StarterPrompts />}
       <ChatInput />
     </div>
@@ -332,8 +347,6 @@ export function ChatAssistant() {
   const isMobile = useIsMobile();
 
   if (!user) return null;
-
-  // Hide on preview pages
   if (window.location.pathname.includes('-preview')) return null;
 
   return (
@@ -342,7 +355,12 @@ export function ChatAssistant() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.5rem))] right-4 sm:right-6 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center"
+          className={cn(
+            'fixed bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.5rem))] right-4 sm:right-6 z-40',
+            'w-14 h-14 rounded-full bg-pine-6 text-cream',
+            'shadow-[0_10px_28px_rgba(58,74,42,.32)] hover:shadow-[0_14px_36px_rgba(58,74,42,.40)] hover:bg-pine-5 hover:scale-[1.04]',
+            'transition-all flex items-center justify-center',
+          )}
           aria-label="Open chat assistant"
         >
           <ChatCircle className="w-7 h-7" weight="fill" />
@@ -351,20 +369,24 @@ export function ChatAssistant() {
 
       {/* Desktop panel */}
       {!isMobile && isOpen && (
-        <div className="fixed bottom-6 right-6 z-40 w-96 max-h-[600px] h-[calc(100vh-8rem)] rounded-2xl shadow-2xl bg-background border border-border flex flex-col overflow-hidden">
+        <div className="fixed bottom-6 right-6 z-40 w-96 max-h-[600px] h-[calc(100vh-8rem)] rounded-[18px] shadow-[0_24px_56px_rgba(29,34,24,.20),0_4px_12px_rgba(29,34,24,.10)] bg-paper border border-line flex flex-col overflow-hidden font-sans">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
-            <div className="flex items-center gap-2">
-              <Mountains className="w-5 h-5 text-primary" />
-              <span className="font-display font-semibold text-foreground text-sm">
-                Basecamp
-              </span>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-line bg-cream">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-7 h-7 rounded-[8px] bg-pine-6/12 text-pine-6 flex items-center justify-center flex-shrink-0">
+                <Mountains className="w-4 h-4" weight="regular" />
+              </div>
+              <div className="min-w-0">
+                <Mono className="text-pine-6 block leading-none">Basecamp</Mono>
+                <span className="text-[11px] text-ink-3 mt-0.5 block leading-none">Trip planning chat</span>
+              </div>
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-2 rounded-lg hover:bg-muted transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
+              aria-label="Close chat"
+              className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors"
             >
-              <X className="w-4 h-4 text-muted-foreground" />
+              <X className="w-4 h-4" weight="regular" />
             </button>
           </div>
           <ChatPanel />
@@ -374,11 +396,11 @@ export function ChatAssistant() {
       {/* Mobile drawer */}
       {isMobile && (
         <Drawer open={isOpen} onOpenChange={setIsOpen}>
-          <DrawerContent className="h-[85dvh] max-h-[85dvh]">
+          <DrawerContent className="h-[85dvh] max-h-[85dvh] bg-paper border-line">
             <DrawerHeader className="sr-only">
               <DrawerTitle>Basecamp Chat</DrawerTitle>
             </DrawerHeader>
-            <div className="flex-1 flex flex-col overflow-hidden pb-safe">
+            <div className="flex-1 flex flex-col overflow-hidden pb-safe font-sans">
               <ChatPanel />
             </div>
           </DrawerContent>

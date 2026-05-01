@@ -1,9 +1,9 @@
 import { Calendar, Clock, MapPin, NavigationArrow, Path, X } from '@phosphor-icons/react';
 import { DirectionsRenderer, InfoWindow, Marker } from '@react-google-maps/api';
-import { Button } from '@/components/ui/button';
 import { GoogleMap } from '@/components/GoogleMap';
 import { GeneratedTrip, TripConfig, TripStop } from '@/types/trip';
 import { createMarkerIcon, createSimpleMarkerIcon } from '@/utils/mapMarkers';
+import { Mono, Pill } from '@/components/redesign';
 
 interface TripMapViewProps {
   tripConfig: TripConfig;
@@ -38,6 +38,9 @@ export const TripMapView = ({
   onNavigateDay,
   onStartNavigation,
 }: TripMapViewProps) => {
+  // Pine + Paper route stroke (cream on dark, pine on light satellite)
+  const strokeColor = isDark ? '#d9d0c3' : '#3a4a2a';
+
   return (
     <div className="order-2 lg:order-1 h-[280px] sm:h-[400px] lg:h-[calc(100vh-120px)] lg:sticky lg:top-[120px]">
       <div className="relative w-full h-full">
@@ -48,18 +51,13 @@ export const TripMapView = ({
           onLoad={onMapLoad}
           options={{ mapTypeId: 'satellite' }}
         >
-          {/* Route directions - show day route if day selected, otherwise full trip */}
           {activeDay !== null && dayDirections ? (
             <DirectionsRenderer
               key={`day-${activeDay}-route`}
               directions={dayDirections}
               options={{
                 suppressMarkers: true,
-                polylineOptions: {
-                  strokeColor: isDark ? '#d9d0c3' : '#2d5a3d',
-                  strokeWeight: 5,
-                  strokeOpacity: 1,
-                },
+                polylineOptions: { strokeColor, strokeWeight: 5, strokeOpacity: 1 },
               }}
             />
           ) : directions ? (
@@ -68,28 +66,23 @@ export const TripMapView = ({
               directions={directions}
               options={{
                 suppressMarkers: true,
-                polylineOptions: {
-                  strokeColor: isDark ? '#d9d0c3' : '#2d5a3d',
-                  strokeWeight: 5,
-                  strokeOpacity: 1,
-                },
+                polylineOptions: { strokeColor, strokeWeight: 5, strokeOpacity: 1 },
               }}
             />
           ) : null}
 
-          {/* Start/Base marker (only shown when viewing full trip) */}
           {!activeDay && (tripConfig.startLocation || tripConfig.baseLocation) && (
             <Marker
               position={(tripConfig.startLocation || tripConfig.baseLocation)!.coordinates}
               icon={createMarkerIcon('start', { size: 36 })}
-              title={tripConfig.startLocation
-                ? `Start: ${tripConfig.startLocation.name}`
-                : `Base: ${tripConfig.baseLocation!.name}`
+              title={
+                tripConfig.startLocation
+                  ? `Start: ${tripConfig.startLocation.name}`
+                  : `Base: ${tripConfig.baseLocation!.name}`
               }
             />
           )}
 
-          {/* Show origin marker for day preview (previous night's camp or start location) */}
           {activeDay && (() => {
             if (activeDay === 1) {
               const startLoc = tripConfig.startLocation || tripConfig.baseLocation;
@@ -105,8 +98,8 @@ export const TripMapView = ({
               }
             } else {
               for (let d = activeDay - 1; d >= 1; d--) {
-                const prevDay = generatedTrip.days.find(day => day.day === d);
-                const campsite = prevDay?.stops.find(s => s.type === 'camp');
+                const prevDay = generatedTrip.days.find((day) => day.day === d);
+                const campsite = prevDay?.stops.find((s) => s.type === 'camp');
                 if (campsite) {
                   return (
                     <Marker
@@ -122,19 +115,20 @@ export const TripMapView = ({
             return null;
           })()}
 
-          {/* Show destination marker for last day preview when returning to start */}
-          {activeDay && activeDay === generatedTrip.days.length && tripConfig.returnToStart && (tripConfig.startLocation || tripConfig.baseLocation) && (
-            <Marker
-              key="day-destination-end"
-              position={(tripConfig.startLocation || tripConfig.baseLocation)!.coordinates}
-              icon={createMarkerIcon('end', { isActive: true, size: 36 })}
-              title={`End: ${(tripConfig.startLocation || tripConfig.baseLocation)!.name}`}
-            />
-          )}
+          {activeDay &&
+            activeDay === generatedTrip.days.length &&
+            tripConfig.returnToStart &&
+            (tripConfig.startLocation || tripConfig.baseLocation) && (
+              <Marker
+                key="day-destination-end"
+                position={(tripConfig.startLocation || tripConfig.baseLocation)!.coordinates}
+                icon={createMarkerIcon('end', { isActive: true, size: 36 })}
+                title={`End: ${(tripConfig.startLocation || tripConfig.baseLocation)!.name}`}
+              />
+            )}
 
-          {/* Show end marker when trip doesn't return to start */}
           {!activeDay && !tripConfig.returnToStart && (() => {
-            const endStop = allStops.find(s => s.type === 'end');
+            const endStop = allStops.find((s) => s.type === 'end');
             if (endStop) {
               return (
                 <Marker
@@ -148,10 +142,9 @@ export const TripMapView = ({
             return null;
           })()}
 
-          {/* Show end marker for last day preview when NOT returning to start */}
           {activeDay && activeDay === generatedTrip.days.length && !tripConfig.returnToStart && (() => {
-            const dayStops = generatedTrip.days.find(d => d.day === activeDay)?.stops || [];
-            const endStop = dayStops.find(s => s.type === 'end');
+            const dayStops = generatedTrip.days.find((d) => d.day === activeDay)?.stops || [];
+            const endStop = dayStops.find((s) => s.type === 'end');
             if (endStop) {
               return (
                 <Marker
@@ -165,9 +158,8 @@ export const TripMapView = ({
             return null;
           })()}
 
-          {/* Show only active day's stops when day is selected, otherwise all stops */}
-          {(activeDay ? generatedTrip.days.find(d => d.day === activeDay)?.stops || [] : allStops)
-            .filter(stop => stop.type !== 'end')
+          {(activeDay ? generatedTrip.days.find((d) => d.day === activeDay)?.stops || [] : allStops)
+            .filter((stop) => stop.type !== 'end')
             .map((stop) => (
               <Marker
                 key={stop.id}
@@ -178,32 +170,36 @@ export const TripMapView = ({
               />
             ))}
 
-          {/* Info window for selected stop */}
           {selectedStop && (
-            <InfoWindow
-              position={selectedStop.coordinates}
-              onCloseClick={() => onSelectStop(null)}
-            >
-              <div className="p-1 min-w-[200px]">
-                <h4 className="font-semibold text-gray-900 text-base mb-1">
+            <InfoWindow position={selectedStop.coordinates} onCloseClick={() => onSelectStop(null)}>
+              <div className="p-1 min-w-[200px] font-sans">
+                <h4 className="text-[14px] font-semibold tracking-[-0.005em] text-ink">
                   {selectedStop.name}
                 </h4>
-                <p className="text-gray-600 text-sm mb-2">{selectedStop.description}</p>
-                <div className="flex items-center gap-2 text-gray-500 text-sm mb-3">
+                {selectedStop.description && (
+                  <p className="text-[12px] text-ink-3 mt-1 leading-[1.5]">{selectedStop.description}</p>
+                )}
+                <div className="flex items-center gap-2 mt-1.5 mb-2.5 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
                   <span>Day {selectedStop.day}</span>
-                  <span>•</span>
-                  <span>{selectedStop.duration}</span>
+                  {selectedStop.duration && (
+                    <>
+                      <span>·</span>
+                      <span className="normal-case font-sans tracking-normal text-[12px]">
+                        {selectedStop.duration}
+                      </span>
+                    </>
+                  )}
                 </div>
                 <button
-                  onClick={() => {
+                  onClick={() =>
                     window.open(
                       `https://www.google.com/maps/dir/?api=1&destination=${selectedStop.coordinates.lat},${selectedStop.coordinates.lng}`,
-                      '_blank'
-                    );
-                  }}
-                  className="w-full px-3 py-1.5 bg-emerald-600 text-white text-sm rounded hover:bg-emerald-700 transition-colors"
+                      '_blank',
+                    )
+                  }
+                  className="w-full px-3 py-1.5 rounded-full bg-pine-6 text-cream text-[12px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 transition-colors"
                 >
-                  Get Directions
+                  Get directions
                 </button>
               </div>
             </InfoWindow>
@@ -212,66 +208,72 @@ export const TripMapView = ({
 
         {/* Route info overlay */}
         <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 right-2 sm:right-4 z-10">
-          <div className="bg-card/95 backdrop-blur-sm rounded-xl border border-border p-2.5 sm:p-4 shadow-lg">
+          <div className="bg-white/95 backdrop-blur-md border border-line rounded-[14px] shadow-[0_8px_22px_rgba(29,34,24,.10)] p-2.5 sm:p-3.5 font-sans">
             {activeDay ? (
-              <div className="flex items-center justify-between flex-wrap gap-2 sm:gap-4">
-                <div className="flex items-center gap-2 sm:gap-4">
-                  <div className="hidden sm:flex items-center justify-center w-10 h-10 bg-emerald-500/10 rounded-full">
-                    <span className="text-lg font-bold text-emerald-600">{activeDay}</span>
+              <div className="flex items-center justify-between flex-wrap gap-2 sm:gap-3">
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                  <div className="hidden sm:flex items-center justify-center w-10 h-10 bg-pine-6/12 rounded-[10px] flex-shrink-0">
+                    <span className="text-[16px] font-sans font-bold tracking-[-0.01em] text-pine-6 leading-none">
+                      {activeDay}
+                    </span>
                   </div>
-                  <div>
-                    <p className="font-semibold text-foreground text-sm sm:text-base">Day {activeDay}</p>
-                    <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Path className="w-3 h-3" />
-                        {generatedTrip.days.find(d => d.day === activeDay)?.drivingDistance}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {generatedTrip.days.find(d => d.day === activeDay)?.drivingTime}
-                      </span>
-                      <span className="hidden sm:flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {generatedTrip.days.find(d => d.day === activeDay)?.stops.length} stops
-                      </span>
+                  <div className="min-w-0">
+                    <p className="text-[13px] sm:text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">
+                      Day {activeDay}
+                    </p>
+                    <div className="flex items-center gap-2 sm:gap-3 mt-0.5">
+                      <Mono className="text-ink-3 inline-flex items-center gap-1">
+                        <Path className="w-3 h-3" weight="regular" />
+                        {generatedTrip.days.find((d) => d.day === activeDay)?.drivingDistance}
+                      </Mono>
+                      <Mono className="text-ink-3 inline-flex items-center gap-1">
+                        <Clock className="w-3 h-3" weight="regular" />
+                        {generatedTrip.days.find((d) => d.day === activeDay)?.drivingTime}
+                      </Mono>
+                      <Mono className="text-ink-3 hidden sm:inline-flex items-center gap-1">
+                        <MapPin className="w-3 h-3" weight="regular" />
+                        {generatedTrip.days.find((d) => d.day === activeDay)?.stops.length} stops
+                      </Mono>
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                  <Button variant="outline" size="sm" className="text-xs sm:text-sm h-8" onClick={onExitDayMode}>
-                    <X className="w-3.5 h-3.5 sm:mr-1" />
-                    <span className="hidden sm:inline">Exit Day</span>
-                  </Button>
-                  <Button variant="primary" size="sm" className="text-xs sm:text-sm h-8" onClick={onNavigateDay}>
-                    <NavigationArrow className="w-3.5 h-3.5 sm:mr-2" />
-                    <span className="hidden sm:inline">Navigate Day {activeDay}</span>
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                  <Pill variant="ghost" sm mono={false} onClick={onExitDayMode}>
+                    <X className="w-3.5 h-3.5" weight="regular" />
+                    <span className="hidden sm:inline">Exit day</span>
+                  </Pill>
+                  <Pill variant="solid-pine" sm mono={false} onClick={onNavigateDay}>
+                    <NavigationArrow className="w-3.5 h-3.5" weight="regular" />
+                    <span className="hidden sm:inline">Navigate day {activeDay}</span>
                     <span className="sm:hidden">Navigate</span>
-                  </Button>
+                  </Pill>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between flex-wrap gap-2 sm:gap-4">
-                <div className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm">
-                  <div className="flex items-center gap-1.5">
-                    <Path className="w-3.5 h-3.5 text-terracotta" />
-                    <span className="font-semibold text-foreground">
+              <div className="flex items-center justify-between flex-wrap gap-2 sm:gap-3">
+                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                  <div className="inline-flex items-center gap-1">
+                    <Path className="w-3.5 h-3.5 text-pine-6" weight="regular" />
+                    <span className="text-[13px] sm:text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">
                       {generatedTrip.totalDistance}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-foreground">{generatedTrip.totalDrivingTime}</span>
+                  <div className="inline-flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-ink-3" weight="regular" />
+                    <span className="text-[13px] sm:text-[14px] text-ink">{generatedTrip.totalDrivingTime}</span>
                   </div>
-                  <div className="hidden sm:flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-primary" />
-                    <span className="text-foreground">{generatedTrip.days.length} days</span>
+                  <div className="hidden sm:inline-flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-clay" weight="regular" />
+                    <span className="text-[13px] sm:text-[14px] text-ink">
+                      {generatedTrip.days.length} days
+                    </span>
                   </div>
                 </div>
-                <Button variant="primary" size="sm" className="text-xs sm:text-sm h-8" onClick={onStartNavigation}>
-                  <NavigationArrow className="w-3.5 h-3.5 sm:mr-2" />
-                  <span className="hidden sm:inline">Start Navigation</span>
+                <Pill variant="solid-pine" sm mono={false} onClick={onStartNavigation}>
+                  <NavigationArrow className="w-3.5 h-3.5" weight="regular" />
+                  <span className="hidden sm:inline">Start navigation</span>
                   <span className="sm:hidden">Navigate</span>
-                </Button>
+                </Pill>
               </div>
             )}
           </div>

@@ -10,8 +10,6 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { GoogleMap } from "@react-google-maps/api";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -45,6 +43,8 @@ import { useGoogleMaps } from "@/components/GoogleMapsProvider";
 import { useTerrainAnalysis } from "@/hooks/use-terrain-analysis";
 import { Header } from "@/components/Header";
 import { LocationSelector, SelectedLocation } from "@/components/LocationSelector";
+import { Mono } from "@/components/redesign";
+import { cn } from "@/lib/utils";
 import type { TerrainAnalysisResult, Subject, StandingLocation, SunPosition, RimOverlookDebugStats, DistantGlowScore } from "@/types/terrainValidation";
 
 // =============================================================================
@@ -195,13 +195,13 @@ function minutesToTime(baseTime: string, minutes: number): string {
   return base.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
-// Get light quality description
+// Get light quality description (Pine + Paper accent tokens)
 function getLightQuality(score: number): { label: string; color: string; bgColor: string } {
-  if (score >= 0.9) return { label: "Exceptional", color: "text-green-700", bgColor: "bg-green-100" };
-  if (score >= 0.7) return { label: "Great", color: "text-green-600", bgColor: "bg-green-50" };
-  if (score >= 0.5) return { label: "Good", color: "text-yellow-700", bgColor: "bg-yellow-50" };
-  if (score >= 0.3) return { label: "Fair", color: "text-orange-600", bgColor: "bg-orange-50" };
-  return { label: "Poor", color: "text-red-600", bgColor: "bg-red-50" };
+  if (score >= 0.9) return { label: "Exceptional", color: "text-pine-6", bgColor: "bg-pine-6/12" };
+  if (score >= 0.7) return { label: "Great",       color: "text-pine-6", bgColor: "bg-pine-6/[0.06]" };
+  if (score >= 0.5) return { label: "Good",        color: "text-clay",   bgColor: "bg-clay/[0.06]" };
+  if (score >= 0.3) return { label: "Fair",        color: "text-clay",   bgColor: "bg-clay/15" };
+  return { label: "Poor",                          color: "text-ember",  bgColor: "bg-ember/[0.06]" };
 }
 
 // Timeline event for light progression
@@ -330,29 +330,30 @@ function generateLightTimeline(
 function LightTimeline({ events }: { events: TimelineEvent[] }) {
   if (events.length === 0) return null;
 
+  // Pine + Paper accent palette: soft=sage, glow=clay, peak=ember, rim=water, fade=ink-3
   const typeColors: Record<TimelineEvent["type"], string> = {
-    soft: "bg-yellow-200",
-    glow: "bg-amber-400",
-    peak: "bg-orange-500",
-    rim: "bg-purple-400",
-    fade: "bg-gray-300",
+    soft: "bg-sage/40",
+    glow: "bg-clay",
+    peak: "bg-ember",
+    rim: "bg-water",
+    fade: "bg-ink-3/40",
   };
 
   const typeTextColors: Record<TimelineEvent["type"], string> = {
-    soft: "text-yellow-700",
-    glow: "text-amber-700",
-    peak: "text-orange-700",
-    rim: "text-purple-700",
-    fade: "text-gray-500",
+    soft: "text-sage",
+    glow: "text-clay",
+    peak: "text-ember",
+    rim: "text-water",
+    fade: "text-ink-3",
   };
 
   return (
-    <div className="mt-3 pt-3 border-t border-gray-100">
-      <div className="text-xs text-gray-500 mb-2 font-medium">Light Timeline</div>
+    <div className="mt-3 pt-3 border-t border-line">
+      <Mono className="text-ink-2 mb-2 block">Light timeline</Mono>
       <div className="space-y-1.5">
         {events.map((event, idx) => (
           <div key={idx} className="flex items-center gap-2 text-xs">
-            <span className="w-16 text-gray-500 font-mono text-[11px]">{event.time}</span>
+            <span className="w-16 text-ink-3 font-mono text-[11px]">{event.time}</span>
             <div
               className={`w-2 h-2 rounded-full ${typeColors[event.type]}`}
               style={{ opacity: 0.4 + event.intensity * 0.6 }}
@@ -407,18 +408,18 @@ function ScoutingFunnel({ debug }: { debug: RimOverlookDebugStats | undefined })
 
   // Check funnel health - warn if ratio between stages is too aggressive
   const getHealthColor = (current: number, next: number): string => {
-    if (next === 0 || current === 0) return "text-red-600";
+    if (next === 0 || current === 0) return "text-ember";
     const ratio = current / next;
-    if (ratio < 5) return "text-green-600";
-    if (ratio < 10) return "text-yellow-600";
-    if (ratio < 50) return "text-orange-600";
-    return "text-red-600";
+    if (ratio < 5) return "text-pine-6";
+    if (ratio < 10) return "text-clay";
+    if (ratio < 50) return "text-clay";
+    return "text-ember";
   };
 
   // Density sanity check
   const rimRatio = debug.rim_mask_cells / debug.grid_cells_total;
   const density = rimRatio < 0.01 ? "LOW" : rimRatio < 0.5 ? "OK" : "HIGH";
-  const densityColor = density === "LOW" ? "text-red-600" : density === "OK" ? "text-green-600" : "text-yellow-600";
+  const densityColor = density === "LOW" ? "text-ember" : density === "OK" ? "text-pine-6" : "text-clay";
   const densityMessage = density === "LOW"
     ? "Scouting too narrow — thresholds likely too strict or AOI too small"
     : density === "OK"
@@ -426,46 +427,43 @@ function ScoutingFunnel({ debug }: { debug: RimOverlookDebugStats | undefined })
     : "Very broad coverage — may include non-rim areas";
 
   return (
-    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm">
+    <div className="bg-pine-6/[0.06] border border-pine-6/30 rounded-[12px] p-3.5 text-[13px]">
       {/* Header with density indicator */}
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Funnel className="w-4 h-4 text-purple-600" weight="fill" />
-          <span className="font-semibold text-purple-800">Scouting Funnel</span>
-        </div>
-        <div className={`px-2 py-0.5 rounded text-xs font-bold ${densityColor} bg-white`}>
+        <Mono className="text-pine-6 inline-flex items-center gap-1.5">
+          <Funnel className="w-3 h-3" weight="regular" />
+          Scouting funnel
+        </Mono>
+        <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-[0.10em] font-bold bg-white border border-line', densityColor)}>
           {density}
-        </div>
+        </span>
       </div>
 
-      <p className="text-xs text-purple-600 mb-3">{densityMessage}</p>
+      <p className="text-[12px] text-ink-3 mb-3 leading-[1.5]">{densityMessage}</p>
 
       {/* Funnel stages */}
       <div className="space-y-2">
         {stages.map((stage, idx) => {
           const nextStage = stages[idx + 1];
-          const healthColor = nextStage ? getHealthColor(stage.count, nextStage.count) : "text-gray-600";
+          const healthColor = nextStage ? getHealthColor(stage.count, nextStage.count) : "text-ink-3";
           const barWidth = Math.max(5, Math.min(100, (stage.count / stages[0].count) * 100));
 
           return (
             <div key={stage.label} className="relative group">
               <div className="flex items-center justify-between">
-                <span className="text-gray-700 w-28">{stage.label}:</span>
+                <span className="text-ink-2 text-[12px] w-28">{stage.label}:</span>
                 <div className="flex-1 mx-2">
-                  <div
-                    className="h-2 bg-purple-300 rounded"
-                    style={{ width: `${barWidth}%` }}
-                  />
+                  <div className="h-1.5 bg-pine-6/30 rounded-full" style={{ width: `${barWidth}%` }} />
                 </div>
-                <span className={`font-mono font-bold w-20 text-right ${healthColor}`}>
+                <span className={cn('font-mono font-bold text-[12px] w-20 text-right', healthColor)}>
                   {stage.count.toLocaleString()}
                 </span>
               </div>
               {/* Tooltip on hover */}
-              <div className="hidden group-hover:block absolute z-10 left-0 top-full mt-1 p-2 bg-gray-900 text-white text-xs rounded shadow-lg max-w-xs">
+              <div className="hidden group-hover:block absolute z-10 left-0 top-full mt-1 p-2 bg-ink text-cream text-[11px] rounded-[8px] shadow-[0_8px_22px_rgba(29,34,24,.18)] max-w-xs">
                 <p>{stage.tooltip}</p>
                 {stage.rejected != null && stage.rejected > 0 && (
-                  <p className="mt-1 text-gray-300">{stage.rejectedLabel}</p>
+                  <p className="mt-1 text-cream/70">{stage.rejectedLabel}</p>
                 )}
               </div>
             </div>
@@ -474,30 +472,30 @@ function ScoutingFunnel({ debug }: { debug: RimOverlookDebugStats | undefined })
       </div>
 
       {/* Threshold info */}
-      <div className="mt-3 pt-3 border-t border-purple-200 text-xs text-purple-600">
+      <div className="mt-3 pt-3 border-t border-pine-6/20 text-[12px] text-ink-2 space-y-0.5">
         <div className="flex justify-between">
-          <span>TPI threshold:</span>
-          <span className="font-mono">{debug.chosen_tpi_threshold_m?.toFixed(1) || '—'}m</span>
+          <span className="text-ink-3">TPI threshold:</span>
+          <span className="font-mono text-ink">{debug.chosen_tpi_threshold_m?.toFixed(1) || '—'}m</span>
         </div>
         <div className="flex justify-between">
-          <span>Max slope:</span>
-          <span className="font-mono">{debug.chosen_slope_max_deg?.toFixed(0) || '—'}°</span>
+          <span className="text-ink-3">Max slope:</span>
+          <span className="font-mono text-ink">{debug.chosen_slope_max_deg?.toFixed(0) || '—'}°</span>
         </div>
         {debug.auto_threshold_applied && (
-          <div className="mt-1 text-purple-500 italic">Auto-adjusted thresholds</div>
+          <Mono className="text-clay mt-1 italic block">Auto-adjusted thresholds</Mono>
         )}
       </div>
 
       {/* View analysis stats */}
       {debug.avg_overlook_score != null && (
-        <div className="mt-2 pt-2 border-t border-purple-200 text-xs text-purple-600">
+        <div className="mt-2 pt-2 border-t border-pine-6/20 text-[12px] text-ink-2 space-y-0.5">
           <div className="flex justify-between">
-            <span>Avg overlook score:</span>
-            <span className="font-mono">{(debug.avg_overlook_score * 100).toFixed(0)}%</span>
+            <span className="text-ink-3">Avg overlook score:</span>
+            <span className="font-mono text-ink">{(debug.avg_overlook_score * 100).toFixed(0)}%</span>
           </div>
           <div className="flex justify-between">
-            <span>Avg open sky:</span>
-            <span className="font-mono">{((debug.avg_open_sky_fraction || 0) * 100).toFixed(0)}%</span>
+            <span className="text-ink-3">Avg open sky:</span>
+            <span className="font-mono text-ink">{((debug.avg_open_sky_fraction || 0) * 100).toFixed(0)}%</span>
           </div>
         </div>
       )}
@@ -650,40 +648,40 @@ function ShotCard({
   const facingFull = compassToFull(facingDirection);
   const lightQuality = subject.glow_window
     ? getLightQuality(subject.glow_window.peak_glow_score)
-    : { label: "Unknown", color: "text-gray-500", bgColor: "bg-gray-100" };
+    : { label: "Unknown", color: "text-ink-3", bgColor: "bg-cream" };
 
   // Get lighting zone badge
   const zoneType = subject.properties.lighting_zone_type;
   const zoneBadge = zoneType === "rim-zone"
-    ? { label: "Rim Light", color: "text-purple-700", bgColor: "bg-purple-100" }
+    ? { label: "Rim Light", color: "text-clay", bgColor: "bg-clay/15" }
     : zoneType === "shadow-zone"
-    ? { label: "Shadow", color: "text-gray-600", bgColor: "bg-gray-100" }
-    : { label: "Glow", color: "text-amber-700", bgColor: "bg-amber-100" };
+    ? { label: "Shadow", color: "text-ink-2", bgColor: "bg-cream" }
+    : { label: "Glow", color: "text-clay", bgColor: "bg-clay/15" };
 
   return (
-    <Card
-      className={`cursor-pointer transition-all ${
-        isSelected ? "ring-2 ring-blue-500 shadow-md" : "hover:shadow-md"
+    <div
+      className={`bg-white border rounded-[14px] cursor-pointer transition-all ${
+        isSelected ? "border-water ring-1 ring-water/30 shadow-[0_8px_22px_rgba(29,34,24,.10)]" : "border-line hover:border-ink-3/40 hover:shadow-[0_8px_22px_rgba(29,34,24,.08)]"
       }`}
       onClick={onSelect}
     >
-      <CardContent className="p-4">
+      <div className="p-4">
         {/* Verdict Header - THE BIG ANSWER */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
             {verdict.verdict === "yes" && (
-              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-green-600" weight="fill" />
+              <div className="w-10 h-10 rounded-full bg-pine-6/12 flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-pine-6" weight="fill" />
               </div>
             )}
             {verdict.verdict === "maybe" && (
-              <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
-                <Warning className="w-6 h-6 text-yellow-600" weight="fill" />
+              <div className="w-10 h-10 rounded-full bg-clay/15 flex items-center justify-center">
+                <Warning className="w-6 h-6 text-clay" weight="fill" />
               </div>
             )}
             {verdict.verdict === "no" && (
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-                <XCircle className="w-6 h-6 text-red-500" weight="fill" />
+              <div className="w-10 h-10 rounded-full bg-ember/15 flex items-center justify-center">
+                <XCircle className="w-6 h-6 text-ember" weight="fill" />
               </div>
             )}
             <div>
@@ -695,7 +693,7 @@ function ShotCard({
                   {zoneBadge.label}
                 </span>
               </div>
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-ink-3">
                 {explain?.face_direction || `${facingFull}-facing`} • {explain?.area || `${Math.round(subject.properties.area_m2).toLocaleString()}m²`}
               </div>
             </div>
@@ -703,20 +701,20 @@ function ShotCard({
         </div>
 
         {/* Why this spot - Photographer-friendly description */}
-        <p className="text-sm text-gray-600 mb-3 leading-relaxed">
+        <p className="text-sm text-ink-2 mb-3 leading-relaxed">
           {description}
         </p>
 
         {/* Quick Facts - THE 5-SECOND INFO */}
         <div className="space-y-2 text-sm">
           {/* When to shoot */}
-          <div className="flex items-center gap-3 p-2 bg-gray-50 rounded">
-            <Clock className="w-5 h-5 text-gray-400 flex-shrink-0" />
+          <div className="flex items-center gap-3 p-2 bg-cream rounded">
+            <Clock className="w-5 h-5 text-ink-3 flex-shrink-0" />
             <div className="flex-1">
               <span className="font-semibold">{peakTime}</span>
-              <span className="text-gray-500"> — {explain?.best_time || "best light"}</span>
+              <span className="text-ink-3"> — {explain?.best_time || "best light"}</span>
               {explain?.window_duration && (
-                <div className="text-gray-400 text-xs mt-0.5">
+                <div className="text-ink-3 text-xs mt-0.5">
                   {explain.window_duration}
                 </div>
               )}
@@ -724,19 +722,19 @@ function ShotCard({
           </div>
 
           {/* Light quality - using API explanations */}
-          <div className="flex items-center gap-3 p-2 bg-gray-50 rounded">
-            <Sun className="w-5 h-5 text-gray-400 flex-shrink-0" />
+          <div className="flex items-center gap-3 p-2 bg-cream rounded">
+            <Sun className="w-5 h-5 text-ink-3 flex-shrink-0" />
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${lightQuality.bgColor} ${lightQuality.color}`}>
                   {lightQuality.label}
                 </span>
                 {!subject.shadow_check.sun_visible && (
-                  <span className="text-red-500 text-xs">(may be shadowed)</span>
+                  <span className="text-ember text-xs">(may be shadowed)</span>
                 )}
               </div>
               {explain && (
-                <div className="text-gray-500 text-xs mt-1">
+                <div className="text-ink-3 text-xs mt-1">
                   {explain.aspect_offset} • {explain.sun_altitude}
                 </div>
               )}
@@ -745,16 +743,16 @@ function ShotCard({
 
           {/* Where to stand */}
           {standing ? (
-            <div className="p-2 bg-blue-50 rounded space-y-1">
+            <div className="p-2 bg-water/[0.06] rounded space-y-1">
               <div className="flex items-center gap-3">
-                <Camera className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                <Camera className="w-5 h-5 text-water flex-shrink-0" />
                 <div className="flex-1">
-                  <span className="text-blue-700">
+                  <span className="text-water">
                     Stand {Math.round(standing.properties.distance_to_subject_m)}m{" "}
                     {compassToFull(degreesToCompass((standing.properties.camera_bearing_deg + 180) % 360))}
                   </span>
-                  <span className="text-gray-500">, aim </span>
-                  <span className="text-blue-700">{degreesToCompass(standing.properties.camera_bearing_deg)}</span>
+                  <span className="text-ink-3">, aim </span>
+                  <span className="text-water">{degreesToCompass(standing.properties.camera_bearing_deg)}</span>
                 </div>
                 {standing.nav_link && (
                   <a
@@ -762,7 +760,7 @@ function ShotCard({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-water hover:text-water hover:bg-water/15 rounded transition-colors"
                   >
                     <MapPin className="w-4 h-4" />
                     Navigate
@@ -773,13 +771,13 @@ function ShotCard({
               {standing.properties.approach_difficulty && standing.properties.approach_difficulty !== 'unknown' && (
                 <div className="flex items-center gap-2 pl-8 text-xs">
                   <span className={`px-1.5 py-0.5 rounded font-medium ${
-                    standing.properties.approach_difficulty === 'easy' ? 'bg-green-100 text-green-700' :
-                    standing.properties.approach_difficulty === 'moderate' ? 'bg-amber-100 text-amber-700' :
-                    'bg-red-100 text-red-700'
+                    standing.properties.approach_difficulty === 'easy' ? 'bg-pine-6/12 text-pine-6' :
+                    standing.properties.approach_difficulty === 'moderate' ? 'bg-clay/15 text-clay' :
+                    'bg-ember/15 text-ember'
                   }`}>
                     {standing.properties.approach_difficulty}
                   </span>
-                  <span className="text-gray-500">
+                  <span className="text-ink-3">
                     {standing.properties.distance_to_road_m != null && (
                       <>{Math.round(standing.properties.distance_to_road_m)}m from {standing.properties.nearest_road_type || 'road'}</>
                     )}
@@ -796,21 +794,21 @@ function ShotCard({
               {standing.view && standing.view.overlook_score > 0 && (
                 <div className="mt-2 pl-8 text-xs">
                   <div className="flex items-center gap-2">
-                    <Eye className="w-4 h-4 text-cyan-500" />
+                    <Eye className="w-4 h-4 text-water" />
                     <span className={`px-1.5 py-0.5 rounded font-medium ${
-                      standing.view.overlook_score >= 0.7 ? 'bg-cyan-100 text-cyan-700' :
-                      standing.view.overlook_score >= 0.4 ? 'bg-cyan-50 text-cyan-600' :
-                      'bg-gray-100 text-gray-600'
+                      standing.view.overlook_score >= 0.7 ? 'bg-water/15 text-water' :
+                      standing.view.overlook_score >= 0.4 ? 'bg-water/[0.06] text-water' :
+                      'bg-cream text-ink-2'
                     }`}>
                       {standing.view.overlook_score >= 0.7 ? 'Great view' :
                        standing.view.overlook_score >= 0.4 ? 'Good view' : 'Limited view'}
                     </span>
-                    <span className="text-gray-500">
+                    <span className="text-ink-3">
                       Face {degreesToCompass(standing.view.best_bearing_deg)}
                     </span>
                   </div>
                   {standing.view.explanations && (
-                    <p className="mt-1 text-gray-500 leading-relaxed">
+                    <p className="mt-1 text-ink-3 leading-relaxed">
                       {standing.view.explanations.short}
                     </p>
                   )}
@@ -818,7 +816,7 @@ function ShotCard({
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-3 p-2 bg-gray-50 rounded text-gray-500">
+            <div className="flex items-center gap-3 p-2 bg-cream rounded text-ink-3">
               <Camera className="w-5 h-5 flex-shrink-0" />
               <span>No clear shooting position found</span>
             </div>
@@ -826,9 +824,9 @@ function ShotCard({
 
           {/* Candidate Search Info - show when no standing location */}
           {!standing && subject.candidate_search && (
-            <div className="mt-2 p-2 bg-orange-50 rounded border border-orange-200">
+            <div className="mt-2 p-2 bg-ember/[0.06] rounded border border-ember/30">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-orange-700 font-medium">
+                <span className="text-xs text-ember font-medium">
                   {subject.candidate_search.candidates_checked} positions checked
                 </span>
                 <button
@@ -838,8 +836,8 @@ function ShotCard({
                   }}
                   className={`text-xs px-2 py-1 rounded ${
                     showRejectedCandidates
-                      ? "bg-orange-600 text-white"
-                      : "bg-orange-200 text-orange-700 hover:bg-orange-300"
+                      ? "bg-ember text-white"
+                      : "bg-ember/25 text-ember hover:bg-ember/40"
                   }`}
                 >
                   {showRejectedCandidates ? "Hide on map" : "Show on map"}
@@ -849,13 +847,13 @@ function ShotCard({
                 {Object.entries(subject.candidate_search.rejection_summary || {}).map(([reason, count]) => (
                   <div key={reason} className="flex items-center gap-1">
                     <span className={`w-2 h-2 rounded-full ${
-                      reason === 'slope_too_steep' ? 'bg-orange-500' :
-                      reason === 'no_line_of_sight' ? 'bg-red-500' :
-                      reason === 'invalid_geometry' ? 'bg-purple-500' :
-                      reason === 'out_of_bounds' ? 'bg-gray-500' :
-                      'bg-gray-400'
+                      reason === 'slope_too_steep' ? 'bg-ember' :
+                      reason === 'no_line_of_sight' ? 'bg-ember' :
+                      reason === 'invalid_geometry' ? 'bg-clay' :
+                      reason === 'out_of_bounds' ? 'bg-ink-3' :
+                      'bg-ink-3/40'
                     }`} />
-                    <span className="text-gray-600 truncate">
+                    <span className="text-ink-2 truncate">
                       {reason.replace(/_/g, ' ')}: {count as number}
                     </span>
                   </div>
@@ -870,32 +868,32 @@ function ShotCard({
 
         {/* Technical Details (collapsed) */}
         <Collapsible className="mt-3">
-          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
+          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2">
             <CaretDown className="w-3 h-3" />
             Technical details
           </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600">
+          <CollapsibleContent className="mt-2 p-2 bg-cream rounded text-xs text-ink-2">
             {/* Terrain & Light Summary (photographer-friendly) */}
             {explain && (
               <div className="mb-3 space-y-1">
                 <div className="flex gap-2">
-                  <span className="text-gray-400 w-16">Terrain:</span>
+                  <span className="text-ink-3 w-16">Terrain:</span>
                   <span>{explain.slope}</span>
                 </div>
                 <div className="flex gap-2">
-                  <span className="text-gray-400 w-16">Light:</span>
+                  <span className="text-ink-3 w-16">Light:</span>
                   <span>{explain.light_quality}</span>
                 </div>
                 <div className="flex gap-2">
-                  <span className="text-gray-400 w-16">Zone:</span>
+                  <span className="text-ink-3 w-16">Zone:</span>
                   <span>{explain.zone_type}</span>
                 </div>
               </div>
             )}
 
             {/* Surface Properties (raw values) */}
-            <div className="mb-2 pt-2 border-t border-gray-200">
-              <div className="text-gray-500 mb-1 font-medium">Raw Values</div>
+            <div className="mb-2 pt-2 border-t border-line">
+              <div className="text-ink-3 mb-1 font-medium">Raw Values</div>
               <div className="grid grid-cols-2 gap-1 font-mono text-[11px]">
                 <div>face_direction: {subject.properties.face_direction_deg.toFixed(0)}°</div>
                 <div>slope: {subject.properties.slope_deg.toFixed(1)}°</div>
@@ -908,8 +906,8 @@ function ShotCard({
 
             {/* Lighting Conditions */}
             {subject.glow_window && (
-              <div className="mb-2 pt-2 border-t border-gray-200">
-                <div className="text-gray-500 mb-1 font-medium">Lighting at Peak</div>
+              <div className="mb-2 pt-2 border-t border-line">
+                <div className="text-ink-3 mb-1 font-medium">Lighting at Peak</div>
                 <div className="grid grid-cols-2 gap-1 font-mono text-[11px]">
                   <div>sun_azimuth: {(() => {
                     const peakMin = subject.glow_window.peak_minutes;
@@ -931,8 +929,8 @@ function ShotCard({
 
             {/* Shooting Position */}
             {standing && (
-              <div className="pt-2 border-t border-gray-200">
-                <div className="text-gray-500 mb-1 font-medium">Shooting Position</div>
+              <div className="pt-2 border-t border-line">
+                <div className="text-ink-3 mb-1 font-medium">Shooting Position</div>
                 <div className="grid grid-cols-2 gap-1 font-mono text-[11px]">
                   <div>distance: {Math.round(standing.properties.distance_to_subject_m)}m</div>
                   <div>bearing: {standing.properties.camera_bearing_deg.toFixed(0)}°</div>
@@ -946,36 +944,36 @@ function ShotCard({
 
         {/* Debug Card (collapsed) */}
         <Collapsible className="mt-2">
-          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
+          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2">
             <CaretDown className="w-3 h-3" />
             Debug info
           </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 p-2 bg-purple-50 rounded text-xs font-mono border border-purple-200">
+          <CollapsibleContent className="mt-2 p-2 bg-clay/[0.06] rounded text-xs font-mono border border-clay/30">
             {/* Coordinates */}
             <div className="mb-2">
-              <div className="text-purple-600 font-medium mb-1">Coordinates</div>
+              <div className="text-clay font-medium mb-1">Coordinates</div>
               <div className="grid grid-cols-1 gap-0.5 text-[11px]">
                 <div>
-                  <span className="text-gray-500">Subject:</span>{" "}
-                  <span className="text-purple-800">{subject.centroid.lat.toFixed(6)}, {subject.centroid.lon.toFixed(6)}</span>
+                  <span className="text-ink-3">Subject:</span>{" "}
+                  <span className="text-clay">{subject.centroid.lat.toFixed(6)}, {subject.centroid.lon.toFixed(6)}</span>
                   {subject.properties.snapped_to_max_structure && (
-                    <span className="ml-1 px-1 bg-amber-200 text-amber-800 rounded text-[9px] font-medium">SNAPPED</span>
+                    <span className="ml-1 px-1 bg-clay/25 text-clay rounded text-[9px] font-medium">SNAPPED</span>
                   )}
                 </div>
                 {standing ? (
                   <div>
-                    <span className="text-gray-500">Stand:</span>{" "}
-                    <span className="text-purple-800">{standing.location.lat.toFixed(6)}, {standing.location.lon.toFixed(6)}</span>
+                    <span className="text-ink-3">Stand:</span>{" "}
+                    <span className="text-clay">{standing.location.lat.toFixed(6)}, {standing.location.lon.toFixed(6)}</span>
                   </div>
                 ) : (
-                  <div className="text-gray-400">Stand: no position found</div>
+                  <div className="text-ink-3">Stand: no position found</div>
                 )}
               </div>
             </div>
 
             {/* Sun Position at Peak */}
-            <div className="mb-2 pt-2 border-t border-purple-200">
-              <div className="text-purple-600 font-medium mb-1">Sun at Peak</div>
+            <div className="mb-2 pt-2 border-t border-clay/30">
+              <div className="text-clay font-medium mb-1">Sun at Peak</div>
               <div className="grid grid-cols-2 gap-1 text-[11px]">
                 {(() => {
                   const peakMin = subject.glow_window?.peak_minutes;
@@ -983,12 +981,12 @@ function ShotCard({
                   return (
                     <>
                       <div>
-                        <span className="text-gray-500">azimuth:</span>{" "}
-                        <span className="text-purple-800">{sunAtPeak ? `${sunAtPeak.azimuth_deg.toFixed(1)}°` : "—"}</span>
+                        <span className="text-ink-3">azimuth:</span>{" "}
+                        <span className="text-clay">{sunAtPeak ? `${sunAtPeak.azimuth_deg.toFixed(1)}°` : "—"}</span>
                       </div>
                       <div>
-                        <span className="text-gray-500">altitude:</span>{" "}
-                        <span className="text-purple-800">{sunAtPeak ? `${sunAtPeak.altitude_deg.toFixed(1)}°` : "—"}</span>
+                        <span className="text-ink-3">altitude:</span>{" "}
+                        <span className="text-clay">{sunAtPeak ? `${sunAtPeak.altitude_deg.toFixed(1)}°` : "—"}</span>
                       </div>
                     </>
                   );
@@ -997,115 +995,115 @@ function ShotCard({
             </div>
 
             {/* Bearings */}
-            <div className="mb-2 pt-2 border-t border-purple-200">
-              <div className="text-purple-600 font-medium mb-1">Bearings</div>
+            <div className="mb-2 pt-2 border-t border-clay/30">
+              <div className="text-clay font-medium mb-1">Bearings</div>
               <div className="grid grid-cols-2 gap-1 text-[11px]">
                 <div>
-                  <span className="text-gray-500">A_face:</span>{" "}
-                  <span className="text-purple-800">{subject.properties.face_direction_deg.toFixed(1)}°</span>
+                  <span className="text-ink-3">A_face:</span>{" "}
+                  <span className="text-clay">{subject.properties.face_direction_deg.toFixed(1)}°</span>
                 </div>
                 <div>
-                  <span className="text-gray-500">A_cam:</span>{" "}
-                  <span className="text-purple-800">{standing ? `${standing.properties.camera_bearing_deg.toFixed(1)}°` : "—"}</span>
+                  <span className="text-ink-3">A_cam:</span>{" "}
+                  <span className="text-clay">{standing ? `${standing.properties.camera_bearing_deg.toFixed(1)}°` : "—"}</span>
                 </div>
               </div>
             </div>
 
             {/* Structure Metrics */}
-            <div className="pt-2 border-t border-purple-200">
-              <div className="text-purple-600 font-medium mb-1">Structure Metrics</div>
+            <div className="pt-2 border-t border-clay/30">
+              <div className="text-clay font-medium mb-1">Structure Metrics</div>
               {subject.properties.structure ? (
                 <div className="grid grid-cols-2 gap-1 text-[11px]">
                   <div>
-                    <span className="text-gray-500">class:</span>{" "}
+                    <span className="text-ink-3">class:</span>{" "}
                     <span className={`font-medium ${
-                      subject.properties.structure.structure_class === 'micro-dramatic' ? 'text-green-700' :
-                      subject.properties.structure.structure_class === 'macro-dramatic' ? 'text-blue-700' :
-                      'text-gray-500'
+                      subject.properties.structure.structure_class === 'micro-dramatic' ? 'text-pine-6' :
+                      subject.properties.structure.structure_class === 'macro-dramatic' ? 'text-water' :
+                      'text-ink-3'
                     }`}>{subject.properties.structure.structure_class}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">score:</span>{" "}
-                    <span className="text-purple-800">{subject.properties.structure.structure_score.toFixed(3)}</span>
+                    <span className="text-ink-3">score:</span>{" "}
+                    <span className="text-clay">{subject.properties.structure.structure_score.toFixed(3)}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">micro_relief:</span>{" "}
-                    <span className="text-purple-800">{subject.properties.structure.micro_relief_m.toFixed(1)}m</span>
+                    <span className="text-ink-3">micro_relief:</span>{" "}
+                    <span className="text-clay">{subject.properties.structure.micro_relief_m.toFixed(1)}m</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">macro_relief:</span>{" "}
-                    <span className="text-purple-800">{subject.properties.structure.macro_relief_m.toFixed(1)}m</span>
+                    <span className="text-ink-3">macro_relief:</span>{" "}
+                    <span className="text-clay">{subject.properties.structure.macro_relief_m.toFixed(1)}m</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">max_slope_break:</span>{" "}
-                    <span className="text-purple-800">{subject.properties.structure.max_slope_break.toFixed(1)}°</span>
+                    <span className="text-ink-3">max_slope_break:</span>{" "}
+                    <span className="text-clay">{subject.properties.structure.max_slope_break.toFixed(1)}°</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">max_curvature:</span>{" "}
-                    <span className="text-purple-800">{subject.properties.structure.max_curvature.toFixed(4)}</span>
+                    <span className="text-ink-3">max_curvature:</span>{" "}
+                    <span className="text-clay">{subject.properties.structure.max_curvature.toFixed(4)}</span>
                   </div>
                   {/* Per-cell structure analysis */}
-                  <div className="col-span-2 mt-2 pt-2 border-t border-purple-100">
-                    <span className="text-purple-500 text-[10px]">Per-cell analysis:</span>
+                  <div className="col-span-2 mt-2 pt-2 border-t border-line">
+                    <span className="text-clay text-[10px]">Per-cell analysis:</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">score@centroid:</span>{" "}
-                    <span className="text-purple-800">
+                    <span className="text-ink-3">score@centroid:</span>{" "}
+                    <span className="text-clay">
                       {subject.properties.structure.structure_score_at_centroid?.toFixed(3) ?? "—"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-gray-500">max_score:</span>{" "}
-                    <span className="text-purple-800">
+                    <span className="text-ink-3">max_score:</span>{" "}
+                    <span className="text-clay">
                       {subject.properties.structure.max_structure_score_in_zone?.toFixed(3) ?? "—"}
                     </span>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-gray-500">max_loc:</span>{" "}
-                    <span className="text-purple-800">
+                    <span className="text-ink-3">max_loc:</span>{" "}
+                    <span className="text-clay">
                       {subject.properties.structure.max_structure_location
                         ? `${subject.properties.structure.max_structure_location[0].toFixed(6)}, ${subject.properties.structure.max_structure_location[1].toFixed(6)}`
                         : "—"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-gray-500">dist_to_max:</span>{" "}
-                    <span className="text-purple-800">
+                    <span className="text-ink-3">dist_to_max:</span>{" "}
+                    <span className="text-clay">
                       {subject.properties.structure.distance_centroid_to_max_m?.toFixed(0) ?? "—"}m
                     </span>
                   </div>
                 </div>
               ) : (
-                <div className="text-gray-400 text-[11px]">No structure data available</div>
+                <div className="text-ink-3 text-[11px]">No structure data available</div>
               )}
             </div>
 
             {/* Geometry Classification */}
-            <div className="pt-2 border-t border-purple-200">
-              <div className="text-purple-600 font-medium mb-1">Geometry</div>
+            <div className="pt-2 border-t border-clay/30">
+              <div className="text-clay font-medium mb-1">Geometry</div>
               <div className="grid grid-cols-2 gap-1 text-[11px]">
                 <div>
-                  <span className="text-gray-500">type:</span>{" "}
+                  <span className="text-ink-3">type:</span>{" "}
                   <span className={`font-medium ${
-                    subject.properties.geometry_type === 'volumetric' ? 'text-orange-600' : 'text-gray-600'
+                    subject.properties.geometry_type === 'volumetric' ? 'text-ember' : 'text-ink-2'
                   }`}>{subject.properties.geometry_type || 'planar'}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500">face_variance:</span>{" "}
-                  <span className="text-purple-800">{subject.properties.face_direction_variance?.toFixed(1) ?? "—"}°</span>
+                  <span className="text-ink-3">face_variance:</span>{" "}
+                  <span className="text-clay">{subject.properties.face_direction_variance?.toFixed(1) ?? "—"}°</span>
                 </div>
                 {subject.properties.volumetric_reason && (
                   <div className="col-span-2">
-                    <span className="text-gray-500">reason:</span>{" "}
-                    <span className="text-orange-600 font-medium">{subject.properties.volumetric_reason}</span>
+                    <span className="text-ink-3">reason:</span>{" "}
+                    <span className="text-ember font-medium">{subject.properties.volumetric_reason}</span>
                   </div>
                 )}
               </div>
             </div>
           </CollapsibleContent>
         </Collapsible>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -1870,14 +1868,14 @@ export default function PhotoScout() {
 
   if (!isLoaded) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background">
-        <div className="text-muted-foreground">Loading maps...</div>
+      <div className="h-screen flex items-center justify-center bg-paper">
+        <div className="text-ink-3">Loading maps...</div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="h-screen flex flex-col bg-paper">
       <Header showBorder />
 
       {/* Main Content */}
@@ -1913,15 +1911,15 @@ export default function PhotoScout() {
                 <span>Subject (shoot this)</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-blue-600" />
+                <div className="w-4 h-4 rounded-full bg-water" />
                 <span>Standing position</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full border-2 border-dashed border-purple-600" />
+                <div className="w-4 h-4 rounded-full border-2 border-dashed border-clay" />
                 <span>Search center</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-4 h-3 rounded border-2 border-cyan-500 bg-cyan-100 opacity-70" />
+                <div className="w-4 h-3 rounded border-2 border-water bg-water/15 opacity-70" />
                 <span>View cone</span>
               </div>
               <div className="flex items-center gap-2">
@@ -1933,43 +1931,43 @@ export default function PhotoScout() {
                 <span>Rim overlook</span>
               </div>
               {/* Color key */}
-              <div className="flex items-center gap-2 pt-1 border-t border-gray-100 mt-1">
-                <div className="w-3 h-3 rounded-full bg-green-600" />
-                <span className="text-xs text-gray-600">Good</span>
-                <div className="w-3 h-3 rounded-full bg-yellow-600 ml-1" />
-                <span className="text-xs text-gray-600">Maybe</span>
-                <div className="w-3 h-3 rounded-full bg-red-600 ml-1" />
-                <span className="text-xs text-gray-600">Poor</span>
+              <div className="flex items-center gap-2 pt-1 border-t border-line mt-1">
+                <div className="w-3 h-3 rounded-full bg-pine-6" />
+                <span className="text-xs text-ink-2">Good</span>
+                <div className="w-3 h-3 rounded-full bg-clay ml-1" />
+                <span className="text-xs text-ink-2">Maybe</span>
+                <div className="w-3 h-3 rounded-full bg-ember ml-1" />
+                <span className="text-xs text-ink-2">Poor</span>
               </div>
               {/* Analysis zones (only when toggle on) */}
               {showAnalysisZones && (
                 <>
-                  <div className="flex items-center gap-2 pt-1 border-t border-gray-100 mt-1">
-                    <div className="w-4 h-4 rounded border-2 border-green-600 bg-green-100 opacity-50" />
-                    <span className="text-gray-500">Explore area</span>
+                  <div className="flex items-center gap-2 pt-1 border-t border-line mt-1">
+                    <div className="w-4 h-4 rounded border-2 border-pine-6 bg-pine-6/12 opacity-50" />
+                    <span className="text-ink-3">Explore area</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-0.5 bg-amber-500" />
-                    <Sun className="w-3 h-3 text-amber-500" weight="fill" />
-                    <span className="text-gray-500">Sun direction</span>
+                    <div className="w-4 h-0.5 bg-clay" />
+                    <Sun className="w-3 h-3 text-clay" weight="fill" />
+                    <span className="text-ink-3">Sun direction</span>
                   </div>
                 </>
               )}
             </div>
             {/* Show analysis zones toggle */}
             {result && (
-              <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="mt-3 pt-3 border-t border-line">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={showAnalysisZones}
                     onChange={(e) => setShowAnalysisZones(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    className="w-4 h-4 rounded border-line text-clay focus:ring-purple-500"
                   />
                   <span>Show analysis zones</span>
                 </label>
                 {showAnalysisZones && (
-                  <div className="mt-2 text-xs space-y-1 pl-6 text-gray-500">
+                  <div className="mt-2 text-xs space-y-1 pl-6 text-ink-3">
                     <div>Explore areas, sun direction, structure anchors</div>
                   </div>
                 )}
@@ -1983,7 +1981,7 @@ export default function PhotoScout() {
                     type="checkbox"
                     checked={showAllPositions}
                     onChange={(e) => setShowAllPositions(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="w-4 h-4 rounded border-line text-water focus:ring-water"
                   />
                   <span>Show all positions</span>
                 </label>
@@ -1997,26 +1995,26 @@ export default function PhotoScout() {
                     type="checkbox"
                     checked={showRejectedCandidates}
                     onChange={(e) => setShowRejectedCandidates(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                    className="w-4 h-4 rounded border-line text-ember focus:ring-orange-500"
                   />
                   <span>Show rejected candidates</span>
                 </label>
                 {showRejectedCandidates && (
                   <div className="mt-2 text-xs space-y-1 pl-6">
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-orange-500" />
+                      <div className="w-3 h-3 rounded-full bg-ember" />
                       <span>Slope too steep</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-red-500" />
+                      <div className="w-3 h-3 rounded-full bg-ember" />
                       <span>No line of sight</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-purple-500" />
+                      <div className="w-3 h-3 rounded-full bg-clay" />
                       <span>Invalid geometry</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-gray-500" />
+                      <div className="w-3 h-3 rounded-full bg-ink-3" />
                       <span>Out of bounds</span>
                     </div>
                   </div>
@@ -2030,9 +2028,9 @@ export default function PhotoScout() {
                   type="checkbox"
                   checked={showScoutDebug}
                   onChange={(e) => setShowScoutDebug(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  className="w-4 h-4 rounded border-line text-clay focus:ring-purple-500"
                 />
-                <Bug className="w-4 h-4 text-purple-500" />
+                <Bug className="w-4 h-4 text-clay" />
                 <span>Scout coverage (debug)</span>
               </label>
               {showScoutDebug && (
@@ -2042,7 +2040,7 @@ export default function PhotoScout() {
                       type="checkbox"
                       checked={showDebugRimCandidates}
                       onChange={(e) => setShowDebugRimCandidates(e.target.checked)}
-                      className="w-3 h-3 rounded border-gray-300 text-pink-500"
+                      className="w-3 h-3 rounded border-line text-pink-500"
                     />
                     <div className="w-2 h-2 rounded-full bg-pink-400" />
                     <span>Rim candidates (pre-NMS)</span>
@@ -2052,9 +2050,9 @@ export default function PhotoScout() {
                       type="checkbox"
                       checked={showDebugLocalMaxima}
                       onChange={(e) => setShowDebugLocalMaxima(e.target.checked)}
-                      className="w-3 h-3 rounded border-gray-300 text-yellow-500"
+                      className="w-3 h-3 rounded border-line text-clay"
                     />
-                    <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                    <div className="w-2 h-2 rounded-full bg-clay" />
                     <span>Local maxima (post-NMS)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer text-xs">
@@ -2062,9 +2060,9 @@ export default function PhotoScout() {
                       type="checkbox"
                       checked={showDebugViewAnalyzed}
                       onChange={(e) => setShowDebugViewAnalyzed(e.target.checked)}
-                      className="w-3 h-3 rounded border-gray-300 text-cyan-500"
+                      className="w-3 h-3 rounded border-line text-water"
                     />
-                    <div className="w-2 h-2 rounded-full bg-cyan-500" />
+                    <div className="w-2 h-2 rounded-full bg-water" />
                     <span>View analyzed</span>
                   </label>
                 </div>
@@ -2072,9 +2070,9 @@ export default function PhotoScout() {
             </div>
             {/* Sun azimuth indicator */}
             {result && result.sun_track?.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="mt-3 pt-3 border-t border-line">
                 <div className="flex items-center gap-2">
-                  <Sun className="w-4 h-4 text-yellow-500" weight="fill" />
+                  <Sun className="w-4 h-4 text-clay" weight="fill" />
                   <span className="text-xs">
                     Sun: {Math.round(result.sun_track[Math.floor(result.sun_track.length / 2)].azimuth_deg)}° ({degreesToCompass(result.sun_track[Math.floor(result.sun_track.length / 2)].azimuth_deg)})
                   </span>
@@ -2093,17 +2091,17 @@ export default function PhotoScout() {
                 <div className="flex flex-col space-y-1.5">
                   <div className="flex items-center justify-between">
                     <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
-                      <Camera className="w-5 h-5 text-primary" weight="fill" />
+                      <Camera className="w-5 h-5 text-pine-6" weight="fill" />
                       Photo Scout
                     </h2>
-                    {searchOpen ? <CaretDown className="w-4 h-4 text-muted-foreground" /> : <CaretRight className="w-4 h-4 text-muted-foreground" />}
+                    {searchOpen ? <CaretDown className="w-4 h-4 text-ink-3" /> : <CaretRight className="w-4 h-4 text-ink-3" />}
                   </div>
                   {searchOpen ? (
-                    <p className="text-sm text-muted-foreground">Find the best spots for sunrise and sunset photography</p>
+                    <p className="text-sm text-ink-3">Find the best spots for sunrise and sunset photography</p>
                   ) : location ? (
-                    <p className="text-sm text-muted-foreground truncate">{location.name} &middot; {date} &middot; <span className="capitalize">{event}</span></p>
+                    <p className="text-sm text-ink-3 truncate">{location.name} &middot; {date} &middot; <span className="capitalize">{event}</span></p>
                   ) : (
-                    <p className="text-sm text-muted-foreground">Select a location to scout</p>
+                    <p className="text-sm text-ink-3">Select a location to scout</p>
                   )}
                 </div>
               </CollapsibleTrigger>
@@ -2111,7 +2109,7 @@ export default function PhotoScout() {
               <CollapsibleContent className="space-y-4 mt-4">
                 {/* Location Search */}
                 <div>
-                  <Label className="text-sm text-muted-foreground mb-1.5 block">Location</Label>
+                  <Label className="text-sm text-ink-3 mb-1.5 block">Location</Label>
                   <LocationSelector
                     value={location}
                     onChange={setLocation}
@@ -2127,7 +2125,7 @@ export default function PhotoScout() {
                 {/* Date and Event Selection */}
                 <div className="flex gap-3">
                   <div className="flex-1">
-                    <Label className="text-sm text-muted-foreground mb-1.5 block">Date</Label>
+                    <Label className="text-sm text-ink-3 mb-1.5 block">Date</Label>
                     <Input
                       type="date"
                       value={date}
@@ -2136,7 +2134,7 @@ export default function PhotoScout() {
                     />
                   </div>
                   <div className="flex-1">
-                    <Label className="text-sm text-muted-foreground mb-1.5 block">Event</Label>
+                    <Label className="text-sm text-ink-3 mb-1.5 block">Event</Label>
                     <Select value={event} onValueChange={(value: "sunrise" | "sunset") => setEvent(value)}>
                       <SelectTrigger className="w-full">
                         <SelectValue />
@@ -2149,9 +2147,13 @@ export default function PhotoScout() {
                   </div>
                 </div>
 
-                <Button onClick={handleAnalyze} disabled={isLoading || !parsedCoords} className="w-full">
-                  {isLoading ? "Scanning terrain..." : "Scout Location"}
-                </Button>
+                <button
+                  onClick={handleAnalyze}
+                  disabled={isLoading || !parsedCoords}
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full bg-pine-6 text-cream border border-pine-6 text-[12px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 hover:border-pine-5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? "Scanning terrain…" : "Scout location"}
+                </button>
               </CollapsibleContent>
             </div>
           </Collapsible>
@@ -2165,33 +2167,33 @@ export default function PhotoScout() {
               {/* Zone-centric summary - success-oriented framing */}
               <div className="flex items-center gap-3 text-sm">
                 {result.subjects.length > 0 && (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 dark:bg-amber-950 rounded-full">
-                    <Sun className="w-4 h-4 text-amber-600" weight="fill" />
-                    <span className="font-medium text-amber-700 dark:text-amber-400">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-clay/[0.06] dark:bg-clay/[0.06] rounded-full">
+                    <Sun className="w-4 h-4 text-clay" weight="fill" />
+                    <span className="font-medium text-clay dark:text-clay">
                       {result.subjects.length} lighting zone{result.subjects.length !== 1 ? "s" : ""}
                     </span>
                   </div>
                 )}
                 {overlookStandings.length > 0 && (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-50 dark:bg-cyan-950 rounded-full">
-                    <Eye className="w-4 h-4 text-cyan-600" weight="fill" />
-                    <span className="font-medium text-cyan-700 dark:text-cyan-400">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-water/[0.06] dark:bg-water/[0.10] rounded-full">
+                    <Eye className="w-4 h-4 text-water" weight="fill" />
+                    <span className="font-medium text-water dark:text-water">
                       {overlookStandings.length} overlook{overlookStandings.length !== 1 ? "s" : ""}
                     </span>
                   </div>
                 )}
                 {result.subjects.length === 0 && overlookStandings.length === 0 && (
-                  <span className="text-muted-foreground">No viable locations found</span>
+                  <span className="text-ink-3">No viable locations found</span>
                 )}
               </div>
               {result.meta.dem_source && (
-                <div className="mt-3 text-xs text-muted-foreground">
+                <div className="mt-3 text-xs text-ink-3">
                   DEM: {result.meta.dem_source}
                   {result.meta.dem_resolution_m && ` • ${result.meta.dem_resolution_m}m resolution`}
                 </div>
               )}
               {result.meta.structure_debug && showScoutDebug && (
-                <div className="mt-1 text-xs text-purple-400 font-mono">
+                <div className="mt-1 text-xs text-clay font-mono">
                   Structure: {result.meta.structure_debug.enabled ? "enabled" : "disabled"}
                   {" • "}{result.meta.structure_debug.computed_cells} cells computed
                   {" • "}{result.meta.structure_debug.attached_to_subjects} subjects with structure
@@ -2208,30 +2210,30 @@ export default function PhotoScout() {
             )}
 
             {/* Calibration Panel - collapsible */}
-            <div className="border rounded-lg bg-white dark:bg-gray-900">
+            <div className="border rounded-lg bg-white dark:bg-ink">
               <button
                 onClick={() => setCalibrationPanelOpen(!calibrationPanelOpen)}
-                className="w-full flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                className="w-full flex items-center justify-between p-3 hover:bg-cream dark:hover:bg-ink transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Gear className="w-4 h-4 text-gray-500" />
+                  <Gear className="w-4 h-4 text-ink-3" />
                   <span className="text-sm font-medium">Calibration</span>
                   {calibrationStats && (
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-ink-3">
                       {calibrationStats.total_ratings} ratings
                     </span>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`text-xs px-1.5 py-0.5 rounded ${
-                    useTunedRanking ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
+                    useTunedRanking ? 'bg-clay/15 text-clay' : 'bg-cream text-ink-2'
                   }`}>
                     {useTunedRanking ? 'Tuned' : 'Default'}
                   </span>
                   {calibrationPanelOpen ? (
-                    <CaretDown className="w-4 h-4 text-gray-400" />
+                    <CaretDown className="w-4 h-4 text-ink-3" />
                   ) : (
-                    <CaretRight className="w-4 h-4 text-gray-400" />
+                    <CaretRight className="w-4 h-4 text-ink-3" />
                   )}
                 </div>
               </button>
@@ -2242,18 +2244,18 @@ export default function PhotoScout() {
                   {calibrationStats && (
                     <div className="flex items-center gap-3 pt-3">
                       <div className="flex items-center gap-1">
-                        <ThumbsUp className="w-3.5 h-3.5 text-green-600" />
-                        <span className="text-xs text-gray-600">{calibrationStats.by_rating.hit}</span>
+                        <ThumbsUp className="w-3.5 h-3.5 text-pine-6" />
+                        <span className="text-xs text-ink-2">{calibrationStats.by_rating.hit}</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <Minus className="w-3.5 h-3.5 text-yellow-600" />
-                        <span className="text-xs text-gray-600">{calibrationStats.by_rating.meh}</span>
+                        <Minus className="w-3.5 h-3.5 text-clay" />
+                        <span className="text-xs text-ink-2">{calibrationStats.by_rating.meh}</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <ThumbsDown className="w-3.5 h-3.5 text-red-600" />
-                        <span className="text-xs text-gray-600">{calibrationStats.by_rating.miss}</span>
+                        <ThumbsDown className="w-3.5 h-3.5 text-ember" />
+                        <span className="text-xs text-ink-2">{calibrationStats.by_rating.miss}</span>
                       </div>
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-ink-3">
                         ({calibrationStats.unique_regions} regions)
                       </span>
                     </div>
@@ -2261,17 +2263,15 @@ export default function PhotoScout() {
 
                   {/* Tune button */}
                   <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
+                    <button
                       onClick={handleTuneWeights}
                       disabled={isTuning || !calibrationStats?.ready_for_tuning}
-                      className="text-xs"
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-white text-ink-2 border border-line text-[11px] font-sans font-semibold tracking-[0.01em] hover:border-ink-3/50 hover:bg-cream transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isTuning ? 'Tuning...' : 'Tune Weights'}
-                    </Button>
+                      {isTuning ? 'Tuning…' : 'Tune weights'}
+                    </button>
                     {tunedWeights && (
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-ink-3">
                         Last tuned: {tunedWeights.tuned_from_n_samples} samples
                       </span>
                     )}
@@ -2280,11 +2280,11 @@ export default function PhotoScout() {
                   {/* Use tuned ranking toggle */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <label htmlFor="use-tuned" className="text-xs text-gray-600">
+                      <label htmlFor="use-tuned" className="text-xs text-ink-2">
                         Use Tuned Ranking
                       </label>
                       {!tunedWeights && (
-                        <span className="text-xs text-gray-400" title="Tune weights first">
+                        <span className="text-xs text-ink-3" title="Tune weights first">
                           (unavailable)
                         </span>
                       )}
@@ -2295,12 +2295,12 @@ export default function PhotoScout() {
                       checked={useTunedRanking}
                       onChange={(e) => setUseTunedRanking(e.target.checked)}
                       disabled={!tunedWeights}
-                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:opacity-50"
+                      className="rounded border-line text-clay focus:ring-purple-500 disabled:opacity-50"
                     />
                   </div>
 
                   {/* Tuning hint */}
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-ink-3">
                     Tuning works best after ~20+ ratings with a mix of hits and misses.
                   </p>
                 </div>
@@ -2308,14 +2308,14 @@ export default function PhotoScout() {
             </div>
 
             {error && (
-              <div className="p-4 bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400 rounded-lg">
+              <div className="p-4 bg-ember/[0.06] dark:bg-ember/[0.10] text-ember dark:text-ember rounded-lg">
                 {error}
               </div>
             )}
 
             {!result && !isLoading && !error && (
-              <div className="text-center text-muted-foreground py-12">
-                <Mountains className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+              <div className="text-center text-ink-3 py-12">
+                <Mountains className="w-12 h-12 mx-auto mb-4 text-ink-3/50" />
                 <p>Search, enter coordinates, or</p>
                 <p className="font-medium">click on the map</p>
                 <p className="mt-2 text-sm">then click "Scout Location" to find photo opportunities</p>
@@ -2323,8 +2323,8 @@ export default function PhotoScout() {
             )}
 
             {isLoading && (
-              <div className="text-center text-muted-foreground py-12">
-                <Crosshair className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50 animate-pulse" />
+              <div className="text-center text-ink-3 py-12">
+                <Crosshair className="w-12 h-12 mx-auto mb-4 text-ink-3/50 animate-pulse" />
                 <p>Scanning terrain...</p>
                 <p className="text-sm mt-1">Finding lighting zones</p>
               </div>
@@ -2393,9 +2393,9 @@ export default function PhotoScout() {
               // Get category label
               const getCategoryLabel = (category?: string) => {
                 switch (category) {
-                  case 'EPIC_OVERLOOK': return { label: 'Epic Overlook', color: 'text-purple-700', bgColor: 'bg-purple-100' };
+                  case 'EPIC_OVERLOOK': return { label: 'Epic Overlook', color: 'text-clay', bgColor: 'bg-clay/15' };
                   case 'DRAMATIC_ENCLOSED': return { label: 'Dramatic View', color: 'text-indigo-700', bgColor: 'bg-indigo-100' };
-                  default: return { label: 'Scenic View', color: 'text-cyan-700', bgColor: 'bg-cyan-100' };
+                  default: return { label: 'Scenic View', color: 'text-water', bgColor: 'bg-water/15' };
                 }
               };
 
@@ -2412,18 +2412,18 @@ export default function PhotoScout() {
                   : [];
 
                 return (
-                  <Card
+                  <div
                     key={overlook.standing_id}
-                    className={`cursor-pointer transition-all ${
-                      isSelected ? "ring-2 ring-cyan-500 shadow-md" : "hover:shadow-md"
+                    className={`bg-white border rounded-[14px] cursor-pointer transition-all ${
+                      isSelected ? "border-water ring-1 ring-water/30 shadow-[0_8px_22px_rgba(29,34,24,.10)]" : "border-line hover:border-ink-3/40 hover:shadow-[0_8px_22px_rgba(29,34,24,.08)]"
                     } ${isTopPick ? "" : "opacity-90"}`}
                     onClick={() => setSelectedSubjectId(overlook.standing_id)}
                   >
-                    <CardContent className={isTopPick ? "p-4" : "p-3"}>
+                    <div className={isTopPick ? "p-4" : "p-3"}>
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-3">
-                          <div className={`${isTopPick ? "w-10 h-10" : "w-8 h-8"} rounded-full bg-cyan-100 flex items-center justify-center`}>
-                            <Eye className={`${isTopPick ? "w-6 h-6" : "w-5 h-5"} text-cyan-600`} weight="fill" />
+                          <div className={`${isTopPick ? "w-10 h-10" : "w-8 h-8"} rounded-full bg-water/15 flex items-center justify-center`}>
+                            <Eye className={`${isTopPick ? "w-6 h-6" : "w-5 h-5"} text-water`} weight="fill" />
                           </div>
                           <div>
                             <div className={`${isTopPick ? "font-bold text-lg" : "font-semibold text-base"} flex items-center gap-2`}>
@@ -2435,14 +2435,14 @@ export default function PhotoScout() {
                               {/* Rank change badge when using tuned ranking */}
                               {useTunedRanking && rankChange !== 0 && (
                                 <span className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium ${
-                                  rankChange > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                  rankChange > 0 ? 'bg-pine-6/12 text-pine-6' : 'bg-ember/15 text-ember'
                                 }`}>
                                   {rankChange > 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
                                   {Math.abs(rankChange)}
                                 </span>
                               )}
                             </div>
-                            <div className="text-sm text-gray-500">
+                            <div className="text-sm text-ink-3">
                               Face {degreesToCompass(overlook.view?.best_bearing_deg ?? 0)} for best view
                             </div>
                           </div>
@@ -2453,7 +2453,7 @@ export default function PhotoScout() {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-cyan-600 hover:text-cyan-800 hover:bg-cyan-100 rounded transition-colors"
+                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-water hover:text-water/80 hover:bg-water/15 rounded transition-colors"
                           >
                             <MapPin className="w-4 h-4" />
                             Navigate
@@ -2464,18 +2464,18 @@ export default function PhotoScout() {
                       {/* Chips for key metrics */}
                       <div className="flex flex-wrap gap-1.5 mb-2">
                         {overlook.view?.depth_p90_m != null && (
-                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
+                          <span className="px-2 py-0.5 bg-cream text-ink-2 rounded text-xs">
                             Depth: {(overlook.view.depth_p90_m / 1000).toFixed(1)}km
                           </span>
                         )}
                         {overlook.view?.open_sky_fraction != null && (
-                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
+                          <span className="px-2 py-0.5 bg-cream text-ink-2 rounded text-xs">
                             Open ahead: {Math.round(overlook.view.open_sky_fraction * 100)}%
                           </span>
                         )}
                         {overlook.properties.access_type && overlook.properties.access_type !== 'none' && (
                           <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            overlook.properties.access_type === 'road' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                            overlook.properties.access_type === 'road' ? 'bg-pine-6/12 text-pine-6' : 'bg-clay/15 text-clay'
                           }`}>
                             {overlook.properties.access_type}
                             {overlook.properties.distance_to_road_m != null && ` ${Math.round(overlook.properties.distance_to_road_m)}m`}
@@ -2485,7 +2485,7 @@ export default function PhotoScout() {
 
                       {/* Explanation - only for top picks */}
                       {isTopPick && overlook.view?.explanations && (
-                        <p className="text-sm text-gray-600 leading-relaxed">
+                        <p className="text-sm text-ink-2 leading-relaxed">
                           {overlook.view.explanations.short}
                         </p>
                       )}
@@ -2493,12 +2493,12 @@ export default function PhotoScout() {
                       {/* Top drivers (why this spot is ranked) - only for top picks with distant_glow */}
                       {isTopPick && topDrivers.length > 0 && (
                         <div className="flex items-center gap-1.5 mt-2">
-                          <Lightning className="w-3.5 h-3.5 text-amber-500" weight="fill" />
-                          <span className="text-xs text-gray-400">Why:</span>
+                          <Lightning className="w-3.5 h-3.5 text-clay" weight="fill" />
+                          <span className="text-xs text-ink-3">Why:</span>
                           {topDrivers.map((driver) => (
                             <span
                               key={driver.feature}
-                              className="px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded text-xs"
+                              className="px-1.5 py-0.5 bg-clay/[0.06] text-clay rounded text-xs"
                               title={`${driver.label} contributes ${(driver.contribution * 100).toFixed(0)}% to score`}
                             >
                               {driver.label} +{(driver.contribution * 100).toFixed(0)}%
@@ -2509,15 +2509,15 @@ export default function PhotoScout() {
 
                       {/* Calibration rating buttons - only for top picks with distant_glow data */}
                       {isTopPick && overlook.view?.distant_glow && (
-                        <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-100">
-                          <span className="text-xs text-gray-400 mr-1">Rate this spot:</span>
+                        <div className="flex items-center gap-2 mt-3 pt-2 border-t border-line">
+                          <span className="text-xs text-ink-3 mr-1">Rate this spot:</span>
                           {(['hit', 'meh', 'miss'] as const).map((rating) => {
                             const isRated = ratedOverlooks[overlook.standing_id] === rating;
                             const Icon = rating === 'hit' ? ThumbsUp : rating === 'miss' ? ThumbsDown : Minus;
                             const colors = {
-                              hit: isRated ? 'bg-green-500 text-white' : 'bg-gray-100 text-green-600 hover:bg-green-100',
-                              meh: isRated ? 'bg-yellow-500 text-white' : 'bg-gray-100 text-yellow-600 hover:bg-yellow-100',
-                              miss: isRated ? 'bg-red-500 text-white' : 'bg-gray-100 text-red-600 hover:bg-red-100',
+                              hit: isRated ? 'bg-pine-6 text-white' : 'bg-cream text-pine-6 hover:bg-pine-6/12',
+                              meh: isRated ? 'bg-clay text-white' : 'bg-cream text-clay hover:bg-clay/15',
+                              miss: isRated ? 'bg-ember text-white' : 'bg-cream text-ember hover:bg-ember/15',
                             };
                             return (
                               <button
@@ -2540,18 +2540,18 @@ export default function PhotoScout() {
                       {/* Coordinates in debug section - only for top picks */}
                       {isTopPick && (
                         <Collapsible className="mt-3">
-                          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
+                          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2">
                             <CaretDown className="w-3 h-3" />
                             Coordinates
                           </CollapsibleTrigger>
-                          <CollapsibleContent className="mt-2 p-2 bg-gray-50 rounded text-xs font-mono">
+                          <CollapsibleContent className="mt-2 p-2 bg-cream rounded text-xs font-mono">
                             <div>{overlook.location.lat.toFixed(6)}, {overlook.location.lon.toFixed(6)}</div>
-                            <div className="text-gray-500 mt-1">Elevation: {Math.round(overlook.properties.elevation_diff_m || 0)}m relative</div>
+                            <div className="text-ink-3 mt-1">Elevation: {Math.round(overlook.properties.elevation_diff_m || 0)}m relative</div>
                           </CollapsibleContent>
                         </Collapsible>
                       )}
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
                 );
               };
 
@@ -2560,13 +2560,13 @@ export default function PhotoScout() {
                   {/* Top Picks Header */}
                   <div className="flex items-center justify-between mt-4 pt-4 border-t">
                     <div className="flex items-center gap-2">
-                      <Eye className="w-5 h-5 text-cyan-600" weight="fill" />
-                      <h3 className="font-semibold text-sm text-gray-700">Top Picks</h3>
-                      <span className="text-xs text-gray-500">({topPicks.length} of {sortedOverlooks.length})</span>
+                      <Eye className="w-5 h-5 text-water" weight="fill" />
+                      <h3 className="font-semibold text-sm text-ink-2">Top Picks</h3>
+                      <span className="text-xs text-ink-3">({topPicks.length} of {sortedOverlooks.length})</span>
                     </div>
                     {/* Debug: show zone score */}
                     {showScoutDebug && (
-                      <div className="text-xs font-mono text-gray-400">
+                      <div className="text-xs font-mono text-ink-3">
                         score={zoneScore.toFixed(2)} (top3={top3Avg.toFixed(2)}, epic={epicCount}, n={total})
                       </div>
                     )}
@@ -2578,7 +2578,7 @@ export default function PhotoScout() {
                   {/* More Options - collapsed by default */}
                   {moreOptions.length > 0 && (
                     <Collapsible className="mt-2">
-                      <CollapsibleTrigger className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm text-gray-600 hover:text-gray-800 transition-colors">
+                      <CollapsibleTrigger className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-cream hover:bg-cream rounded-lg text-sm text-ink-2 hover:text-ink transition-colors">
                         <CaretDown className="w-4 h-4" />
                         <span>+{moreOptions.length} more overlook{moreOptions.length !== 1 ? "s" : ""}</span>
                       </CollapsibleTrigger>
@@ -2592,8 +2592,8 @@ export default function PhotoScout() {
             })()}
 
             {result && result.subjects.length === 0 && overlookStandings.length === 0 && (
-              <div className="text-center text-muted-foreground py-12">
-                <Mountains className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+              <div className="text-center text-ink-3 py-12">
+                <Mountains className="w-12 h-12 mx-auto mb-4 text-ink-3/50" />
                 <p>No viable overlooks found</p>
                 <p className="text-sm mt-2">Try a location with more dramatic terrain or canyon edges</p>
               </div>

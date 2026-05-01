@@ -1,11 +1,10 @@
-import { useState, useCallback } from "react";
-import { Marker } from "@react-google-maps/api";
-import { MapPin, MagnifyingGlass, Crosshair } from "@phosphor-icons/react";
-import { GoogleMap } from "@/components/GoogleMap";
-import { PlaceSearch } from "@/components/PlaceSearch";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useState, useCallback } from 'react';
+import { Marker } from '@react-google-maps/api';
+import { MapPin, MagnifyingGlass, Crosshair } from '@phosphor-icons/react';
+import { GoogleMap } from '@/components/GoogleMap';
+import { PlaceSearch } from '@/components/PlaceSearch';
+import { Mono, Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 interface SelectedLocation {
   lat: number;
@@ -20,20 +19,17 @@ interface MapLocationPickerProps {
 }
 
 export function MapLocationPicker({ onSelectLocation, onCancel, initialCenter }: MapLocationPickerProps) {
-  const defaultCenter = initialCenter || { lat: 39.8283, lng: -98.5795 }; // Center of US as fallback
+  const defaultCenter = initialCenter || { lat: 39.8283, lng: -98.5795 };
   const defaultZoom = initialCenter ? 10 : 4;
   const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral>(defaultCenter);
   const [mapZoom, setMapZoom] = useState(defaultZoom);
   const [selectedLocation, setSelectedLocation] = useState<SelectedLocation | null>(null);
-  const [locationName, setLocationName] = useState("");
-  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [locationName, setLocationName] = useState('');
 
   const handleMapClick = useCallback((e: google.maps.MapMouseEvent) => {
     if (e.latLng) {
-      const lat = e.latLng.lat();
-      const lng = e.latLng.lng();
-      setSelectedLocation({ lat, lng });
-      setLocationName("");
+      setSelectedLocation({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+      setLocationName('');
     }
   }, []);
 
@@ -42,7 +38,7 @@ export function MapLocationPicker({ onSelectLocation, onCancel, initialCenter }:
       const lat = place.geometry.location.lat();
       const lng = place.geometry.location.lng();
       setSelectedLocation({ lat, lng, name: place.name });
-      setLocationName(place.name || "");
+      setLocationName(place.name || '');
       setMapCenter({ lat, lng });
       setMapZoom(12);
     }
@@ -50,13 +46,10 @@ export function MapLocationPicker({ onSelectLocation, onCancel, initialCenter }:
 
   const handleConfirm = () => {
     if (selectedLocation) {
-      const name = locationName.trim() ||
+      const name =
+        locationName.trim() ||
         `Location (${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)})`;
-      onSelectLocation({
-        lat: selectedLocation.lat,
-        lng: selectedLocation.lng,
-        name,
-      });
+      onSelectLocation({ lat: selectedLocation.lat, lng: selectedLocation.lng, name });
     }
   };
 
@@ -69,36 +62,36 @@ export function MapLocationPicker({ onSelectLocation, onCancel, initialCenter }:
           setSelectedLocation({ lat, lng });
           setMapCenter({ lat, lng });
           setMapZoom(12);
-          setLocationName("");
+          setLocationName('');
         },
         (error) => {
-          console.error("Error getting location:", error);
-        }
+          console.error('Error getting location:', error);
+        },
       );
     }
   };
 
+  const inputCls =
+    'w-full h-10 px-3 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors';
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Search bar */}
-      <div className="p-4 border-b border-border space-y-3">
-        <div className="flex items-center gap-2">
-          <MagnifyingGlass className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Search for a location</span>
-        </div>
-        <PlaceSearch
-          onPlaceSelect={handlePlaceSelect}
-          placeholder="Search places..."
-        />
-        <Button
-          variant="outline"
-          size="sm"
+    <div className="flex flex-col h-full bg-paper text-ink font-sans">
+      {/* Search section */}
+      <div className="p-4 border-b border-line bg-cream space-y-2.5">
+        <Mono className="text-pine-6 inline-flex items-center gap-1.5">
+          <MagnifyingGlass className="w-3 h-3" weight="regular" />
+          Search for a location
+        </Mono>
+        <PlaceSearch onPlaceSelect={handlePlaceSelect} placeholder="Search places…" />
+        <Pill
+          variant="ghost"
+          mono={false}
           onClick={handleUseCurrentLocation}
-          className="w-full"
+          className="!w-full !justify-center"
         >
-          <Crosshair className="w-4 h-4 mr-2" />
+          <Crosshair className="w-3.5 h-3.5" weight="regular" />
           Use my current location
-        </Button>
+        </Pill>
       </div>
 
       {/* Map */}
@@ -107,7 +100,6 @@ export function MapLocationPicker({ onSelectLocation, onCancel, initialCenter }:
           center={mapCenter}
           zoom={mapZoom}
           onClick={handleMapClick}
-          onLoad={setMap}
           className="w-full h-full"
         >
           {selectedLocation && (
@@ -118,11 +110,10 @@ export function MapLocationPicker({ onSelectLocation, onCancel, initialCenter }:
           )}
         </GoogleMap>
 
-        {/* Click hint overlay */}
         {!selectedLocation && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-background/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg border border-border">
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <MapPin className="w-4 h-4" />
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-md border border-line rounded-full shadow-[0_8px_22px_rgba(29,34,24,.10)] px-4 py-2">
+            <p className="text-[12px] font-mono font-semibold uppercase tracking-[0.10em] text-ink-2 inline-flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-pine-6" weight="regular" />
               Click on the map to drop a pin
             </p>
           </div>
@@ -130,43 +121,41 @@ export function MapLocationPicker({ onSelectLocation, onCancel, initialCenter }:
       </div>
 
       {/* Selected location details */}
-      {selectedLocation && (
-        <div className="p-4 border-t border-border space-y-3 bg-muted/30">
-          <div className="flex items-center gap-2 text-sm">
-            <MapPin className="w-4 h-4 text-primary" weight="fill" />
-            <span className="text-muted-foreground">
+      {selectedLocation ? (
+        <div className="p-4 border-t border-line bg-cream space-y-3">
+          <div className="inline-flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-pine-6" weight="fill" />
+            <Mono className="text-ink-2">
               {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
-            </span>
+            </Mono>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="location-name" className="text-xs">Location name</Label>
-            <Input
+          <div className="space-y-1.5">
+            <Mono className="text-ink-2 block">Location name</Mono>
+            <input
               id="location-name"
               value={locationName}
               onChange={(e) => setLocationName(e.target.value)}
               placeholder="Enter a name for this location"
+              className={inputCls}
             />
           </div>
 
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={onCancel} className="flex-1">
+          <div className="flex items-center gap-2">
+            <Pill variant="ghost" mono={false} onClick={onCancel} className="!flex-1 !justify-center">
               Cancel
-            </Button>
-            <Button variant="primary" onClick={handleConfirm} className="flex-1">
-              <MapPin className="w-4 h-4 mr-2" />
-              Add Location
-            </Button>
+            </Pill>
+            <Pill variant="solid-pine" mono={false} onClick={handleConfirm} className="!flex-1 !justify-center">
+              <MapPin className="w-3.5 h-3.5" weight="regular" />
+              Add location
+            </Pill>
           </div>
         </div>
-      )}
-
-      {/* Cancel button when no location selected */}
-      {!selectedLocation && (
-        <div className="p-4 border-t border-border">
-          <Button variant="outline" onClick={onCancel} className="w-full">
+      ) : (
+        <div className="p-4 border-t border-line bg-cream">
+          <Pill variant="ghost" mono={false} onClick={onCancel} className="!w-full !justify-center">
             Cancel
-          </Button>
+          </Pill>
         </div>
       )}
     </div>

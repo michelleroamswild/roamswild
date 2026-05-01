@@ -5,10 +5,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSurpriseMe } from '@/hooks/use-surprise-me';
 import { useGoogleMaps } from '@/components/GoogleMapsProvider';
@@ -34,6 +32,8 @@ import {
   ArrowSquareOut,
   GlobeHemisphereWest,
 } from '@phosphor-icons/react';
+import { Mono, Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 interface SurpriseMeDialogProps {
   open: boolean;
@@ -45,9 +45,7 @@ function cleanRegionName(name: string): string {
   const suffixes = ['National Forest', 'National Park', 'Wilderness', 'State Park', 'Recreation Area'];
   for (const suffix of suffixes) {
     const duplicated = `${suffix} ${suffix}`;
-    if (name.includes(duplicated)) {
-      return name.replace(duplicated, suffix);
-    }
+    if (name.includes(duplicated)) return name.replace(duplicated, suffix);
   }
   return name;
 }
@@ -60,13 +58,13 @@ const BIOME_ICONS: Record<BiomeType, React.ReactNode> = {
   grassland: <Flower className="w-5 h-5" weight="fill" />,
 };
 
-// Better contrast for biome colors
+// Biomes mapped to redesign accents (was rainbow palette before).
 const BIOME_COLORS: Record<BiomeType, string> = {
-  desert: 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30',
-  alpine: 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/50',
-  forest: 'text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/30',
-  coastal: 'text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/30',
-  grassland: 'text-lime-700 dark:text-lime-300 bg-lime-100 dark:bg-lime-900/30',
+  desert:    'bg-clay/15 text-clay',
+  alpine:    'bg-water/15 text-water',
+  forest:    'bg-pine-6/12 text-pine-6',
+  coastal:   'bg-water/15 text-water',
+  grassland: 'bg-sage/15 text-sage',
 };
 
 export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) {
@@ -80,7 +78,6 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
   const [manualLocation, setManualLocation] = useState<SelectedLocation | null>(null);
   const [lastUsedCoords, setLastUsedCoords] = useState<{ lat: number; lng: number; overrides?: { maxDistanceMiles?: number } } | null>(null);
 
-  // Clear state when dialog closes
   useEffect(() => {
     if (!open) {
       clearResult();
@@ -91,12 +88,9 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
     }
   }, [open, clearResult]);
 
-  // Reverse geocode to get nearest city/state when result changes
+  // Reverse geocode the result location to a city/state label.
   useEffect(() => {
-    if (!result || !googleMapsLoaded || !window.google?.maps?.Geocoder) {
-      return;
-    }
-
+    if (!result || !googleMapsLoaded || !window.google?.maps?.Geocoder) return;
     const geocoder = new window.google.maps.Geocoder();
     geocoder.geocode(
       { location: { lat: result.region.center.lat, lng: result.region.center.lng } },
@@ -104,83 +98,61 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
         if (status === 'OK' && results && results.length > 0) {
           let city: string | null = null;
           let state: string | null = null;
-
-          // Look through results for locality and state
           for (const r of results) {
-            for (const component of r.address_components) {
-              if (component.types.includes('locality') && !city) {
-                city = component.long_name;
-              }
-              if (component.types.includes('administrative_area_level_1') && !state) {
-                state = component.short_name;
-              }
+            for (const c of r.address_components) {
+              if (c.types.includes('locality') && !city) city = c.long_name;
+              if (c.types.includes('administrative_area_level_1') && !state) state = c.short_name;
             }
             if (city && state) break;
           }
-
-          if (city && state) {
-            setNearestLocation(`Near ${city}, ${state}`);
-          } else if (state) {
-            setNearestLocation(state);
-          }
+          if (city && state) setNearestLocation(`Near ${city}, ${state}`);
+          else if (state) setNearestLocation(state);
         }
-      }
+      },
     );
   }, [result, googleMapsLoaded]);
 
-  // Start getting surprise when dialog opens
   useEffect(() => {
     if (open && !result && !loading && !error && !showLocationFallback) {
       handleGetSurprise();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const handleGetSurprise = async () => {
     setShowLocationFallback(false);
     setGettingLocation(false);
-    // Skip geolocation — go straight to "anywhere" mode
     const overrides = { maxDistanceMiles: 2000 };
     setLastUsedCoords({ lat: 39.83, lng: -98.58, overrides });
     await getSurprise(39.83, -98.58, overrides);
   };
 
   const handleExplore = () => {
-    if (result) {
-      recordClick();
-
-      // Build location state with surprise me data
-      const locationState = {
-        placeId: `surprise-${result.region.id}`,
-        name: result.region.name,
-        address: result.region.tagline || `${result.region.primaryBiome} region`,
-        lat: result.anchor?.center.lat ?? result.region.center.lat,
-        lng: result.anchor?.center.lng ?? result.region.center.lng,
-        surpriseMe: {
-          regionId: result.region.id,
-          explanation: result.explanation,
-          distanceMiles: result.region.distanceMiles,
-          driveTimeHours: result.region.driveTimeHours,
-          biome: result.region.primaryBiome,
-          cautions: result.cautions,
-          anchor: result.anchor ? {
-            road: result.anchor.road,
-            center: result.anchor.center,
-            lengthMiles: result.anchor.lengthMiles,
-          } : undefined,
-          highlights: result.anchorHighlights?.map(h => ({
-            type: h.type,
-            name: h.name,
-            lat: h.lat,
-            lon: h.lon,
-            distanceMiles: h.distanceMiles,
-          })),
-        },
-      };
-
-      // Close dialog and navigate to location detail
-      onOpenChange(false);
-      navigate(`/location/${result.region.id}`, { state: locationState });
-    }
+    if (!result) return;
+    recordClick();
+    const locationState = {
+      placeId: `surprise-${result.region.id}`,
+      name: result.region.name,
+      address: result.region.tagline || `${result.region.primaryBiome} region`,
+      lat: result.anchor?.center.lat ?? result.region.center.lat,
+      lng: result.anchor?.center.lng ?? result.region.center.lng,
+      surpriseMe: {
+        regionId: result.region.id,
+        explanation: result.explanation,
+        distanceMiles: result.region.distanceMiles,
+        driveTimeHours: result.region.driveTimeHours,
+        biome: result.region.primaryBiome,
+        cautions: result.cautions,
+        anchor: result.anchor
+          ? { road: result.anchor.road, center: result.anchor.center, lengthMiles: result.anchor.lengthMiles }
+          : undefined,
+        highlights: result.anchorHighlights?.map((h) => ({
+          type: h.type, name: h.name, lat: h.lat, lon: h.lon, distanceMiles: h.distanceMiles,
+        })),
+      },
+    };
+    onOpenChange(false);
+    navigate(`/location/${result.region.id}`, { state: locationState });
   };
 
   const handleUseManualLocation = async () => {
@@ -192,7 +164,6 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
 
   const handleAnywhere = async () => {
     setShowLocationFallback(false);
-    // Geographic center of the contiguous US
     const overrides = { maxDistanceMiles: 2000 };
     setLastUsedCoords({ lat: 39.83, lng: -98.58, overrides });
     await getSurprise(39.83, -98.58, overrides);
@@ -200,100 +171,100 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
 
   const handleTryAgain = () => {
     clearResult();
-    if (lastUsedCoords) {
-      getSurprise(lastUsedCoords.lat, lastUsedCoords.lng, lastUsedCoords.overrides);
-    } else {
-      handleGetSurprise();
-    }
+    if (lastUsedCoords) getSurprise(lastUsedCoords.lat, lastUsedCoords.lng, lastUsedCoords.overrides);
+    else handleGetSurprise();
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md" className="max-w-lg sm:max-h-[85vh] flex flex-col max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-none max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-0" onInteractOutside={(e) => { if (showLocationFallback) e.preventDefault(); }}>
+      <DialogContent
+        size="md"
+        className="max-w-lg sm:max-h-[85vh] flex flex-col border-line bg-white rounded-[18px] max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-none max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-0"
+        onInteractOutside={(e) => { if (showLocationFallback) e.preventDefault(); }}
+      >
         <DialogHeader className="text-left shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            <Shuffle className="w-5 h-5 text-primary" weight="bold" />
-            Surprise Me
-          </DialogTitle>
-          <DialogDescription>
+          <Mono className="text-pine-6 flex items-center gap-1.5">
+            <Shuffle className="w-3.5 h-3.5" weight="regular" />
+            Surprise me
+          </Mono>
+          <DialogTitle className="font-sans font-semibold tracking-[-0.015em] text-ink text-[22px] leading-[1.15] mt-1">
             {loading || gettingLocation
-              ? 'Finding you an adventure...'
+              ? 'Finding you an adventure…'
               : result
-                ? 'We found a great spot for you!'
-                : 'Discover somewhere new to explore'}
-          </DialogDescription>
+                ? 'A great spot for you.'
+                : 'Discover somewhere new.'}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="py-4 flex-1 overflow-y-auto">
-          {/* Loading State */}
+          {/* Loading */}
           {(loading || gettingLocation) && (
-            <div className="flex flex-col items-center justify-center py-8">
-              <SpinnerGap className="w-12 h-12 text-primary animate-spin" />
-              <p className="mt-4 text-sm text-foreground/70">
-                {gettingLocation ? 'Getting your location...' : 'Finding your surprise...'}
-              </p>
+            <div className="flex flex-col items-center justify-center py-10">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/10 mb-3">
+                <SpinnerGap className="w-6 h-6 text-pine-6 animate-spin" />
+              </div>
+              <Mono className="text-pine-6">
+                {gettingLocation ? 'Getting your location…' : 'Finding your surprise…'}
+              </Mono>
             </div>
           )}
 
-          {/* Location Fallback State */}
+          {/* Location fallback */}
           {showLocationFallback && !loading && !gettingLocation && (
             <div className="flex flex-col items-center py-4 text-center space-y-4">
-              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                <MapPin className="w-6 h-6 text-muted-foreground" />
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 text-pine-6">
+                <MapPin className="w-5 h-5" weight="regular" />
               </div>
-              <p className="text-sm text-foreground/70">
+              <p className="text-[14px] text-ink-3 max-w-xs leading-[1.55]">
                 We couldn't get your location. Search for a place or explore anywhere.
               </p>
-
               <div className="w-full space-y-3">
                 <LocationSelector
                   value={manualLocation}
                   onChange={setManualLocation}
-                  placeholder="Search for a city or place..."
+                  placeholder="Search for a city or place…"
                   showMyLocation={false}
                   showSavedLocations={false}
                   showCoordinates={false}
-                  showClear={true}
+                  showClear
                   compact
                 />
-
                 {manualLocation && (
-                  <Button onClick={handleUseManualLocation} className="w-full">
+                  <Pill variant="solid-pine" mono={false} onClick={handleUseManualLocation} className="!w-full !justify-center">
                     Use this location
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
+                    <ArrowRight className="w-3.5 h-3.5" weight="bold" />
+                  </Pill>
                 )}
-
                 <div className="flex items-center gap-3">
-                  <div className="flex-1 border-t border-border" />
-                  <span className="text-xs text-muted-foreground">or</span>
-                  <div className="flex-1 border-t border-border" />
+                  <div className="flex-1 border-t border-line" />
+                  <Mono className="text-ink-3">Or</Mono>
+                  <div className="flex-1 border-t border-line" />
                 </div>
-
-                <Button onClick={handleAnywhere} className="w-full">
-                  <GlobeHemisphereWest className="w-4 h-4 mr-2" />
+                <Pill variant="ghost" mono={false} onClick={handleAnywhere} className="!w-full !justify-center">
+                  <GlobeHemisphereWest className="w-3.5 h-3.5" weight="regular" />
                   Surprise me from anywhere
-                </Button>
+                </Pill>
               </div>
             </div>
           )}
 
-          {/* Error State (non-location errors) */}
+          {/* Error */}
           {error && !showLocationFallback && !loading && !gettingLocation && (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
-                <Warning className="w-6 h-6 text-destructive" weight="fill" />
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-ember/15 text-ember mb-3">
+                <Warning className="w-6 h-6" weight="regular" />
               </div>
-              <p className="text-sm text-destructive font-medium mb-2">
-                {error}
-              </p>
-              <Button variant="outline" size="sm" onClick={handleTryAgain} className="mt-2">
-                Try Again
-              </Button>
+              <Mono className="text-ember">Couldn't find a spot</Mono>
+              <p className="text-[14px] text-ink-3 mt-2 max-w-xs">{error}</p>
+              <div className="mt-4">
+                <Pill variant="ghost" mono={false} onClick={handleTryAgain}>
+                  Try again
+                </Pill>
+              </div>
             </div>
           )}
 
-          {/* Result State */}
+          {/* Result */}
           {result && !loading && !gettingLocation && (
             <ResultDisplay result={result} nearestLocation={nearestLocation} />
           )}
@@ -302,14 +273,14 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
         <DialogFooter className="flex-col sm:flex-row gap-2 shrink-0">
           {result && !loading && (
             <>
-              <Button variant="outline" onClick={handleTryAgain} className="w-full sm:w-auto">
-                <Shuffle className="w-4 h-4 mr-2" />
-                Try Another
-              </Button>
-              <Button onClick={handleExplore} className="w-full sm:w-auto">
-                Explore Region
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
+              <Pill variant="ghost" mono={false} onClick={handleTryAgain} className="!w-full sm:!w-auto !justify-center">
+                <Shuffle className="w-3.5 h-3.5" weight="regular" />
+                Try another
+              </Pill>
+              <Pill variant="solid-pine" mono={false} onClick={handleExplore} className="!w-full sm:!w-auto !justify-center">
+                Explore region
+                <ArrowRight className="w-3.5 h-3.5" weight="bold" />
+              </Pill>
             </>
           )}
         </DialogFooter>
@@ -318,122 +289,113 @@ export function SurpriseMeDialog({ open, onOpenChange }: SurpriseMeDialogProps) 
   );
 }
 
-function ResultDisplay({ result, nearestLocation }: { result: SurpriseMeSuccessResponse; nearestLocation: string | null }) {
+// === Result body ========================================================
+function ResultDisplay({
+  result,
+  nearestLocation,
+}: {
+  result: SurpriseMeSuccessResponse;
+  nearestLocation: string | null;
+}) {
   const biome = result.region.primaryBiome;
-  const biomeColor = biome ? BIOME_COLORS[biome] : 'text-foreground/70 bg-secondary';
+  const biomeColor = biome ? BIOME_COLORS[biome] : 'bg-cream text-ink-3';
   const biomeIcon = biome ? BIOME_ICONS[biome] : <MapPin className="w-5 h-5" />;
   const displayName = cleanRegionName(result.region.name);
 
   return (
     <div className="space-y-4">
-      {/* Region Header */}
+      {/* Region header */}
       <div className="flex items-start gap-3">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${biomeColor}`}>
+        <div className={cn('w-12 h-12 rounded-[12px] flex items-center justify-center flex-shrink-0', biomeColor)}>
           {biomeIcon}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-display font-semibold text-lg text-foreground truncate">
+          <h3 className="text-[18px] font-sans font-bold tracking-[-0.015em] text-ink leading-[1.15] truncate">
             {displayName}
           </h3>
-          <div className="flex items-center gap-2 text-sm text-foreground/70">
-            {nearestLocation && (
-              <>
-                <MapPin className="w-3.5 h-3.5" />
-                <span>{nearestLocation}</span>
-                {biome && <span className="text-foreground/40">•</span>}
-              </>
-            )}
-            {biome && <span className="capitalize">{biome}</span>}
-          </div>
+          <Mono className="text-ink-3 block mt-1">
+            {nearestLocation && <>{nearestLocation}{biome && ' · '}</>}
+            {biome}
+          </Mono>
         </div>
       </div>
 
       {/* Explanation */}
-      <p className="text-sm text-foreground/80 leading-relaxed">
+      <p className="text-[14px] text-ink leading-[1.55]">
         {cleanRegionName(result.explanation)}
       </p>
 
-      {/* Stats */}
+      {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary border border-border">
-          <Car className="w-4 h-4 text-foreground/60" />
-          <div>
-            <p className="text-xs text-foreground/60">Distance</p>
-            <p className="text-sm font-medium text-foreground">{Math.round(result.region.distanceMiles)} miles</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary border border-border">
-          <Path className="w-4 h-4 text-foreground/60" />
-          <div>
-            <p className="text-xs text-foreground/60">Drive time</p>
-            <p className="text-sm font-medium text-foreground">
-              {result.region.driveTimeHours
-                ? `${result.region.driveTimeHours.toFixed(1)} hrs`
-                : `~${Math.round(result.region.distanceMiles / 50)} hrs`}
-            </p>
-          </div>
-        </div>
+        <StatTile Icon={Car} label="Distance" value={`${Math.round(result.region.distanceMiles)} mi`} />
+        <StatTile
+          Icon={Path}
+          label="Drive time"
+          value={
+            result.region.driveTimeHours
+              ? `${result.region.driveTimeHours.toFixed(1)} hrs`
+              : `~${Math.round(result.region.distanceMiles / 50)} hrs`
+          }
+        />
       </div>
 
-      {/* Scenic Anchor */}
+      {/* Scenic anchor */}
       {result.anchor ? (
         <button
           onClick={() => {
             window.open(
               `https://www.google.com/maps/dir/?api=1&destination=${result.anchor!.center.lat},${result.anchor!.center.lng}`,
-              '_blank'
+              '_blank',
             );
           }}
-          className="w-full p-4 rounded-xl bg-card border border-border shadow-sm hover:shadow-md hover:border-primary/30 transition-all text-left animate-in fade-in duration-300"
+          className="w-full p-4 rounded-[14px] border border-line bg-cream hover:border-pine-6 hover:bg-pine-6/[0.04] transition-all text-left animate-in fade-in duration-300"
         >
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <NavigationArrow className="w-5 h-5 text-primary" weight="fill" />
-              <p className="text-sm font-semibold text-foreground">Scenic Drive</p>
-            </div>
-            <ArrowSquareOut className="w-4 h-4 text-foreground/50" />
+            <Mono className="text-pine-6 flex items-center gap-1.5">
+              <NavigationArrow className="w-3.5 h-3.5" weight="regular" />
+              Scenic drive
+            </Mono>
+            <ArrowSquareOut className="w-3.5 h-3.5 text-ink-3" weight="regular" />
           </div>
-          <p className="text-sm text-foreground/80">
+          <p className="text-[14px] font-sans font-semibold text-ink">
             {result.anchor.road.name || result.anchor.road.ref || 'Unnamed road'}
             {result.anchor.lengthMiles > 0 && (
-              <span className="text-sm ml-2 text-foreground/60">
+              <span className="ml-2 text-ink-3 font-normal">
                 ({result.anchor.lengthMiles.toFixed(1)} mi)
               </span>
             )}
           </p>
           {result.anchor.road.surface !== 'unknown' && (
-            <p className="text-xs text-foreground/60 mt-1 capitalize">
-              {result.anchor.road.surface} surface
-            </p>
+            <Mono className="text-ink-3 block mt-1">{result.anchor.road.surface} surface</Mono>
           )}
         </button>
       ) : (
-        <div className="w-full p-4 rounded-xl bg-card border border-border shadow-sm">
+        <div className="w-full p-4 rounded-[14px] border border-line bg-cream">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-5 h-5 rounded bg-muted animate-pulse" />
-            <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+            <div className="w-5 h-5 rounded bg-line animate-pulse" />
+            <div className="h-4 w-24 rounded bg-line animate-pulse" />
           </div>
-          <div className="h-3.5 w-48 rounded bg-muted animate-pulse" />
-          <div className="h-3 w-20 rounded bg-muted animate-pulse mt-2" />
+          <div className="h-3.5 w-48 rounded bg-line animate-pulse" />
+          <div className="h-3 w-20 rounded bg-line animate-pulse mt-2" />
         </div>
       )}
 
-      {/* Nearby Highlights */}
+      {/* Highlights */}
       {result.anchorHighlights && result.anchorHighlights.length > 0 ? (
         <div className="space-y-2 animate-in fade-in duration-300">
-          <p className="text-xs font-semibold text-foreground/60 uppercase tracking-wide">Nearby Highlights</p>
+          <Mono className="text-ink-2 block">Nearby highlights</Mono>
           <div className="grid grid-cols-2 gap-2">
-            {result.anchorHighlights.slice(0, 4).map((highlight, i) => (
-              <HighlightChip key={i} highlight={highlight} />
+            {result.anchorHighlights.slice(0, 4).map((h, i) => (
+              <HighlightChip key={i} highlight={h} />
             ))}
           </div>
         </div>
       ) : !result.anchor && (
         <div className="space-y-2">
-          <div className="h-3 w-28 rounded bg-muted animate-pulse" />
+          <div className="h-3 w-28 rounded bg-line animate-pulse" />
           <div className="grid grid-cols-2 gap-2">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-9 rounded-lg bg-muted animate-pulse" />
+              <div key={i} className="h-9 rounded-[10px] bg-line animate-pulse" />
             ))}
           </div>
         </div>
@@ -441,11 +403,11 @@ function ResultDisplay({ result, nearestLocation }: { result: SurpriseMeSuccessR
 
       {/* Cautions */}
       {result.cautions && result.cautions.length > 0 && (
-        <div className="p-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700/50">
-          <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-1">Heads up</p>
-          <ul className="text-xs text-amber-700 dark:text-amber-300 space-y-0.5">
+        <div className="px-3 py-2.5 rounded-[12px] border border-clay/40 bg-clay/[0.08]">
+          <Mono className="text-clay block">Heads up</Mono>
+          <ul className="text-[13px] text-ink mt-1.5 space-y-0.5 leading-[1.5]">
             {result.cautions.slice(0, 3).map((caution, i) => (
-              <li key={i}>• {caution}</li>
+              <li key={i}>· {caution}</li>
             ))}
           </ul>
         </div>
@@ -454,57 +416,66 @@ function ResultDisplay({ result, nearestLocation }: { result: SurpriseMeSuccessR
   );
 }
 
-const HIGHLIGHT_ICONS: Record<ScenicAnchorHighlight['type'], React.ReactNode> = {
-  viewpoint: <Binoculars className="w-3.5 h-3.5" weight="fill" />,
-  trail: <Path className="w-3.5 h-3.5" weight="fill" />,
-  water: <Drop className="w-3.5 h-3.5" weight="fill" />,
-  camp: <Tent className="w-3.5 h-3.5" weight="fill" />,
-};
+const StatTile = ({
+  Icon,
+  label,
+  value,
+}: {
+  Icon: typeof Car;
+  label: string;
+  value: string;
+}) => (
+  <div className="flex items-center gap-2 p-3 rounded-[12px] border border-line bg-cream">
+    <Icon className="w-4 h-4 text-ink-3 flex-shrink-0" weight="regular" />
+    <div className="min-w-0">
+      <Mono className="text-ink-3 block">{label}</Mono>
+      <p className="text-[14px] font-sans font-bold tracking-[-0.005em] text-ink mt-0.5">{value}</p>
+    </div>
+  </div>
+);
 
-// Better contrast for highlight colors
-const HIGHLIGHT_COLORS: Record<ScenicAnchorHighlight['type'], string> = {
-  viewpoint: 'text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/40',
-  trail: 'text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/40',
-  water: 'text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40',
-  camp: 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40',
+// Highlight chip — small pill with type-accent color and external link icon.
+const HIGHLIGHT_STYLES: Record<ScenicAnchorHighlight['type'], { Icon: typeof Binoculars; bg: string; text: string; border: string }> = {
+  viewpoint: { Icon: Binoculars, bg: 'bg-ember/12',  text: 'text-ember',  border: 'border-ember/40' },
+  trail:     { Icon: Path,       bg: 'bg-sage/15',   text: 'text-sage',   border: 'border-sage/40' },
+  water:     { Icon: Drop,       bg: 'bg-water/15',  text: 'text-water',  border: 'border-water/40' },
+  camp:      { Icon: Tent,       bg: 'bg-clay/15',   text: 'text-clay',   border: 'border-clay/40' },
 };
 
 function HighlightChip({ highlight }: { highlight: ScenicAnchorHighlight }) {
-  const icon = HIGHLIGHT_ICONS[highlight.type];
-  const colorClass = HIGHLIGHT_COLORS[highlight.type];
+  const s = HIGHLIGHT_STYLES[highlight.type];
+  const Icon = s.Icon;
   const label = highlight.name || highlight.type.charAt(0).toUpperCase() + highlight.type.slice(1);
-  const isLongName = label.length > 25;
+  const isLong = label.length > 25;
 
-  const handleClick = () => {
-    window.open(
-      `https://www.google.com/maps/search/?api=1&query=${highlight.lat},${highlight.lon}`,
-      '_blank'
-    );
-  };
+  const handleClick = () =>
+    window.open(`https://www.google.com/maps/search/?api=1&query=${highlight.lat},${highlight.lon}`, '_blank');
 
   const chipContent = (
     <button
       onClick={handleClick}
-      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg hover:opacity-80 transition-opacity ${colorClass}`}
+      className={cn(
+        'flex items-center gap-1.5 px-3 py-2 rounded-[10px] border hover:opacity-80 transition-opacity',
+        s.bg, s.text, s.border,
+      )}
     >
-      {icon}
-      <span className={`text-xs font-medium ${isLongName ? 'truncate max-w-[150px]' : ''}`}>{label}</span>
-      <ArrowSquareOut className="w-3 h-3 opacity-70 flex-shrink-0" />
+      <Icon className="w-3.5 h-3.5 flex-shrink-0" weight="fill" />
+      <span className={cn('text-[12px] font-mono uppercase tracking-[0.10em] font-semibold', isLong && 'truncate max-w-[150px]')}>
+        {label}
+      </span>
+      <ArrowSquareOut className="w-3 h-3 opacity-70 flex-shrink-0" weight="regular" />
     </button>
   );
 
-  if (isLongName) {
+  if (isLong) {
     return (
       <Tooltip>
-        <TooltipTrigger asChild>
-          {chipContent}
-        </TooltipTrigger>
+        <TooltipTrigger asChild>{chipContent}</TooltipTrigger>
         <TooltipContent>
           <p>{label}</p>
         </TooltipContent>
       </Tooltip>
     );
   }
-
   return chipContent;
 }

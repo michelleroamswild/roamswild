@@ -708,3 +708,23 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   overflow: visible !important;
   padding: 0 !important;
 }
+
+/* === View Transitions API — smooth crossfade between routes ===
+ * Triggered via document.startViewTransition() in src/components/RouteTransition.tsx
+ * on every route change. Falls back gracefully on unsupported browsers (no
+ * transition, instant swap). */
+@keyframes rw-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes rw-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+::view-transition-old(root) {
+  animation: rw-fade-out 180ms ease-in forwards;
+}
+::view-transition-new(root) {
+  animation: rw-fade-in 220ms ease-out forwards;
+}

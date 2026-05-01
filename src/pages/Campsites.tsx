@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Plus,
   Tent,
@@ -12,19 +12,15 @@ import {
   Globe,
   Lock,
   Car,
-  SortAscending,
   MagnifyingGlass,
-  Tag,
+  Tag as TagIcon,
   X,
   NoteBlank,
   Users,
   CheckCircle,
   Compass,
+  SortAscending,
 } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -42,6 +38,8 @@ import { Campsite, CampsiteType, CampsiteVisibility } from '@/types/campsite';
 import { AddCampsiteModal } from '@/components/AddCampsiteModal';
 import { ImportCampsitesModal } from '@/components/ImportCampsitesModal';
 import { Header } from '@/components/Header';
+import { Mono, Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 const typeLabels: Record<CampsiteType, string> = {
   dispersed: 'Dispersed',
@@ -58,14 +56,19 @@ const roadAccessLabels: Record<string, string> = {
   '4wd_hard': '4WD Hard',
 };
 
-const sourceTypeLabels: Record<string, string> = {
-  manual: 'Added',
-  explorer: 'Explorer',
-};
+type Tab = 'mine' | 'friends' | 'explorer' | 'public';
 
 const Campsites = () => {
   const navigate = useNavigate();
-  const { campsites, publicCampsites, friendsCampsites, isLoading, deleteCampsite, exportToGeoJSON, fetchPublicCampsites } = useCampsites();
+  const {
+    campsites,
+    publicCampsites,
+    friendsCampsites,
+    isLoading,
+    deleteCampsite,
+    exportToGeoJSON,
+    fetchPublicCampsites,
+  } = useCampsites();
   const { getFriendById } = useFriends();
 
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string; name: string }>({
@@ -75,7 +78,7 @@ const Campsites = () => {
   });
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'mine' | 'friends' | 'explorer' | 'public'>('mine');
+  const [activeTab, setActiveTab] = useState<Tab>('mine');
   const [sortBy, setSortBy] = useState<'name-asc' | 'name-desc' | 'newest' | 'oldest'>('newest');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<CampsiteType | 'all'>('all');
@@ -90,131 +93,82 @@ const Campsites = () => {
     mapRef.current = map;
   }, []);
 
-  // Load public campsites when switching tabs
-  const handleTabChange = (tab: 'mine' | 'friends' | 'explorer' | 'public') => {
+  const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
     if ((tab === 'explorer' || tab === 'public') && publicCampsites.length === 0) {
       fetchPublicCampsites();
     }
   };
 
-  // Filter campsites for each tab
+  // Explorer spots = user's own + public confirmed explorer-source spots.
   const explorerSpots = useMemo(() => {
-    // Explorer spots are confirmed spots from the dispersed explorer (source_type = 'explorer')
-    // Combine user's explorer spots with public confirmed explorer spots
-    const userExplorerSpots = campsites.filter(c => c.sourceType === 'explorer');
-    const publicExplorerSpots = publicCampsites.filter(c => c.sourceType === 'explorer' && c.isConfirmed);
-    // Dedupe by id
-    const seen = new Set(userExplorerSpots.map(c => c.id));
+    const userExplorerSpots = campsites.filter((c) => c.sourceType === 'explorer');
+    const publicExplorerSpots = publicCampsites.filter((c) => c.sourceType === 'explorer' && c.isConfirmed);
+    const seen = new Set(userExplorerSpots.map((c) => c.id));
     const combined = [...userExplorerSpots];
-    publicExplorerSpots.forEach(c => {
-      if (!seen.has(c.id)) {
-        combined.push(c);
-      }
+    publicExplorerSpots.forEach((c) => {
+      if (!seen.has(c.id)) combined.push(c);
     });
     return combined;
   }, [campsites, publicCampsites]);
 
-  // Get the correct list based on active tab
-  const getListForTab = () => {
+  const getListForTab = (): Campsite[] => {
     switch (activeTab) {
-      case 'mine':
-        return campsites;
-      case 'friends':
-        return friendsCampsites;
-      case 'explorer':
-        return explorerSpots;
-      case 'public':
-        return publicCampsites;
-      default:
-        return campsites;
+      case 'mine':     return campsites;
+      case 'friends':  return friendsCampsites;
+      case 'explorer': return explorerSpots;
+      case 'public':   return publicCampsites;
+      default:         return campsites;
     }
   };
 
-  // Get unique states for filter dropdown
   const availableStates = useMemo(() => {
     const list = getListForTab();
     const states = new Set<string>();
-    list.forEach(c => {
-      if (c.state) states.add(c.state);
-    });
+    list.forEach((c) => { if (c.state) states.add(c.state); });
     return Array.from(states).sort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campsites, publicCampsites, friendsCampsites, explorerSpots, activeTab]);
 
-  // Get unique tags for filter pills
   const availableTags = useMemo(() => {
     const list = getListForTab();
     const tags = new Set<string>();
-    list.forEach(c => {
-      c.tags?.forEach(t => tags.add(t));
-    });
+    list.forEach((c) => c.tags?.forEach((t) => tags.add(t)));
     return Array.from(tags).sort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campsites, publicCampsites, friendsCampsites, explorerSpots, activeTab]);
 
-  // Filter and sort campsites
   const displayedCampsites = useMemo(() => {
     let list = getListForTab();
 
-    // Filter by search
     if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      list = list.filter(c =>
-        c.name.toLowerCase().includes(query) ||
-        c.description?.toLowerCase().includes(query)
-      );
+      const q = searchQuery.toLowerCase();
+      list = list.filter((c) => c.name.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q));
     }
-
-    // Filter by type
-    if (filterType !== 'all') {
-      list = list.filter(c => c.type === filterType);
-    }
-
-    // Filter by visibility (only for "mine" tab)
-    if (activeTab === 'mine' && filterVisibility !== 'all') {
-      list = list.filter(c => c.visibility === filterVisibility);
-    }
-
-    // Filter by state
-    if (filterState !== 'all') {
-      list = list.filter(c => c.state === filterState);
-    }
-
-    // Filter by tags (show campsites that have ANY of the selected tags)
-    if (filterTags.length > 0) {
-      list = list.filter(c =>
-        c.tags?.some(tag => filterTags.includes(tag))
-      );
-    }
-
-    // Filter by has notes (check both notes and description fields)
+    if (filterType !== 'all') list = list.filter((c) => c.type === filterType);
+    if (activeTab === 'mine' && filterVisibility !== 'all') list = list.filter((c) => c.visibility === filterVisibility);
+    if (filterState !== 'all') list = list.filter((c) => c.state === filterState);
+    if (filterTags.length > 0) list = list.filter((c) => c.tags?.some((tag) => filterTags.includes(tag)));
     if (filterHasNotes) {
-      list = list.filter(c =>
-        (c.notes && c.notes.trim().length > 0) ||
-        (c.description && c.description.trim().length > 0)
+      list = list.filter((c) =>
+        (c.notes && c.notes.trim().length > 0) || (c.description && c.description.trim().length > 0),
       );
     }
 
-    // Sort
     return [...list].sort((a, b) => {
       switch (sortBy) {
-        case 'name-asc':
-          return a.name.localeCompare(b.name);
-        case 'name-desc':
-          return b.name.localeCompare(a.name);
-        case 'oldest':
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case 'name-asc':  return a.name.localeCompare(b.name);
+        case 'name-desc': return b.name.localeCompare(a.name);
+        case 'oldest':    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         case 'newest':
-        default:
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        default:          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campsites, publicCampsites, friendsCampsites, activeTab, searchQuery, filterType, filterVisibility, filterState, filterTags, filterHasNotes, sortBy]);
 
-  // Calculate map center based on displayed campsites
   const mapCenter = useMemo(() => {
-    if (displayedCampsites.length === 0) {
-      return { lat: 39.8283, lng: -98.5795 }; // Center of US
-    }
+    if (displayedCampsites.length === 0) return { lat: 39.8283, lng: -98.5795 };
     const avgLat = displayedCampsites.reduce((sum, c) => sum + c.lat, 0) / displayedCampsites.length;
     const avgLng = displayedCampsites.reduce((sum, c) => sum + c.lng, 0) / displayedCampsites.length;
     return { lat: avgLat, lng: avgLng };
@@ -227,11 +181,8 @@ const Campsites = () => {
 
   const handleConfirmDelete = async () => {
     const success = await deleteCampsite(deleteModal.id);
-    if (success) {
-      toast.success(`Deleted "${deleteModal.name}"`);
-    } else {
-      toast.error('Failed to delete campsite');
-    }
+    if (success) toast.success(`Deleted "${deleteModal.name}"`);
+    else toast.error('Failed to delete campsite');
     setDeleteModal({ isOpen: false, id: '', name: '' });
   };
 
@@ -249,29 +200,24 @@ const Campsites = () => {
     toast.success('Campsites exported');
   };
 
-  const handleCampsiteClick = (campsite: Campsite) => {
-    navigate(`/campsites/${campsite.id}`);
-  };
+  const toggleTag = (tag: string) =>
+    setFilterTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
 
-  const toggleTag = (tag: string) => {
-    setFilterTags(prev =>
-      prev.includes(tag)
-        ? prev.filter(t => t !== tag)
-        : [...prev, tag]
-    );
-  };
-
-  const clearTagFilters = () => {
-    setFilterTags([]);
-  };
+  // Tabs config — drives both render and accent color of the count badge.
+  const tabs: Array<{ key: Tab; label: string; Icon?: typeof Tent; count?: number; badgeAccent?: 'pine' | 'sage' }> = [
+    { key: 'mine',     label: 'My spots',  count: campsites.length },
+    { key: 'friends',  label: 'Friends',   Icon: Users,    count: friendsCampsites.length, badgeAccent: 'sage' },
+    { key: 'explorer', label: 'Explorer',  Icon: Compass,  count: explorerSpots.length,    badgeAccent: 'pine' },
+    { key: 'public',   label: 'Public' },
+  ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-paper text-ink font-sans min-h-screen">
       <Header showBorder />
 
       <main className="w-full">
         <div className="grid lg:grid-cols-2">
-          {/* Map Section */}
+          {/* Map — sticky on lg, hidden on mobile */}
           <div className="hidden lg:block h-[calc(100vh-80px)] sticky top-[80px]">
             <GoogleMap
               center={mapCenter}
@@ -291,404 +237,433 @@ const Campsites = () => {
             </GoogleMap>
           </div>
 
-          {/* List Section */}
-          <div className="p-6 lg:h-[calc(100vh-80px)] lg:overflow-y-auto">
-            {/* Page Header */}
-            <div className="flex items-start justify-between gap-4 mb-6">
-              <div>
-                <h1 className="text-3xl font-display font-bold text-foreground">Campsites</h1>
-                <p className="text-muted-foreground mt-1">
-                  {campsites.length} {campsites.length === 1 ? 'campsite' : 'campsites'} saved
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setImportModalOpen(true)}>
-                  <UploadSimple className="w-4 h-4 mr-1" weight="bold" />
-                  Import
-                </Button>
-                {campsites.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={handleExport}>
-                    <Export className="w-4 h-4 mr-1" weight="bold" />
-                    Export
-                  </Button>
-                )}
-                <Button variant="primary" size="sm" onClick={() => setAddModalOpen(true)}>
-                  <Plus className="w-4 h-4 mr-1" weight="bold" />
-                  Add
-                </Button>
-              </div>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex gap-1 p-1 bg-secondary/50 rounded-lg mb-6 w-fit">
-              <button
-                onClick={() => handleTabChange('mine')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  activeTab === 'mine'
-                    ? 'bg-white text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                My Spots
-              </button>
-              <button
-                onClick={() => handleTabChange('friends')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
-                  activeTab === 'friends'
-                    ? 'bg-white text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <Users className="w-4 h-4" />
-                Friends
-                {friendsCampsites.length > 0 && (
-                  <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 text-xs rounded-full">
-                    {friendsCampsites.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => handleTabChange('explorer')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
-                  activeTab === 'explorer'
-                    ? 'bg-white text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <Compass className="w-4 h-4" />
-                Explorer
-                {explorerSpots.length > 0 && (
-                  <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
-                    {explorerSpots.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => handleTabChange('public')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  activeTab === 'public'
-                    ? 'bg-white text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Public
-              </button>
-            </div>
-
-            {isLoading ? (
-              <div className="text-center py-16">
-                <div className="flex items-center justify-center w-20 h-20 bg-secondary rounded-full mx-auto mb-6">
-                  <SpinnerGap className="w-10 h-10 text-primary animate-spin" />
-                </div>
-                <h2 className="text-xl font-display font-medium text-muted-foreground">
-                  Loading campsites...
-                </h2>
-              </div>
-            ) : activeTab === 'mine' && campsites.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="flex items-center justify-center w-20 h-20 bg-secondary rounded-full mx-auto mb-6">
-                  <Tent className="w-10 h-10 text-muted-foreground" />
-                </div>
-                <h2 className="font-display font-bold text-foreground mb-2">
-                  No campsites yet
-                </h2>
-                <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-                  Add your favorite camping spots to build your personal database.
-                  Import from Google Maps or add locations manually.
-                </p>
-                <div className="flex items-center justify-center gap-3">
-                  <Button variant="secondary" size="lg" onClick={() => setImportModalOpen(true)}>
-                    <UploadSimple className="w-5 h-5 mr-2" weight="bold" />
-                    Import from Google
-                  </Button>
-                  <Button variant="primary" size="lg" onClick={() => setAddModalOpen(true)}>
-                    <Plus className="w-5 h-5 mr-2" weight="bold" />
-                    Add Campsite
-                  </Button>
-                </div>
-              </div>
-            ) : (
-          <div className="space-y-4">
-            {/* Filters */}
-            <div className="space-y-3">
-              {/* Search */}
-              <div className="relative">
-                <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search campsites..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-9"
-                />
-              </div>
-
-              {/* Filter Row */}
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Type</Label>
-                  <Select value={filterType} onValueChange={(v) => setFilterType(v as CampsiteType | 'all')}>
-                    <SelectTrigger className="w-[120px] h-8 text-sm">
-                      <SelectValue placeholder="All" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="dispersed">Dispersed</SelectItem>
-                      <SelectItem value="established">Established</SelectItem>
-                      <SelectItem value="blm">BLM</SelectItem>
-                      <SelectItem value="usfs">USFS</SelectItem>
-                      <SelectItem value="private">Private</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {activeTab === 'mine' && (
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Visibility</Label>
-                    <Select value={filterVisibility} onValueChange={(v) => setFilterVisibility(v as CampsiteVisibility | 'all')}>
-                      <SelectTrigger className="w-[110px] h-8 text-sm">
-                        <SelectValue placeholder="All" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All</SelectItem>
-                        <SelectItem value="private">Private</SelectItem>
-                        <SelectItem value="friends">Friends</SelectItem>
-                        <SelectItem value="public">Public</SelectItem>
-                      </SelectContent>
-                    </Select>
+          {/* List section */}
+          <div className="bg-paper lg:h-[calc(100vh-80px)] lg:overflow-y-auto">
+            <div className="px-5 py-6 space-y-5">
+              {/* Page intro card — same pattern as the trip detail "Your trip" header */}
+              <div className="bg-white border border-line rounded-[14px] p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <Mono className="text-pine-6">My campsites</Mono>
+                    <h1 className="text-[28px] font-sans font-bold tracking-[-0.025em] text-ink leading-[1.1] mt-1">
+                      Campsites.
+                    </h1>
+                    <Mono className="text-ink-3 block mt-2">
+                      {campsites.length} {campsites.length === 1 ? 'saved' : 'saved'}
+                    </Mono>
                   </div>
-                )}
-
-                {availableStates.length > 0 && (
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">State</Label>
-                    <Select value={filterState} onValueChange={setFilterState}>
-                      <SelectTrigger className="w-[100px] h-8 text-sm">
-                        <SelectValue placeholder="All" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All</SelectItem>
-                        {availableStates.map((state) => (
-                          <SelectItem key={state} value={state}>{state}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <Pill variant="ghost" sm mono={false} onClick={() => setImportModalOpen(true)}>
+                      <UploadSimple className="w-3.5 h-3.5" weight="regular" />
+                      Import
+                    </Pill>
+                    {campsites.length > 0 && (
+                      <Pill variant="ghost" sm mono={false} onClick={handleExport}>
+                        <Export className="w-3.5 h-3.5" weight="regular" />
+                        Export
+                      </Pill>
+                    )}
+                    <Pill variant="solid-pine" sm mono={false} onClick={() => setAddModalOpen(true)}>
+                      <Plus className="w-3.5 h-3.5" weight="bold" />
+                      Add
+                    </Pill>
                   </div>
-                )}
-
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Sort</Label>
-                  <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-                    <SelectTrigger className="w-[130px] h-8 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="newest">Newest</SelectItem>
-                      <SelectItem value="oldest">Oldest</SelectItem>
-                      <SelectItem value="name-asc">Name (A-Z)</SelectItem>
-                      <SelectItem value="name-desc">Name (Z-A)</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
-
-                <button
-                  onClick={() => setFilterHasNotes(!filterHasNotes)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors h-8 ${
-                    filterHasNotes
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary text-foreground hover:bg-secondary/80'
-                  }`}
-                >
-                  <NoteBlank className="w-3.5 h-3.5" />
-                  Notes
-                </button>
               </div>
-            </div>
 
-            {/* Tag filter pills */}
-            {availableTags.length > 0 && (
+              {/* Tabs — same pill pattern as nav (active = solid ink) */}
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs text-muted-foreground mr-1">Tags:</span>
-                {availableTags.map((tag) => (
-                  <button
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                    className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
-                      filterTags.includes(tag)
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-secondary text-foreground hover:bg-secondary/80'
-                    }`}
+                {tabs.map(({ key, label, Icon, count, badgeAccent }) => {
+                  const active = activeTab === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => handleTabChange(key)}
+                      className={cn(
+                        'inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-sans font-semibold tracking-[-0.005em] transition-colors',
+                        active ? 'bg-ink text-cream hover:bg-ink-2' : 'text-ink hover:bg-ink/5',
+                      )}
+                    >
+                      {Icon && <Icon className="w-3.5 h-3.5" weight="regular" />}
+                      {label}
+                      {count != null && count > 0 && (
+                        <span className={cn(
+                          'ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-semibold tracking-[0.05em]',
+                          active
+                            ? 'bg-cream/20 text-cream'
+                            : badgeAccent === 'sage'
+                              ? 'bg-sage/15 text-sage'
+                              : badgeAccent === 'pine'
+                                ? 'bg-pine-6/12 text-pine-6'
+                                : 'bg-ink/10 text-ink-3',
+                        )}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Search + filter row */}
+              <div className="space-y-3">
+                <div className="relative">
+                  <MagnifyingGlass className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-3" weight="regular" />
+                  <input
+                    placeholder="Search campsites…"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full h-10 pl-10 pr-4 rounded-[14px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <FilterSelect value={filterType} onChange={(v) => setFilterType(v as CampsiteType | 'all')} placeholder="All types">
+                    <SelectItem value="all">All types</SelectItem>
+                    <SelectItem value="dispersed">Dispersed</SelectItem>
+                    <SelectItem value="established">Established</SelectItem>
+                    <SelectItem value="blm">BLM</SelectItem>
+                    <SelectItem value="usfs">USFS</SelectItem>
+                    <SelectItem value="private">Private</SelectItem>
+                  </FilterSelect>
+
+                  {activeTab === 'mine' && (
+                    <FilterSelect
+                      value={filterVisibility}
+                      onChange={(v) => setFilterVisibility(v as CampsiteVisibility | 'all')}
+                      placeholder="All visibility"
+                    >
+                      <SelectItem value="all">All visibility</SelectItem>
+                      <SelectItem value="private">Private</SelectItem>
+                      <SelectItem value="friends">Friends</SelectItem>
+                      <SelectItem value="public">Public</SelectItem>
+                    </FilterSelect>
+                  )}
+
+                  {availableStates.length > 0 && (
+                    <FilterSelect value={filterState} onChange={setFilterState} placeholder="All states">
+                      <SelectItem value="all">All states</SelectItem>
+                      {availableStates.map((state) => (
+                        <SelectItem key={state} value={state}>{state}</SelectItem>
+                      ))}
+                    </FilterSelect>
+                  )}
+
+                  <FilterSelect
+                    value={sortBy}
+                    onChange={(v) => setSortBy(v as typeof sortBy)}
+                    placeholder="Sort"
+                    leadingIcon={SortAscending}
                   >
-                    {tag}
-                  </button>
-                ))}
-                {filterTags.length > 0 && (
+                    <SelectItem value="newest">Newest</SelectItem>
+                    <SelectItem value="oldest">Oldest</SelectItem>
+                    <SelectItem value="name-asc">Name (A–Z)</SelectItem>
+                    <SelectItem value="name-desc">Name (Z–A)</SelectItem>
+                  </FilterSelect>
+
                   <button
-                    onClick={clearTagFilters}
-                    className="px-1.5 py-0.5 rounded-full text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-0.5"
+                    onClick={() => setFilterHasNotes(!filterHasNotes)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[12px] font-mono uppercase tracking-[0.10em] font-semibold transition-colors',
+                      filterHasNotes
+                        ? 'bg-pine-6 border-pine-6 text-cream'
+                        : 'bg-white border-line text-ink-3 hover:text-ink hover:border-ink-3',
+                    )}
                   >
-                    <X className="w-3 h-3" />
-                    Clear
+                    <NoteBlank className="w-3 h-3" weight="regular" />
+                    Notes
                   </button>
+                </div>
+
+                {/* Tag pills */}
+                {availableTags.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Mono className="text-ink-3 mr-0.5">Tags</Mono>
+                    {availableTags.map((tag) => {
+                      const on = filterTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          onClick={() => toggleTag(tag)}
+                          className={cn(
+                            'inline-flex items-center px-2.5 py-1 rounded-full border text-[11px] font-mono uppercase tracking-[0.10em] font-semibold transition-colors',
+                            on
+                              ? 'bg-pine-6 border-pine-6 text-cream'
+                              : 'bg-white border-line text-ink-3 hover:text-ink hover:border-ink-3',
+                          )}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                    {filterTags.length > 0 && (
+                      <button
+                        onClick={() => setFilterTags([])}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-mono uppercase tracking-[0.10em] font-semibold text-ink-3 hover:text-ember transition-colors"
+                      >
+                        <X className="w-3 h-3" weight="bold" />
+                        Clear
+                      </button>
+                    )}
+                  </div>
                 )}
+
+                <Mono className="text-ink-3 block">
+                  {displayedCampsites.length} {displayedCampsites.length === 1 ? 'result' : 'results'}
+                </Mono>
               </div>
-            )}
 
-            {/* Results count */}
-            <p className="text-xs text-muted-foreground">
-              Showing {displayedCampsites.length} {displayedCampsites.length === 1 ? 'result' : 'results'}
-            </p>
-
-            {/* Campsite list */}
-            {displayedCampsites.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                No campsites match your filters
-              </div>
-            ) : (
-              displayedCampsites.map((campsite, index) => (
-                <Card
-                  key={campsite.id}
-                  className="group hover:border-primary/30 hover:shadow-card transition-all duration-300 cursor-pointer animate-fade-in overflow-hidden"
-                  style={{ animationDelay: `${index * 50}ms` }}
-                  onClick={() => handleCampsiteClick(campsite)}
-                >
-                  <CardContent className="p-0">
-                    <div className="flex items-stretch">
-                      {/* Left accent bar */}
-                      <div className={`w-1.5 ${
-                        campsite.visibility === 'public' ? 'bg-primary' : 'bg-muted-foreground/30'
-                      }`} />
-
-                      <div className="flex-1 p-5">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-lg font-display font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                                {campsite.name}
-                              </h3>
-                              {campsite.visibility === 'public' ? (
-                                <Globe className="w-4 h-4 text-primary flex-shrink-0" />
-                              ) : (
-                                <Lock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                              )}
-                            </div>
-
-                            {/* Type and source badges */}
-                            <div className="flex items-center gap-2 mt-2 flex-wrap">
-                              <span className="inline-block px-2 py-0.5 bg-secondary rounded-full text-xs font-medium text-foreground">
-                                {typeLabels[campsite.type]}
-                              </span>
-                              {activeTab === 'friends' && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full text-xs font-medium">
-                                  <Users className="w-3 h-3" />
-                                  Shared by {getFriendById(campsite.userId)?.name || getFriendById(campsite.userId)?.email || 'Friend'}
-                                </span>
-                              )}
-                              {campsite.sourceType === 'explorer' && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">
-                                  <Compass className="w-3 h-3" />
-                                  Explorer
-                                </span>
-                              )}
-                              {campsite.sourceType === 'explorer' && campsite.confirmationCount > 0 && (
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  campsite.isConfirmed
-                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                                }`}>
-                                  {campsite.isConfirmed ? (
-                                    <CheckCircle className="w-3 h-3" />
-                                  ) : (
-                                    <Users className="w-3 h-3" />
-                                  )}
-                                  {campsite.confirmationCount} {campsite.isConfirmed ? 'Verified' : 'Pending'}
-                                </span>
-                              )}
-                              {campsite.roadAccess && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-secondary rounded-full text-xs font-medium text-foreground">
-                                  <Car className="w-3 h-3" />
-                                  {roadAccessLabels[campsite.roadAccess] || campsite.roadAccess}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Location */}
-                            <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
-                              <MapPin className="w-4 h-4 flex-shrink-0" />
-                              <span>
-                                {campsite.state || `${campsite.lat.toFixed(4)}, ${campsite.lng.toFixed(4)}`}
-                              </span>
-                            </div>
-
-                            {/* Description preview */}
-                            {campsite.description && (
-                              <p className="mt-2 text-sm text-muted-foreground line-clamp-1">
-                                {campsite.description}
-                              </p>
-                            )}
-
-                            {/* Tags */}
-                            {campsite.tags && campsite.tags.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                                {campsite.tags.map((tag) => (
-                                  <span
-                                    key={tag}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium"
-                                  >
-                                    <Tag className="w-3 h-3" />
-                                    {tag}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Actions */}
-                          <div className="flex items-center gap-2">
-                            {activeTab === 'mine' && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
-                                onClick={(e) => handleDeleteClick(e, campsite.id, campsite.name)}
-                              >
-                                <Trash className="w-4 h-4" />
-                              </Button>
-                            )}
-                            <CaretRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-              </div>
-            )}
+              {/* Results */}
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/10 mb-4">
+                    <SpinnerGap className="w-6 h-6 text-pine-6 animate-spin" />
+                  </div>
+                  <Mono className="text-pine-6">Loading campsites…</Mono>
+                </div>
+              ) : activeTab === 'mine' && campsites.length === 0 ? (
+                <div className="border border-dashed border-line bg-white/50 rounded-[18px] px-8 py-14 text-center">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 text-pine-6 mb-4">
+                    <Tent className="w-5 h-5" weight="regular" />
+                  </div>
+                  <h2 className="font-sans font-semibold text-xl tracking-[-0.01em] text-ink">
+                    No campsites yet
+                  </h2>
+                  <p className="text-[14px] text-ink-3 mt-2 max-w-[460px] mx-auto leading-[1.55]">
+                    Add your favorite camping spots to build your personal database. Import from Google Maps or add locations manually.
+                  </p>
+                  <div className="mt-6 flex items-center justify-center gap-2">
+                    <Pill variant="ghost" mono={false} onClick={() => setImportModalOpen(true)}>
+                      <UploadSimple className="w-3.5 h-3.5" weight="regular" />
+                      Import
+                    </Pill>
+                    <Pill variant="solid-pine" mono={false} onClick={() => setAddModalOpen(true)}>
+                      <Plus className="w-3.5 h-3.5" weight="bold" />
+                      Add campsite
+                    </Pill>
+                  </div>
+                </div>
+              ) : displayedCampsites.length === 0 ? (
+                <div className="border border-dashed border-line bg-white/50 rounded-[14px] px-6 py-10 text-center">
+                  <p className="text-[14px] font-sans font-semibold text-ink">No matches</p>
+                  <p className="text-[13px] text-ink-3 mt-1">Try loosening or removing a filter.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {displayedCampsites.map((campsite) => (
+                    <CampsiteRow
+                      key={campsite.id}
+                      campsite={campsite}
+                      activeTab={activeTab}
+                      friendName={
+                        getFriendById(campsite.userId)?.name ||
+                        getFriendById(campsite.userId)?.email ||
+                        'Friend'
+                      }
+                      onClick={() => navigate(`/campsites/${campsite.id}`)}
+                      onDelete={(e) => handleDeleteClick(e, campsite.id, campsite.name)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </main>
 
+      {/* Footer */}
+      <footer className="bg-cream border-t border-line px-6 md:px-14 py-10 flex flex-wrap items-center justify-between gap-4">
+        <Mono>ROAMSWILD · OFF-GRID CAMPING · 2026</Mono>
+        <div className="flex flex-wrap gap-6 text-[13px] text-ink-3">
+          <Link to="/about" className="hover:text-ink transition-colors">Field notes</Link>
+          <Link to="/how-we-map" className="hover:text-ink transition-colors">How we map</Link>
+          <Link to="/submit-spot" className="hover:text-ink transition-colors">Submit a spot</Link>
+          <Link to="/privacy" className="hover:text-ink transition-colors">Privacy</Link>
+        </div>
+      </footer>
+
       {/* Modals */}
-      <AddCampsiteModal
-        isOpen={addModalOpen}
-        onClose={() => setAddModalOpen(false)}
-      />
-
-      <ImportCampsitesModal
-        isOpen={importModalOpen}
-        onClose={() => setImportModalOpen(false)}
-      />
-
+      <AddCampsiteModal isOpen={addModalOpen} onClose={() => setAddModalOpen(false)} />
+      <ImportCampsitesModal isOpen={importModalOpen} onClose={() => setImportModalOpen(false)} />
       <ConfirmDeleteModal
         isOpen={deleteModal.isOpen}
         onClose={() => setDeleteModal({ isOpen: false, id: '', name: '' })}
         onConfirm={handleConfirmDelete}
-        title="Delete Campsite"
+        title="Delete campsite"
         description="Are you sure you want to delete this campsite? This action cannot be undone."
         itemName={deleteModal.name}
       />
     </div>
+  );
+};
+
+// === Helpers ===
+
+// Pill-shaped Select wrapper — keeps the filter row visually consistent with
+// the rest of the redesign (no shadcn "border-2 border-primary" trigger).
+const FilterSelect = ({
+  value,
+  onChange,
+  placeholder,
+  leadingIcon: LeadingIcon,
+  children,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  leadingIcon?: typeof SortAscending;
+  children: React.ReactNode;
+}) => (
+  <Select value={value} onValueChange={onChange}>
+    <SelectTrigger className="inline-flex items-center gap-1.5 h-8 w-auto px-3 py-1.5 rounded-full border border-line bg-white text-ink text-[12px] font-mono uppercase tracking-[0.10em] font-semibold hover:border-ink-3 transition-colors [&>svg]:opacity-60">
+      {LeadingIcon && <LeadingIcon className="w-3 h-3 text-ink-3" weight="regular" />}
+      <SelectValue placeholder={placeholder} />
+    </SelectTrigger>
+    <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink">
+      {children}
+    </SelectContent>
+  </Select>
+);
+
+// Single campsite row — same row pattern as the redesigned MyTrips, but with
+// campsite-specific badges (visibility, type, source, road access).
+const CampsiteRow = ({
+  campsite,
+  activeTab,
+  friendName,
+  onClick,
+  onDelete,
+}: {
+  campsite: Campsite;
+  activeTab: Tab;
+  friendName: string;
+  onClick: () => void;
+  onDelete: (e: React.MouseEvent) => void;
+}) => {
+  const isPublic = campsite.visibility === 'public';
+
+  return (
+    <div
+      onClick={onClick}
+      className="group border border-line bg-white rounded-[14px] overflow-hidden cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(29,34,24,.10),0_3px_8px_rgba(29,34,24,.04)]"
+    >
+      <div className="flex items-stretch">
+        {/* Left accent bar — pine for public, ink-3 for private */}
+        <div className={cn('w-1.5', isPublic ? 'bg-pine-6' : 'bg-ink-3/30')} />
+
+        <div className="flex-1 p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              {/* Title + visibility icon */}
+              <div className="flex items-center gap-2">
+                <h3 className="text-[15px] font-sans font-semibold tracking-[-0.005em] text-ink truncate">
+                  {campsite.name}
+                </h3>
+                {isPublic ? (
+                  <Globe className="w-3.5 h-3.5 text-pine-6 flex-shrink-0" weight="regular" />
+                ) : (
+                  <Lock className="w-3.5 h-3.5 text-ink-3 flex-shrink-0" weight="regular" />
+                )}
+              </div>
+
+              {/* Badge row */}
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <BadgePill variant="ghost">{typeLabels[campsite.type]}</BadgePill>
+                {activeTab === 'friends' && (
+                  <BadgePill variant="sage">
+                    <Users className="w-3 h-3" weight="regular" />
+                    {friendName}
+                  </BadgePill>
+                )}
+                {campsite.sourceType === 'explorer' && (
+                  <BadgePill variant="pine">
+                    <Compass className="w-3 h-3" weight="regular" />
+                    Explorer
+                  </BadgePill>
+                )}
+                {campsite.sourceType === 'explorer' && campsite.confirmationCount > 0 && (
+                  <BadgePill variant={campsite.isConfirmed ? 'pine' : 'clay'}>
+                    {campsite.isConfirmed ? (
+                      <CheckCircle className="w-3 h-3" weight="fill" />
+                    ) : (
+                      <Users className="w-3 h-3" weight="regular" />
+                    )}
+                    {campsite.confirmationCount} {campsite.isConfirmed ? 'verified' : 'pending'}
+                  </BadgePill>
+                )}
+                {campsite.roadAccess && (
+                  <BadgePill variant="ghost">
+                    <Car className="w-3 h-3" weight="regular" />
+                    {roadAccessLabels[campsite.roadAccess] || campsite.roadAccess}
+                  </BadgePill>
+                )}
+              </div>
+
+              {/* Location */}
+              <div className="flex items-center gap-1.5 mt-2 text-[13px] text-ink-3">
+                <MapPin className="w-3.5 h-3.5 flex-shrink-0" weight="regular" />
+                <span>{campsite.state || `${campsite.lat.toFixed(4)}, ${campsite.lng.toFixed(4)}`}</span>
+              </div>
+
+              {/* Description preview */}
+              {campsite.description && (
+                <p className="mt-2 text-[13px] text-ink-3 line-clamp-1">{campsite.description}</p>
+              )}
+
+              {/* Tags */}
+              {campsite.tags && campsite.tags.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1 mt-2">
+                  {campsite.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-pine-6/10 text-pine-6 text-[10px] font-mono font-semibold uppercase tracking-[0.10em]"
+                    >
+                      <TagIcon className="w-3 h-3" weight="regular" />
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {activeTab === 'mine' && (
+                <button
+                  onClick={onDelete}
+                  className="opacity-0 group-hover:opacity-100 inline-flex items-center justify-center w-8 h-8 rounded-full text-ink-3 hover:text-ember hover:bg-ember/10 transition-all"
+                  aria-label="Delete campsite"
+                >
+                  <Trash className="w-4 h-4" weight="regular" />
+                </button>
+              )}
+              <CaretRight className="w-4 h-4 text-ink-3 group-hover:text-pine-6 group-hover:translate-x-0.5 transition-all" weight="bold" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Small badge pill for the row meta line. Shared variant set with the rest
+// of the redesign so colors stay aligned.
+const BadgePill = ({
+  children,
+  variant,
+}: {
+  children: React.ReactNode;
+  variant: 'pine' | 'sage' | 'clay' | 'ghost';
+}) => {
+  const styles =
+    variant === 'pine'  ? 'bg-pine-6/10 text-pine-6 border-pine-6/30' :
+    variant === 'sage'  ? 'bg-sage/15  text-sage   border-sage/30' :
+    variant === 'clay'  ? 'bg-clay/15  text-clay   border-clay/40' :
+                          'bg-cream    text-ink-3  border-line';
+  return (
+    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-mono font-semibold uppercase tracking-[0.10em]', styles)}>
+      {children}
+    </span>
   );
 };
 

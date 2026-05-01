@@ -13,24 +13,20 @@ import {
   EyeSlash,
   MapPin,
   Crosshair,
-  ArrowRight,
   Check,
   X,
-  Warning,
   Mountains,
-  Compass,
   Clock,
   ArrowsClockwise,
   Cube,
-  Path,
 } from '@phosphor-icons/react';
 import { GoogleMap } from '@react-google-maps/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PlaceSearch } from '@/components/PlaceSearch';
 import { Header } from '@/components/Header';
 import { useGoogleMaps } from '@/components/GoogleMapsProvider';
+import { Mono, Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 import {
   TerrainAnalysisResult,
   Subject,
@@ -185,15 +181,15 @@ export default function TerrainValidation() {
     return `${displayHours}:${mins.toString().padStart(2, '0')} ${period}`;
   };
 
-  // Get validation status color
+  // Get validation status color (Pine + Paper tokens)
   const getStatusColor = (status: ValidationStatus) => {
     switch (status) {
       case 'pass':
-        return 'text-green-600';
+        return 'text-pine-6';
       case 'warn':
-        return 'text-yellow-600';
+        return 'text-clay';
       case 'fail':
-        return 'text-red-600';
+        return 'text-ember';
     }
   };
 
@@ -287,75 +283,72 @@ export default function TerrainValidation() {
   }, [result, map, layers.subjects, layers.standing, selectedSubjectId]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-paper text-ink font-sans">
       <Header />
 
       <div className="flex h-[calc(100vh-64px)]">
         {/* Left Panel - Search & Controls */}
-        <div className="w-80 border-r bg-muted/30 flex flex-col overflow-hidden">
-          <div className="p-4 border-b space-y-4">
+        <div className="w-80 border-r border-line bg-cream flex flex-col overflow-hidden">
+          <div className="p-4 border-b border-line space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-mono text-muted-foreground">
-                <Crosshair className="w-4 h-4" />
-                TERRAIN VALIDATOR
-              </div>
+              <Mono className="text-pine-6 inline-flex items-center gap-1.5">
+                <Crosshair className="w-3 h-3" weight="regular" />
+                Terrain validator
+              </Mono>
               {usingMock && (
-                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-mono rounded">
-                  MOCK
+                <span className="px-2 py-0.5 rounded-full bg-clay/15 text-clay text-[10px] font-mono uppercase tracking-[0.10em] font-semibold">
+                  Mock
                 </span>
               )}
             </div>
 
             {/* Place Search */}
-            <div>
-              <label className="text-xs font-mono text-muted-foreground">LOCATION</label>
-              <PlaceSearch
-                onPlaceSelect={handlePlaceSelect}
-                placeholder="Search place..."
-              />
+            <div className="space-y-1.5">
+              <Mono className="text-ink-2 block">Location</Mono>
+              <PlaceSearch onPlaceSelect={handlePlaceSelect} placeholder="Search place…" />
             </div>
 
             {/* Coordinates */}
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-mono text-muted-foreground">LAT</label>
+              <div className="space-y-1.5">
+                <Mono className="text-ink-2 block">Lat</Mono>
                 <Input
                   type="number"
                   step="0.00001"
                   value={lat ?? ''}
                   onChange={(e) => setLat(parseFloat(e.target.value) || null)}
-                  className="font-mono text-sm"
+                  className="font-mono"
                 />
               </div>
-              <div>
-                <label className="text-xs font-mono text-muted-foreground">LON</label>
+              <div className="space-y-1.5">
+                <Mono className="text-ink-2 block">Lon</Mono>
                 <Input
                   type="number"
                   step="0.00001"
                   value={lon ?? ''}
                   onChange={(e) => setLon(parseFloat(e.target.value) || null)}
-                  className="font-mono text-sm"
+                  className="font-mono"
                 />
               </div>
             </div>
 
             {/* Date & Event */}
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-mono text-muted-foreground">DATE</label>
+              <div className="space-y-1.5">
+                <Mono className="text-ink-2 block">Date</Mono>
                 <Input
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="font-mono text-sm"
+                  className="font-mono"
                 />
               </div>
-              <div>
-                <label className="text-xs font-mono text-muted-foreground">EVENT</label>
+              <div className="space-y-1.5">
+                <Mono className="text-ink-2 block">Event</Mono>
                 <select
                   value={event}
                   onChange={(e) => setEvent(e.target.value as 'sunrise' | 'sunset')}
-                  className="w-full h-10 px-3 border rounded-md font-mono text-sm bg-background"
+                  className="w-full h-10 px-3 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none focus:border-pine-6 transition-colors"
                 >
                   <option value="sunset">Sunset</option>
                   <option value="sunrise">Sunrise</option>
@@ -364,64 +357,65 @@ export default function TerrainValidation() {
             </div>
 
             {/* Run Button */}
-            <Button
+            <Pill
+              variant="solid-pine"
+              mono={false}
               onClick={runAnalysis}
-              disabled={!lat || !lon || isLoading}
-              className="w-full font-mono"
+              className={cn('!w-full !justify-center', (!lat || !lon || isLoading) && 'opacity-50 pointer-events-none')}
             >
               {isLoading ? (
                 <>
-                  <ArrowsClockwise className="w-4 h-4 mr-2 animate-spin" />
-                  RUNNING...
+                  <ArrowsClockwise className="w-3.5 h-3.5 animate-spin" />
+                  Running…
                 </>
               ) : (
                 <>
-                  <Crosshair className="w-4 h-4 mr-2" />
-                  RUN ANALYSIS
+                  <Crosshair className="w-3.5 h-3.5" weight="regular" />
+                  Run analysis
                 </>
               )}
-            </Button>
+            </Pill>
 
             {error && (
-              <div className="p-2 bg-red-100 text-red-700 rounded text-sm font-mono">
-                {error}
+              <div className="px-3 py-2.5 rounded-[12px] border border-ember/30 bg-ember/[0.06]">
+                <p className="text-[13px] text-ember leading-[1.5]">{error}</p>
               </div>
             )}
           </div>
 
           {/* Layer Toggles */}
-          <div className="p-4 border-b">
-            <div className="text-xs font-mono text-muted-foreground mb-2">LAYERS</div>
+          <div className="p-4 border-b border-line">
+            <Mono className="text-ink-2 mb-2 block">Layers</Mono>
             <div className="space-y-1">
-              {LAYER_CONFIG.map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  onClick={() => toggleLayer(key as keyof LayerVisibility)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm font-mono transition-colors ${
-                    layers[key as keyof LayerVisibility]
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:bg-muted'
-                  }`}
-                >
-                  {layers[key as keyof LayerVisibility] ? (
-                    <Eye className="w-4 h-4" />
-                  ) : (
-                    <EyeSlash className="w-4 h-4" />
-                  )}
-                  <Icon className="w-4 h-4" />
-                  {label}
-                </button>
-              ))}
+              {LAYER_CONFIG.map(({ key, label, icon: Icon }) => {
+                const on = layers[key as keyof LayerVisibility];
+                return (
+                  <button
+                    key={key}
+                    onClick={() => toggleLayer(key as keyof LayerVisibility)}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] text-[12px] font-sans transition-colors',
+                      on
+                        ? 'bg-pine-6/12 text-pine-6 font-semibold'
+                        : 'text-ink-3 hover:bg-paper-2',
+                    )}
+                  >
+                    {on ? <Eye className="w-3.5 h-3.5" weight="regular" /> : <EyeSlash className="w-3.5 h-3.5" weight="regular" />}
+                    <Icon className="w-3.5 h-3.5" weight="regular" />
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* Timeline */}
           {result && (
-            <div className="p-4 border-b">
-              <div className="text-xs font-mono text-muted-foreground mb-2">
-                <Clock className="w-3 h-3 inline mr-1" />
-                TIMELINE
-              </div>
+            <div className="p-4 border-b border-line">
+              <Mono className="text-ink-2 inline-flex items-center gap-1 mb-2">
+                <Clock className="w-3 h-3" weight="regular" />
+                Timeline
+              </Mono>
 
               <input
                 type="range"
@@ -429,28 +423,26 @@ export default function TerrainValidation() {
                 max={result.sun_track[result.sun_track.length - 1]?.minutes_from_start ?? 100}
                 value={currentMinutes}
                 onChange={(e) => setCurrentMinutes(parseInt(e.target.value))}
-                className="w-full"
+                className="w-full accent-pine-6 cursor-grab active:cursor-grabbing"
               />
 
-              <div className="flex justify-between text-xs font-mono text-muted-foreground mt-1">
-                <span>{formatTime(result.sun_track[0]?.minutes_from_start ?? 0)}</span>
-                <span className="text-primary">
-                  {formatTime(currentMinutes)}
-                </span>
-                <span>
+              <div className="flex justify-between mt-1">
+                <Mono className="text-ink-3">{formatTime(result.sun_track[0]?.minutes_from_start ?? 0)}</Mono>
+                <Mono className="text-pine-6">{formatTime(currentMinutes)}</Mono>
+                <Mono className="text-ink-3">
                   {formatTime(result.sun_track[result.sun_track.length - 1]?.minutes_from_start ?? 0)}
-                </span>
+                </Mono>
               </div>
 
               {currentSun && (
-                <div className="mt-2 p-2 bg-muted rounded text-xs font-mono space-y-1">
+                <div className="mt-2.5 px-3 py-2 rounded-[10px] bg-white border border-line space-y-1">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">sun_az:</span>
-                    <span>{currentSun.azimuth_deg.toFixed(1)}°</span>
+                    <Mono className="text-ink-3">sun_az</Mono>
+                    <span className="font-mono text-[12px] text-ink">{currentSun.azimuth_deg.toFixed(1)}°</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">sun_alt:</span>
-                    <span>{currentSun.altitude_deg.toFixed(2)}°</span>
+                    <Mono className="text-ink-3">sun_alt</Mono>
+                    <span className="font-mono text-[12px] text-ink">{currentSun.altitude_deg.toFixed(2)}°</span>
                   </div>
                 </div>
               )}
@@ -460,31 +452,33 @@ export default function TerrainValidation() {
           {/* Subject List */}
           {result && (
             <div className="flex-1 overflow-y-auto p-4">
-              <div className="text-xs font-mono text-muted-foreground mb-2">
-                SUBJECTS ({result.subjects.length})
-              </div>
-              <div className="space-y-2">
+              <Mono className="text-ink-2 mb-2 block">Subjects ({result.subjects.length})</Mono>
+              <div className="space-y-1.5">
                 {result.subjects.map((subject) => (
                   <button
                     key={subject.subject_id}
                     onClick={() => setSelectedSubjectId(subject.subject_id)}
-                    className={`w-full p-2 rounded border text-left transition-colors ${
+                    className={cn(
+                      'w-full p-2.5 rounded-[10px] border text-left transition-colors bg-white',
                       selectedSubjectId === subject.subject_id
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-primary/50'
-                    }`}
+                        ? 'border-pine-6 bg-pine-6/[0.06]'
+                        : 'border-line hover:border-ink-3/50',
+                    )}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-sm">Subject #{subject.subject_id}</span>
+                      <span className="font-sans font-semibold tracking-[-0.005em] text-[13px] text-ink">
+                        Subject #{subject.subject_id}
+                      </span>
                       {subject.glow_window ? (
-                        <Check className="w-4 h-4 text-green-600" />
+                        <Check className="w-4 h-4 text-pine-6" weight="bold" />
                       ) : (
-                        <X className="w-4 h-4 text-red-600" />
+                        <X className="w-4 h-4 text-ember" weight="bold" />
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground font-mono mt-1">
-                      slope: {subject.properties.slope_deg.toFixed(1)}° | face: {subject.properties.face_direction_deg.toFixed(0)}°
-                    </div>
+                    <Mono className="text-ink-3 mt-1 block">
+                      slope: {subject.properties.slope_deg.toFixed(1)}° | face:{' '}
+                      {subject.properties.face_direction_deg.toFixed(0)}°
+                    </Mono>
                   </button>
                 ))}
               </div>
@@ -510,28 +504,29 @@ export default function TerrainValidation() {
               {/* Overlays managed via useEffect */}
             </GoogleMap>
           ) : (
-            <div className="flex items-center justify-center h-full bg-muted">
-              <ArrowsClockwise className="w-8 h-8 animate-spin text-muted-foreground" />
+            <div className="flex items-center justify-center h-full bg-cream">
+              <ArrowsClockwise className="w-6 h-6 animate-spin text-pine-6" />
             </div>
           )}
 
           {/* Map Legend */}
-          <div className="absolute bottom-4 left-4 bg-background/90 backdrop-blur p-3 rounded-lg shadow-lg">
-            <div className="text-xs font-mono space-y-1.5">
+          <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-md border border-line p-3.5 rounded-[14px] shadow-[0_8px_22px_rgba(29,34,24,.10)]">
+            <Mono className="text-ink-2 mb-2 block">Legend</Mono>
+            <div className="space-y-1.5 text-[12px] text-ink-2">
               <div className="flex items-center gap-2">
-                <div className="w-4 h-3 rounded-sm bg-violet-500/50 border border-violet-500" />
+                <div className="w-4 h-3 rounded-sm bg-clay/40 border border-clay" />
                 <span>Subject polygon (steep terrain)</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-b-[8px] border-b-violet-500" />
+                <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-b-[8px] border-b-clay" />
                 <span>Subject centroid (arrow = face dir)</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                <div className="w-3 h-3 rounded-full bg-pine-6" />
                 <span>Standing location (photographer)</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-4 h-3 rounded-sm bg-amber-500/50 border border-amber-500" />
+                <div className="w-4 h-3 rounded-sm bg-ember/40 border border-ember" />
                 <span>Selected</span>
               </div>
             </div>
@@ -539,19 +534,21 @@ export default function TerrainValidation() {
         </div>
 
         {/* Right Panel - Inspector */}
-        <div className="w-96 border-l bg-muted/30 overflow-y-auto">
+        <div className="w-96 border-l border-line bg-cream overflow-y-auto">
           {selectedSubject ? (
             <div className="p-4 space-y-4">
               {/* Subject Header */}
               <div className="flex items-center justify-between">
-                <h3 className="font-mono font-bold">SUBJECT #{selectedSubject.subject_id}</h3>
+                <h3 className="font-sans font-bold tracking-[-0.01em] text-ink text-[16px]">
+                  Subject #{selectedSubject.subject_id}
+                </h3>
                 {selectedSubject.glow_window ? (
-                  <span className="flex items-center gap-1 text-green-600 text-sm">
-                    <Check className="w-4 h-4" /> VALID
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-pine-6/12 text-pine-6 text-[10px] font-mono uppercase tracking-[0.10em] font-semibold">
+                    <Check className="w-3 h-3" weight="bold" /> Valid
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1 text-red-600 text-sm">
-                    <X className="w-4 h-4" /> NO GLOW
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-ember/15 text-ember text-[10px] font-mono uppercase tracking-[0.10em] font-semibold">
+                    <X className="w-3 h-3" weight="bold" /> No glow
                   </span>
                 )}
               </div>
@@ -674,8 +671,10 @@ export default function TerrainValidation() {
               {/* Standing Location */}
               {selectedStanding && (
                 <>
-                  <div className="border-t pt-4 mt-4">
-                    <h3 className="font-mono font-bold mb-4">STANDING LOCATION</h3>
+                  <div className="border-t border-line pt-4 mt-4">
+                    <h3 className="font-sans font-bold tracking-[-0.01em] text-ink text-[16px] mb-4">
+                      Standing location
+                    </h3>
                   </div>
 
                   <InspectorSection title="POSITION">
@@ -732,12 +731,14 @@ export default function TerrainValidation() {
               )}
             </div>
           ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
+            <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <Mountains className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p className="font-mono text-sm">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-sage/15 text-sage mb-2.5">
+                  <Mountains className="w-5 h-5" weight="regular" />
+                </div>
+                <Mono className="text-pine-6 block">
                   {result ? 'Click a subject to inspect' : 'Run analysis to begin'}
-                </p>
+                </Mono>
               </div>
             </div>
           )}
@@ -751,8 +752,8 @@ export default function TerrainValidation() {
 function InspectorSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs font-mono text-muted-foreground mb-1">{title}</div>
-      <div className="bg-background border rounded p-2 space-y-1">{children}</div>
+      <Mono className="text-ink-2 mb-1 block">{title}</Mono>
+      <div className="bg-white border border-line rounded-[10px] px-3 py-2 space-y-1">{children}</div>
     </div>
   );
 }
@@ -768,15 +769,15 @@ function InspectorRow({
   status?: ValidationStatus;
 }) {
   const statusColors = {
-    pass: 'text-green-600',
-    warn: 'text-yellow-600',
-    fail: 'text-red-600',
+    pass: 'text-pine-6',
+    warn: 'text-clay',
+    fail: 'text-ember',
   };
 
   return (
-    <div className="flex justify-between text-xs font-mono">
-      <span className="text-muted-foreground">{label}:</span>
-      <span className={status ? statusColors[status] : ''}>{value}</span>
+    <div className="flex justify-between text-[11px] font-mono">
+      <span className="text-ink-3">{label}:</span>
+      <span className={cn('font-semibold', status ? statusColors[status] : 'text-ink')}>{value}</span>
     </div>
   );
 }
@@ -792,16 +793,16 @@ function ValidationRow({
   detail?: string;
 }) {
   return (
-    <div className="flex justify-between text-xs font-mono">
-      <span className="flex items-center gap-1">
+    <div className="flex justify-between text-[11px] font-mono">
+      <span className="inline-flex items-center gap-1">
         {check ? (
-          <Check className="w-3 h-3 text-green-600" />
+          <Check className="w-3 h-3 text-pine-6" weight="bold" />
         ) : (
-          <X className="w-3 h-3 text-red-600" />
+          <X className="w-3 h-3 text-ember" weight="bold" />
         )}
-        {label}
+        <span className="text-ink">{label}</span>
       </span>
-      {detail && <span className="text-muted-foreground">{detail}</span>}
+      {detail && <span className="text-ink-3">{detail}</span>}
     </div>
   );
 }

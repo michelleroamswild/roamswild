@@ -20,11 +20,6 @@ import {
   Check,
   X,
 } from '@phosphor-icons/react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -41,20 +36,28 @@ import { Campsite, CampsiteFormData, CampsiteType, RoadAccess, CampsiteVisibilit
 import { toast } from 'sonner';
 import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
 import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
+import { Mono, Pill, TopoBg } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 const typeLabels: Record<CampsiteType, string> = {
-  dispersed: 'Dispersed Camping',
-  established: 'Established Campground',
-  blm: 'BLM Land',
+  dispersed: 'Dispersed camping',
+  established: 'Established campground',
+  blm: 'BLM land',
   usfs: 'US Forest Service',
-  private: 'Private Property',
+  private: 'Private property',
 };
 
 const roadAccessLabels: Record<RoadAccess, string> = {
-  '2wd': '2WD - Paved/Graded Road',
-  '4wd_easy': '4WD Easy - Dirt Roads',
-  '4wd_moderate': '4WD Moderate - Some Obstacles',
-  '4wd_hard': '4WD Hard - Technical Terrain',
+  '2wd': '2WD — paved/graded road',
+  '4wd_easy': '4WD easy — dirt roads',
+  '4wd_moderate': '4WD moderate — some obstacles',
+  '4wd_hard': '4WD hard — technical terrain',
+};
+
+const VISIBILITY_META: Record<CampsiteVisibility, { label: string; Icon: typeof Globe; accent: string; bg: string; border: string }> = {
+  public:  { label: 'Public',       Icon: Globe, accent: 'text-pine-6', bg: 'bg-pine-6/10', border: 'border-pine-6/30' },
+  friends: { label: 'Friends only', Icon: Users, accent: 'text-water',  bg: 'bg-water/15',  border: 'border-water/40' },
+  private: { label: 'Private',      Icon: Lock,  accent: 'text-ink-3',  bg: 'bg-ink/8',     border: 'border-line' },
 };
 
 const CampsiteDetail = () => {
@@ -68,8 +71,6 @@ const CampsiteDetail = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-
-  // Edit form state
   const [editForm, setEditForm] = useState<Partial<CampsiteFormData>>({});
 
   useEffect(() => {
@@ -83,7 +84,7 @@ const CampsiteDetail = () => {
     loadCampsite();
   }, [id, getCampsite]);
 
-  const isOwner = campsite && user && campsite.userId === user.id;
+  const isOwner = !!campsite && !!user && campsite.userId === user.id;
 
   const handleStartEdit = () => {
     if (!campsite) return;
@@ -112,13 +113,10 @@ const CampsiteDetail = () => {
 
   const handleSave = async () => {
     if (!campsite || !id) return;
-
     setIsSaving(true);
     const success = await updateCampsite(id, editForm);
     setIsSaving(false);
-
     if (success) {
-      // Refresh campsite data
       const updated = await getCampsite(id);
       setCampsite(updated);
       setIsEditing(false);
@@ -139,114 +137,112 @@ const CampsiteDetail = () => {
     }
   };
 
-  const handleGetDirections = () => {
-    if (!campsite) return;
-    window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${campsite.lat},${campsite.lng}`,
-      '_blank'
-    );
-  };
-
-  const handleOpenInMaps = () => {
-    if (!campsite) return;
-    window.open(
-      `https://www.google.com/maps/search/?api=1&query=${campsite.lat},${campsite.lng}`,
-      '_blank'
-    );
-  };
-
+  // === Loading state ===
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <SpinnerGap className="w-10 h-10 text-primary animate-spin" />
-      </div>
-    );
-  }
-
-  if (!campsite) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-xl font-display font-bold text-foreground mb-2">
-            Campsite not found
-          </h2>
-          <p className="text-muted-foreground mb-4">
-            This campsite doesn't exist or you don't have access to it.
-          </p>
-          <Link to="/campsites">
-            <Button variant="primary">Back to Campsites</Button>
-          </Link>
+      <div className="min-h-screen bg-cream text-ink font-sans relative flex items-center justify-center overflow-hidden">
+        <TopoBg color="hsl(var(--paper))" opacity={0.55} scale={700} />
+        <div className="relative flex flex-col items-center gap-3">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/10">
+            <SpinnerGap className="w-6 h-6 text-pine-6 animate-spin" />
+          </div>
+          <Mono className="text-pine-6">Loading campsite</Mono>
         </div>
       </div>
     );
   }
 
+  // === Not found state ===
+  if (!campsite) {
+    return (
+      <div className="min-h-screen bg-cream text-ink font-sans relative flex items-center justify-center p-6 overflow-hidden">
+        <TopoBg color="hsl(var(--paper))" opacity={0.55} scale={700} />
+        <div className="relative max-w-[420px] text-center bg-white border border-line rounded-[18px] p-8">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 text-pine-6 mb-4">
+            <Tent className="w-5 h-5" weight="regular" />
+          </div>
+          <h2 className="text-[22px] font-sans font-bold tracking-[-0.015em] text-ink leading-[1.15]">
+            Campsite not found
+          </h2>
+          <p className="text-[14px] text-ink-3 mt-3 leading-[1.55]">
+            This campsite doesn't exist or you don't have access to it.
+          </p>
+          <div className="mt-6">
+            <Link
+              to="/campsites"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-pine-6 text-cream text-[14px] font-sans font-semibold hover:bg-pine-5 transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" weight="bold" />
+              Back to campsites
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const visibilityMeta = VISIBILITY_META[campsite.visibility];
+  const VisibilityIcon = visibilityMeta.Icon;
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="container px-4 md:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/campsites">
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <ArrowLeft className="w-5 h-5" weight="bold" />
-                </Button>
+    <div className="min-h-screen bg-paper text-ink font-sans">
+      {/* Sticky cluster — back nav + edit/delete */}
+      <header className="sticky top-0 z-50 bg-cream/95 backdrop-blur-md border-b border-line">
+        <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+              <Link
+                to="/campsites"
+                aria-label="Back to campsites"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors shrink-0"
+              >
+                <ArrowLeft className="w-4 h-4" weight="regular" />
               </Link>
-              <div>
-                <h1 className="text-xl font-display font-bold text-foreground">
+              <div className="min-w-0">
+                <Mono className="text-pine-6 inline-flex items-center gap-1.5">
+                  <VisibilityIcon className="w-3 h-3" weight="regular" />
+                  {visibilityMeta.label} · {typeLabels[campsite.type]}
+                </Mono>
+                <h1 className="text-[16px] sm:text-[20px] font-sans font-bold tracking-[-0.01em] text-ink truncate mt-0.5">
                   {campsite.name}
                 </h1>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>{typeLabels[campsite.type]}</span>
-                  <span>•</span>
-                  {campsite.visibility === 'public' ? (
-                    <span className="flex items-center gap-1">
-                      <Globe className="w-3 h-3" /> Public
-                    </span>
-                  ) : campsite.visibility === 'friends' ? (
-                    <span className="flex items-center gap-1">
-                      <Users className="w-3 h-3" /> Friends only
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1">
-                      <Lock className="w-3 h-3" /> Private
-                    </span>
-                  )}
-                </div>
               </div>
             </div>
+
             {isOwner && !isEditing && (
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={handleStartEdit}>
-                  <PencilSimple className="w-4 h-4 mr-1" weight="bold" />
-                  Edit
-                </Button>
-                <Button
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Pill variant="ghost" sm mono={false} onClick={handleStartEdit}>
+                  <PencilSimple className="w-3.5 h-3.5" weight="regular" />
+                  <span className="hidden sm:inline">Edit</span>
+                </Pill>
+                <Pill
                   variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
+                  sm
+                  mono={false}
                   onClick={() => setDeleteModalOpen(true)}
+                  className="!text-ember !border-ember/40 hover:!bg-ember/10"
                 >
-                  <Trash className="w-4 h-4 mr-1" weight="bold" />
-                  Delete
-                </Button>
+                  <Trash className="w-3.5 h-3.5" weight="regular" />
+                  <span className="hidden sm:inline">Delete</span>
+                </Pill>
               </div>
             )}
             {isEditing && (
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={handleCancelEdit}>
-                  <X className="w-4 h-4 mr-1" weight="bold" />
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Pill variant="ghost" sm mono={false} onClick={handleCancelEdit}>
+                  <X className="w-3.5 h-3.5" weight="bold" />
                   Cancel
-                </Button>
-                <Button variant="primary" size="sm" onClick={handleSave} disabled={isSaving}>
-                  {isSaving ? (
-                    <SpinnerGap className="w-4 h-4 mr-1 animate-spin" />
-                  ) : (
-                    <Check className="w-4 h-4 mr-1" weight="bold" />
-                  )}
+                </Pill>
+                <Pill
+                  variant="solid-pine"
+                  sm
+                  mono={false}
+                  onClick={handleSave}
+                  className={isSaving ? 'opacity-50 pointer-events-none' : ''}
+                >
+                  {isSaving ? <SpinnerGap className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" weight="bold" />}
                   Save
-                </Button>
+                </Pill>
               </div>
             )}
           </div>
@@ -255,332 +251,357 @@ const CampsiteDetail = () => {
 
       <main className="w-full">
         <div className="grid lg:grid-cols-2">
-          {/* Map Section */}
+          {/* Map (left, sticky on lg) */}
           <div className="order-2 lg:order-1 h-[400px] lg:h-[calc(100vh-73px)] lg:sticky lg:top-[73px]">
-            <div className="relative w-full h-full">
-              <GoogleMap
-                center={{ lat: campsite.lat, lng: campsite.lng }}
-                zoom={14}
-                className="w-full h-full"
-              >
-                <Marker
-                  position={{ lat: campsite.lat, lng: campsite.lng }}
-                  icon={createSimpleMarkerIcon('camp', { size: 10 })}
-                />
-              </GoogleMap>
-            </div>
+            <GoogleMap
+              center={{ lat: campsite.lat, lng: campsite.lng }}
+              zoom={14}
+              className="w-full h-full"
+            >
+              <Marker
+                position={{ lat: campsite.lat, lng: campsite.lng }}
+                icon={createSimpleMarkerIcon('camp', { size: 10 })}
+              />
+            </GoogleMap>
           </div>
 
-          {/* Info Panel */}
-          <div className="order-1 lg:order-2 space-y-4 p-6 lg:h-[calc(100vh-73px)] lg:overflow-y-auto">
-            {isEditing ? (
-              /* Edit Form */
-              <Card>
-                <CardContent className="p-6 space-y-4">
-                  <div className="space-y-2">
-                    <Label>Name</Label>
-                    <Input
-                      value={editForm.name || ''}
-                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    />
-                  </div>
+          {/* Info / edit panel (right, scrollable on lg) */}
+          <div className="order-1 lg:order-2 bg-paper lg:h-[calc(100vh-73px)] lg:overflow-y-auto">
+            <div className="px-4 sm:px-6 py-5 space-y-5">
+              {isEditing ? (
+                <EditForm form={editForm} setForm={setEditForm} />
+              ) : (
+                <>
+                  {/* Intro card — same pattern as the trip detail "Your trip" header */}
+                  <div className="bg-white border border-line rounded-[14px] p-5">
+                    <Mono className="text-pine-6">Campsite</Mono>
+                    <h1 className="text-[24px] sm:text-[28px] font-sans font-bold tracking-[-0.025em] text-ink leading-[1.1] mt-1">
+                      {campsite.name}
+                    </h1>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>Latitude</Label>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={editForm.lat || ''}
-                        onChange={(e) => setEditForm({ ...editForm, lat: parseFloat(e.target.value) })}
-                      />
+                    {/* Visibility + type badges */}
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                      <span className={cn(
+                        'inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] font-mono font-semibold uppercase tracking-[0.10em]',
+                        visibilityMeta.bg, visibilityMeta.border, visibilityMeta.accent,
+                      )}>
+                        <VisibilityIcon className="w-3 h-3" weight="regular" />
+                        {visibilityMeta.label}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border bg-cream border-line text-ink-3 text-[10px] font-mono font-semibold uppercase tracking-[0.10em]">
+                        {typeLabels[campsite.type]}
+                      </span>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Longitude</Label>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={editForm.lng || ''}
-                        onChange={(e) => setEditForm({ ...editForm, lng: parseFloat(e.target.value) })}
-                      />
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>Type</Label>
-                      <Select
-                        value={editForm.type}
-                        onValueChange={(v) => setEditForm({ ...editForm, type: v as CampsiteType })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="dispersed">Dispersed</SelectItem>
-                          <SelectItem value="established">Established</SelectItem>
-                          <SelectItem value="blm">BLM</SelectItem>
-                          <SelectItem value="usfs">USFS</SelectItem>
-                          <SelectItem value="private">Private</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Visibility</Label>
-                      <Select
-                        value={editForm.visibility}
-                        onValueChange={(v) => setEditForm({ ...editForm, visibility: v as CampsiteVisibility })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="private">Private</SelectItem>
-                          <SelectItem value="friends">Friends only</SelectItem>
-                          <SelectItem value="public">Public</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    {/* Coords / state */}
+                    <div className="mt-4 pt-4 border-t border-line flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
+                      <MapPin className="w-3.5 h-3.5" weight="regular" />
+                      {campsite.state && `${campsite.state} · `}
+                      {campsite.lat.toFixed(4)}, {campsite.lng.toFixed(4)}
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Description</Label>
-                    <Textarea
-                      value={editForm.description || ''}
-                      onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                      rows={3}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Road Access</Label>
-                    <Select
-                      value={editForm.roadAccess || ''}
-                      onValueChange={(v) => setEditForm({ ...editForm, roadAccess: v as RoadAccess })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="2wd">2WD</SelectItem>
-                        <SelectItem value="4wd_easy">4WD Easy</SelectItem>
-                        <SelectItem value="4wd_moderate">4WD Moderate</SelectItem>
-                        <SelectItem value="4wd_hard">4WD Hard</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Cell Coverage</Label>
-                    <Select
-                      value={editForm.cellCoverage?.toString() || ''}
-                      onValueChange={(v) => setEditForm({ ...editForm, cellCoverage: parseInt(v) })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0">0 - No signal</SelectItem>
-                        <SelectItem value="1">1 - Very weak</SelectItem>
-                        <SelectItem value="2">2 - Weak</SelectItem>
-                        <SelectItem value="3">3 - Moderate</SelectItem>
-                        <SelectItem value="4">4 - Good</SelectItem>
-                        <SelectItem value="5">5 - Excellent</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <Label>Water Available</Label>
-                    <Switch
-                      checked={editForm.waterAvailable || false}
-                      onCheckedChange={(v) => setEditForm({ ...editForm, waterAvailable: v })}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <Label>Fee Required</Label>
-                    <Switch
-                      checked={editForm.feeRequired || false}
-                      onCheckedChange={(v) => setEditForm({ ...editForm, feeRequired: v })}
-                    />
-                  </div>
-
-                  {editForm.feeRequired && (
-                    <div className="space-y-2">
-                      <Label>Fee Amount</Label>
-                      <Input
-                        value={editForm.feeAmount || ''}
-                        onChange={(e) => setEditForm({ ...editForm, feeAmount: e.target.value })}
-                        placeholder="e.g. $10/night"
-                      />
+                  {/* Description */}
+                  {campsite.description && (
+                    <div className="bg-white border border-line rounded-[14px] p-5">
+                      <Mono className="text-ink-2 block mb-2">Description</Mono>
+                      <p className="text-[14px] text-ink leading-[1.55]">{campsite.description}</p>
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <Label>Seasonal Access</Label>
-                    <Input
-                      value={editForm.seasonalAccess || ''}
-                      onChange={(e) => setEditForm({ ...editForm, seasonalAccess: e.target.value })}
-                      placeholder="e.g. Year-round"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Private Notes</Label>
-                    <Textarea
-                      value={editForm.notes || ''}
-                      onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                      rows={2}
-                      placeholder="Personal notes..."
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              /* View Mode */
-              <>
-                {/* Location */}
-                <Card className="bg-gradient-card">
-                  <CardContent className="p-6">
-                    <div className="flex items-start gap-4">
-                      <div className="flex items-center justify-center w-14 h-14 bg-primary/10 rounded-xl">
-                        <Tent className="w-7 h-7 text-primary" />
-                      </div>
-                      <div className="flex-1">
-                        <h2 className="text-xl font-display font-bold text-foreground">
-                          {campsite.name}
-                        </h2>
-                        <div className="flex items-center gap-2 mt-1 text-muted-foreground">
-                          <MapPin className="w-4 h-4" />
-                          <span className="text-sm">
-                            {campsite.state && `${campsite.state} · `}
-                            {campsite.lat.toFixed(6)}, {campsite.lng.toFixed(6)}
-                          </span>
-                        </div>
-                        <span className="inline-block mt-2 px-3 py-1 bg-secondary rounded-full text-sm text-foreground">
-                          {typeLabels[campsite.type]}
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Description */}
-                {campsite.description && (
-                  <Card>
-                    <CardContent className="p-6">
-                      <h3 className="font-semibold text-foreground mb-2">Description</h3>
-                      <p className="text-muted-foreground">{campsite.description}</p>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Details */}
-                <Card>
-                  <CardContent className="p-6 space-y-4">
-                    <h3 className="font-semibold text-foreground">Details</h3>
-
+                  {/* Detail rows */}
+                  <div className="bg-white border border-line rounded-[14px] p-5 space-y-3.5">
+                    <Mono className="text-ink-2 block">Details</Mono>
                     {campsite.roadAccess && (
-                      <div className="flex items-center gap-3">
-                        <Car className="w-5 h-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium text-foreground">Road Access</p>
-                          <p className="text-sm text-muted-foreground">
-                            {roadAccessLabels[campsite.roadAccess]}
-                          </p>
-                        </div>
-                      </div>
+                      <DetailRow Icon={Car} label="Road access" value={roadAccessLabels[campsite.roadAccess]} />
                     )}
-
                     {campsite.cellCoverage !== undefined && (
-                      <div className="flex items-center gap-3">
-                        <CellSignalFull className="w-5 h-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium text-foreground">Cell Coverage</p>
-                          <p className="text-sm text-muted-foreground">
-                            {campsite.cellCoverage}/5 bars
-                          </p>
-                        </div>
-                      </div>
+                      <DetailRow Icon={CellSignalFull} label="Cell coverage" value={`${campsite.cellCoverage}/5 bars`} />
                     )}
-
                     {campsite.waterAvailable !== undefined && (
-                      <div className="flex items-center gap-3">
-                        <Drop className="w-5 h-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium text-foreground">Water</p>
-                          <p className="text-sm text-muted-foreground">
-                            {campsite.waterAvailable ? 'Available' : 'Not available'}
-                          </p>
-                        </div>
-                      </div>
+                      <DetailRow Icon={Drop} label="Water" value={campsite.waterAvailable ? 'Available' : 'Not available'} />
                     )}
-
                     {(campsite.feeRequired || campsite.feeAmount) && (
-                      <div className="flex items-center gap-3">
-                        <CurrencyDollar className="w-5 h-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium text-foreground">Fee</p>
-                          <p className="text-sm text-muted-foreground">
-                            {campsite.feeAmount || (campsite.feeRequired ? 'Required' : 'Free')}
-                          </p>
-                        </div>
-                      </div>
+                      <DetailRow
+                        Icon={CurrencyDollar}
+                        label="Fee"
+                        value={campsite.feeAmount || (campsite.feeRequired ? 'Required' : 'Free')}
+                      />
                     )}
-
                     {campsite.seasonalAccess && (
-                      <div className="flex items-center gap-3">
-                        <Calendar className="w-5 h-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium text-foreground">Seasonal Access</p>
-                          <p className="text-sm text-muted-foreground">{campsite.seasonalAccess}</p>
-                        </div>
-                      </div>
+                      <DetailRow Icon={Calendar} label="Seasonal" value={campsite.seasonalAccess} />
                     )}
-                  </CardContent>
-                </Card>
+                  </div>
 
-                {/* Private Notes (owner only) */}
-                {isOwner && campsite.notes && (
-                  <Card>
-                    <CardContent className="p-6">
-                      <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-                        <Lock className="w-4 h-4" />
-                        Private Notes
-                      </h3>
-                      <p className="text-muted-foreground">{campsite.notes}</p>
-                    </CardContent>
-                  </Card>
-                )}
+                  {/* Private notes — owner only */}
+                  {isOwner && campsite.notes && (
+                    <div className="bg-clay/[0.06] border border-clay/30 rounded-[14px] p-5">
+                      <Mono className="text-clay flex items-center gap-1.5">
+                        <Lock className="w-3 h-3" weight="regular" />
+                        Private notes
+                      </Mono>
+                      <p className="text-[14px] text-ink leading-[1.55] mt-2">{campsite.notes}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
 
-                {/* Actions */}
-                <div className="flex gap-3">
-                  <Button variant="primary" size="lg" className="flex-1" onClick={handleGetDirections}>
-                    <NavigationArrow className="w-4 h-4 mr-2" />
-                    Get Directions
-                  </Button>
-                  <Button variant="outline" size="lg" onClick={handleOpenInMaps}>
-                    <ArrowSquareOut className="w-4 h-4" />
-                  </Button>
-                </div>
-              </>
+            {/* Sticky bottom action bar */}
+            {!isEditing && (
+              <div className="sticky bottom-0 border-t border-line bg-cream px-4 sm:px-6 py-3 flex items-center gap-2">
+                <Pill
+                  variant="solid-pine"
+                  mono={false}
+                  onClick={() =>
+                    window.open(
+                      `https://www.google.com/maps/dir/?api=1&destination=${campsite.lat},${campsite.lng}`,
+                      '_blank',
+                    )
+                  }
+                  className="!flex-1 !justify-center"
+                >
+                  <NavigationArrow className="w-4 h-4" weight="regular" />
+                  Get directions
+                </Pill>
+                <Pill
+                  variant="ghost"
+                  mono={false}
+                  onClick={() =>
+                    window.open(
+                      `https://www.google.com/maps/search/?api=1&query=${campsite.lat},${campsite.lng}`,
+                      '_blank',
+                    )
+                  }
+                >
+                  <ArrowSquareOut className="w-4 h-4" weight="regular" />
+                </Pill>
+              </div>
             )}
           </div>
         </div>
       </main>
 
-      {/* Delete Modal */}
+      {/* Delete confirmation */}
       <ConfirmDeleteModal
         isOpen={deleteModalOpen}
         onClose={() => setDeleteModalOpen(false)}
         onConfirm={handleDelete}
-        title="Delete Campsite"
+        title="Delete campsite"
         description="Are you sure you want to delete this campsite? This action cannot be undone."
         itemName={campsite.name}
       />
     </div>
   );
 };
+
+// === Helpers ===
+
+const DetailRow = ({
+  Icon,
+  label,
+  value,
+}: {
+  Icon: typeof Car;
+  label: string;
+  value: string;
+}) => (
+  <div className="flex items-start gap-3">
+    <div className="inline-flex items-center justify-center w-8 h-8 rounded-[8px] bg-cream text-ink-2 flex-shrink-0">
+      <Icon className="w-4 h-4" weight="regular" />
+    </div>
+    <div className="flex-1 min-w-0">
+      <Mono className="text-ink-3 block">{label}</Mono>
+      <p className="text-[14px] text-ink mt-0.5">{value}</p>
+    </div>
+  </div>
+);
+
+// Edit form lives in its own component so the read-mode body stays slim.
+// Inputs use the same chrome as the auth/wizard fields (rounded-[12px]
+// border-line, focus pine-6) — no shadcn Input default styling.
+const EditForm = ({
+  form,
+  setForm,
+}: {
+  form: Partial<CampsiteFormData>;
+  setForm: (f: Partial<CampsiteFormData>) => void;
+}) => {
+  const inputClass =
+    'w-full h-10 px-3 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors';
+
+  return (
+    <div className="bg-white border border-line rounded-[14px] p-5 space-y-4">
+      <Mono className="text-pine-6">Edit campsite</Mono>
+
+      <Field label="Name">
+        <input
+          value={form.name || ''}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          className={inputClass}
+        />
+      </Field>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Latitude">
+          <input
+            type="number"
+            step="any"
+            value={form.lat ?? ''}
+            onChange={(e) => setForm({ ...form, lat: parseFloat(e.target.value) })}
+            className={inputClass}
+          />
+        </Field>
+        <Field label="Longitude">
+          <input
+            type="number"
+            step="any"
+            value={form.lng ?? ''}
+            onChange={(e) => setForm({ ...form, lng: parseFloat(e.target.value) })}
+            className={inputClass}
+          />
+        </Field>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Type">
+          <FormSelect
+            value={form.type ?? ''}
+            onChange={(v) => setForm({ ...form, type: v as CampsiteType })}
+          >
+            <SelectItem value="dispersed">Dispersed</SelectItem>
+            <SelectItem value="established">Established</SelectItem>
+            <SelectItem value="blm">BLM</SelectItem>
+            <SelectItem value="usfs">USFS</SelectItem>
+            <SelectItem value="private">Private</SelectItem>
+          </FormSelect>
+        </Field>
+        <Field label="Visibility">
+          <FormSelect
+            value={form.visibility ?? ''}
+            onChange={(v) => setForm({ ...form, visibility: v as CampsiteVisibility })}
+          >
+            <SelectItem value="private">Private</SelectItem>
+            <SelectItem value="friends">Friends only</SelectItem>
+            <SelectItem value="public">Public</SelectItem>
+          </FormSelect>
+        </Field>
+      </div>
+
+      <Field label="Description">
+        <textarea
+          value={form.description || ''}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+          rows={3}
+          className="w-full px-3 py-2 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors resize-none"
+        />
+      </Field>
+
+      <Field label="Road access">
+        <FormSelect
+          value={form.roadAccess ?? ''}
+          onChange={(v) => setForm({ ...form, roadAccess: v as RoadAccess })}
+          placeholder="Select…"
+        >
+          <SelectItem value="2wd">2WD</SelectItem>
+          <SelectItem value="4wd_easy">4WD Easy</SelectItem>
+          <SelectItem value="4wd_moderate">4WD Moderate</SelectItem>
+          <SelectItem value="4wd_hard">4WD Hard</SelectItem>
+        </FormSelect>
+      </Field>
+
+      <Field label="Cell coverage">
+        <FormSelect
+          value={form.cellCoverage?.toString() ?? ''}
+          onChange={(v) => setForm({ ...form, cellCoverage: parseInt(v) })}
+          placeholder="Select…"
+        >
+          <SelectItem value="0">0 — No signal</SelectItem>
+          <SelectItem value="1">1 — Very weak</SelectItem>
+          <SelectItem value="2">2 — Weak</SelectItem>
+          <SelectItem value="3">3 — Moderate</SelectItem>
+          <SelectItem value="4">4 — Good</SelectItem>
+          <SelectItem value="5">5 — Excellent</SelectItem>
+        </FormSelect>
+      </Field>
+
+      <ToggleRow label="Water available" checked={form.waterAvailable || false} onChange={(v) => setForm({ ...form, waterAvailable: v })} />
+      <ToggleRow label="Fee required" checked={form.feeRequired || false} onChange={(v) => setForm({ ...form, feeRequired: v })} />
+
+      {form.feeRequired && (
+        <Field label="Fee amount">
+          <input
+            value={form.feeAmount || ''}
+            onChange={(e) => setForm({ ...form, feeAmount: e.target.value })}
+            placeholder="e.g. $10/night"
+            className={inputClass}
+          />
+        </Field>
+      )}
+
+      <Field label="Seasonal access">
+        <input
+          value={form.seasonalAccess || ''}
+          onChange={(e) => setForm({ ...form, seasonalAccess: e.target.value })}
+          placeholder="e.g. Year-round"
+          className={inputClass}
+        />
+      </Field>
+
+      <Field label="Private notes">
+        <textarea
+          value={form.notes || ''}
+          onChange={(e) => setForm({ ...form, notes: e.target.value })}
+          rows={2}
+          placeholder="Personal notes…"
+          className="w-full px-3 py-2 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors resize-none"
+        />
+      </Field>
+    </div>
+  );
+};
+
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div>
+    <Mono className="text-ink-2 block mb-1.5">{label}</Mono>
+    {children}
+  </div>
+);
+
+const FormSelect = ({
+  value,
+  onChange,
+  placeholder,
+  children,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  children: React.ReactNode;
+}) => (
+  <Select value={value} onValueChange={onChange}>
+    <SelectTrigger className="h-10 w-full px-3 rounded-[12px] border-line bg-white text-ink text-[14px] hover:border-ink-3 transition-colors">
+      <SelectValue placeholder={placeholder} />
+    </SelectTrigger>
+    <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink">
+      {children}
+    </SelectContent>
+  </Select>
+);
+
+const ToggleRow = ({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) => (
+  <div className="flex items-center justify-between">
+    <Mono className="text-ink-2">{label}</Mono>
+    <Switch checked={checked} onCheckedChange={onChange} />
+  </div>
+);
 
 export default CampsiteDetail;

@@ -119,16 +119,16 @@ export function GoogleMap({ center, zoom = 10, children, className, onClick, onL
 
   if (loadError) {
     return (
-      <div className="flex items-center justify-center h-full bg-sand">
-        <p className="text-muted-foreground">Error loading maps</p>
+      <div className="flex items-center justify-center h-full bg-cream font-sans">
+        <p className="text-[12px] font-mono font-semibold uppercase tracking-[0.12em] text-ember">Error loading maps</p>
       </div>
     );
   }
 
   if (!isLoaded) {
     return (
-      <div className="flex items-center justify-center h-full bg-sand animate-pulse">
-        <p className="text-muted-foreground">Loading map...</p>
+      <div className="flex items-center justify-center h-full bg-cream animate-pulse font-sans">
+        <p className="text-[12px] font-mono font-semibold uppercase tracking-[0.12em] text-pine-6">Loading map…</p>
       </div>
     );
   }

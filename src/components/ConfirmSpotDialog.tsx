@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SpinnerGap, CheckCircle, MapPin, Jeep, Check } from '@phosphor-icons/react';
 import { PotentialSpot } from '@/hooks/use-dispersed-roads';
 import { useCampsites } from '@/context/CampsitesContext';
 import type { RoadAccess, Campsite } from '@/types/campsite';
+import { Mono, Pill } from '@/components/redesign';
 
 interface ConfirmSpotDialogProps {
   spot: PotentialSpot;
@@ -26,7 +24,6 @@ export function ConfirmSpotDialog({ spot, open, onOpenChange, onConfirmed, exist
   const [alreadyConfirmed, setAlreadyConfirmed] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
 
-  // Check if user has already confirmed this spot when dialog opens
   useEffect(() => {
     if (open && existingCampsite) {
       setCheckingStatus(true);
@@ -48,7 +45,6 @@ export function ConfirmSpotDialog({ spot, open, onOpenChange, onConfirmed, exist
         setTimeout(() => {
           onOpenChange(false);
           onConfirmed?.();
-          // Reset state after dialog closes
           setTimeout(() => {
             setIsSuccess(false);
             setNotes('');
@@ -64,131 +60,139 @@ export function ConfirmSpotDialog({ spot, open, onOpenChange, onConfirmed, exist
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md border-line bg-white rounded-[18px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CheckCircle className="w-5 h-5 text-green-600" />
-            {alreadyConfirmed ? 'Already Confirmed' : 'Confirm Camping Spot'}
+          <Mono className="text-pine-6 flex items-center gap-1.5">
+            <CheckCircle className="w-3.5 h-3.5" weight="regular" />
+            {alreadyConfirmed ? 'Already confirmed' : 'Confirm spot'}
+          </Mono>
+          <DialogTitle className="font-sans font-semibold tracking-[-0.015em] text-ink text-[20px] leading-[1.15] mt-1">
+            {alreadyConfirmed ? "You've already confirmed this." : 'Confirm camping spot.'}
           </DialogTitle>
         </DialogHeader>
 
         {checkingStatus ? (
           <div className="py-8 text-center">
-            <SpinnerGap className="w-8 h-8 text-primary mx-auto mb-3 animate-spin" />
-            <p className="text-sm text-muted-foreground">Checking status...</p>
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10 mb-3">
+              <SpinnerGap className="w-5 h-5 text-pine-6 animate-spin" />
+            </div>
+            <Mono className="text-pine-6">Checking status…</Mono>
           </div>
         ) : isSuccess ? (
           <div className="py-8 text-center">
-            <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-3" />
-            <p className="text-lg font-medium text-foreground">Spot Confirmed!</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Thank you for helping verify this location.
-            </p>
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/15 text-pine-6 mb-3">
+              <CheckCircle className="w-7 h-7" weight="fill" />
+            </div>
+            <Mono className="text-pine-6">Spot confirmed</Mono>
+            <p className="text-[14px] text-ink-3 mt-2">Thank you for helping verify this location.</p>
           </div>
         ) : alreadyConfirmed ? (
-          <div className="py-6 text-center">
-            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Check className="w-8 h-8 text-green-600" />
+          <div className="py-4 text-center space-y-3">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-pine-6/15 text-pine-6">
+              <Check className="w-7 h-7" weight="bold" />
             </div>
-            <p className="text-lg font-medium text-foreground">You've already confirmed this spot</p>
-            <p className="text-sm text-muted-foreground mt-2">
-              {existingCampsite && (
-                <>
-                  This spot has {existingCampsite.confirmationCount} {existingCampsite.confirmationCount === 1 ? 'confirmation' : 'confirmations'}.
-                  {existingCampsite.isConfirmed ? ' It\'s now verified!' : ` ${3 - existingCampsite.confirmationCount} more needed to verify.`}
-                </>
-              )}
-            </p>
-            <Button className="mt-6" onClick={() => onOpenChange(false)}>
-              Close
-            </Button>
+            {existingCampsite && (
+              <p className="text-[13px] text-ink-3 leading-[1.55] max-w-xs mx-auto">
+                This spot has {existingCampsite.confirmationCount}{' '}
+                {existingCampsite.confirmationCount === 1 ? 'confirmation' : 'confirmations'}.
+                {existingCampsite.isConfirmed
+                  ? " It's now verified."
+                  : ` ${3 - existingCampsite.confirmationCount} more needed to verify.`}
+              </p>
+            )}
+            <Pill variant="solid-pine" mono={false} onClick={() => onOpenChange(false)}>Close</Pill>
           </div>
         ) : (
           <>
-            <div className="space-y-4 py-4">
-              {/* Location Info */}
-              <div className="p-3 bg-muted rounded-lg">
+            <div className="space-y-4">
+              {/* Location info card */}
+              <div className="px-3 py-3 bg-cream border border-line rounded-[12px]">
                 <div className="flex items-start gap-3">
-                  <MapPin className="w-5 h-5 text-primary mt-0.5" />
+                  <MapPin className="w-4 h-4 text-pine-6 mt-0.5 flex-shrink-0" weight="regular" />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground truncate">{spot.name}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-[14px] font-sans font-semibold text-ink truncate">{spot.name}</p>
+                    <Mono className="text-ink-3 block mt-0.5">
                       {spot.lat.toFixed(5)}, {spot.lng.toFixed(5)}
-                    </p>
+                    </Mono>
                     {spot.roadName && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Road: {spot.roadName}
-                      </p>
+                      <Mono className="text-ink-3 block mt-0.5">Road · {spot.roadName}</Mono>
                     )}
                   </div>
-                  <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded font-medium">
-                    Score: {spot.score}
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-pine-6/10 text-pine-6 text-[10px] font-mono font-bold">
+                    {spot.score}
                   </span>
                 </div>
               </div>
 
-              {/* Existing confirmations */}
+              {/* Existing confirmations notice */}
               {existingCampsite && existingCampsite.confirmationCount > 0 && (
-                <div className="p-2.5 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <p className="text-sm text-amber-700 dark:text-amber-300">
-                    {existingCampsite.confirmationCount} {existingCampsite.confirmationCount === 1 ? 'person has' : 'people have'} already confirmed this spot
-                  </p>
+                <div className="px-3 py-2.5 rounded-[10px] border border-clay/30 bg-clay/[0.06]">
+                  <Mono className="text-clay">
+                    {existingCampsite.confirmationCount}{' '}
+                    {existingCampsite.confirmationCount === 1 ? 'person has' : 'people have'} already confirmed this spot
+                  </Mono>
                 </div>
               )}
 
-              {/* Road Access */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Jeep className="w-4 h-4" />
-                  Road Access
-                </Label>
+              {/* Road access */}
+              <div>
+                <Mono className="text-ink-2 flex items-center gap-1.5 mb-1.5">
+                  <Jeep className="w-3.5 h-3.5" weight="regular" />
+                  Road access
+                </Mono>
                 <Select value={roadAccess} onValueChange={(v) => setRoadAccess(v as RoadAccess)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-10 rounded-[12px] border-line bg-white text-ink text-[14px] hover:border-ink-3 transition-colors">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2wd">2WD Accessible</SelectItem>
-                    <SelectItem value="4wd_easy">4WD Easy</SelectItem>
-                    <SelectItem value="4wd_moderate">4WD Moderate</SelectItem>
-                    <SelectItem value="4wd_hard">4WD Difficult</SelectItem>
+                  <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink">
+                    <SelectItem value="2wd">2WD accessible</SelectItem>
+                    <SelectItem value="4wd_easy">4WD easy</SelectItem>
+                    <SelectItem value="4wd_moderate">4WD moderate</SelectItem>
+                    <SelectItem value="4wd_hard">4WD difficult</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               {/* Notes */}
-              <div className="space-y-2">
-                <Label>Notes (optional)</Label>
-                <Textarea
+              <div>
+                <Mono className="text-ink-2 block mb-1.5">Notes (optional)</Mono>
+                <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Any helpful details about this spot..."
+                  placeholder="Any helpful details about this spot…"
                   rows={3}
+                  className="w-full px-3 py-2 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors resize-none"
                 />
               </div>
 
-              <p className="text-xs text-muted-foreground">
-                By confirming, you verify that this is a viable dispersed camping location.
-                After 3 confirmations, this spot will be marked as a verified campsite.
+              <p className="text-[12px] text-ink-3 leading-[1.5]">
+                By confirming, you verify this is a viable dispersed camping location. After 3 confirmations, this spot
+                will be marked as a verified campsite.
               </p>
             </div>
 
-            <DialogFooter>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <DialogFooter className="gap-2 sm:gap-2 mt-2">
+              <Pill variant="ghost" mono={false} onClick={() => onOpenChange(false)}>
                 Cancel
-              </Button>
-              <Button onClick={handleConfirm} disabled={isSubmitting}>
+              </Pill>
+              <Pill
+                variant="solid-pine"
+                mono={false}
+                onClick={handleConfirm}
+                className={isSubmitting ? 'opacity-50 pointer-events-none' : ''}
+              >
                 {isSubmitting ? (
                   <>
-                    <SpinnerGap className="w-4 h-4 mr-2 animate-spin" />
-                    Confirming...
+                    <SpinnerGap className="w-3.5 h-3.5 animate-spin" />
+                    Confirming…
                   </>
                 ) : (
                   <>
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Confirm Spot
+                    <CheckCircle className="w-3.5 h-3.5" weight="regular" />
+                    Confirm spot
                   </>
                 )}
-              </Button>
+              </Pill>
             </DialogFooter>
           </>
         )}

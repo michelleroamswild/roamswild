@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Envelope, Link, Copy, Check, Trash, UserPlus } from '@phosphor-icons/react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
+import { X, Envelope, Link as LinkIcon, Copy, Check, Trash, UserPlus } from '@phosphor-icons/react';
 import {
   Dialog,
   DialogContent,
@@ -18,6 +15,7 @@ import {
 } from './ui/select';
 import { useTrip, Collaborator, ShareLink } from '@/context/TripContext';
 import { toast } from 'sonner';
+import { Mono, Pill } from '@/components/redesign';
 
 interface ShareTripModalProps {
   tripId: string;
@@ -27,7 +25,15 @@ interface ShareTripModalProps {
 }
 
 export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripModalProps) {
-  const { shareTrip, createShareLink, revokeShareLink, removeCollaborator, updateCollaboratorPermission, fetchCollaborators, fetchShareLinks } = useTrip();
+  const {
+    shareTrip,
+    createShareLink,
+    revokeShareLink,
+    removeCollaborator,
+    updateCollaboratorPermission,
+    fetchCollaborators,
+    fetchShareLinks,
+  } = useTrip();
 
   const [email, setEmail] = useState('');
   const [permission, setPermission] = useState<'view' | 'edit'>('edit');
@@ -37,18 +43,13 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
 
-  // Load collaborators and share links when modal opens
   useEffect(() => {
-    if (isOpen && tripId) {
-      loadData();
-    }
+    if (isOpen && tripId) loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, tripId]);
 
   const loadData = async () => {
-    const [collabs, links] = await Promise.all([
-      fetchCollaborators(tripId),
-      fetchShareLinks(tripId),
-    ]);
+    const [collabs, links] = await Promise.all([fetchCollaborators(tripId), fetchShareLinks(tripId)]);
     setCollaborators(collabs);
     setShareLinks(links);
   };
@@ -58,7 +59,6 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
       toast.error('Please enter an email address');
       return;
     }
-
     setIsInviting(true);
     const result = await shareTrip(tripId, email.trim(), permission);
     setIsInviting(false);
@@ -114,105 +114,97 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md border-line bg-white rounded-[18px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5" weight="bold" />
-            Share "{tripName}"
+          <Mono className="text-pine-6 flex items-center gap-1.5">
+            <UserPlus className="w-3.5 h-3.5" weight="regular" />
+            Share trip
+          </Mono>
+          <DialogTitle className="font-sans font-semibold tracking-[-0.015em] text-ink text-[20px] leading-[1.15] mt-1 truncate">
+            {tripName}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-5 mt-2">
           {/* Invite by email */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Invite by email</Label>
+          <div className="space-y-2">
+            <Mono className="text-ink-2 block">Invite by email</Mono>
             <div className="flex gap-2">
-              <div className="flex-1">
-                <Input
-                  type="email"
-                  placeholder="Enter email address"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
-                />
-              </div>
-              <Select value={permission} onValueChange={(v) => setPermission(v as 'view' | 'edit')}>
-                <SelectTrigger className="w-24">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="edit">Edit</SelectItem>
-                  <SelectItem value="view">View</SelectItem>
-                </SelectContent>
-              </Select>
+              <input
+                type="email"
+                placeholder="friend@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
+                className="flex-1 h-10 px-3 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
+              />
+              <PermissionSelect value={permission} onChange={setPermission} />
             </div>
-            <Button variant="primary" onClick={handleInvite} disabled={isInviting} className="w-full">
-              <Envelope className="w-4 h-4 mr-2" />
-              {isInviting ? 'Sending...' : 'Send Invite'}
-            </Button>
+            <Pill
+              variant="solid-pine"
+              mono={false}
+              onClick={handleInvite}
+              className={`!w-full !justify-center ${isInviting ? 'opacity-50 pointer-events-none' : ''}`}
+            >
+              <Envelope className="w-3.5 h-3.5" weight="regular" />
+              {isInviting ? 'Sending…' : 'Send invite'}
+            </Pill>
           </div>
 
           {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Or share with link</span>
-            </div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 border-t border-line" />
+            <Mono className="text-ink-3">Or share with link</Mono>
+            <div className="flex-1 border-t border-line" />
           </div>
 
           {/* Create share link */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Select value={permission} onValueChange={(v) => setPermission(v as 'view' | 'edit')}>
-                <SelectTrigger className="w-24">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="edit">Edit</SelectItem>
-                  <SelectItem value="view">View</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button onClick={handleCreateLink} disabled={isCreatingLink} variant="outline" className="flex-1">
-                <Link className="w-4 h-4 mr-2" />
-                {isCreatingLink ? 'Creating...' : 'Create Link'}
-              </Button>
-            </div>
+          <div className="flex items-center gap-2">
+            <PermissionSelect value={permission} onChange={setPermission} />
+            <Pill
+              variant="ghost"
+              mono={false}
+              onClick={handleCreateLink}
+              className={`!flex-1 !justify-center ${isCreatingLink ? 'opacity-50 pointer-events-none' : ''}`}
+            >
+              <LinkIcon className="w-3.5 h-3.5" weight="regular" />
+              {isCreatingLink ? 'Creating…' : 'Create link'}
+            </Pill>
           </div>
 
           {/* Active share links */}
           {shareLinks.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Active links</Label>
-              <div className="space-y-2 max-h-32 overflow-y-auto">
+              <Mono className="text-ink-2 block">Active links</Mono>
+              <div className="space-y-1.5 max-h-32 overflow-y-auto">
                 {shareLinks.map((link) => (
-                  <div key={link.id} className="flex items-center justify-between p-2 bg-muted rounded-lg text-sm">
+                  <div
+                    key={link.id}
+                    className="flex items-center justify-between px-3 py-2 rounded-[10px] border border-line bg-cream"
+                  >
                     <div className="flex items-center gap-2 min-w-0">
-                      <Link className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      <span className="text-muted-foreground capitalize">{link.permission}</span>
+                      <LinkIcon className="w-3.5 h-3.5 text-ink-3 flex-shrink-0" weight="regular" />
+                      <Mono className="text-ink-2 capitalize">{link.permission}</Mono>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0"
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                      <button
                         onClick={() => handleCopyLink(link.token, link.id)}
+                        aria-label="Copy link"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-3 hover:text-ink hover:bg-white transition-colors"
                       >
                         {copiedLinkId === link.id ? (
-                          <Check className="w-3.5 h-3.5 text-green-500" />
+                          <Check className="w-3.5 h-3.5 text-pine-6" weight="bold" />
                         ) : (
-                          <Copy className="w-3.5 h-3.5" />
+                          <Copy className="w-3.5 h-3.5" weight="regular" />
                         )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                      </button>
+                      <button
                         onClick={() => handleRevokeLink(link.id)}
+                        aria-label="Revoke link"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-3 hover:text-ember hover:bg-ember/10 transition-colors"
                       >
-                        <Trash className="w-3.5 h-3.5" />
-                      </Button>
+                        <Trash className="w-3.5 h-3.5" weight="regular" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -223,40 +215,45 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
           {/* Current collaborators */}
           {collaborators.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm font-medium">People with access</Label>
-              <div className="space-y-2 max-h-40 overflow-y-auto">
+              <Mono className="text-ink-2 block">People with access</Mono>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto">
                 {collaborators.map((collab) => (
-                  <div key={collab.id} className="flex items-center justify-between p-2 bg-muted rounded-lg">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-medium flex-shrink-0">
-                        {collab.name ? collab.name.slice(0, 2).toUpperCase() : collab.email.slice(0, 2).toUpperCase()}
+                  <div
+                    key={collab.id}
+                    className="flex items-center justify-between px-3 py-2 rounded-[10px] border border-line bg-cream"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-pine-6 text-cream inline-flex items-center justify-center text-[11px] font-sans font-semibold tracking-[0.02em] flex-shrink-0">
+                        {(collab.name ?? collab.email).slice(0, 2).toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{collab.name || collab.email}</p>
-                        {collab.name && <p className="text-xs text-muted-foreground truncate">{collab.email}</p>}
+                        <p className="text-[13px] font-sans font-semibold tracking-[-0.005em] text-ink truncate">
+                          {collab.name || collab.email}
+                        </p>
+                        {collab.name && (
+                          <Mono className="text-ink-3 block truncate">{collab.email}</Mono>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Select
-                        value={collab.permission}
-                        onValueChange={(v) => handleUpdatePermission(collab.userId, v as 'view' | 'edit')}
-                      >
-                        <SelectTrigger className="h-7 w-20 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="edit">Edit</SelectItem>
-                          <SelectItem value="view">View</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                      {collab.permission === 'owner' ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full border border-line bg-cream text-ink-2 text-[10px] font-mono uppercase tracking-[0.10em] font-semibold">
+                          Owner
+                        </span>
+                      ) : (
+                        <PermissionSelect
+                          value={collab.permission}
+                          onChange={(v) => handleUpdatePermission(collab.userId, v)}
+                          compact
+                        />
+                      )}
+                      <button
                         onClick={() => handleRemoveCollaborator(collab.userId, collab.name)}
+                        aria-label="Remove collaborator"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-3 hover:text-ember hover:bg-ember/10 transition-colors"
                       >
-                        <X className="w-3.5 h-3.5" />
-                      </Button>
+                        <X className="w-3.5 h-3.5" weight="bold" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -268,3 +265,29 @@ export function ShareTripModal({ tripId, tripName, isOpen, onClose }: ShareTripM
     </Dialog>
   );
 }
+
+const PermissionSelect = ({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: 'view' | 'edit';
+  onChange: (v: 'view' | 'edit') => void;
+  compact?: boolean;
+}) => (
+  <Select value={value} onValueChange={(v) => onChange(v as 'view' | 'edit')}>
+    <SelectTrigger
+      className={
+        compact
+          ? 'h-7 w-[72px] px-2.5 rounded-full border-line bg-white text-ink text-[11px] font-mono uppercase tracking-[0.10em] font-semibold hover:border-ink-3 transition-colors'
+          : 'h-10 w-[88px] px-3 rounded-[12px] border-line bg-white text-ink text-[14px] hover:border-ink-3 transition-colors'
+      }
+    >
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink">
+      <SelectItem value="edit">Edit</SelectItem>
+      <SelectItem value="view">View</SelectItem>
+    </SelectContent>
+  </Select>
+);

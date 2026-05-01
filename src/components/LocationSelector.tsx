@@ -21,7 +21,6 @@ import {
   NavigationArrow,
 } from '@phosphor-icons/react';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   DropdownMenu,
@@ -34,6 +33,8 @@ import {
 import { useGoogleMaps } from './GoogleMapsProvider';
 import { useSavedLocations, SavedLocation } from '@/context/SavedLocationsContext';
 import { useAuth } from '@/context/AuthContext';
+import { Mono } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 export interface SelectedLocation {
   lat: number;
@@ -51,21 +52,15 @@ interface LocationSelectorProps {
   showCoordinates?: boolean;
   showClear?: boolean;
   compact?: boolean;
-  onMapClickHint?: boolean; // Show "or click map" hint
-  coordinatesDisplay?: string; // Show coordinates inline to the right of buttons
+  onMapClickHint?: boolean;
+  coordinatesDisplay?: string;
 }
 
-// Parse coordinate string like "39.0708, -106.9890" or "39.0708 -106.9890"
 function parseCoordinates(input: string): { lat: number; lng: number } | null {
   const cleaned = input.trim();
   if (!cleaned) return null;
-
-  // Try comma-separated first
-  let parts = cleaned.split(',').map(s => s.trim());
-  if (parts.length !== 2) {
-    // Try space-separated
-    parts = cleaned.split(/\s+/);
-  }
+  let parts = cleaned.split(',').map((s) => s.trim());
+  if (parts.length !== 2) parts = cleaned.split(/\s+/);
   if (parts.length !== 2) return null;
 
   const lat = parseFloat(parts[0]);
@@ -78,11 +73,18 @@ function parseCoordinates(input: string): { lat: number; lng: number } | null {
   return { lat, lng };
 }
 
+const iconBtnCls = (compact: boolean) =>
+  cn(
+    'inline-flex items-center justify-center rounded-full border border-line bg-white text-ink-2',
+    'hover:border-ink-3/50 hover:bg-cream transition-colors disabled:opacity-50',
+    compact ? 'h-8 px-2' : 'h-10 px-2.5',
+  );
+
 export function LocationSelector({
   value,
   onChange,
-  placeholder = "Search location...",
-  className = "",
+  placeholder = 'Search location…',
+  className = '',
   showMyLocation = true,
   showSavedLocations = true,
   showCoordinates = true,
@@ -102,11 +104,8 @@ export function LocationSelector({
   const [coordError, setCoordError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Update input value when external value changes
   useEffect(() => {
-    if (value && mode === 'search') {
-      setInputValue(value.name);
-    }
+    if (value && mode === 'search') setInputValue(value.name);
   }, [value, mode]);
 
   const onLoad = (autocompleteInstance: google.maps.places.Autocomplete) => {
@@ -117,12 +116,14 @@ export function LocationSelector({
     if (autocomplete) {
       const place = autocomplete.getPlace();
       if (place.geometry?.location) {
-        const lat = typeof place.geometry.location.lat === 'function'
-          ? place.geometry.location.lat()
-          : place.geometry.location.lat;
-        const lng = typeof place.geometry.location.lng === 'function'
-          ? place.geometry.location.lng()
-          : place.geometry.location.lng;
+        const lat =
+          typeof place.geometry.location.lat === 'function'
+            ? place.geometry.location.lat()
+            : place.geometry.location.lat;
+        const lng =
+          typeof place.geometry.location.lng === 'function'
+            ? place.geometry.location.lng()
+            : place.geometry.location.lng;
 
         const name = place.name || place.formatted_address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
         setInputValue(name);
@@ -150,17 +151,12 @@ export function LocationSelector({
       alert('Geolocation is not supported by your browser');
       return;
     }
-
     setIsGettingLocation(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
         setInputValue('Current Location');
-        onChange({
-          lat: latitude,
-          lng: longitude,
-          name: 'Current Location',
-        });
+        onChange({ lat: latitude, lng: longitude, name: 'Current Location' });
         setIsGettingLocation(false);
       },
       (error) => {
@@ -168,17 +164,13 @@ export function LocationSelector({
         alert('Unable to get your location. Please check your permissions.');
         setIsGettingLocation(false);
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 10000 },
     );
   };
 
   const handleSavedLocationSelect = (location: SavedLocation) => {
     setInputValue(location.name);
-    onChange({
-      lat: location.lat,
-      lng: location.lng,
-      name: location.name,
-    });
+    onChange({ lat: location.lat, lng: location.lng, name: location.name });
   };
 
   const handleClear = () => {
@@ -197,23 +189,22 @@ export function LocationSelector({
     return (
       <div className={`flex flex-col sm:flex-row sm:items-center gap-2 ${className}`}>
         <div className="relative flex-1 w-full">
-          <MagnifyingGlass className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input disabled placeholder="Loading..." className="pl-9 h-10" />
+          <MagnifyingGlass className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-3" />
+          <Input disabled placeholder="Loading…" className="pl-9 h-10" />
         </div>
       </div>
     );
   }
 
-  const iconSize = compact ? "w-3.5 h-3.5" : "w-4 h-4";
-  const buttonSize = compact ? "sm" : "default";
+  const iconSize = compact ? 'w-3.5 h-3.5' : 'w-4 h-4';
 
   return (
     <div className={`flex flex-col sm:flex-row sm:items-center gap-2 ${className}`}>
-      {/* Main input area - full width on mobile */}
+      {/* Main input area */}
       <div className="relative flex-1 w-full">
         {mode === 'search' ? (
           <>
-            <MapPin className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${iconSize} text-muted-foreground z-10`} />
+            <MapPin className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${iconSize} text-ink-3 z-10`} />
             <Autocomplete
               onLoad={onLoad}
               onPlaceChanged={onPlaceChanged}
@@ -227,13 +218,13 @@ export function LocationSelector({
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder={placeholder}
-                className={`pl-9 pr-8 text-base`}
+                className="pl-9 pr-9"
               />
             </Autocomplete>
           </>
         ) : (
           <>
-            <Crosshair className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${iconSize} text-muted-foreground`} />
+            <Crosshair className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${iconSize} text-ink-3`} />
             <Input
               ref={inputRef}
               value={inputValue}
@@ -248,132 +239,122 @@ export function LocationSelector({
                 }
               }}
               placeholder="lat, lng (e.g. 39.07, -106.99)"
-              className={`pl-9 pr-8 text-base ${coordError ? 'border-destructive' : ''}`}
+              className={cn('pl-9 pr-9', coordError && '!border-ember')}
             />
           </>
         )}
 
-        {/* Clear button */}
         {showClear && (value || inputValue) && (
           <button
             onClick={handleClear}
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+            aria-label="Clear"
+            className="absolute right-2 top-1/2 transform -translate-y-1/2 inline-flex items-center justify-center w-6 h-6 rounded-full text-ink-3 hover:text-ink hover:bg-cream transition-colors"
           >
-            <X className={iconSize} />
+            <X className={iconSize} weight="regular" />
           </button>
         )}
       </div>
 
-      {/* Action buttons - row below search on mobile, inline on desktop */}
+      {/* Action buttons */}
       <div className="flex items-center gap-1.5 sm:gap-2">
-        {/* Mode toggle (search vs coordinates) */}
         {showCoordinates && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size={buttonSize}
-                onClick={toggleMode}
-                className={`px-2`}
-              >
+              <button onClick={toggleMode} className={iconBtnCls(compact)} aria-label="Toggle input mode">
                 {mode === 'search' ? (
-                  <Crosshair className={iconSize} />
+                  <Crosshair className={iconSize} weight="regular" />
                 ) : (
-                  <MagnifyingGlass className={iconSize} />
+                  <MagnifyingGlass className={iconSize} weight="regular" />
                 )}
-              </Button>
+              </button>
             </TooltipTrigger>
-            <TooltipContent>
-              {mode === 'search' ? 'Enter coordinates' : 'Search by name'}
-            </TooltipContent>
+            <TooltipContent>{mode === 'search' ? 'Enter coordinates' : 'Search by name'}</TooltipContent>
           </Tooltip>
         )}
 
-        {/* My location button */}
         {showMyLocation && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size={buttonSize}
+              <button
                 onClick={handleMyLocation}
                 disabled={isGettingLocation}
-                className={`px-2`}
+                className={iconBtnCls(compact)}
+                aria-label="Use my location"
               >
-                <NavigationArrow className={`${iconSize} ${isGettingLocation ? 'animate-pulse' : ''}`} />
-              </Button>
+                <NavigationArrow
+                  className={cn(iconSize, isGettingLocation && 'animate-pulse text-pine-6')}
+                  weight="regular"
+                />
+              </button>
             </TooltipTrigger>
             <TooltipContent>Use my location</TooltipContent>
           </Tooltip>
         )}
 
-        {/* Saved locations dropdown */}
         {showSavedLocations && user && savedLocations.length > 0 && (
           <Tooltip>
             <TooltipTrigger asChild>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size={buttonSize}
-                className={`px-2`}
-              >
-                <BookmarkSimple className={iconSize} />
-                <CaretDown className="w-3 h-3 ml-0.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>Saved Locations</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {savedLocations.slice(0, 10).map((location) => (
-                <DropdownMenuItem
-                  key={location.id}
-                  onClick={() => handleSavedLocationSelect(location)}
-                  className="flex items-center gap-2"
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className={iconBtnCls(compact)} aria-label="Saved locations">
+                    <BookmarkSimple className={iconSize} weight="regular" />
+                    <CaretDown className="w-3 h-3 ml-0.5" weight="regular" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-64 rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink"
                 >
-                  <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{location.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
-                    </div>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <DropdownMenuLabel>
+                    <Mono className="text-ink-2">Saved locations</Mono>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator className="bg-line" />
+                  {savedLocations.slice(0, 10).map((location) => (
+                    <DropdownMenuItem
+                      key={location.id}
+                      onClick={() => handleSavedLocationSelect(location)}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-ink-3 flex-shrink-0" weight="regular" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-sans font-semibold tracking-[-0.005em] text-ink truncate">
+                          {location.name}
+                        </div>
+                        <Mono className="text-ink-3 truncate block">
+                          {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                        </Mono>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </TooltipTrigger>
             <TooltipContent>Saved locations</TooltipContent>
           </Tooltip>
         )}
 
-        {/* Coordinate submit button (only in coordinates mode) */}
         {mode === 'coordinates' && inputValue && (
-          <Button
-            size={buttonSize}
+          <button
             onClick={handleCoordinateSubmit}
+            className={cn(
+              'inline-flex items-center justify-center rounded-full bg-pine-6 text-cream border border-pine-6 hover:bg-pine-5 hover:border-pine-5 transition-colors px-3 font-sans font-semibold text-[12px] tracking-[0.01em]',
+              compact ? 'h-8' : 'h-10',
+            )}
           >
             Go
-          </Button>
+          </button>
         )}
 
-        {/* Error message */}
         {coordError && (
-          <span className="text-xs text-destructive whitespace-nowrap">{coordError}</span>
+          <Mono className="text-ember whitespace-nowrap">{coordError}</Mono>
         )}
 
-        {/* Map click hint */}
         {onMapClickHint && (
-          <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">
-            or click map
-          </span>
+          <Mono className="text-ink-3 whitespace-nowrap hidden sm:inline">or click map</Mono>
         )}
 
-        {/* Coordinates display - inline to the right of all buttons */}
         {coordinatesDisplay && (
-          <span className="text-xs text-muted-foreground whitespace-nowrap ml-auto font-mono">
-            {coordinatesDisplay}
-          </span>
+          <Mono className="text-ink-3 whitespace-nowrap ml-auto">{coordinatesDisplay}</Mono>
         )}
       </div>
     </div>

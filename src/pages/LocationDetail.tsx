@@ -1,36 +1,44 @@
-import { useState, useEffect } from "react";
-import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Mountains, NavigationArrow, Star, ShareNetwork, ArrowSquareOut, Compass, Plus, Trash, Boot, Path, Calendar, Tent, SpinnerGap, Camera, CaretDown, CaretUp, X, Tree, TreeEvergreen, Sun, Cloud, CloudRain, Snowflake, Wind, Shuffle, Binoculars, Drop } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
-import { PacePreference, LodgingType } from "@/types/trip";
+import { useState, useEffect } from 'react';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { useSavedLocations } from "@/context/SavedLocationsContext";
-import { GoogleMap } from "@/components/GoogleMap";
-import { Marker, InfoWindow, Polygon } from "@react-google-maps/api";
-import { useNearbyPlaces, GoogleSavedPlace } from "@/hooks/use-nearby-places";
-import { useNearbyHikes, HikeResult } from "@/hooks/use-nearby-hikes";
-import { usePhotoHotspots, PhotoHotspot } from "@/hooks/use-photo-hotspots";
-import { usePublicLands, PublicLand } from "@/hooks/use-public-lands";
-import { useNoaaWeather, getWeatherIcon } from "@/hooks/use-noaa-weather";
-import { usePhotoWeather } from "@/hooks/use-photo-weather";
-import { PhotoWeatherCard } from "@/components/PhotoWeatherCard";
-import { FiveDayPhotoForecast } from "@/components/FiveDayPhotoForecast";
-import { toast } from "sonner";
-import { useTrip } from "@/context/TripContext";
-import { useTripGenerator } from "@/hooks/use-trip-generator";
-import { createMarkerIcon } from "@/utils/mapMarkers";
-import { getTripUrl } from "@/utils/slugify";
+  ArrowLeft,
+  MapPin,
+  Mountains,
+  NavigationArrow,
+  Star,
+  ArrowSquareOut,
+  Compass,
+  Boot,
+  Path,
+  Calendar,
+  Tent,
+  SpinnerGap,
+  Camera,
+  X,
+  Sun,
+  Shuffle,
+  Binoculars,
+  Drop,
+  Check,
+  Heart,
+  CheckCircle,
+} from '@phosphor-icons/react';
+import { Slider } from '@/components/ui/slider';
+import { PacePreference, LodgingType } from '@/types/trip';
+import { useSavedLocations } from '@/context/SavedLocationsContext';
+import { GoogleMap } from '@/components/GoogleMap';
+import { Marker, InfoWindow } from '@react-google-maps/api';
+import { useNearbyPlaces, GoogleSavedPlace } from '@/hooks/use-nearby-places';
+import { useNearbyHikes, HikeResult } from '@/hooks/use-nearby-hikes';
+import { usePhotoHotspots, PhotoHotspot } from '@/hooks/use-photo-hotspots';
+import { useNoaaWeather, getWeatherIcon } from '@/hooks/use-noaa-weather';
+import { toast } from 'sonner';
+import { useTrip } from '@/context/TripContext';
+import { useTripGenerator } from '@/hooks/use-trip-generator';
+import { createMarkerIcon } from '@/utils/mapMarkers';
+import { getTripUrl } from '@/utils/slugify';
+import { Mono, Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 type NearbyPlace = GoogleSavedPlace & { distance: number };
 
@@ -40,7 +48,6 @@ interface LocationState {
   address: string;
   lat: number;
   lng: number;
-  // Surprise Me data (optional)
   surpriseMe?: {
     regionId: string;
     explanation: string;
@@ -63,157 +70,129 @@ interface LocationState {
   };
 }
 
-// Helper to get weather message based on elevation in feet
+const MARKER_SIZE = 38;
+
 function getElevationMessage(elevationFeet: number): string | null {
-  if (elevationFeet >= 8000) return "This is covered in snow";
-  if (elevationFeet >= 6000) return "Make sure you bring your puffy";
-  if (elevationFeet >= 3000) return "It might be a bit chilly here";
+  if (elevationFeet >= 8000) return 'Likely snow-covered';
+  if (elevationFeet >= 6000) return 'Pack a puffy';
+  if (elevationFeet >= 3000) return 'Could be chilly';
   return null;
 }
 
-// Clean up duplicated suffixes like "San Juan National Forest National Forest"
 function cleanRegionName(name: string): string {
   const suffixes = ['National Forest', 'National Park', 'Wilderness', 'State Park', 'Recreation Area'];
   for (const suffix of suffixes) {
     const duplicated = `${suffix} ${suffix}`;
-    if (name.includes(duplicated)) {
-      return name.replace(duplicated, suffix);
-    }
+    if (name.includes(duplicated)) return name.replace(duplicated, suffix);
   }
   return name;
 }
 
-// Photo hotspot icon (camera) - special marker for photo locations
-const PHOTO_HOTSPOT_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
-  <circle cx="20" cy="20" r="18" fill="#f97316" stroke="#ffffff" stroke-width="2"/>
-  <path d="M28 15h-2.5l-1.5-2h-8l-1.5 2H12c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V17c0-1.1-.9-2-2-2z" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-  <circle cx="20" cy="21" r="4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-</svg>
-`)}`;
-
-// Public lands icon (forest green with tree)
-const PUBLIC_LAND_ICON_SVG = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
-  <circle cx="20" cy="20" r="18" fill="#166534" stroke="#ffffff" stroke-width="2"/>
-  <path d="M20 8l-8 12h4v8h8v-8h4L20 8z" fill="#ffffff"/>
-</svg>
-`)}`;
-
-const MARKER_SIZE = 38;
-
-// Highlight type icons and colors
-const HIGHLIGHT_ICONS: Record<string, React.ReactNode> = {
-  viewpoint: <Binoculars className="w-3.5 h-3.5" weight="fill" />,
-  trail: <Path className="w-3.5 h-3.5" weight="fill" />,
-  water: <Drop className="w-3.5 h-3.5" weight="fill" />,
-  camp: <Tent className="w-3.5 h-3.5" weight="fill" />,
+const HIGHLIGHT_META: Record<
+  'viewpoint' | 'trail' | 'water' | 'camp',
+  { Icon: typeof Binoculars; bg: string; text: string }
+> = {
+  viewpoint: { Icon: Binoculars, bg: 'bg-ember/15', text: 'text-ember' },
+  trail:     { Icon: Path,       bg: 'bg-sage/15',  text: 'text-sage' },
+  water:     { Icon: Drop,       bg: 'bg-water/15', text: 'text-water' },
+  camp:      { Icon: Tent,       bg: 'bg-clay/15',  text: 'text-clay' },
 };
 
-// Colors with better contrast ratios (darker text, lighter bg for accessibility)
-const HIGHLIGHT_COLORS: Record<string, string> = {
-  viewpoint: 'text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/40',
-  trail: 'text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/40',
-  water: 'text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40',
-  camp: 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40',
-};
-
-// Surprise Me Banner Component
 function SurpriseMeBanner({ surpriseMe }: { surpriseMe: NonNullable<LocationState['surpriseMe']> }) {
   return (
-    <Card className="bg-gradient-to-br from-terracotta/15 via-primary/10 to-terracotta/5 border-terracotta/40 shadow-md">
-      <CardContent className="p-5">
-        {/* Header - More prominent */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-terracotta/20 flex items-center justify-center">
-            <Shuffle className="w-5 h-5 text-terracotta" weight="bold" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-foreground">Surprise Me Discovery</p>
-            <p className="text-sm text-foreground/70">
-              {Math.round(surpriseMe.distanceMiles)} mi away
-              {surpriseMe.driveTimeHours && ` · ~${surpriseMe.driveTimeHours.toFixed(1)} hr drive`}
-            </p>
-          </div>
+    <div className="bg-clay/[0.06] border border-clay/30 rounded-[14px] p-5">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-[10px] bg-clay/15 text-clay flex items-center justify-center">
+          <Shuffle className="w-5 h-5" weight="regular" />
         </div>
+        <div>
+          <Mono className="text-clay">Surprise me discovery</Mono>
+          <p className="text-[13px] text-ink-3 mt-0.5">
+            {Math.round(surpriseMe.distanceMiles)} mi away
+            {surpriseMe.driveTimeHours && ` · ~${surpriseMe.driveTimeHours.toFixed(1)} hr drive`}
+          </p>
+        </div>
+      </div>
 
-        {/* Explanation - Better contrast */}
-        <p className="text-sm text-foreground/90 leading-relaxed mb-4">
-          {cleanRegionName(surpriseMe.explanation)}
-        </p>
+      <p className="text-[14px] text-ink leading-[1.55] mb-4">
+        {cleanRegionName(surpriseMe.explanation)}
+      </p>
 
-        {/* Scenic Drive Anchor - More prominent */}
-        {surpriseMe.anchor && (
-          <button
-            onClick={() => {
-              window.open(
-                `https://www.google.com/maps/dir/?api=1&destination=${surpriseMe.anchor!.center.lat},${surpriseMe.anchor!.center.lng}`,
-                '_blank'
-              );
-            }}
-            className="w-full p-4 rounded-xl bg-card border border-border shadow-sm mb-4 hover:shadow-md hover:border-primary/30 transition-all text-left"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <NavigationArrow className="w-5 h-5 text-primary" weight="fill" />
-                <p className="text-sm font-semibold text-foreground">Scenic Drive</p>
-              </div>
-              <ArrowSquareOut className="w-4 h-4 text-foreground/60" />
-            </div>
-            <p className="text-sm text-foreground/80">
-              {surpriseMe.anchor.road.name || surpriseMe.anchor.road.ref || 'Unnamed road'}
-              {surpriseMe.anchor.lengthMiles > 0 && (
-                <span className="text-sm ml-2 text-foreground/60">({surpriseMe.anchor.lengthMiles.toFixed(1)} mi)</span>
-              )}
-            </p>
-            {surpriseMe.anchor.road.surface !== 'unknown' && (
-              <p className="text-xs text-foreground/60 mt-1 capitalize">
-                {surpriseMe.anchor.road.surface} surface
-              </p>
+      {surpriseMe.anchor && (
+        <button
+          onClick={() => {
+            window.open(
+              `https://www.google.com/maps/dir/?api=1&destination=${surpriseMe.anchor!.center.lat},${surpriseMe.anchor!.center.lng}`,
+              '_blank',
+            );
+          }}
+          className="w-full p-4 rounded-[12px] bg-white border border-line shadow-[0_1px_2px_rgba(29,34,24,.04)] hover:border-pine-6/40 hover:shadow-[0_8px_18px_rgba(29,34,24,.08)] transition-all text-left mb-4"
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <Mono className="text-pine-6 inline-flex items-center gap-1.5">
+              <NavigationArrow className="w-3.5 h-3.5" weight="regular" />
+              Scenic drive
+            </Mono>
+            <ArrowSquareOut className="w-3.5 h-3.5 text-ink-3" weight="regular" />
+          </div>
+          <p className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">
+            {surpriseMe.anchor.road.name || surpriseMe.anchor.road.ref || 'Unnamed road'}
+            {surpriseMe.anchor.lengthMiles > 0 && (
+              <span className="text-[13px] text-ink-3 font-normal ml-2">
+                ({surpriseMe.anchor.lengthMiles.toFixed(1)} mi)
+              </span>
             )}
-          </button>
-        )}
+          </p>
+          {surpriseMe.anchor.road.surface !== 'unknown' && (
+            <Mono className="text-ink-3 mt-1 capitalize block">
+              {surpriseMe.anchor.road.surface} surface
+            </Mono>
+          )}
+        </button>
+      )}
 
-        {/* Nearby Highlights - Better labeled */}
-        {surpriseMe.highlights && surpriseMe.highlights.length > 0 && (
-          <div className="mb-4">
-            <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wide mb-2">Nearby Highlights</p>
-            <div className="flex flex-wrap gap-2">
-              {surpriseMe.highlights.slice(0, 4).map((highlight, i) => (
+      {surpriseMe.highlights && surpriseMe.highlights.length > 0 && (
+        <div className="mb-4">
+          <Mono className="text-ink-2 mb-2 block">Nearby highlights</Mono>
+          <div className="flex flex-wrap gap-1.5">
+            {surpriseMe.highlights.slice(0, 4).map((h, i) => {
+              const meta = HIGHLIGHT_META[h.type] || HIGHLIGHT_META.viewpoint;
+              const HIcon = meta.Icon;
+              return (
                 <button
                   key={i}
-                  onClick={() => {
-                    window.open(
-                      `https://www.google.com/maps/search/?api=1&query=${highlight.lat},${highlight.lon}`,
-                      '_blank'
-                    );
-                  }}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg hover:opacity-80 transition-opacity ${HIGHLIGHT_COLORS[highlight.type] || 'bg-muted text-foreground/70'}`}
+                  onClick={() =>
+                    window.open(`https://www.google.com/maps/search/?api=1&query=${h.lat},${h.lon}`, '_blank')
+                  }
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono uppercase tracking-[0.10em] font-semibold transition-opacity hover:opacity-80',
+                    meta.bg,
+                    meta.text,
+                  )}
                 >
-                  {HIGHLIGHT_ICONS[highlight.type] || <MapPin className="w-3.5 h-3.5" />}
-                  <span className="text-xs font-medium truncate max-w-[100px]">
-                    {highlight.name || highlight.type.charAt(0).toUpperCase() + highlight.type.slice(1)}
+                  <HIcon className="w-3 h-3" weight="regular" />
+                  <span className="truncate max-w-[120px]">
+                    {h.name || h.type.charAt(0).toUpperCase() + h.type.slice(1)}
                   </span>
-                  <ArrowSquareOut className="w-3 h-3 opacity-70 flex-shrink-0" />
+                  <ArrowSquareOut className="w-2.5 h-2.5" weight="regular" />
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Cautions - Better contrast with amber-700 */}
-        {surpriseMe.cautions && surpriseMe.cautions.length > 0 && (
-          <div className="p-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700/50">
-            <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-1">Heads up</p>
-            <ul className="text-xs text-amber-700 dark:text-amber-300 space-y-0.5">
-              {surpriseMe.cautions.slice(0, 2).map((caution, i) => (
-                <li key={i}>• {caution}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      {surpriseMe.cautions && surpriseMe.cautions.length > 0 && (
+        <div className="px-3 py-2.5 rounded-[10px] border border-clay/40 bg-clay/[0.10]">
+          <Mono className="text-clay mb-1 block">Heads up</Mono>
+          <ul className="text-[12px] text-ink-2 space-y-0.5 leading-[1.5]">
+            {surpriseMe.cautions.slice(0, 2).map((caution, i) => (
+              <li key={i}>· {caution}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -223,15 +202,11 @@ const LocationDetail = () => {
   const routerLocation = useLocation();
   const { locations, addLocation, removeLocation, isLocationSaved } = useSavedLocations();
   const { setTripConfig, setGeneratedTrip } = useTrip();
-  const { generateTrip, generating, error: tripError } = useTripGenerator();
+  const { generateTrip, generating } = useTripGenerator();
 
-  const [selectedPlace, setSelectedPlace] = useState<NearbyPlace | null>(null);
   const [selectedHike, setSelectedHike] = useState<HikeResult | null>(null);
-  const [selectedPlaceElevation, setSelectedPlaceElevation] = useState<number | null>(null);
   const [elevation, setElevation] = useState<number | null>(null);
-  const [mapsLoaded, setMapsLoaded] = useState(false);
 
-  // Trip planning state
   const [tripDuration, setTripDuration] = useState<number[]>([3]);
   const [activities, setActivities] = useState<string[]>(['hiking']);
   const [pacePreference, setPacePreference] = useState<PacePreference>('moderate');
@@ -239,172 +214,112 @@ const LocationDetail = () => {
   const [sameCampsite, setSameCampsite] = useState(false);
   const [itineraryModalOpen, setItineraryModalOpen] = useState(false);
 
-  // Get location from router state (search) or from saved locations
   const stateLocation = routerLocation.state as LocationState | null;
 
-  // Preserve surprise me data in state so it persists after saving
   const [surpriseMeData, setSurpriseMeData] = useState<LocationState['surpriseMe'] | null>(null);
 
-  // Capture surprise me data on initial load from router state
   useEffect(() => {
     if (stateLocation?.surpriseMe && !surpriseMeData) {
       setSurpriseMeData(stateLocation.surpriseMe);
     }
   }, [stateLocation?.surpriseMe]);
-  const savedLocation = locations.find(l => l.placeId === id || l.id === id);
 
-  // Combine into a unified location object
-  const location = savedLocation ? {
-    placeId: savedLocation.placeId,
-    name: savedLocation.name,
-    address: savedLocation.address,
-    type: savedLocation.type,
-    lat: savedLocation.lat,
-    lng: savedLocation.lng,
-  } : stateLocation ? {
-    placeId: stateLocation.placeId,
-    name: stateLocation.name,
-    address: stateLocation.address,
-    type: "Place",
-    lat: stateLocation.lat,
-    lng: stateLocation.lng,
-  } : null;
+  const savedLocation = locations.find((l) => l.placeId === id || l.id === id);
+
+  const location = savedLocation
+    ? {
+        placeId: savedLocation.placeId,
+        name: savedLocation.name,
+        address: savedLocation.address,
+        type: savedLocation.type,
+        lat: savedLocation.lat,
+        lng: savedLocation.lng,
+      }
+    : stateLocation
+      ? {
+          placeId: stateLocation.placeId,
+          name: stateLocation.name,
+          address: stateLocation.address,
+          type: 'Place',
+          lat: stateLocation.lat,
+          lng: stateLocation.lng,
+        }
+      : null;
 
   const isSaved = location ? isLocationSaved(location.placeId) : false;
 
-  // Get nearby places from Google Takeout data (50 mile radius)
   const { nearbyPlaces, loading: nearbyLoading } = useNearbyPlaces(
     location?.lat ?? 0,
     location?.lng ?? 0,
-    50
+    50,
   );
 
-  // Get nearby hikes from Google Places and Hiking Project
   const { hikes, loading: hikesLoading } = useNearbyHikes(
     location?.lat ?? 0,
     location?.lng ?? 0,
-    30
+    30,
   );
 
-  // Get photo hotspots from Flickr
   const { hotspots: photoHotspots, loading: photoHotspotsLoading } = usePhotoHotspots(
     location?.lat ?? 0,
     location?.lng ?? 0,
-    50
+    50,
   );
 
-  // Get nearby public lands (BLM, USFS) for dispersed camping
-  const { publicLands, loading: publicLandsLoading } = usePublicLands(
-    location?.lat ?? 0,
-    location?.lng ?? 0,
-    50
-  );
-
-  // Get NOAA weather for this location
   const { weather, loading: weatherLoading } = useNoaaWeather(
     location?.lat ?? null,
-    location?.lng ?? null
+    location?.lng ?? null,
   );
 
-  // Get photography weather conditions
-  const { forecast: photoWeather, loading: photoWeatherLoading, error: photoWeatherError, fetchedAt: photoWeatherFetchedAt, refetch: refetchPhotoWeather } = usePhotoWeather(
-    location?.lat ?? 0,
-    location?.lng ?? 0,
-    elevation ?? 0
-  );
-
-  // Photo hotspots UI state
-  const [showPhotoHotspots, setShowPhotoHotspots] = useState(false);
-  const [photoHotspotsExpanded, setPhotoHotspotsExpanded] = useState(false);
-  const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoHotspot | null>(null);
   const [enlargedPhoto, setEnlargedPhoto] = useState<{ url: string; name: string } | null>(null);
+  const [selectedPhotoHotspot, setSelectedPhotoHotspot] = useState<PhotoHotspot | null>(null);
 
-  // Public lands UI state
-  const [showPublicLands, setShowPublicLands] = useState(false);
-  const [publicLandsExpanded, setPublicLandsExpanded] = useState(false);
-  const [selectedPublicLand, setSelectedPublicLand] = useState<PublicLand | null>(null);
-
-  // Auto-show public lands on map when they're found and no campsites
-  useEffect(() => {
-    if (publicLands.length > 0 && nearbyPlaces.length === 0 && !nearbyLoading) {
-      setShowPublicLands(true);
-      setPublicLandsExpanded(true);
-    }
-  }, [publicLands, nearbyPlaces, nearbyLoading]);
-
-  // Fetch elevation using USGS API
   useEffect(() => {
     if (!location) return;
-
     const controller = new AbortController();
-    fetch(`https://epqs.nationalmap.gov/v1/json?x=${location.lng}&y=${location.lat}&units=Meters&output=json`, {
-      signal: controller.signal
-    })
+    fetch(
+      `https://epqs.nationalmap.gov/v1/json?x=${location.lng}&y=${location.lat}&units=Meters&output=json`,
+      { signal: controller.signal },
+    )
       .then((res) => res.json())
       .then((data) => {
-        if (data?.value !== undefined) {
-          setElevation(Number(data.value));
-        }
+        if (data?.value !== undefined) setElevation(Number(data.value));
       })
       .catch(() => {});
-
     return () => controller.abort();
   }, [location]);
 
-  // Fetch elevation for selected camp spot using USGS API
-  useEffect(() => {
-    if (!selectedPlace) {
-      setSelectedPlaceElevation(null);
-      return;
-    }
-
-    const controller = new AbortController();
-    fetch(`https://epqs.nationalmap.gov/v1/json?x=${selectedPlace.lng}&y=${selectedPlace.lat}&units=Meters&output=json`, {
-      signal: controller.signal
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.value !== undefined) {
-          setSelectedPlaceElevation(Number(data.value));
-        }
-      })
-      .catch(() => {});
-
-    return () => controller.abort();
-  }, [selectedPlace]);
-
   if (!location) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <MapPin className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-30" />
-          <h1 className="text-2xl font-display font-bold text-foreground mb-2">Location Not Found</h1>
-          <p className="text-muted-foreground mb-6">This location may have been removed.</p>
-          <Link to="/">
-            <Button variant="primary">Back to Home</Button>
+      <div className="min-h-screen bg-cream flex items-center justify-center p-6">
+        <div className="text-center max-w-sm">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-sage/15 text-sage mb-4">
+            <MapPin className="w-6 h-6" weight="regular" />
+          </div>
+          <Mono className="text-sage">Lost in the woods</Mono>
+          <h1 className="text-[24px] font-sans font-bold tracking-[-0.02em] text-ink mt-2">
+            Location not found.
+          </h1>
+          <p className="text-[14px] text-ink-3 mt-2">This location may have been removed.</p>
+          <Link
+            to="/"
+            className="mt-6 inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-pine-6 text-cream border border-pine-6 text-[12px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 hover:border-pine-5 transition-colors"
+          >
+            Back to home
           </Link>
         </div>
       </div>
     );
   }
 
-  const handleOpenInMaps = () => {
-    window.open(
-      `https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lng}`,
-      '_blank'
-    );
-  };
+  const handleOpenInMaps = () =>
+    window.open(`https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lng}`, '_blank');
 
-  const handleGetDirections = () => {
-    window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${location.lat},${location.lng}`,
-      '_blank'
-    );
-  };
+  const handleGetDirections = () =>
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${location.lat},${location.lng}`, '_blank');
 
   const handleSaveLocation = () => {
     if (!location) return;
-
     const added = addLocation({
       placeId: location.placeId,
       name: location.name,
@@ -413,40 +328,18 @@ const LocationDetail = () => {
       lat: location.lat,
       lng: location.lng,
     });
-
-    if (added) {
-      toast.success(`Saved ${location.name}`, {
-        description: "Added to your favorites",
-      });
-    }
+    if (added) toast.success(`Saved ${location.name}`, { description: 'Added to your favorites' });
   };
 
   const handleRemoveLocation = () => {
     if (!savedLocation) return;
-
     removeLocation(savedLocation.id);
-    toast.success(`Removed ${location.name}`, {
-      description: "Removed from favorites",
-    });
-  };
-
-  const handleCreateTrip = () => {
-    navigate('/create-trip', {
-      state: {
-        startLocation: {
-          name: location.name,
-          lat: location.lat,
-          lng: location.lng,
-          placeId: location.placeId,
-        },
-      },
-    });
+    toast.success(`Removed ${location.name}`, { description: 'Removed from favorites' });
   };
 
   const handleGenerateTrip = async () => {
     if (!location) return;
 
-    // Map pace preference to activities per day
     const paceToActivities: Record<PacePreference, number> = {
       relaxed: 1,
       moderate: 2,
@@ -465,15 +358,14 @@ const LocationDetail = () => {
         address: location.address,
         coordinates: { lat: location.lat, lng: location.lng },
       },
-      activities: activities,
-      pacePreference: pacePreference,
+      activities,
+      pacePreference,
       activitiesPerDay: paceToActivities[pacePreference],
-      globalLodging: globalLodging,
-      sameCampsite: sameCampsite,
+      globalLodging,
+      sameCampsite,
     };
 
     const tripResult = await generateTrip(tripConfig);
-
     if (tripResult) {
       setTripConfig(tripResult.config);
       setGeneratedTrip(tripResult);
@@ -481,39 +373,50 @@ const LocationDetail = () => {
     }
   };
 
+  const cleanedName = cleanRegionName(location.name);
+  const WeatherIcon = weather ? getWeatherIcon(weather.shortForecast) : Sun;
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="container px-4 md:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/">
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <ArrowLeft className="w-5 h-5" />
-                </Button>
+    <div className="min-h-screen bg-paper text-ink font-sans">
+      {/* Sticky cream header */}
+      <header className="sticky top-0 z-50 bg-cream/95 backdrop-blur-md border-b border-line">
+        <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+              <Link
+                to="/"
+                aria-label="Back home"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors shrink-0"
+              >
+                <ArrowLeft className="w-4 h-4" weight="regular" />
               </Link>
-              <h1 className="text-xl font-display font-bold text-foreground truncate">{cleanRegionName(location.name)}</h1>
+              <div className="min-w-0">
+                <Mono className="text-pine-6 inline-flex items-center gap-1.5">
+                  <MapPin className="w-3 h-3" weight="regular" />
+                  Location
+                </Mono>
+                <h1 className="text-[16px] sm:text-[20px] font-sans font-bold tracking-[-0.01em] text-ink truncate mt-0.5">
+                  {cleanedName}
+                </h1>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-1.5 shrink-0">
               {isSaved ? (
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={handleRemoveLocation}
-                >
-                  <Star className="w-4 h-4 mr-2" weight="fill" />
-                  Saved
-                </Button>
+                <Pill variant="solid-pine" mono={false} onClick={handleRemoveLocation}>
+                  <CheckCircle className="w-4 h-4" weight="fill" />
+                  <span className="hidden sm:inline">Saved</span>
+                </Pill>
               ) : (
-                <Button
-                  variant="tertiary"
-                  size="sm"
+                <Pill
+                  variant="ghost"
+                  mono={false}
                   onClick={handleSaveLocation}
+                  className="!border-pine-6 !text-pine-6 hover:!bg-pine-6/10"
                 >
-                  <Star className="w-4 h-4 mr-2" />
-                  Save
-                </Button>
+                  <Heart className="w-4 h-4" weight="regular" />
+                  <span className="hidden sm:inline">Save</span>
+                </Pill>
               )}
             </div>
           </div>
@@ -522,1036 +425,363 @@ const LocationDetail = () => {
 
       <main className="w-full">
         <div className="grid lg:grid-cols-2">
-          {/* Map Section */}
+          {/* Map (left, sticky on lg) */}
           <div className="order-2 lg:order-1 h-[400px] lg:h-[calc(100vh-73px)] lg:sticky lg:top-[73px]">
             <div className="relative w-full h-full">
-                <GoogleMap
-                  center={{ lat: location.lat, lng: location.lng }}
-                  zoom={nearbyPlaces.length > 0 ? 10 : 14}
-                  className="w-full h-full"
-                  onLoad={() => setMapsLoaded(true)}
-                >
-                  {/* Main location marker */}
+              <GoogleMap
+                center={{ lat: location.lat, lng: location.lng }}
+                zoom={hikes.length > 0 ? 11 : 13}
+                className="w-full h-full"
+              >
+                <Marker
+                  position={{ lat: location.lat, lng: location.lng }}
+                  icon={createMarkerIcon('viewpoint', { size: 40 })}
+                />
+                {hikes.map((hike) => (
                   <Marker
-                    position={{ lat: location.lat, lng: location.lng }}
-                    icon={createMarkerIcon('viewpoint', { size: 40 })}
+                    key={hike.id}
+                    position={{ lat: hike.lat, lng: hike.lng }}
+                    title={hike.name}
+                    icon={createMarkerIcon('hike', { size: MARKER_SIZE })}
+                    onClick={() => setSelectedHike(hike)}
                   />
-                  {/* ARCHIVED: Nearby camp spots markers (tent icon) - will be replaced with explore page content
-                  {nearbyPlaces.map((place) => (
-                    <Marker
-                      key={place.id}
-                      position={{ lat: place.lat, lng: place.lng }}
-                      title={`${place.name} (${place.distance.toFixed(1)} mi)`}
-                      icon={createMarkerIcon('camp', { size: MARKER_SIZE })}
-                      onClick={() => {
-                        setSelectedPlace(place);
-                        setSelectedHike(null);
-                        setSelectedPhotoHotspot(null);
-                        setSelectedPublicLand(null);
-                      }}
-                    />
-                  ))}
-                  */}
-                  {/* Nearby hikes markers (boot icon) */}
-                  {hikes.map((hike) => (
-                    <Marker
-                      key={hike.id}
-                      position={{ lat: hike.lat, lng: hike.lng }}
-                      title={hike.name}
-                      icon={createMarkerIcon('hike', { size: MARKER_SIZE })}
-                      onClick={() => {
-                        setSelectedHike(hike);
-                        setSelectedPlace(null);
-                        setSelectedPhotoHotspot(null);
-                        setSelectedPublicLand(null);
-                      }}
-                    />
-                  ))}
-                  {/* Photo hotspot markers */}
-                  {showPhotoHotspots && photoHotspots.map((hotspot) => (
-                    <Marker
-                      key={hotspot.id}
-                      position={{ lat: hotspot.lat, lng: hotspot.lng }}
-                      title={`${hotspot.name} (${hotspot.photoCount} photos)`}
-                      icon={{
-                        url: PHOTO_HOTSPOT_ICON_SVG,
-                        scaledSize: new google.maps.Size(MARKER_SIZE - 4, MARKER_SIZE - 4),
-                        anchor: new google.maps.Point((MARKER_SIZE - 4) / 2, (MARKER_SIZE - 4) / 2),
-                      }}
-                      onClick={() => {
-                        setSelectedPhotoHotspot(hotspot);
-                        setSelectedPlace(null);
-                        setSelectedHike(null);
-                        setSelectedPublicLand(null);
-                      }}
-                    />
-                  ))}
-                  {/* ARCHIVED: Public lands polygon overlays - will be replaced with explore page content
-                  {showPublicLands && publicLands.map((land) => (
-                    land.polygon ? (
-                      <Polygon
-                        key={land.id}
-                        paths={land.polygon}
-                        options={{
-                          fillColor: '#4ba391',
-                          fillOpacity: 0.3,
-                          strokeColor: '#3c8a79',
-                          strokeOpacity: 0.8,
-                          strokeWeight: 2,
-                          clickable: true,
-                        }}
-                        onClick={() => {
-                          setSelectedPublicLand(land);
-                          setSelectedPlace(null);
-                          setSelectedHike(null);
-                          setSelectedPhotoHotspot(null);
-                        }}
-                      />
-                    ) : null
-                  ))}
-                  */}
-                  {/* Info popup for selected photo hotspot */}
-                  {selectedPhotoHotspot && (
-                    <InfoWindow
-                      position={{ lat: selectedPhotoHotspot.lat, lng: selectedPhotoHotspot.lng }}
-                      onCloseClick={() => setSelectedPhotoHotspot(null)}
-                    >
-                      <div className="min-w-[200px]">
-                        {selectedPhotoHotspot.samplePhotoUrl && (
-                          <button
-                            onClick={() => setEnlargedPhoto({ url: selectedPhotoHotspot.samplePhotoUrl!, name: selectedPhotoHotspot.name })}
-                            className="w-full h-32 overflow-hidden rounded-t-lg cursor-pointer"
-                          >
-                            <img
-                              src={selectedPhotoHotspot.samplePhotoUrl}
-                              alt={selectedPhotoHotspot.name}
-                              className="w-full h-full object-cover hover:scale-105 transition-transform"
-                            />
-                          </button>
-                        )}
-                        <div className="p-2">
-                          <h4 className="font-semibold text-gray-900 text-sm">
-                            {selectedPhotoHotspot.name}
-                          </h4>
-                          <p className="text-gray-500 text-xs mt-0.5">
-                            {selectedPhotoHotspot.photoCount.toLocaleString()} photos
-                          </p>
-                        </div>
-                      </div>
-                    </InfoWindow>
-                  )}
-                  {/* ARCHIVED: Info popup for selected public land
-                  {selectedPublicLand && (
-                    <InfoWindow
-                      position={{ lat: selectedPublicLand.lat, lng: selectedPublicLand.lng }}
-                      onCloseClick={() => setSelectedPublicLand(null)}
-                    >
-                      <div className="p-1 min-w-[220px]">
-                        <h4 className="font-semibold text-gray-900 text-base mb-1">
-                          {selectedPublicLand.name}
-                        </h4>
-                        <p className="text-xs text-green-700 mb-1">
-                          {selectedPublicLand.managingAgency === 'BLM' ? 'Bureau of Land Management' : 'US Forest Service'}
-                        </p>
-                        <div className="flex items-center gap-3 text-gray-500 text-sm mb-2">
-                          <span>{selectedPublicLand.distance.toFixed(1)} mi away</span>
-                        </div>
-                        <p className="text-xs bg-green-50 text-green-700 px-2 py-1.5 rounded mb-3">
-                          Dispersed camping typically allowed - check local regulations
-                        </p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              window.open(
-                                `https://www.google.com/maps/dir/?api=1&destination=${selectedPublicLand.lat},${selectedPublicLand.lng}`,
-                                '_blank'
-                              );
-                            }}
-                            className="flex-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
-                          >
-                            Directions
-                          </button>
-                          <button
-                            onClick={() => {
-                              window.open(
-                                `https://www.google.com/maps/search/?api=1&query=${selectedPublicLand.lat},${selectedPublicLand.lng}`,
-                                '_blank'
-                              );
-                            }}
-                            className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-100 transition-colors"
-                          >
-                            View
-                          </button>
-                        </div>
-                      </div>
-                    </InfoWindow>
-                  )}
-                  */}
-                  {/* ARCHIVED: Info popup for selected place
-                  {selectedPlace && (
-                    <InfoWindow
-                      position={{ lat: selectedPlace.lat, lng: selectedPlace.lng }}
-                      onCloseClick={() => setSelectedPlace(null)}
-                    >
-                      <div className="p-1 min-w-[220px]">
-                        <h4 className="font-semibold text-gray-900 text-base mb-1">
-                          {selectedPlace.name}
-                        </h4>
-                        {selectedPlace.source === 'ridb' && (
-                          <p className="text-xs text-blue-600 mb-1">via Recreation.gov</p>
-                        )}
-                        {selectedPlace.note && (
-                          <p className="text-gray-600 text-sm mb-2 italic">{selectedPlace.note}</p>
-                        )}
-                        <div className="flex items-center gap-3 text-gray-500 text-sm mb-2">
-                          <span>{selectedPlace.distance.toFixed(1)} mi away</span>
-                          {selectedPlaceElevation !== null && (
-                            <>
-                              <span>•</span>
-                              <span>{Math.round(selectedPlaceElevation * 3.28084).toLocaleString()} ft</span>
-                            </>
+                ))}
+                {selectedHike && (
+                  <InfoWindow
+                    position={{ lat: selectedHike.lat, lng: selectedHike.lng }}
+                    onCloseClick={() => setSelectedHike(null)}
+                  >
+                    <div className="min-w-[200px] font-sans">
+                      <h4 className="text-[14px] font-semibold tracking-[-0.005em] text-ink">
+                        {selectedHike.name}
+                      </h4>
+                      {selectedHike.rating && (
+                        <div className="flex items-center gap-1 text-[12px] text-ink-3 mt-1">
+                          <Star className="w-3 h-3 fill-clay text-clay" weight="fill" />
+                          <span>{selectedHike.rating.toFixed(1)}</span>
+                          {selectedHike.reviewCount && (
+                            <span className="text-ink-3/70">({selectedHike.reviewCount})</span>
                           )}
                         </div>
-                        {selectedPlaceElevation !== null && (() => {
-                          const elevFeet = Math.round(selectedPlaceElevation * 3.28084);
-                          const message = getElevationMessage(elevFeet);
-                          if (!message) return null;
-                          return (
-                            <p className="text-xs bg-blue-50 text-blue-700 px-2 py-1.5 rounded mb-3">
-                              {elevFeet >= 8000 ? '❄️' : elevFeet >= 6000 ? '🧥' : '🌡️'} {message}
-                            </p>
-                          );
-                        })()}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              window.open(
-                                `https://www.google.com/maps/dir/?api=1&destination=${selectedPlace.lat},${selectedPlace.lng}`,
-                                '_blank'
-                              );
-                            }}
-                            className="flex-1 px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded hover:bg-primary-hover transition-colors"
-                          >
-                            Directions
-                          </button>
-                          {selectedPlace.source === 'ridb' ? (
-                            <button
-                              onClick={() => {
-                                const facilityId = selectedPlace.id.replace('ridb-', '');
-                                window.open(
-                                  `https://www.recreation.gov/camping/campgrounds/${facilityId}`,
-                                  '_blank'
-                                );
-                              }}
-                              className="px-3 py-1.5 border border-blue-300 text-blue-700 text-sm rounded hover:bg-blue-50 transition-colors"
-                            >
-                              Book
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                window.open(
-                                  `https://www.google.com/maps/search/?api=1&query=${selectedPlace.lat},${selectedPlace.lng}`,
-                                  '_blank'
-                                );
-                              }}
-                              className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-100 transition-colors"
-                            >
-                              View
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </InfoWindow>
-                  )}
-                  */}
-                  {/* Info popup for selected hike */}
-                  {selectedHike && (
-                    <InfoWindow
-                      position={{ lat: selectedHike.lat, lng: selectedHike.lng }}
-                      onCloseClick={() => setSelectedHike(null)}
-                    >
-                      <div className="p-1 min-w-[200px]">
-                        <h4 className="font-semibold text-gray-900 text-base mb-1">
-                          {selectedHike.name}
-                        </h4>
-                        {selectedHike.rating && (
-                          <div className="flex items-center gap-1 text-sm text-gray-600 mb-2">
-                            <span className="text-amber-500">★</span>
-                            <span>{selectedHike.rating.toFixed(1)}</span>
-                            {selectedHike.reviewCount && (
-                              <span className="text-gray-400">({selectedHike.reviewCount})</span>
-                            )}
-                          </div>
-                        )}
-                        {selectedHike.location && (
-                          <p className="text-gray-500 text-sm mb-3">{selectedHike.location}</p>
-                        )}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              window.open(
-                                `https://www.google.com/maps/dir/?api=1&destination=${selectedHike.lat},${selectedHike.lng}`,
-                                '_blank'
-                              );
-                            }}
-                            className="flex-1 px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded hover:bg-primary-hover transition-colors"
-                          >
-                            Directions
-                          </button>
-                          <button
-                            onClick={() => {
-                              window.open(
-                                `https://www.google.com/maps/search/?api=1&query=${selectedHike.lat},${selectedHike.lng}`,
-                                '_blank'
-                              );
-                            }}
-                            className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-100 transition-colors"
-                          >
-                            View
-                          </button>
-                        </div>
-                      </div>
-                    </InfoWindow>
-                  )}
-                </GoogleMap>
-
-                {/* Map Actions Overlay */}
-                <div className="absolute bottom-4 left-4 right-4 z-10">
-                  <div className="bg-card/95 backdrop-blur-sm rounded-xl border border-border p-4 shadow-lg">
-                    <div className="flex items-center justify-between flex-wrap gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-terracotta" />
-                          <span className="text-sm text-foreground">
-                            {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={handleOpenInMaps}>
-                          <ArrowSquareOut className="w-4 h-4 mr-2" />
-                          Open in Maps
-                        </Button>
-                        <Button variant="primary" size="sm" onClick={handleGetDirections}>
-                          <NavigationArrow className="w-4 h-4 mr-2" />
+                      )}
+                      {selectedHike.location && (
+                        <p className="text-[12px] text-ink-3 mt-1">{selectedHike.location}</p>
+                      )}
+                      <div className="flex gap-1.5 mt-2.5">
+                        <button
+                          onClick={() =>
+                            window.open(
+                              `https://www.google.com/maps/dir/?api=1&destination=${selectedHike.lat},${selectedHike.lng}`,
+                              '_blank',
+                            )
+                          }
+                          className="flex-1 px-2.5 py-1 rounded-full bg-pine-6 text-cream text-[11px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 transition-colors"
+                        >
                           Directions
-                        </Button>
+                        </button>
                       </div>
+                    </div>
+                  </InfoWindow>
+                )}
+              </GoogleMap>
+
+              {/* Map overlay — coords + actions */}
+              <div className="absolute bottom-4 left-4 right-4 z-10">
+                <div className="bg-white/95 backdrop-blur-md border border-line rounded-[14px] shadow-[0_8px_22px_rgba(29,34,24,.10)] px-3.5 py-2.5">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="inline-flex items-center gap-1.5 min-w-0">
+                      <MapPin className="w-3.5 h-3.5 text-pine-6 flex-shrink-0" weight="regular" />
+                      <Mono className="text-ink-2 truncate">
+                        {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                      </Mono>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Pill variant="ghost" sm mono={false} onClick={handleOpenInMaps}>
+                        <ArrowSquareOut className="w-3.5 h-3.5" weight="regular" />
+                        Maps
+                      </Pill>
+                      <Pill variant="solid-pine" sm mono={false} onClick={handleGetDirections}>
+                        <NavigationArrow className="w-3.5 h-3.5" weight="regular" />
+                        Directions
+                      </Pill>
                     </div>
                   </div>
                 </div>
               </div>
+            </div>
           </div>
 
-          {/* Info Panel */}
-          <div className="order-1 lg:order-2 space-y-5 p-6 lg:h-[calc(100vh-73px)] lg:overflow-y-auto">
-            {/* Location Info Card with integrated stats - Always at top */}
-            <Card className="bg-gradient-card overflow-hidden">
-              <CardContent className="p-5">
-                {/* Header */}
-                <div className="flex items-start gap-4 mb-5">
-                  <div className="flex items-center justify-center w-12 h-12 bg-primary/10 rounded-xl flex-shrink-0">
-                    <MapPin className="w-6 h-6 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h2 className="text-lg font-display font-bold text-foreground leading-tight">{cleanRegionName(location.name)}</h2>
-                    <p className="text-sm text-foreground/70 mt-1 line-clamp-2">{location.address}</p>
-                  </div>
-                </div>
-
-                {/* Stats Row */}
-                <div className="grid grid-cols-3 gap-3">
-                  {/* Elevation */}
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-full bg-lavenderslate/20 flex items-center justify-center flex-shrink-0">
-                      <Mountains className="w-4 h-4 text-lavenderslate" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-foreground/60">Elevation</p>
-                      {elevation !== null ? (
-                        <p className="text-sm font-bold text-foreground truncate">
-                          {Math.round(elevation * 3.28084).toLocaleString()} ft
-                        </p>
-                      ) : (
-                        <p className="text-sm font-bold text-foreground/30">--</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Weather */}
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-full bg-skyblue/20 flex items-center justify-center flex-shrink-0">
-                      {weatherLoading ? (
-                        <SpinnerGap className="w-4 h-4 text-skyblue animate-spin" />
-                      ) : weather ? (
-                        (() => {
-                          const WeatherIcon = getWeatherIcon(weather.shortForecast);
-                          return <WeatherIcon className="w-4 h-4 text-skyblue" />;
-                        })()
-                      ) : (
-                        <Sun className="w-4 h-4 text-skyblue" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-foreground/60">Weather</p>
-                      {weather ? (
-                        <p className="text-sm font-bold text-foreground truncate">
-                          {weather.temperature}°{weather.temperatureUnit}
-                        </p>
-                      ) : (
-                        <p className="text-sm font-bold text-foreground/30">--</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Coordinates */}
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-full bg-softamber/20 flex items-center justify-center flex-shrink-0">
-                      <Compass className="w-4 h-4 text-softamber" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-foreground/60">Coords</p>
-                      <p className="text-sm font-bold text-foreground truncate">
-                        {location.lat.toFixed(2)}°, {location.lng.toFixed(2)}°
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Surprise Me Banner */}
-            {surpriseMeData && (
-              <SurpriseMeBanner surpriseMe={surpriseMeData} />
-            )}
-
-            {/* ARCHIVED: 5-Day Photo Forecast - keeping code for reference
-            <FiveDayPhotoForecast
-              forecast={photoWeather}
-              loading={photoWeatherLoading}
-              compact
-            />
-            */}
-
-            {/* ARCHIVED: Photography Weather Conditions - keeping code for reference
-            <PhotoWeatherCard
-              forecast={photoWeather}
-              loading={photoWeatherLoading}
-              error={photoWeatherError}
-              fetchedAt={photoWeatherFetchedAt}
-              onRefresh={refetchPhotoWeather}
-            />
-            */}
-
-
-            {/* ARCHIVED: Nearby Camp Spots - will be replaced with explore page content
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-display font-semibold text-foreground">
-                    Nearby Camp Spots
-                  </h3>
-                  {nearbyPlaces.length > 0 && nearbyPlaces[0].source === 'ridb' && (
-                    <span className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded">
-                      via Recreation.gov
-                    </span>
-                  )}
-                </div>
-                {nearbyLoading ? (
-                  <div className="text-center py-4 text-muted-foreground">
-                    <p>Loading nearby spots...</p>
-                  </div>
-                ) : nearbyPlaces.length > 0 ? (
-                  <div className="space-y-3">
-                    {nearbyPlaces.slice(0, 5).map((place) => (
-                      <div
-                        key={place.id}
-                        className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors cursor-pointer"
-                        onClick={() => {
-                          if (place.source === 'ridb') {
-                            const facilityId = place.id.replace('ridb-', '');
-                            window.open(
-                              `https://www.recreation.gov/camping/campgrounds/${facilityId}`,
-                              '_blank'
-                            );
-                          } else {
-                            window.open(
-                              `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`,
-                              '_blank'
-                            );
-                          }
-                        }}
-                      >
-                        <div className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 ${place.source === 'ridb' ? 'bg-[#213D5C]/10' : 'bg-wildviolet/20'}`}>
-                          <Tent className={`w-5 h-5 ${place.source === 'ridb' ? 'text-[#213D5C]' : 'text-wildviolet'}`} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-foreground truncate">
-                            {place.name}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {place.distance.toFixed(1)} miles away
-                          </p>
-                        </div>
-                        <ArrowSquareOut className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      </div>
-                    ))}
-                    {nearbyPlaces.length > 5 && (
-                      <p className="text-sm text-muted-foreground text-center pt-2">
-                        +{nearbyPlaces.length - 5} more places nearby
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground">
-                    <Compass className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p>No camp spots within 50 miles</p>
-                  </div>
+          {/* Info panel (right, scrollable on lg) */}
+          <div className="order-1 lg:order-2 bg-paper lg:h-[calc(100vh-73px)] lg:overflow-y-auto">
+            <div className="px-4 sm:px-6 py-5 space-y-5">
+              {/* Intro card */}
+              <div className="bg-white border border-line rounded-[14px] p-5">
+                <Mono className="text-pine-6">{location.type}</Mono>
+                <h2 className="text-[24px] sm:text-[28px] font-sans font-bold tracking-[-0.025em] text-ink leading-[1.1] mt-1">
+                  {cleanedName}
+                </h2>
+                {location.address && (
+                  <p className="text-[14px] text-ink-3 mt-2 leading-[1.5]">{location.address}</p>
                 )}
-              </CardContent>
-            </Card>
-            */}
 
-            {/* Section Divider - Explore */}
-            <div className="flex items-center gap-3 pt-2">
-              <div className="flex-1 h-px bg-border" />
-              <span className="text-xs font-semibold text-foreground/50 uppercase tracking-wider">Things To Do</span>
-              <div className="flex-1 h-px bg-border" />
+                {/* Stats row */}
+                <div className="grid grid-cols-3 gap-3 mt-5 pt-5 border-t border-line">
+                  <StatTile
+                    Icon={Mountains}
+                    accent="sage"
+                    label="Elevation"
+                    value={elevation !== null ? `${Math.round(elevation * 3.28084).toLocaleString()} ft` : '—'}
+                    hint={
+                      elevation !== null ? getElevationMessage(Math.round(elevation * 3.28084)) : null
+                    }
+                  />
+                  <StatTile
+                    Icon={weatherLoading ? SpinnerGap : WeatherIcon}
+                    accent="water"
+                    label="Weather"
+                    value={weather ? `${weather.temperature}°${weather.temperatureUnit}` : '—'}
+                    hint={weather?.shortForecast || null}
+                    iconClass={weatherLoading ? 'animate-spin' : ''}
+                  />
+                  <StatTile
+                    Icon={Compass}
+                    accent="clay"
+                    label="Coords"
+                    value={`${location.lat.toFixed(2)}°, ${location.lng.toFixed(2)}°`}
+                  />
+                </div>
+              </div>
+
+              {/* Surprise me banner */}
+              {surpriseMeData && <SurpriseMeBanner surpriseMe={surpriseMeData} />}
+
+              {/* Things to do divider */}
+              <div className="flex items-center gap-3 pt-2">
+                <div className="flex-1 h-px bg-line" />
+                <Mono className="text-ink-3">Things to do</Mono>
+                <div className="flex-1 h-px bg-line" />
+              </div>
+
+              {/* Three column section */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* Hikes */}
+                <SectionCard
+                  Icon={Boot}
+                  accent="sage"
+                  title="Hikes"
+                  count={hikes.length}
+                  loading={hikesLoading}
+                  loadingLabel="Finding trails…"
+                  emptyLabel="No hikes found"
+                >
+                  {hikes.slice(0, 4).map((hike) => (
+                    <ListRow
+                      key={hike.id}
+                      onClick={() =>
+                        window.open(
+                          `https://www.google.com/maps/search/?api=1&query=${hike.lat},${hike.lng}`,
+                          '_blank',
+                        )
+                      }
+                      title={hike.name}
+                      meta={
+                        hike.rating ? (
+                          <span className="inline-flex items-center gap-0.5">
+                            <Star className="w-2.5 h-2.5 fill-clay text-clay" weight="fill" />
+                            {hike.rating.toFixed(1)}
+                          </span>
+                        ) : null
+                      }
+                    />
+                  ))}
+                  {hikes.length > 4 && <MoreLine count={hikes.length - 4} />}
+                </SectionCard>
+
+                {/* Camping */}
+                <SectionCard
+                  Icon={Tent}
+                  accent="clay"
+                  title="Camping"
+                  count={nearbyPlaces.length}
+                  loading={nearbyLoading}
+                  loadingLabel="Finding campsites…"
+                  emptyLabel="No campsites found"
+                >
+                  {nearbyPlaces.slice(0, 4).map((place: NearbyPlace) => (
+                    <ListRow
+                      key={place.id}
+                      onClick={() => {
+                        if (place.source === 'ridb') {
+                          const facilityId = place.id.replace('ridb-', '');
+                          window.open(`https://www.recreation.gov/camping/campgrounds/${facilityId}`, '_blank');
+                        } else {
+                          window.open(
+                            `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`,
+                            '_blank',
+                          );
+                        }
+                      }}
+                      title={place.name}
+                      meta={
+                        <>
+                          {place.distance.toFixed(1)} mi
+                          {place.source === 'ridb' && <span className="text-water ml-1">· Rec.gov</span>}
+                        </>
+                      }
+                    />
+                  ))}
+                  {nearbyPlaces.length > 4 && <MoreLine count={nearbyPlaces.length - 4} />}
+                </SectionCard>
+
+                {/* Photos */}
+                <SectionCard
+                  Icon={Camera}
+                  accent="ember"
+                  title="Photos"
+                  count={photoHotspots.length}
+                  loading={photoHotspotsLoading}
+                  loadingLabel="Finding spots…"
+                  emptyLabel="No photo spots"
+                >
+                  {photoHotspots.slice(0, 4).map((hotspot) => (
+                    <button
+                      key={hotspot.id}
+                      onClick={() => {
+                        if (hotspot.samplePhotoUrl) {
+                          setEnlargedPhoto({ url: hotspot.samplePhotoUrl, name: hotspot.name });
+                        } else {
+                          setSelectedPhotoHotspot(hotspot);
+                        }
+                      }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-[8px] hover:bg-cream transition-colors text-left"
+                    >
+                      {hotspot.samplePhotoUrl ? (
+                        <img
+                          src={hotspot.samplePhotoUrl}
+                          alt={hotspot.name}
+                          className="w-7 h-7 rounded-[6px] object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-7 h-7 rounded-[6px] bg-ember/15 text-ember flex items-center justify-center flex-shrink-0">
+                          <Camera className="w-3.5 h-3.5" weight="regular" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-sans font-semibold tracking-[-0.005em] text-ink truncate">
+                          {hotspot.name}
+                        </p>
+                        <Mono className="text-ink-3 block">{hotspot.photoCount.toLocaleString()} photos</Mono>
+                      </div>
+                    </button>
+                  ))}
+                  {photoHotspots.length > 4 && <MoreLine count={photoHotspots.length - 4} />}
+                </SectionCard>
+              </div>
             </div>
 
-            {/* Three Column Layout for Hikes, Camping, Photos */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Nearby Hikes */}
-              <Card id="hikes-section" className="flex flex-col">
-                <CardContent className="p-4 flex-1">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Boot className="w-5 h-5 text-pinesoft" />
-                    <h3 className="text-sm font-display font-semibold text-foreground">
-                      Hikes
-                    </h3>
-                    {hikes.length > 0 && (
-                      <span className="text-xs text-foreground/50 ml-auto">{hikes.length}</span>
-                    )}
-                  </div>
-                  {hikesLoading ? (
-                    <div className="text-center py-4 text-foreground/60">
-                      <SpinnerGap className="w-5 h-5 mx-auto mb-2 animate-spin" />
-                      <p className="text-xs">Finding trails...</p>
-                    </div>
-                  ) : hikes.length > 0 ? (
-                    <div className="space-y-2">
-                      {hikes.slice(0, 4).map((hike) => (
-                        <div
-                          key={hike.id}
-                          className="flex items-center gap-2 p-2 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors cursor-pointer"
-                          onClick={() => {
-                            window.open(
-                              `https://www.google.com/maps/search/?api=1&query=${hike.lat},${hike.lng}`,
-                              '_blank'
-                            );
-                          }}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-foreground text-xs truncate">
-                              {hike.name}
-                            </p>
-                            {hike.rating && (
-                              <div className="flex items-center gap-1 text-xs text-foreground/60">
-                                <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                                <span>{hike.rating.toFixed(1)}</span>
-                              </div>
-                            )}
-                          </div>
-                          <ArrowSquareOut className="w-3 h-3 text-foreground/40 flex-shrink-0" />
-                        </div>
-                      ))}
-                      {hikes.length > 4 && (
-                        <p className="text-xs text-foreground/50 text-center pt-1">
-                          +{hikes.length - 4} more
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4 text-foreground/50">
-                      <Boot className="w-6 h-6 mx-auto mb-1 opacity-40" />
-                      <p className="text-xs">No hikes found</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Camping Section */}
-              <Card id="camp-section" className="flex flex-col">
-                <CardContent className="p-4 flex-1">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Tent className="w-5 h-5 text-wildviolet" />
-                    <h3 className="text-sm font-display font-semibold text-foreground">
-                      Camping
-                    </h3>
-                    {nearbyPlaces.length > 0 && (
-                      <span className="text-xs text-foreground/50 ml-auto">{nearbyPlaces.length}</span>
-                    )}
-                  </div>
-                  {nearbyLoading ? (
-                    <div className="text-center py-4 text-foreground/60">
-                      <SpinnerGap className="w-5 h-5 mx-auto mb-2 animate-spin" />
-                      <p className="text-xs">Finding campsites...</p>
-                    </div>
-                  ) : nearbyPlaces.length > 0 ? (
-                    <div className="space-y-2">
-                      {nearbyPlaces.slice(0, 4).map((place) => (
-                        <div
-                          key={place.id}
-                          className="flex items-center gap-2 p-2 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors cursor-pointer"
-                          onClick={() => {
-                            if (place.source === 'ridb') {
-                              const facilityId = place.id.replace('ridb-', '');
-                              window.open(
-                                `https://www.recreation.gov/camping/campgrounds/${facilityId}`,
-                                '_blank'
-                              );
-                            } else {
-                              window.open(
-                                `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`,
-                                '_blank'
-                              );
-                            }
-                          }}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-foreground text-xs truncate">
-                              {place.name}
-                            </p>
-                            <p className="text-xs text-foreground/60">
-                              {place.distance.toFixed(1)} mi
-                              {place.source === 'ridb' && <span className="text-blue-600 ml-1">• Rec.gov</span>}
-                            </p>
-                          </div>
-                          <ArrowSquareOut className="w-3 h-3 text-foreground/40 flex-shrink-0" />
-                        </div>
-                      ))}
-                      {nearbyPlaces.length > 4 && (
-                        <p className="text-xs text-foreground/50 text-center pt-1">
-                          +{nearbyPlaces.length - 4} more
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4 text-foreground/50">
-                      <Tent className="w-6 h-6 mx-auto mb-1 opacity-40" />
-                      <p className="text-xs">No campsites found</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Photo Hotspots */}
-              <Card id="photo-section" className="flex flex-col">
-                <CardContent className="p-4 flex-1">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Camera className="w-5 h-5 text-blushorchid" />
-                    <h3 className="text-sm font-display font-semibold text-foreground">
-                      Photos
-                    </h3>
-                    {photoHotspots.length > 0 && (
-                      <span className="text-xs text-foreground/50 ml-auto">{photoHotspots.length}</span>
-                    )}
-                  </div>
-                  {photoHotspotsLoading ? (
-                    <div className="text-center py-4 text-foreground/60">
-                      <SpinnerGap className="w-5 h-5 mx-auto mb-2 animate-spin" />
-                      <p className="text-xs">Finding spots...</p>
-                    </div>
-                  ) : photoHotspots.length > 0 ? (
-                    <div className="space-y-2">
-                      {photoHotspots.slice(0, 4).map((hotspot) => (
-                        <div
-                          key={hotspot.id}
-                          className="flex items-center gap-2 p-2 bg-secondary/50 rounded-lg hover:bg-secondary transition-colors cursor-pointer"
-                          onClick={() => {
-                            if (hotspot.samplePhotoUrl) {
-                              setEnlargedPhoto({ url: hotspot.samplePhotoUrl, name: hotspot.name });
-                            } else {
-                              setSelectedPhotoHotspot(hotspot);
-                              setShowPhotoHotspots(true);
-                            }
-                          }}
-                        >
-                          {hotspot.samplePhotoUrl ? (
-                            <img
-                              src={hotspot.samplePhotoUrl}
-                              alt={hotspot.name}
-                              className="w-8 h-8 rounded object-cover flex-shrink-0"
-                            />
-                          ) : (
-                            <div className="w-8 h-8 rounded bg-blushorchid/15 flex items-center justify-center flex-shrink-0">
-                              <Camera className="w-4 h-4 text-blushorchid" />
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-foreground text-xs truncate">
-                              {hotspot.name}
-                            </p>
-                            <p className="text-xs text-foreground/60">
-                              {hotspot.photoCount.toLocaleString()} photos
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                      {photoHotspots.length > 4 && (
-                        <p className="text-xs text-foreground/50 text-center pt-1">
-                          +{photoHotspots.length - 4} more
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4 text-foreground/50">
-                      <Camera className="w-6 h-6 mx-auto mb-1 opacity-40" />
-                      <p className="text-xs">No photo spots found</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>{/* End three column grid */}
-
-            {/* ARCHIVED: Public Lands for Dispersed Camping - will be replaced with explore page content
-            <Card>
-                <CardContent className="p-4">
-                  <button
-                    onClick={() => setPublicLandsExpanded(!publicLandsExpanded)}
-                    className="w-full flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-2">
-                      <TreeEvergreen className="w-5 h-5 text-pinesoft" />
-                      <h3 className="font-semibold text-foreground">Dispersed Camping Areas</h3>
-                      {publicLands.length > 0 && (
-                        <span className="text-xs text-foreground/60">({publicLands.length})</span>
-                      )}
-                    </div>
-                    {publicLandsExpanded ? (
-                      <CaretUp className="w-5 h-5 text-foreground/60" />
-                    ) : (
-                      <CaretDown className="w-5 h-5 text-foreground/60" />
-                    )}
-                  </button>
-
-                  {publicLandsExpanded && (
-                    <div className="mt-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-foreground/60">BLM & US Forest Service lands</span>
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor="show-lands" className="text-sm text-foreground/60">
-                            Show on map
-                          </Label>
-                          <Switch
-                            id="show-lands"
-                            checked={showPublicLands}
-                            onCheckedChange={setShowPublicLands}
-                          />
-                        </div>
-                      </div>
-
-                      {publicLandsLoading ? (
-                        <div className="text-center py-4 text-foreground/60">
-                          <p>Finding nearby public lands...</p>
-                        </div>
-                      ) : publicLands.length > 0 ? (
-                        <div className="space-y-2">
-                          {publicLands.slice(0, 5).map((land) => (
-                            <div
-                              key={land.id}
-                              className="flex items-center gap-3 p-2 rounded-lg hover:bg-pinesoft/10 transition-colors cursor-pointer"
-                              onClick={() => {
-                                setSelectedPublicLand(land);
-                                setShowPublicLands(true);
-                              }}
-                            >
-                              <div className="w-10 h-10 rounded-lg bg-pinesoft/10 flex items-center justify-center flex-shrink-0">
-                                <TreeEvergreen className="w-5 h-5 text-pinesoft" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-foreground text-sm truncate">
-                                  {land.name}
-                                </p>
-                                <div className="flex items-center gap-2 text-xs text-foreground/60">
-                                  <span>{land.managingAgency}</span>
-                                  <span>•</span>
-                                  <span>{land.distance.toFixed(1)} mi</span>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                          {publicLands.length > 5 && (
-                            <p className="text-sm text-foreground/60 text-center pt-2">
-                              +{publicLands.length - 5} more areas nearby
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-center py-4 text-foreground/60">
-                          <TreeEvergreen className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                          <p>No BLM or Forest Service lands within 50 miles</p>
-                        </div>
-                      )}
-
-                      <p className="text-xs text-foreground/70 bg-secondary/50 p-2 rounded">
-                        Dispersed camping is generally allowed on BLM and National Forest lands. Always check local regulations and fire restrictions.
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-            </Card>
-            */}
-
-            {/* Create Itinerary Button */}
-            <div className="pt-4">
-              <Button
-                variant="primary"
-                size="sm"
-                className="w-full"
+            {/* Sticky bottom action bar */}
+            <div className="sticky bottom-0 border-t border-line bg-cream px-4 sm:px-6 py-3 flex items-center gap-2">
+              <Pill
+                variant="solid-pine"
+                mono={false}
                 onClick={() => setItineraryModalOpen(true)}
+                className="!flex-1 !justify-center"
               >
-                <Calendar className="w-4 h-4 mr-2" />
-                Create Itinerary
-              </Button>
+                <Calendar className="w-4 h-4" weight="regular" />
+                Plan a trip
+              </Pill>
+              <Pill variant="ghost" mono={false} onClick={handleGetDirections}>
+                <NavigationArrow className="w-4 h-4" weight="regular" />
+              </Pill>
             </div>
           </div>
         </div>
       </main>
 
-      {/* Create Itinerary Modal */}
-      <Dialog open={itineraryModalOpen} onOpenChange={setItineraryModalOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-primary" />
-              Create Itinerary
-            </DialogTitle>
-            <DialogDescription>
-              Plan a trip to {cleanRegionName(location.name)}
-            </DialogDescription>
-          </DialogHeader>
+      {/* Itinerary modal */}
+      {itineraryModalOpen && (
+        <ItineraryModal
+          locationName={cleanedName}
+          tripDuration={tripDuration}
+          setTripDuration={setTripDuration}
+          activities={activities}
+          setActivities={setActivities}
+          pacePreference={pacePreference}
+          setPacePreference={setPacePreference}
+          globalLodging={globalLodging}
+          setGlobalLodging={setGlobalLodging}
+          sameCampsite={sameCampsite}
+          setSameCampsite={setSameCampsite}
+          generating={generating}
+          onClose={() => setItineraryModalOpen(false)}
+          onGenerate={() => {
+            setItineraryModalOpen(false);
+            handleGenerateTrip();
+          }}
+        />
+      )}
 
-          <div className="space-y-6 py-4">
-            {/* Duration Slider */}
-            <div className="space-y-3">
-              <Label>Trip Duration</Label>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-foreground/60">Days</span>
-                <span className="text-2xl font-bold text-foreground">{tripDuration[0]}</span>
-              </div>
-              <Slider
-                value={tripDuration}
-                onValueChange={setTripDuration}
-                min={1}
-                max={14}
-                step={1}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-foreground/50">
-                <span>1 day</span>
-                <span>14 days</span>
-              </div>
-            </div>
-
-            {/* Activities Selection */}
-            <div className="space-y-3 pt-2 border-t border-border">
-              <Label>Activities</Label>
-              {[
-                { id: "hiking", label: "Hiking", description: "Find trails and hikes along your route" },
-                { id: "photography", label: "Photography", description: "Find photo hotspots and scenic viewpoints" },
-                { id: "offroading", label: "Offroading", description: "Find trails and off-highway routes" },
-              ].map((activity) => {
-                const isSelected = activities.includes(activity.id);
-                return (
-                  <div
-                    key={activity.id}
-                    className={`rounded-lg border transition-colors ${
-                      isSelected ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                    }`}
-                  >
-                    <label
-                      htmlFor={`activity-${activity.id}`}
-                      className="flex items-start space-x-3 p-3 cursor-pointer"
-                    >
-                      <Checkbox
-                        id={`activity-${activity.id}`}
-                        checked={isSelected}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setActivities([...activities, activity.id]);
-                          } else {
-                            setActivities(activities.filter(id => id !== activity.id));
-                          }
-                        }}
-                        className="mt-0.5"
-                      />
-                      <div className="flex-1 space-y-0.5">
-                        <span className="font-medium text-sm">{activity.label}</span>
-                        <p className="text-xs text-foreground/60">{activity.description}</p>
-                      </div>
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Trip Pace */}
-            <div className="space-y-3 pt-2 border-t border-border">
-              <Label>Trip Pace</Label>
-              <p className="text-xs text-foreground/60 -mt-1">How packed do you want each day to be?</p>
-              <div className="grid gap-2">
-                {[
-                  { id: 'relaxed', label: 'Relaxed', description: 'Fewer activities, more downtime' },
-                  { id: 'moderate', label: 'Moderate', description: 'Balanced activity and rest' },
-                  { id: 'packed', label: 'Packed', description: 'Maximum activities each day' },
-                ].map((option) => (
-                  <label
-                    key={option.id}
-                    htmlFor={`pace-${option.id}`}
-                    className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-                      pacePreference === option.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      id={`pace-${option.id}`}
-                      name="pace-preference"
-                      value={option.id}
-                      checked={pacePreference === option.id}
-                      onChange={(e) => setPacePreference(e.target.value as PacePreference)}
-                      className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
-                    />
-                    <div className="space-y-0.5">
-                      <span className="font-medium text-sm">{option.label}</span>
-                      <p className="text-xs text-foreground/60">{option.description}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Lodging Type */}
-            <div className="space-y-3 pt-2 border-t border-border">
-              <Label>Lodging Type</Label>
-              <div className="grid gap-2">
-                {[
-                  { id: 'dispersed', label: 'Dispersed Camping', description: 'Free camping on public lands' },
-                  { id: 'campground', label: 'Established Camping', description: 'Campgrounds with amenities' },
-                ].map((option) => (
-                  <label
-                    key={option.id}
-                    htmlFor={`lodging-${option.id}`}
-                    className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-                      globalLodging === option.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      id={`lodging-${option.id}`}
-                      name="lodging-type"
-                      value={option.id}
-                      checked={globalLodging === option.id}
-                      onChange={(e) => setGlobalLodging(e.target.value as LodgingType)}
-                      className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
-                    />
-                    <div className="space-y-0.5">
-                      <span className="font-medium text-sm">{option.label}</span>
-                      <p className="text-xs text-foreground/60">{option.description}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Campsite Selection */}
-            <div className="space-y-3 pt-2 border-t border-border">
-              <Label>Campsite Selection</Label>
-              <div className="grid gap-2">
-                {[
-                  { id: 'best-each-night', label: 'Best campsite each night', description: 'Pick the best option for each night of your trip', baseCamp: false },
-                  { id: 'basecamp', label: 'Setup basecamp', description: 'Stay at the same campsite every night', baseCamp: true },
-                ].map((option) => (
-                  <label
-                    key={option.id}
-                    htmlFor={`campsite-${option.id}`}
-                    className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-                      sameCampsite === option.baseCamp ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      id={`campsite-${option.id}`}
-                      name="campsite-selection"
-                      checked={sameCampsite === option.baseCamp}
-                      onChange={() => setSameCampsite(option.baseCamp)}
-                      className="h-4 w-4 cursor-pointer accent-[hsl(var(--forest))]"
-                    />
-                    <div className="space-y-0.5">
-                      <span className="font-medium text-sm">{option.label}</span>
-                      <p className="text-xs text-foreground/60">{option.description}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setItineraryModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                setItineraryModalOpen(false);
-                handleGenerateTrip();
-              }}
-              disabled={generating}
-            >
-              {generating ? (
-                <>
-                  <SpinnerGap className="w-4 h-4 mr-2 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  Generate Trip
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Photo Lightbox */}
+      {/* Photo lightbox */}
       {enlargedPhoto && (
         <div
-          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4"
+          className="fixed inset-0 z-[100] bg-ink-pine/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
           onClick={() => setEnlargedPhoto(null)}
         >
           <button
-            className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors"
+            className="absolute top-4 right-4 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-cream hover:bg-white/20 transition-colors"
             onClick={() => setEnlargedPhoto(null)}
+            aria-label="Close"
           >
-            <X className="w-8 h-8" />
+            <X className="w-5 h-5" weight="regular" />
           </button>
           <div className="max-w-4xl max-h-[90vh] relative" onClick={(e) => e.stopPropagation()}>
             <img
               src={enlargedPhoto.url}
               alt={enlargedPhoto.name}
-              className="max-w-full max-h-[85vh] object-contain rounded-lg"
+              className="max-w-full max-h-[85vh] object-contain rounded-[14px]"
             />
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 rounded-b-lg">
-              <p className="text-white font-medium">{enlargedPhoto.name}</p>
-              <p className="text-white/70 text-sm flex items-center gap-1">
-                <Camera className="w-3 h-3" />
-                Photo Hotspot via Flickr
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-ink-pine/90 to-transparent p-4 rounded-b-[14px]">
+              <p className="text-cream text-[15px] font-sans font-semibold tracking-[-0.005em]">
+                {enlargedPhoto.name}
               </p>
+              <Mono className="text-cream/70 mt-0.5 inline-flex items-center gap-1">
+                <Camera className="w-3 h-3" weight="regular" />
+                Photo hotspot · Flickr
+              </Mono>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Photo hotspot detail (when no sample photo) */}
+      {selectedPhotoHotspot && !enlargedPhoto && (
+        <div
+          className="fixed inset-0 z-[90] bg-ink-pine/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setSelectedPhotoHotspot(null)}
+        >
+          <div
+            className="bg-white border border-line rounded-[18px] shadow-[0_18px_44px_rgba(29,34,24,.16)] max-w-sm w-full p-5 animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="inline-flex items-center justify-center w-10 h-10 rounded-[10px] bg-ember/15 text-ember mb-3">
+              <Camera className="w-5 h-5" weight="regular" />
+            </div>
+            <Mono className="text-ember">Photo hotspot</Mono>
+            <h3 className="text-[18px] font-sans font-bold tracking-[-0.015em] text-ink mt-1">
+              {selectedPhotoHotspot.name}
+            </h3>
+            <p className="text-[13px] text-ink-3 mt-1">
+              {selectedPhotoHotspot.photoCount.toLocaleString()} photos shared here.
+            </p>
+            <div className="mt-4">
+              <Pill
+                variant="solid-pine"
+                mono={false}
+                onClick={() => setSelectedPhotoHotspot(null)}
+                className="!w-full !justify-center"
+              >
+                Close
+              </Pill>
             </div>
           </div>
         </div>
@@ -1561,3 +791,417 @@ const LocationDetail = () => {
 };
 
 export default LocationDetail;
+
+// === Helpers ===
+
+const ACCENT_TONES: Record<
+  'sage' | 'clay' | 'ember' | 'water' | 'pine',
+  { bg: string; text: string }
+> = {
+  sage:  { bg: 'bg-sage/15',   text: 'text-sage' },
+  clay:  { bg: 'bg-clay/15',   text: 'text-clay' },
+  ember: { bg: 'bg-ember/15',  text: 'text-ember' },
+  water: { bg: 'bg-water/15',  text: 'text-water' },
+  pine:  { bg: 'bg-pine-6/12', text: 'text-pine-6' },
+};
+
+const StatTile = ({
+  Icon,
+  accent,
+  label,
+  value,
+  hint,
+  iconClass,
+}: {
+  Icon: typeof Mountains;
+  accent: keyof typeof ACCENT_TONES;
+  label: string;
+  value: string;
+  hint?: string | null;
+  iconClass?: string;
+}) => {
+  const tone = ACCENT_TONES[accent];
+  return (
+    <div className="flex items-start gap-2.5 min-w-0">
+      <div
+        className={cn(
+          'w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0',
+          tone.bg,
+          tone.text,
+        )}
+      >
+        <Icon className={cn('w-4 h-4', iconClass)} weight="regular" />
+      </div>
+      <div className="min-w-0">
+        <Mono className="text-ink-3 block">{label}</Mono>
+        <p className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink truncate mt-0.5">
+          {value}
+        </p>
+        {hint && <p className="text-[11px] text-ink-3 mt-0.5 truncate">{hint}</p>}
+      </div>
+    </div>
+  );
+};
+
+const SectionCard = ({
+  Icon,
+  accent,
+  title,
+  count,
+  loading,
+  loadingLabel,
+  emptyLabel,
+  children,
+}: {
+  Icon: typeof Boot;
+  accent: keyof typeof ACCENT_TONES;
+  title: string;
+  count: number;
+  loading: boolean;
+  loadingLabel: string;
+  emptyLabel: string;
+  children: React.ReactNode;
+}) => {
+  const tone = ACCENT_TONES[accent];
+  return (
+    <div className="bg-white border border-line rounded-[14px] p-4 flex flex-col">
+      <div className="flex items-center gap-2 mb-3">
+        <div
+          className={cn(
+            'w-7 h-7 rounded-[8px] flex items-center justify-center flex-shrink-0',
+            tone.bg,
+            tone.text,
+          )}
+        >
+          <Icon className="w-3.5 h-3.5" weight="regular" />
+        </div>
+        <h3 className="text-[13px] font-sans font-semibold tracking-[-0.005em] text-ink">{title}</h3>
+        {count > 0 && !loading && <Mono className="text-ink-3 ml-auto">{count}</Mono>}
+      </div>
+      {loading ? (
+        <div className="text-center py-5">
+          <SpinnerGap className="w-4 h-4 mx-auto mb-1.5 text-pine-6 animate-spin" />
+          <Mono className="text-pine-6">{loadingLabel}</Mono>
+        </div>
+      ) : count === 0 ? (
+        <div className="text-center py-5">
+          <Icon className="w-5 h-5 mx-auto mb-1.5 text-ink-3 opacity-40" weight="regular" />
+          <Mono className="text-ink-3">{emptyLabel}</Mono>
+        </div>
+      ) : (
+        <div className="space-y-1">{children}</div>
+      )}
+    </div>
+  );
+};
+
+const ListRow = ({
+  onClick,
+  title,
+  meta,
+}: {
+  onClick: () => void;
+  title: string;
+  meta?: React.ReactNode;
+}) => (
+  <button
+    onClick={onClick}
+    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-[8px] hover:bg-cream transition-colors text-left"
+  >
+    <div className="flex-1 min-w-0">
+      <p className="text-[12px] font-sans font-semibold tracking-[-0.005em] text-ink truncate">
+        {title}
+      </p>
+      {meta && (
+        <Mono className="text-ink-3 mt-0.5 inline-flex items-center gap-1">{meta}</Mono>
+      )}
+    </div>
+    <ArrowSquareOut className="w-3 h-3 text-ink-3 flex-shrink-0" weight="regular" />
+  </button>
+);
+
+const MoreLine = ({ count }: { count: number }) => (
+  <Mono className="text-ink-3 block text-center pt-1">+{count} more</Mono>
+);
+
+// === Itinerary Modal ===
+
+type AccentName = 'pine' | 'sage' | 'water' | 'clay' | 'ember';
+
+const ACCENT_FULL: Record<
+  AccentName,
+  {
+    iconBg: string;
+    iconText: string;
+    selectedBorder: string;
+    selectedBg: string;
+    dot: string;
+  }
+> = {
+  pine:  { iconBg: 'bg-pine-6/12', iconText: 'text-pine-6', selectedBorder: 'border-pine-6', selectedBg: 'bg-pine-6/[0.06]', dot: 'border-pine-6 bg-pine-6' },
+  sage:  { iconBg: 'bg-sage/15',   iconText: 'text-sage',   selectedBorder: 'border-sage',   selectedBg: 'bg-sage/[0.06]',   dot: 'border-sage bg-sage' },
+  water: { iconBg: 'bg-water/15',  iconText: 'text-water',  selectedBorder: 'border-water',  selectedBg: 'bg-water/[0.06]',  dot: 'border-water bg-water' },
+  clay:  { iconBg: 'bg-clay/15',   iconText: 'text-clay',   selectedBorder: 'border-clay',   selectedBg: 'bg-clay/[0.06]',   dot: 'border-clay bg-clay' },
+  ember: { iconBg: 'bg-ember/15',  iconText: 'text-ember',  selectedBorder: 'border-ember',  selectedBg: 'bg-ember/[0.06]',  dot: 'border-ember bg-ember' },
+};
+
+const ACTIVITY_OPTIONS: Array<{ id: string; label: string; description: string; accent: AccentName }> = [
+  { id: 'hiking',      label: 'Hiking',      description: 'Find trails and hikes along your route.',  accent: 'sage' },
+  { id: 'photography', label: 'Photography', description: 'Photo hotspots and scenic viewpoints.',     accent: 'ember' },
+  { id: 'offroading',  label: 'Offroading',  description: 'Trails and off-highway routes.',            accent: 'clay' },
+];
+
+const PACE_OPTIONS: Array<{ id: PacePreference; label: string; description: string; accent: AccentName }> = [
+  { id: 'relaxed',  label: 'Relaxed',  description: 'Fewer activities, more downtime.',  accent: 'water' },
+  { id: 'moderate', label: 'Moderate', description: 'Balanced activity and rest.',       accent: 'pine'  },
+  { id: 'packed',   label: 'Packed',   description: 'Maximum activities each day.',      accent: 'ember' },
+];
+
+const LODGING_OPTIONS: Array<{ id: LodgingType; label: string; description: string; accent: AccentName }> = [
+  { id: 'dispersed',  label: 'Dispersed camping',   description: 'Free camping on public lands.', accent: 'pine' },
+  { id: 'campground', label: 'Established camping', description: 'Campgrounds with amenities.',   accent: 'water' },
+];
+
+const CAMPSITE_OPTIONS: Array<{ id: string; label: string; description: string; baseCamp: boolean; accent: AccentName }> = [
+  { id: 'best-each-night', label: 'Best each night', description: 'Pick the best option for each night.', baseCamp: false, accent: 'sage' },
+  { id: 'basecamp',        label: 'Setup basecamp',  description: 'Same campsite every night.',           baseCamp: true,  accent: 'clay' },
+];
+
+const ItineraryModal = ({
+  locationName,
+  tripDuration,
+  setTripDuration,
+  activities,
+  setActivities,
+  pacePreference,
+  setPacePreference,
+  globalLodging,
+  setGlobalLodging,
+  sameCampsite,
+  setSameCampsite,
+  generating,
+  onClose,
+  onGenerate,
+}: {
+  locationName: string;
+  tripDuration: number[];
+  setTripDuration: (v: number[]) => void;
+  activities: string[];
+  setActivities: (v: string[]) => void;
+  pacePreference: PacePreference;
+  setPacePreference: (v: PacePreference) => void;
+  globalLodging: LodgingType;
+  setGlobalLodging: (v: LodgingType) => void;
+  sameCampsite: boolean;
+  setSameCampsite: (v: boolean) => void;
+  generating: boolean;
+  onClose: () => void;
+  onGenerate: () => void;
+}) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center font-sans">
+    <div className="absolute inset-0 bg-ink-pine/60 backdrop-blur-sm" onClick={onClose} />
+    <div className="relative bg-white border border-line rounded-[18px] shadow-[0_18px_44px_rgba(29,34,24,.16),0_3px_8px_rgba(29,34,24,.08)] w-full max-w-md mx-4 max-h-[90dvh] flex flex-col overflow-hidden animate-fade-in">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-line flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <Mono className="text-pine-6 inline-flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5" weight="regular" />
+            Plan a trip
+          </Mono>
+          <h2 className="text-[20px] font-sans font-semibold tracking-[-0.015em] text-ink leading-[1.15] mt-1">
+            Trip to {locationName}.
+          </h2>
+        </div>
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="inline-flex items-center justify-center w-9 h-9 rounded-full text-ink-3 hover:text-ink hover:bg-ink/5 transition-colors shrink-0"
+        >
+          <X className="w-4 h-4" weight="regular" />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-6">
+        {/* Duration */}
+        <div className="space-y-3">
+          <Mono className="text-ink-2 block">Trip duration</Mono>
+          <div className="flex items-baseline justify-between">
+            <span className="text-[42px] font-sans font-bold tracking-[-0.025em] text-ink leading-none">
+              {tripDuration[0]}
+            </span>
+            <Mono className="text-ink-3">{tripDuration[0] === 1 ? 'day' : 'days'}</Mono>
+          </div>
+          <Slider
+            value={tripDuration}
+            onValueChange={setTripDuration}
+            min={1}
+            max={14}
+            step={1}
+            className="w-full cursor-grab active:cursor-grabbing"
+          />
+          <div className="flex justify-between">
+            <Mono className="text-ink-3">1 day</Mono>
+            <Mono className="text-ink-3">14 days</Mono>
+          </div>
+        </div>
+
+        {/* Activities */}
+        <div className="space-y-3 pt-2 border-t border-line">
+          <div className="pt-4">
+            <Mono className="text-ink-2 block">Activities</Mono>
+            <p className="text-[13px] text-ink-3 mt-1">What do you want to do on this trip?</p>
+          </div>
+          <div className="space-y-2">
+            {ACTIVITY_OPTIONS.map(({ id, label, description, accent }) => {
+              const a = ACCENT_FULL[accent];
+              const selected = activities.includes(id);
+              return (
+                <label
+                  key={id}
+                  className={cn(
+                    'flex items-start gap-3 p-3 rounded-[12px] border bg-white cursor-pointer transition-all',
+                    selected ? `${a.selectedBorder} ${a.selectedBg}` : 'border-line hover:border-ink-3/40',
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={(e) => {
+                      if (e.target.checked) setActivities([...activities, id]);
+                      else setActivities(activities.filter((x) => x !== id));
+                    }}
+                    className="sr-only"
+                  />
+                  <div
+                    className={cn(
+                      'w-5 h-5 rounded-[5px] border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-colors',
+                      selected ? a.dot : 'border-ink-3/40 bg-transparent',
+                    )}
+                  >
+                    {selected && <Check className="w-3 h-3 text-cream" weight="bold" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">
+                      {label}
+                    </div>
+                    <p className="text-[13px] text-ink-3 mt-0.5 leading-[1.5]">{description}</p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Pace */}
+        <RadioGroup
+          label="Trip pace"
+          hint="How packed do you want each day to be?"
+          options={PACE_OPTIONS}
+          value={pacePreference}
+          onChange={setPacePreference}
+        />
+
+        {/* Lodging */}
+        <RadioGroup
+          label="Lodging type"
+          options={LODGING_OPTIONS}
+          value={globalLodging}
+          onChange={setGlobalLodging}
+        />
+
+        {/* Campsite selection */}
+        <RadioGroup
+          label="Campsite selection"
+          options={CAMPSITE_OPTIONS.map((o) => ({ ...o, id: o.baseCamp ? 'basecamp' : 'best-each-night' }))}
+          value={sameCampsite ? 'basecamp' : 'best-each-night'}
+          onChange={(v) => setSameCampsite(v === 'basecamp')}
+        />
+      </div>
+
+      {/* Footer */}
+      <div className="px-5 py-4 border-t border-line flex items-center gap-2">
+        <Pill variant="ghost" mono={false} onClick={onClose} className="!flex-1 !justify-center">
+          Cancel
+        </Pill>
+        <Pill
+          variant="solid-pine"
+          mono={false}
+          onClick={onGenerate}
+          className={cn('!flex-1 !justify-center', generating && 'opacity-50 pointer-events-none')}
+        >
+          {generating ? (
+            <>
+              <SpinnerGap className="w-3.5 h-3.5 animate-spin" />
+              Generating…
+            </>
+          ) : (
+            <>
+              <Calendar className="w-3.5 h-3.5" weight="regular" />
+              Generate trip
+            </>
+          )}
+        </Pill>
+      </div>
+    </div>
+  </div>
+);
+
+function RadioGroup<T extends string>({
+  label,
+  hint,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  options: Array<{ id: T; label: string; description: string; accent: AccentName }>;
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="space-y-3 pt-2 border-t border-line">
+      <div className="pt-4">
+        <Mono className="text-ink-2 block">{label}</Mono>
+        {hint && <p className="text-[13px] text-ink-3 mt-1">{hint}</p>}
+      </div>
+      <div className="grid gap-2">
+        {options.map((option) => {
+          const a = ACCENT_FULL[option.accent];
+          const selected = value === option.id;
+          return (
+            <label
+              key={option.id}
+              className={cn(
+                'flex items-center gap-3 p-3 rounded-[12px] border bg-white cursor-pointer transition-all',
+                selected ? `${a.selectedBorder} ${a.selectedBg}` : 'border-line hover:border-ink-3/40',
+              )}
+            >
+              <input
+                type="radio"
+                checked={selected}
+                onChange={() => onChange(option.id)}
+                className="sr-only"
+              />
+              <div
+                className={cn(
+                  'w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors flex-shrink-0',
+                  selected ? a.dot : 'border-ink-3/40 bg-transparent',
+                )}
+              >
+                {selected && <span className="w-1.5 h-1.5 rounded-full bg-cream" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">
+                  {option.label}
+                </div>
+                <p className="text-[13px] text-ink-3 mt-0.5 leading-[1.5]">{option.description}</p>
+              </div>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

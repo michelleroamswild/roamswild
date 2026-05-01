@@ -1,26 +1,13 @@
 import { useState, useEffect } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { SpinnerGap, MapPin, Tent } from '@phosphor-icons/react';
+import { SpinnerGap, MapPin, Tent, Plus } from '@phosphor-icons/react';
 import { useCampsites } from '@/context/CampsitesContext';
 import { CampsiteFormData, CampsiteType, RoadAccess, CampsiteVisibility } from '@/types/campsite';
 import { toast } from 'sonner';
+import { Mono, Pill } from '@/components/redesign';
+import { cn } from '@/lib/utils';
 
 interface AddCampsiteModalProps {
   isOpen: boolean;
@@ -33,18 +20,9 @@ export function AddCampsiteModal({ isOpen, onClose, initialLat, initialLng }: Ad
   const { addCampsite } = useCampsites();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form state
   const [name, setName] = useState('');
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
-
-  // Sync initial coordinates when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      if (initialLat !== undefined) setLat(String(initialLat));
-      if (initialLng !== undefined) setLng(String(initialLng));
-    }
-  }, [isOpen, initialLat, initialLng]);
   const [type, setType] = useState<CampsiteType>('dispersed');
   const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
@@ -55,6 +33,13 @@ export function AddCampsiteModal({ isOpen, onClose, initialLat, initialLng }: Ad
   const [feeAmount, setFeeAmount] = useState('');
   const [seasonalAccess, setSeasonalAccess] = useState('');
   const [visibility, setVisibility] = useState<CampsiteVisibility>('private');
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialLat !== undefined) setLat(String(initialLat));
+      if (initialLng !== undefined) setLng(String(initialLng));
+    }
+  }, [isOpen, initialLat, initialLng]);
 
   const resetForm = () => {
     setName('');
@@ -80,7 +65,6 @@ export function AddCampsiteModal({ isOpen, onClose, initialLat, initialLng }: Ad
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate required fields
     if (!name.trim()) {
       toast.error('Name is required');
       return;
@@ -93,7 +77,6 @@ export function AddCampsiteModal({ isOpen, onClose, initialLat, initialLng }: Ad
       toast.error('Please enter a valid latitude (-90 to 90)');
       return;
     }
-
     if (isNaN(lngNum) || lngNum < -180 || lngNum > 180) {
       toast.error('Please enter a valid longitude (-180 to 180)');
       return;
@@ -118,7 +101,6 @@ export function AddCampsiteModal({ isOpen, onClose, initialLat, initialLng }: Ad
     };
 
     const result = await addCampsite(formData);
-
     setIsSubmitting(false);
 
     if (result) {
@@ -130,217 +112,246 @@ export function AddCampsiteModal({ isOpen, onClose, initialLat, initialLng }: Ad
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+      <DialogContent className="sm:max-w-lg border-line bg-white rounded-[18px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Tent className="w-5 h-5 text-primary" />
-            Add Campsite
+          <Mono className="text-pine-6 flex items-center gap-1.5">
+            <Tent className="w-3.5 h-3.5" weight="regular" />
+            New campsite
+          </Mono>
+          <DialogTitle className="font-sans font-semibold tracking-[-0.015em] text-ink text-[20px] leading-[1.15] mt-1">
+            Save a camping spot.
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5 mt-2">
           {/* Name */}
-          <div className="space-y-2">
-            <Label htmlFor="name">Name *</Label>
-            <Input
-              id="name"
+          <Field label="Name" required>
+            <input
               placeholder="e.g. Hidden Valley Camp"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
+              className={inputCls}
             />
-          </div>
+          </Field>
 
           {/* Coordinates */}
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              <MapPin className="w-4 h-4" />
-              GPS Coordinates *
-            </Label>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Input
-                  placeholder="Latitude (e.g. 36.2345)"
-                  value={lat}
-                  onChange={(e) => setLat(e.target.value)}
-                  type="number"
-                  step="any"
-                  required
-                />
-              </div>
-              <div>
-                <Input
-                  placeholder="Longitude (e.g. -116.8765)"
-                  value={lng}
-                  onChange={(e) => setLng(e.target.value)}
-                  type="number"
-                  step="any"
-                  required
-                />
-              </div>
+          <div className="space-y-1.5">
+            <Mono className="text-ink-2 flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5" weight="regular" />
+              GPS coordinates
+              <span className="text-ember">*</span>
+            </Mono>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                placeholder="Latitude"
+                value={lat}
+                onChange={(e) => setLat(e.target.value)}
+                type="number"
+                step="any"
+                required
+                className={inputCls}
+              />
+              <input
+                placeholder="Longitude"
+                value={lng}
+                onChange={(e) => setLng(e.target.value)}
+                type="number"
+                step="any"
+                required
+                className={inputCls}
+              />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Tip: You can get coordinates from Google Maps by right-clicking a location
+            <p className="text-[12px] text-ink-3">
+              Tip: right-click a location in Google Maps to copy its coordinates.
             </p>
           </div>
 
           {/* Type & Visibility */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Select value={type} onValueChange={(v) => setType(v as CampsiteType)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="dispersed">Dispersed</SelectItem>
-                  <SelectItem value="established">Established</SelectItem>
-                  <SelectItem value="blm">BLM Land</SelectItem>
-                  <SelectItem value="usfs">USFS Land</SelectItem>
-                  <SelectItem value="private">Private</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Visibility</Label>
-              <Select value={visibility} onValueChange={(v) => setVisibility(v as CampsiteVisibility)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="private">Private (just me)</SelectItem>
-                  <SelectItem value="friends">Friends only</SelectItem>
-                  <SelectItem value="public">Public (everyone)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <Field label="Type">
+              <FormSelect value={type} onValueChange={(v) => setType(v as CampsiteType)}>
+                <SelectItem value="dispersed">Dispersed</SelectItem>
+                <SelectItem value="established">Established</SelectItem>
+                <SelectItem value="blm">BLM land</SelectItem>
+                <SelectItem value="usfs">USFS land</SelectItem>
+                <SelectItem value="private">Private</SelectItem>
+              </FormSelect>
+            </Field>
+            <Field label="Visibility">
+              <FormSelect value={visibility} onValueChange={(v) => setVisibility(v as CampsiteVisibility)}>
+                <SelectItem value="private">Just me</SelectItem>
+                <SelectItem value="friends">Friends only</SelectItem>
+                <SelectItem value="public">Public</SelectItem>
+              </FormSelect>
+            </Field>
           </div>
 
           {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Describe the campsite..."
+          <Field label="Description">
+            <textarea
+              placeholder="Describe the campsite…"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
+              className={cn(inputCls, 'resize-none py-2')}
             />
-          </div>
+          </Field>
 
-          {/* Road Access */}
-          <div className="space-y-2">
-            <Label>Road Access</Label>
-            <Select value={roadAccess} onValueChange={(v) => setRoadAccess(v as RoadAccess)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select road conditions" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2wd">2WD - Paved/Graded</SelectItem>
-                <SelectItem value="4wd_easy">4WD Easy - Dirt roads</SelectItem>
-                <SelectItem value="4wd_moderate">4WD Moderate - Some obstacles</SelectItem>
-                <SelectItem value="4wd_hard">4WD Hard - Technical</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Road access */}
+          <Field label="Road access">
+            <FormSelect
+              value={roadAccess}
+              onValueChange={(v) => setRoadAccess(v as RoadAccess)}
+              placeholder="Select road conditions"
+            >
+              <SelectItem value="2wd">2WD — paved/graded</SelectItem>
+              <SelectItem value="4wd_easy">4WD easy — dirt roads</SelectItem>
+              <SelectItem value="4wd_moderate">4WD moderate — some obstacles</SelectItem>
+              <SelectItem value="4wd_hard">4WD hard — technical</SelectItem>
+            </FormSelect>
+          </Field>
 
-          {/* Cell Coverage */}
-          <div className="space-y-2">
-            <Label>Cell Coverage (0-5 bars)</Label>
-            <Select value={cellCoverage} onValueChange={setCellCoverage}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select cell coverage" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">0 - No signal</SelectItem>
-                <SelectItem value="1">1 - Very weak</SelectItem>
-                <SelectItem value="2">2 - Weak</SelectItem>
-                <SelectItem value="3">3 - Moderate</SelectItem>
-                <SelectItem value="4">4 - Good</SelectItem>
-                <SelectItem value="5">5 - Excellent</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Cell coverage */}
+          <Field label="Cell coverage">
+            <FormSelect value={cellCoverage} onValueChange={setCellCoverage} placeholder="Select cell coverage">
+              <SelectItem value="0">0 · No signal</SelectItem>
+              <SelectItem value="1">1 · Very weak</SelectItem>
+              <SelectItem value="2">2 · Weak</SelectItem>
+              <SelectItem value="3">3 · Moderate</SelectItem>
+              <SelectItem value="4">4 · Good</SelectItem>
+              <SelectItem value="5">5 · Excellent</SelectItem>
+            </FormSelect>
+          </Field>
 
           {/* Toggles */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="water">Water Available</Label>
-              <Switch
-                id="water"
-                checked={waterAvailable}
-                onCheckedChange={setWaterAvailable}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label htmlFor="fee">Fee Required</Label>
-              <Switch
-                id="fee"
-                checked={feeRequired}
-                onCheckedChange={setFeeRequired}
-              />
-            </div>
-
+          <div className="space-y-2.5">
+            <ToggleRow label="Water available" checked={waterAvailable} onChange={setWaterAvailable} />
+            <ToggleRow label="Fee required" checked={feeRequired} onChange={setFeeRequired} />
             {feeRequired && (
-              <div className="space-y-2">
-                <Label htmlFor="feeAmount">Fee Amount</Label>
-                <Input
-                  id="feeAmount"
-                  placeholder="e.g. $10/night"
-                  value={feeAmount}
-                  onChange={(e) => setFeeAmount(e.target.value)}
-                />
+              <div className="pl-3 animate-fade-in">
+                <Field label="Fee amount">
+                  <input
+                    placeholder="e.g. $10/night"
+                    value={feeAmount}
+                    onChange={(e) => setFeeAmount(e.target.value)}
+                    className={inputCls}
+                  />
+                </Field>
               </div>
             )}
           </div>
 
-          {/* Seasonal Access */}
-          <div className="space-y-2">
-            <Label htmlFor="seasonal">Seasonal Access</Label>
-            <Input
-              id="seasonal"
-              placeholder="e.g. Year-round, Summer only, May-October"
+          {/* Seasonal */}
+          <Field label="Seasonal access">
+            <input
+              placeholder="e.g. Year-round, May–October"
               value={seasonalAccess}
               onChange={(e) => setSeasonalAccess(e.target.value)}
+              className={inputCls}
             />
-          </div>
+          </Field>
 
-          {/* Private Notes */}
-          <div className="space-y-2">
-            <Label htmlFor="notes">Private Notes</Label>
-            <Textarea
-              id="notes"
-              placeholder="Personal notes (only visible to you)..."
+          {/* Private notes */}
+          <div className="space-y-1.5">
+            <Mono className="text-ink-2 block">Private notes</Mono>
+            <textarea
+              placeholder="Personal notes (only visible to you)…"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
+              className={cn(inputCls, 'resize-none py-2')}
             />
-            <p className="text-xs text-muted-foreground">
-              These notes are private and won't be shared even if the campsite is public
+            <p className="text-[12px] text-ink-3">
+              These notes are always private — even if the campsite is shared.
             </p>
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button type="button" variant="ghost" onClick={handleClose}>
+          <div className="flex items-center gap-2 pt-3 border-t border-line">
+            <Pill variant="ghost" mono={false} onClick={handleClose} className="!flex-1 !justify-center">
               Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={isSubmitting}>
+            </Pill>
+            <Pill
+              as="button"
+              type="submit"
+              variant="solid-pine"
+              mono={false}
+              className={cn('!flex-1 !justify-center', isSubmitting && 'opacity-50 pointer-events-none')}
+            >
               {isSubmitting ? (
                 <>
-                  <SpinnerGap className="w-4 h-4 mr-2 animate-spin" />
-                  Adding...
+                  <SpinnerGap className="w-3.5 h-3.5 animate-spin" />
+                  Adding…
                 </>
               ) : (
-                'Add Campsite'
+                <>
+                  <Plus className="w-3.5 h-3.5" weight="regular" />
+                  Add campsite
+                </>
               )}
-            </Button>
+            </Pill>
           </div>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
+
+const inputCls =
+  'w-full h-10 px-3 rounded-[12px] border border-line bg-white text-ink text-[14px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors';
+
+const Field = ({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) => (
+  <div className="space-y-1.5">
+    <Mono className="text-ink-2 block">
+      {label}
+      {required && <span className="text-ember"> *</span>}
+    </Mono>
+    {children}
+  </div>
+);
+
+const FormSelect = ({
+  value,
+  onValueChange,
+  placeholder,
+  children,
+}: {
+  value: string;
+  onValueChange: (v: string) => void;
+  placeholder?: string;
+  children: React.ReactNode;
+}) => (
+  <Select value={value} onValueChange={onValueChange}>
+    <SelectTrigger className="h-10 rounded-[12px] border-line bg-white text-ink text-[14px] hover:border-ink-3 transition-colors">
+      <SelectValue placeholder={placeholder} />
+    </SelectTrigger>
+    <SelectContent className="rounded-[12px] border-line bg-white [&_[data-highlighted]]:bg-cream [&_[data-highlighted]]:text-ink">
+      {children}
+    </SelectContent>
+  </Select>
+);
+
+const ToggleRow = ({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) => (
+  <label className="flex items-center justify-between px-3 py-2.5 rounded-[12px] border border-line bg-white cursor-pointer hover:border-ink-3/40 transition-colors">
+    <span className="text-[14px] text-ink">{label}</span>
+    <Switch checked={checked} onCheckedChange={onChange} />
+  </label>
+);
