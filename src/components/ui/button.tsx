@@ -10,17 +10,14 @@ const buttonVariants = cva(
     variants: {
       variant: {
         // Main button hierarchy
-        primary: "bg-primary text-primary-foreground hover:bg-forest shadow-md hover:shadow-lg hover:-translate-y-px",
-        secondary: "bg-white text-primary-dark border-2 border-primary hover:bg-primary hover:text-primary-foreground dark:bg-transparent dark:text-primary dark:border-primary dark:hover:bg-primary dark:hover:text-primary-foreground shadow-md hover:shadow-lg hover:-translate-y-px",
+        primary: "bg-primary text-primary-foreground hover:bg-pine-6 shadow-md hover:shadow-lg hover:-translate-y-px",
+        secondary: "bg-white text-ink border-2 border-primary hover:bg-primary hover:text-primary-foreground dark:bg-transparent dark:text-primary dark:border-primary dark:hover:bg-primary dark:hover:text-primary-foreground shadow-md hover:shadow-lg hover:-translate-y-px",
         tertiary: "text-primary border-2 border-primary/30 hover:border-primary hover:bg-primary/5",
         // Utility variants
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        // Chip variants for filters
-        chip: "bg-cream text-ink-2 border border-line rounded-full text-xs font-medium hover:border-ink-3/50 hover:bg-paper-2",
-        "chip-active": "bg-pine-6 text-cream rounded-full text-xs font-medium shadow-sm",
       },
       size: {
         default: "h-10 px-4 py-2",
@@ -28,7 +25,6 @@ const buttonVariants = cva(
         lg: "h-12 rounded-lg px-8 text-base",
         xl: "h-14 rounded-xl px-10 text-lg",
         icon: "h-10 w-10",
-        chip: "h-8 px-4 py-1",
       },
     },
     defaultVariants: {

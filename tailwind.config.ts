@@ -49,22 +49,14 @@ export default {
   			]
   		},
   		colors: {
-  			border: {
-  				DEFAULT: 'hsl(var(--border))',
-  				light: 'hsl(var(--border-light))'
-  			},
+  			// shadcn theme tokens — kept so the shadcn UI primitives still resolve
+  			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
-  			background: {
-  				DEFAULT: 'hsl(var(--background))',
-  				secondary: 'hsl(var(--background-secondary))'
-  			},
-  			surface: 'hsl(var(--surface))',
+  			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			primary: {
   				DEFAULT: 'hsl(var(--primary))',
-  				dark: 'hsl(var(--primary-dark))',
-  				hover: 'hsl(var(--primary-hover))',
   				foreground: 'hsl(var(--primary-foreground))'
   			},
   			secondary: {
@@ -83,44 +75,14 @@ export default {
   				DEFAULT: 'hsl(var(--accent))',
   				foreground: 'hsl(var(--accent-foreground))'
   			},
-  			accentdark: 'hsl(var(--accentdark))',
-  			secondaryaccent: {
-  				DEFAULT: 'hsl(var(--secondaryaccent))',
-  				foreground: 'hsl(var(--secondaryaccent-foreground))'
-  			},
   			popover: {
   				DEFAULT: 'hsl(var(--popover))',
   				foreground: 'hsl(var(--popover-foreground))'
   			},
   			card: {
   				DEFAULT: 'hsl(var(--card))',
-  				light: 'hsl(var(--card-light))',
   				foreground: 'hsl(var(--card-foreground))'
   			},
-  			forest: {
-  				DEFAULT: 'hsl(var(--forest))',
-  				light: 'hsl(var(--forest-light))'
-  			},
-  			sand: {
-  				DEFAULT: 'hsl(var(--sand))',
-  				dark: 'hsl(var(--sand-dark))'
-  			},
-  			terracotta: {
-  				DEFAULT: 'hsl(var(--terracotta))',
-  				dark: 'hsl(var(--terracotta-dark))'
-  			},
-  			earth: 'hsl(var(--earth))',
-  			cream: 'hsl(var(--cream))',
-  			// Custom accent colors for map markers and UI
-  			pinesoft: 'hsl(var(--accent-pinesoft))',
-  			aquateal: 'hsl(var(--accent-aquateal))',
-  			skyblue: 'hsl(var(--accent-skyblue))',
-  			lavenderslate: 'hsl(var(--accent-lavenderslate))',
-  			softamber: 'hsl(var(--accent-softamber))',
-  			blushorchid: 'hsl(var(--accent-blushorchid))',
-  			wildviolet: 'hsl(var(--accent-wildviolet))',
-  			mossgreen: 'hsl(var(--accent-mossgreen))',
-  			coralred: 'hsl(var(--accent-coralred))',
 
   			// 2026 Redesign tokens — Pine + Paper
   			cream:    'hsl(var(--cream))',
@@ -175,17 +137,6 @@ export default {
   				fourwd:    'hsl(var(--road-fourwd))',
   				atv:       'hsl(var(--road-atv))',
   			},
-  			// Refreshed decorative palette (lower-saturation v2)
-  			'accent-sage-2':  'hsl(var(--accent-sage))',
-  			'accent-mist':    'hsl(var(--accent-mist))',
-  			'accent-sky':     'hsl(var(--accent-sky))',
-  			'accent-iris':    'hsl(var(--accent-iris))',
-  			'accent-amber-2': 'hsl(var(--accent-amber-soft))',
-  			'accent-rose':    'hsl(var(--accent-rose))',
-  			'accent-plum':    'hsl(var(--accent-plum))',
-  			'accent-moss-2':  'hsl(var(--accent-moss))',
-  			'accent-clay-2':  'hsl(var(--accent-clay-soft))',
-
   			sidebar: {
   				DEFAULT: 'hsl(var(--sidebar-background))',
   				foreground: 'hsl(var(--sidebar-foreground))',
@@ -255,11 +206,6 @@ export default {
   			'slide-in': 'slide-in 0.4s ease-out forwards',
   			'pulse-soft': 'pulse-soft 2s ease-in-out infinite'
   		},
-  		boxShadow: {
-  			card: '0 4px 20px -4px hsl(var(--forest) / 0.1)',
-  			'card-hover': '0 8px 30px -4px hsl(var(--forest) / 0.15)',
-  			search: '0 8px 40px -8px hsl(var(--forest) / 0.2)'
-  		}
   	}
   },
   plugins: [require("tailwindcss-animate")],

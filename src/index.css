@@ -6,21 +6,18 @@
 
 @layer base {
   :root {
+    /* shadcn theme tokens — kept so the shadcn UI primitives still work.
+     * Most of the app uses the Pine + Paper tokens defined further down. */
     --background: 36 23% 97%;
-    --background-secondary: 35 20% 62%;
-    --surface: 0 0% 100%;
     --foreground: 69 17% 21%;
 
     --card: 36 23% 97%;
-    --card-light: 36 23% 97%;
     --card-foreground: 150 25% 15%;
 
     --popover: 40 25% 97%;
     --popover-foreground: 150 25% 15%;
 
     --primary: 69 17% 21%;
-    --primary-dark: 69 17% 21%;
-    --primary-hover: 82 61% 15%;
     --primary-foreground: 40 25% 97%;
 
     --secondary: 51 37% 89%;
@@ -30,44 +27,16 @@
     --muted-foreground: 84 35% 28%;
 
     --accent: 74 68% 56%;
-    --accentdark: 73 69% 35%;
     --accent-foreground: var(--primary);
-
-    --secondaryaccent: 40 83% 63%;
-    --secondaryaccent-foreground: var(--primary);
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 35 20% 85%;
-    --border-light: 35 20% 85%;
     --input: 90 14% 97%;
     --ring: 152 45% 25%;
 
     --radius: 0.5rem;
-
-    /* Custom overlanding tokens */
-    --forest: 74 68% 35%;
-    --forest-light: var(--accent);
-    --sand: 35 35% 85%;
-    --sand-dark: 35 25% 75%;
-    --terracotta: 20 65% 55%;
-    --terracotta-dark: 20 65% 45%;
-    --earth: 351 7% 63%;
-    --earth-light: 355 8% 71%;
-    --cream: 35 20% 85%;
-    --topo-line: 150 15% 80%;
-
-    /* Custom accent colors */
-    --accent-pinesoft: 167 39% 49%;
-    --accent-aquateal: 171 60% 64%;
-    --accent-skyblue: 212 86% 77%;
-    --accent-lavenderslate: 249 80% 75%;
-    --accent-softamber: 40 83% 63%;
-    --accent-blushorchid: 332 76% 79%;
-    --accent-wildviolet: 280 80% 74%;
-    --accent-mossgreen: 118 39% 45%;
-    --accent-coralred: 0 83% 66%;
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -150,36 +119,20 @@
     --road-fourwd:      8 58% 46%;
     --road-atv:        45 62% 56%;
 
-    /* Decorative accents (replaces the legacy saturated set) */
-    --accent-sage:  150 20% 52%;   /* was --accent-pinesoft */
-    --accent-mist:  186 28% 62%;   /* was --accent-aquateal */
-    --accent-sky:   206 36% 70%;   /* was --accent-skyblue */
-    --accent-iris:  248 28% 70%;   /* was --accent-lavenderslate */
-    --accent-amber-soft:  38 52% 62%;   /* was --accent-softamber */
-    --accent-rose:  338 30% 72%;   /* was --accent-blushorchid */
-    --accent-plum:  282 22% 62%;   /* was --accent-wildviolet */
-    --accent-moss:   96 27% 38%;   /* was --accent-mossgreen */
-    --accent-clay-soft:   20 50% 52%;   /* was --accent-coralred */
   }
 
   .dark {
-    /* Background uses light theme primary hue, darkened */
+    /* shadcn theme tokens — dark-mode overrides */
     --background: 69 17% 10%;
-    --background-secondary: 35 20% 22%;
-    --surface: 69 17% 14%;
     --foreground: 36 23% 97%;
 
     --card: 69 17% 18%;
-    --card-light: 69 17% 24%;
     --card-foreground: 36 23% 97%;
 
     --popover: 30 12% 13%;
     --popover-foreground: 40 20% 93%;
 
-    /* Primary uses the muted/cream tone from light mode */
     --primary: 35 20% 85%;
-    --primary-dark: 69 17% 21%;
-    --primary-hover: 35 20% 75%;
     --primary-foreground: 30 15% 10%;
 
     --secondary: 35 25% 75%;
@@ -188,7 +141,6 @@
     --muted: 30 10% 16%;
     --muted-foreground: 40 12% 55%;
 
-    /* Accent stays the lime green */
     --accent: 74 68% 56%;
     --accent-foreground: 30 15% 10%;
 
@@ -196,32 +148,9 @@
     --destructive-foreground: 0 0% 98%;
 
     --border: 69 17% 21%;
-    --border-light: 69 17% 36%;
     --input: 35 10% 18%;
     --ring: 74 50% 40%;
 
-    /* Earth tones - same as light mode */
-    --forest: 74 68% 35%;
-    --forest-light: var(--accent);
-    --sand: 35 35% 85%;
-    --sand-dark: 35 25% 75%;
-    --terracotta: 20 65% 55%;
-    --terracotta-dark: 20 65% 45%;
-    --earth: 351 7% 63%;
-    --earth-light: 355 8% 71%;
-    --cream: 35 20% 85%;
-    --topo-line: 150 15% 80%;
-
-    /* Accent colors with higher L for dark mode */
-    --accent-pinesoft: 167 39% 65%;
-    --accent-aquateal: 171 60% 75%;
-    --accent-skyblue: 212 86% 85%;
-    --accent-lavenderslate: 249 80% 85%;
-    --accent-softamber: 40 83% 75%;
-    --accent-blushorchid: 332 76% 88%;
-    --accent-wildviolet: 280 80% 84%;
-    --accent-mossgreen: 118 39% 55%;
-    --accent-coralred: 0 83% 76%;
     --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
 
     /* ============================================================
@@ -283,16 +212,6 @@
     --road-fourwd:      8 62% 58%;
     --road-atv:        45 66% 62%;
 
-    /* Decorative — lighter steps */
-    --accent-sage:  150 24% 68%;
-    --accent-mist:  186 32% 72%;
-    --accent-sky:   206 40% 76%;
-    --accent-iris:  248 32% 76%;
-    --accent-amber-soft:  38 56% 70%;
-    --accent-rose:  338 34% 78%;
-    --accent-plum:  282 26% 70%;
-    --accent-moss:   96 30% 56%;
-    --accent-clay-soft:   20 56% 62%;
   }
 }
 
@@ -323,80 +242,6 @@
 }
 
 @layer utilities {
-  .topo-pattern {
-    background-image:
-      repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 40px,
-        hsl(var(--topo-line) / 0.3) 40px,
-        hsl(var(--topo-line) / 0.3) 41px
-      ),
-      repeating-linear-gradient(
-        90deg,
-        transparent,
-        transparent 40px,
-        hsl(var(--topo-line) / 0.15) 40px,
-        hsl(var(--topo-line) / 0.15) 41px
-      );
-  }
-
-  .hero-topo {
-    background-color: hsl(var(--cream));
-    position: relative;
-  }
-
-  .dark .hero-topo {
-    background-color: hsl(var(--background));
-  }
-
-  .hero-topo::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-color: hsl(var(--earth));
-    -webkit-mask-image: url('/src/images/topography.svg');
-    mask-image: url('/src/images/topography.svg');
-    -webkit-mask-size: 400px 400px;
-    mask-size: 400px 400px;
-    -webkit-mask-repeat: repeat;
-    mask-repeat: repeat;
-    opacity: 0.15;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .dark .hero-topo::before {
-    background-color: hsl(var(--accent));
-    opacity: 0.08;
-  }
-
-  .hero-topo > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  .text-gradient-light {
-    background: linear-gradient(135deg, hsl(84 50% 65%) 0%, hsl(20 70% 65%) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .text-gradient-forest {
-    background: linear-gradient(135deg, hsl(var(--forest)) 0%, hsl(var(--accentdark)) 50%, hsl(var(--forest)) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .dark .text-gradient-forest {
-    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(74 68% 65%) 50%, hsl(40 83% 70%) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
   /* Floating animations for hero photos */
   @keyframes float-slow {
     0%, 100% {
@@ -440,46 +285,6 @@
 
   .animate-scroll:hover {
     animation-play-state: paused;
-  }
-
-  .gradient-hero {
-    background: linear-gradient(
-      135deg,
-      hsl(var(--forest)) 0%,
-      hsl(var(--forest-light)) 50%,
-      hsl(var(--terracotta)) 100%
-    );
-  }
-
-  .gradient-card {
-    background: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--sand) / 0.5) 100%);
-  }
-
-  /* Grainy texture overlay */
-  .grainy {
-    position: relative;
-  }
-
-  .grainy::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-    opacity: 0.03;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .grainy > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  .text-gradient {
-    background: linear-gradient(135deg, hsl(var(--forest)) 0%, hsl(var(--terracotta)) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
   }
 
   /* Hide scrollbar while allowing scroll */
@@ -631,7 +436,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 input[type="date"]::-webkit-calendar-picker-indicator:hover,
 input[type="time"]::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
-  background-color: hsl(var(--forest) / 0.1);
+  background-color: hsl(var(--pine-6) / 0.1);
 }
 
 /* Date/Time picker popup styling (Chrome/Safari) */
@@ -660,7 +465,7 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 ::-webkit-datetime-edit-hour-field:focus,
 ::-webkit-datetime-edit-minute-field:focus,
 ::-webkit-datetime-edit-ampm-field:focus {
-  background-color: hsl(var(--forest) / 0.15);
+  background-color: hsl(var(--pine-6) / 0.15);
   border-radius: 2px;
   outline: none;
 }
