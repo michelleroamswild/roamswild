@@ -2040,9 +2040,9 @@ export default function PhotoScout() {
                       type="checkbox"
                       checked={showDebugRimCandidates}
                       onChange={(e) => setShowDebugRimCandidates(e.target.checked)}
-                      className="w-3 h-3 rounded border-line text-pink-500"
+                      className="w-3 h-3 rounded border-line text-clay"
                     />
-                    <div className="w-2 h-2 rounded-full bg-pink-400" />
+                    <div className="w-2 h-2 rounded-full bg-clay" />
                     <span>Rim candidates (pre-NMS)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer text-xs">
@@ -2394,7 +2394,7 @@ export default function PhotoScout() {
               const getCategoryLabel = (category?: string) => {
                 switch (category) {
                   case 'EPIC_OVERLOOK': return { label: 'Epic Overlook', color: 'text-clay', bgColor: 'bg-clay/15' };
-                  case 'DRAMATIC_ENCLOSED': return { label: 'Dramatic View', color: 'text-indigo-700', bgColor: 'bg-indigo-100' };
+                  case 'DRAMATIC_ENCLOSED': return { label: 'Dramatic View', color: 'text-pine-6', bgColor: 'bg-pine-6/12' };
                   default: return { label: 'Scenic View', color: 'text-water', bgColor: 'bg-water/15' };
                 }
               };

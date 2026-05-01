@@ -19,8 +19,8 @@ const buttonVariants = cva(
         outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
         // Chip variants for filters
-        chip: "bg-secondary text-secondary-foreground hover:bg-sand-dark border border-border rounded-full text-xs font-medium",
-        "chip-active": "bg-primary text-primary-foreground rounded-full text-xs font-medium shadow-sm",
+        chip: "bg-cream text-ink-2 border border-line rounded-full text-xs font-medium hover:border-ink-3/50 hover:bg-paper-2",
+        "chip-active": "bg-pine-6 text-cream rounded-full text-xs font-medium shadow-sm",
       },
       size: {
         default: "h-10 px-4 py-2",

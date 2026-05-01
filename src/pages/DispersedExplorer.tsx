@@ -1395,10 +1395,10 @@ const DispersedExplorer = () => {
 
   const getSpotIcon = (type: PotentialSpot['type']) => {
     switch (type) {
-      case 'camp-site': return <Tent className="w-4 h-4 text-mossgreen" />;
-      case 'dead-end': return <MapPinLine className="w-4 h-4 text-orange-600" />;
-      case 'intersection': return <Path className="w-4 h-4 text-blue-600" />;
-      default: return <MapPin className="w-4 h-4 text-gray-600" />;
+      case 'camp-site': return <Tent className="w-4 h-4 text-pine-6" />;
+      case 'dead-end': return <MapPinLine className="w-4 h-4 text-ember" />;
+      case 'intersection': return <Path className="w-4 h-4 text-water" />;
+      default: return <MapPin className="w-4 h-4 text-ink-3" />;
     }
   };
 

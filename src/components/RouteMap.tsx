@@ -121,10 +121,10 @@ export function RouteMap({ stops, className, showDirections = true, onStopClick 
           position={selectedStop.coordinates}
           onCloseClick={() => setSelectedStop(null)}
         >
-          <div className="p-2 min-w-[200px]">
-            <h3 className="font-semibold text-foreground">{selectedStop.name}</h3>
-            <p className="text-sm text-muted-foreground mt-1">{selectedStop.description}</p>
-            <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+          <div className="p-1 min-w-[200px] font-sans">
+            <h3 className="text-[14px] font-semibold tracking-[-0.005em] text-ink">{selectedStop.name}</h3>
+            <p className="text-[12px] text-ink-3 mt-1 leading-[1.5]">{selectedStop.description}</p>
+            <div className="flex gap-3 mt-1.5 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
               <span>{selectedStop.duration}</span>
               <span>{selectedStop.elevation}</span>
             </div>

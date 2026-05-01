@@ -396,14 +396,14 @@ export const DispersedMap = ({
           position={mapTapPoint}
           onCloseClick={onDismissMapTap}
         >
-          <div className="min-w-[180px]">
-            <p className="text-xs text-gray-500 mb-2 font-mono">
+          <div className="min-w-[180px] font-sans">
+            <p className="text-[11px] text-ink-3 mb-2 font-mono uppercase tracking-[0.10em] font-semibold">
               {mapTapPoint.lat.toFixed(5)}, {mapTapPoint.lng.toFixed(5)}
             </p>
             <div className="flex gap-1.5">
               <button
                 onClick={onOpenSaveFromMap}
-                className="flex-1 px-2 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded hover:bg-emerald-700 transition-colors"
+                className="flex-1 px-2.5 py-1 rounded-full bg-pine-6 text-cream text-[11px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 transition-colors"
               >
                 Save
               </button>
@@ -414,9 +414,9 @@ export const DispersedMap = ({
                     '_blank'
                   );
                 }}
-                className="flex-1 px-2 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                className="flex-1 px-2.5 py-1 rounded-full bg-white text-ink-2 border border-line text-[11px] font-sans font-semibold tracking-[0.01em] hover:border-ink-3/50 hover:bg-cream transition-colors"
               >
-                Open Map
+                Open map
               </button>
             </div>
           </div>

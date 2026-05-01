@@ -317,13 +317,90 @@ const StyleGuide = () => {
               </div>
             </div>
             <div>
-              <Mono>TAGS · small, mono caps, outline only</Mono>
+              <Mono>TAGS · small, mono caps, outline only · facts and amenities</Mono>
               <div className="flex gap-1.5 mt-2.5 flex-wrap items-center">
                 {['BLM', 'USFS', 'Dead-end', '4WD', 'Vault toilet', 'Bear country', 'Free dispersed'].map((t) => (
                   <Tag key={t}>{t}</Tag>
                 ))}
               </div>
             </div>
+
+            {/* Filled accent chips — used for status, source, sub-kind labels.
+               Same shape as Tag but filled with an accent tint instead of outlined. */}
+            <div>
+              <Mono>STATUS CHIPS · filled accent · status, source, sub-kind</Mono>
+              <div className="flex gap-1.5 mt-2.5 flex-wrap items-center">
+                <StatusChip tone="pine">Saved</StatusChip>
+                <StatusChip tone="sage">USFS</StatusChip>
+                <StatusChip tone="clay">Pending</StatusChip>
+                <StatusChip tone="ember">Closed</StatusChip>
+                <StatusChip tone="water">Recreation.gov</StatusChip>
+                <StatusChip tone="ink">Owner</StatusChip>
+              </div>
+              <p className="text-[12.5px] text-ink-3 mt-2 leading-[1.55] max-w-[640px]">
+                Same dimensions as a Tag (10px mono, full-radius) but filled with{' '}
+                <code className="font-mono text-ink-2">bg-{`{accent}`}/15 text-{`{accent}`}</code>. Use for source
+                labels, status states, and category sub-kinds — anywhere a Tag's outline feels too quiet.
+              </p>
+            </div>
+
+            {/* Same chip shape with leading icon */}
+            <div>
+              <Mono>STATUS CHIPS · with icon · timed states</Mono>
+              <div className="flex gap-1.5 mt-2.5 flex-wrap items-center">
+                <StatusChip tone="pine" Icon={Check}>Approved</StatusChip>
+                <StatusChip tone="clay" Icon={Clock}>Pending</StatusChip>
+                <StatusChip tone="water" Icon={User}>Signed up</StatusChip>
+                <StatusChip tone="ember" Icon={Warning}>Failed</StatusChip>
+                <StatusChip tone="sage" Icon={Star}>Verified</StatusChip>
+              </div>
+            </div>
+
+            {/* Highlight type chips — used in Surprise Me banner + LocationDetail */}
+            <div>
+              <Mono>HIGHLIGHT CHIPS · type-coloured · for stops on a discovery card</Mono>
+              <div className="flex gap-1.5 mt-2.5 flex-wrap items-center">
+                <StatusChip tone="ember" Icon={Camera}>Viewpoint</StatusChip>
+                <StatusChip tone="sage" Icon={Path}>Trail</StatusChip>
+                <StatusChip tone="water" Icon={MapPinArea}>Water</StatusChip>
+                <StatusChip tone="clay" Icon={Tent}>Camp</StatusChip>
+              </div>
+            </div>
+
+            {/* Score badges — solid rounded chip with bold sans number */}
+            <div>
+              <Mono>SCORE BADGES · solid · ordinal score, 0–100</Mono>
+              <div className="flex gap-2 mt-2.5 flex-wrap items-center">
+                <ScoreBadge score={92} />
+                <ScoreBadge score={71} />
+                <ScoreBadge score={48} />
+                <ScoreBadge score={24} />
+                <span className="text-[12px] text-ink-3 ml-2">
+                  ≥70 pine · ≥50 clay · ≥30 ember · &lt;30 ink
+                </span>
+              </div>
+            </div>
+
+            {/* Code chips — invite codes, coords, mono ids */}
+            <div>
+              <Mono>CODE CHIPS · cream + line · invite codes, IDs, coords</Mono>
+              <div className="flex gap-1.5 mt-2.5 flex-wrap items-center">
+                <CodeChip>ROAM-4789</CodeChip>
+                <CodeChip>BLM-MOAB-12</CodeChip>
+                <CodeChip>38.55, -109.67</CodeChip>
+              </div>
+            </div>
+
+            {/* Permission badges — share dialog */}
+            <div>
+              <Mono>PERMISSION BADGES · soft · trip share dialog</Mono>
+              <div className="flex gap-1.5 mt-2.5 flex-wrap items-center">
+                <StatusChip tone="ink">Owner</StatusChip>
+                <StatusChip tone="pine">Edit</StatusChip>
+                <StatusChip tone="water">View</StatusChip>
+              </div>
+            </div>
+
             <div>
               <Mono>STATUS DOTS · single accent + shape</Mono>
               <div className="flex gap-2.5 mt-2.5 flex-wrap items-center">
@@ -774,3 +851,62 @@ const StyleGuide = () => {
 };
 
 export default StyleGuide;
+
+// ====== Tag helpers used inside section 09 ======
+
+type ChipTone = 'pine' | 'sage' | 'clay' | 'ember' | 'water' | 'ink';
+
+const CHIP_TONES: Record<ChipTone, string> = {
+  pine:  'bg-pine-6/12 text-pine-6',
+  sage:  'bg-sage/15 text-sage',
+  clay:  'bg-clay/15 text-clay',
+  ember: 'bg-ember/15 text-ember',
+  water: 'bg-water/15 text-water',
+  ink:   'bg-ink/8 text-ink-2 border border-line',
+};
+
+const StatusChip = ({
+  tone,
+  Icon,
+  children,
+}: {
+  tone: ChipTone;
+  Icon?: typeof Sun;
+  children: React.ReactNode;
+}) => (
+  <span
+    className={[
+      'inline-flex items-center gap-1 px-2 py-0.5 rounded-full',
+      'text-[10px] font-mono uppercase tracking-[0.10em] font-semibold',
+      CHIP_TONES[tone],
+    ].join(' ')}
+  >
+    {Icon && <Icon className="w-3 h-3" weight="regular" />}
+    {children}
+  </span>
+);
+
+const ScoreBadge = ({ score }: { score: number }) => {
+  const tone =
+    score >= 70 ? 'bg-pine-6 text-cream'
+    : score >= 50 ? 'bg-clay text-cream'
+    : score >= 30 ? 'bg-ember text-cream'
+    : 'bg-ink-3 text-cream';
+  return (
+    <span
+      className={[
+        'inline-flex items-center justify-center min-w-[36px] px-2 py-0.5 rounded-full',
+        'text-[12px] font-sans font-bold tracking-[-0.005em]',
+        tone,
+      ].join(' ')}
+    >
+      {score}
+    </span>
+  );
+};
+
+const CodeChip = ({ children }: { children: React.ReactNode }) => (
+  <code className="inline-flex items-center px-2 py-1 rounded-[8px] bg-cream border border-line text-ink text-[12px] font-mono font-semibold tracking-[0.06em]">
+    {children}
+  </code>
+);

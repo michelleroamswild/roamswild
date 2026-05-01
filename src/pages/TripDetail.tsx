@@ -704,10 +704,12 @@ const TripDetail = () => {
   // Show loading state while fetching trips
   if (isLoading || !generatedTrip || !tripConfig) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex items-center gap-3 text-muted-foreground">
-          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <span>Loading trip...</span>
+      <div className="min-h-screen bg-cream flex items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-3">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-pine-6/10">
+            <div className="w-5 h-5 border-2 border-pine-6 border-t-transparent rounded-full animate-spin" />
+          </div>
+          <p className="text-[12px] font-mono font-semibold uppercase tracking-[0.12em] text-pine-6">Loading trip…</p>
         </div>
       </div>
     );

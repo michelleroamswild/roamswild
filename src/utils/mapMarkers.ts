@@ -148,23 +148,3 @@ export function getPhotoHotspotColor(photoCount: number): string {
   }
 }
 
-// Type styles for consistency with card styling (uses accent color tokens)
-export function getTypeStyles(type: string): string {
-  switch (type) {
-    case 'hike':
-      return 'bg-pinesoft/20 text-emerald-800 dark:text-emerald-300 border-pinesoft/30';
-    case 'camp':
-      return 'bg-wildviolet/20 text-purple-800 dark:text-purple-300 border-wildviolet/30';
-    case 'viewpoint':
-      return 'bg-skyblue/20 text-blue-800 dark:text-blue-300 border-skyblue/30';
-    case 'gas':
-      return 'bg-blushorchid/20 text-pink-800 dark:text-pink-300 border-blushorchid/30';
-    case 'photo':
-      return 'bg-blushorchid/20 text-pink-800 dark:text-pink-300 border-blushorchid/30';
-    case 'start':
-    case 'end':
-      return 'bg-aquateal/20 text-teal-800 dark:text-teal-300 border-aquateal/30';
-    default:
-      return 'bg-lavenderslate/20 text-indigo-800 dark:text-indigo-300 border-lavenderslate/30';
-  }
-}
