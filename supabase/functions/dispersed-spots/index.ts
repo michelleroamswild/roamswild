@@ -103,6 +103,15 @@ serve(async (req) => {
         accessDifficulty: row.access_difficulty || null,
         // Worst-nearby road's tags — explains why a spot is rated extreme/hard
         accessRoad: row.access_road || null,
+        // True when the spot sits within ~50m of the containing public-land
+        // polygon's boundary — high risk of being on a private inholding.
+        nearPublicLandEdge: !!row.near_public_land_edge,
+        metersFromPublicLandEdge:
+          row.meters_from_public_land_edge != null
+            ? parseFloat(row.meters_from_public_land_edge)
+            : null,
+        // True when no current PAD-US polygon contains this spot at all.
+        outsidePublicLandPolygon: !!row.outside_public_land_polygon,
       };
     });
 

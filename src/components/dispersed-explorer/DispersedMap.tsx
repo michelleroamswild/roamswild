@@ -151,7 +151,8 @@ export const DispersedMap = ({
         const isBLM = land.managingAgency === 'BLM';
         const isNPS = land.managingAgency === 'NPS';
         const isState = land.managingAgency === 'STATE';
-        const isStateTrust = ['SDOL', 'SFW', 'SPR', 'SDNR'].includes(land.managingAgency);
+        // Mirror the broadened state-trust whitelist in use-public-lands.ts.
+        const isStateTrust = ['SDOL', 'SFW', 'SPR', 'SDNR', 'SLB', 'SLO', 'SDC', 'SDF', 'OTHS'].includes(land.managingAgency);
         const isLandTrust = land.managingAgency === 'NGO';
 
         const agencyKey = isBLM ? 'BLM'

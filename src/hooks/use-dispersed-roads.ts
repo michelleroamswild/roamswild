@@ -83,6 +83,15 @@ export interface PotentialSpot {
   // Access difficulty derived from worst nearby road OSM tags
   // (extreme = grade5/very_horrible — needs 4WD with rock-crawling capability)
   accessDifficulty?: 'easy' | 'moderate' | 'hard' | 'extreme' | 'unknown' | null;
+  // True when the spot sits within ~50m of the containing public-land
+  // polygon's boundary. High risk of being on a private inholding because
+  // PAD-US polygons routinely overlap private parcels near edges.
+  nearPublicLandEdge?: boolean;
+  metersFromPublicLandEdge?: number | null;
+  // True when no public-land polygon contains the spot at all — its
+  // metadata claims public land but no current PAD-US row matches the
+  // coords. Strongest "this might be wrong" signal.
+  outsidePublicLandPolygon?: boolean;
   // Worst-nearby road's tags that drove the rating — for the detail panel
   accessRoad?: {
     road_name?: string | null;

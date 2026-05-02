@@ -187,7 +187,13 @@ export function usePublicLands(
         // PAD-US State & NGO Lands query (state trust lands, land trusts, etc.)
         // SDOL = State Dept of Lands, SFW = State Fish & Wildlife, NGO = Land Trusts
         const stateLandsParams = new URLSearchParams({
-          where: "(Mang_Type='STAT' AND Mang_Name IN ('SDOL', 'SFW', 'SPR', 'SDNR')) OR Mang_Type='NGO' OR Mang_Type='TRIB'",
+          // Mang_Name codes for state-trust managers per the PAD-US 4.0 manual.
+          // The original whitelist missed `SLB` (State Land Board — Utah's
+          // SITLA, Idaho, Colorado etc.), `SLO` (State Land Office — NM, AZ),
+          // `SDC` (State Dept of Conservation — CA), `SDF` (State Dept of
+          // Forestry), `OTHS` (other state). Bug #X — explained why SITLA
+          // polygons weren't rendering in Moab.
+          where: "(Mang_Type='STAT' AND Mang_Name IN ('SDOL', 'SFW', 'SPR', 'SDNR', 'SLB', 'SLO', 'SDC', 'SDF', 'OTHS')) OR Mang_Type='NGO' OR Mang_Type='TRIB'",
           geometry: JSON.stringify({
             xmin: centerLng - (radiusMiles / 50),
             ymin: centerLat - (radiusMiles / 69),

@@ -6,8 +6,12 @@ import { Mono, Pill } from '@/components/redesign';
 import { cn } from '@/lib/utils';
 
 // Pin badge for the leading column. Always w-2 h-2 so the row aligns
-// regardless of which type/score the spot is.
+// regardless of which type/score the spot is. Quality flags
+// (outside-polygon / near-edge) take priority over everything else —
+// red signals "this might not actually be on public land."
 const SpotDot = ({ spot }: { spot: UnifiedSpot }) => {
+  if (spot.originalSpot?.outsidePublicLandPolygon || spot.originalSpot?.nearPublicLandEdge)
+    return <span className="w-2 h-2 rounded-full bg-ember flex-shrink-0" />;
   if (spot.category === 'campground') return <span className="w-2 h-2 rounded-full bg-pin-campground flex-shrink-0" />;
   if (spot.category === 'mine')       return <Tent className="w-3 h-3 text-pine-6 flex-shrink-0" weight="fill" />;
   if (spot.category === 'friend')     return <Users className="w-3 h-3 text-sage flex-shrink-0" weight="fill" />;

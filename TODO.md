@@ -49,6 +49,64 @@ Pre-existing on `main`, doesn't affect runtime. Likely a generated-types
 regression or a too-broad relationship typing in
 `src/integrations/supabase/types.ts`. Cosmetic but worth fixing eventually.
 
+## Hide OSM tracks in cities
+
+The road overlay on `/dispersed` shows every OSM track inside city limits,
+which is visual noise — those streets aren't relevant to dispersed-camping
+exploration. Probably worth a filter that drops road segments inside (or
+within some buffer of) admin-boundary city polygons before render. Cheapest
+implementation lives client-side: pass an `is_in_city` flag from the road
+import and skip rendering when true. Could share the same OSM admin-
+boundary import that the spot quality filter (#1 town distance) eventually
+needs.
+
+## Map polish — popovers, controls, overlays, pin consistency
+
+The map UI is leftover from before the Pine + Paper redesign. A handful of
+improvements have piled up worth doing as one coordinated pass rather than
+piecemeal:
+
+- **Redesign info popovers / tooltips** that appear on marker click. They
+  currently use Google's default chrome (white tail, generic typography) —
+  should match the Pine + Paper card surfaces (rounded-[14px], cream/paper
+  bg, mono captions, ink text).
+- **Redesign map controls** (zoom buttons, satellite toggle, legend
+  positioning). Currently using the default Maps controls; should be small
+  pill-style buttons matching the rest of the UI.
+- **Adopt brand colors for overlays.** Today's polygon fills and stroke
+  colors (`#d97706` BLM orange, `#06b6d4` state-trust cyan, `#7c3aed` NPS
+  purple, `#ec4899` land-trust pink) are arbitrary Tailwind defaults. Pick
+  hues from the Pine + Paper palette (clay, sage, water, ember, etc.) so
+  agency colors fit the rest of the design system.
+- **Adopt brand colors for spot pins.** Same idea on the marker side —
+  current red `#dc2626` / black `#000000` / orange `#f97316` / yellow
+  `#eab308` are off-system. Map every pin state to a token from the palette.
+- **Consistency across pages.** Every page that renders a Google Map
+  (Index hero featured-spot, Index Near You grid, DispersedExplorer,
+  AdminSpotReview, MapPreview, LocationDetail, IoTest) should share the
+  same control style, popover style, and pin vocabulary. Pull them into a
+  small shared module so future maps inherit the conventions automatically.
+
+## Paginate `get_public_lands_in_bbox`
+
+PostgREST silently caps RPC results at 1000 rows. After the Designations
+import (Grand Staircase, Bears Ears, Vermilion Cliffs, plus 500+ WSAs/
+ACECs), Utah has 5000+ polygons intersecting its bbox — but the admin
+map only ever sees the largest 1000 (`ORDER BY ST_Area DESC`). Smaller
+agency-specific polygons get truncated.
+
+Fix: add `p_offset` to `get_public_lands_in_bbox`, paginate from the
+client until a page returns < 1000. Same pattern as the Range-header
+trick we tried — except this version actually works because it's
+parameter-driven, not header-driven. Call site is
+`src/pages/AdminSpotReview.tsx`'s polygon-load effect (and similarly in
+`src/hooks/use-public-lands.ts` for the explorer map).
+
+Deferred because the truncated view is good enough for state-level
+review work — the missing polygons are typically smaller agency rows
+behind the giant NMs / forests visually, and the admin still sees the
+big picture.
+
 ## Navigation flicker between pages
 
 When navigating from the home page (which has a `data-dark-band` section) to

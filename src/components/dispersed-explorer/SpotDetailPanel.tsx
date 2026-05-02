@@ -87,6 +87,23 @@ export const SpotDetailPanel = ({
   // Consolidated tags (excluding the source/derived flag — that lives in the
   // hero badge slot). Maps land/road flags to the redesign accent palette.
   const tags: { key: string; label: ReactNode; variant: Parameters<typeof DetailTag>[0]['variant'] }[] = [];
+  // Surface quality flags first — they're the strongest "this might not be
+  // a usable spot" signals and should be the most prominent chips.
+  if (selectedSpot.outsidePublicLandPolygon) {
+    tags.push({
+      key: 'outside',
+      variant: 'ember',
+      label: 'Not on public land (no polygon contains it)',
+    });
+  } else if (selectedSpot.nearPublicLandEdge) {
+    const meters = selectedSpot.metersFromPublicLandEdge;
+    const detail = meters != null ? ` (${Math.round(meters)}m)` : '';
+    tags.push({
+      key: 'edge',
+      variant: 'ember',
+      label: `Possible private inholding${detail}`,
+    });
+  }
   if (selectedSpot.isOnMVUMRoad) tags.push({ key: 'mvum', variant: 'sage', label: 'USFS MVUM' });
   if (selectedSpot.isOnBLMRoad)  tags.push({ key: 'blm', variant: 'clay', label: 'BLM' });
   if (selectedSpot.isOnPublicLand && !selectedSpot.isOnMVUMRoad && !selectedSpot.isOnBLMRoad) {

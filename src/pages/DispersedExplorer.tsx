@@ -922,7 +922,7 @@ const DispersedExplorer = () => {
     const usfsPolygons = publicLands.filter(l => l.managingAgency === 'USFS' || l.managingAgency === 'FS').length;
     const npsPolygons = publicLands.filter(l => l.managingAgency === 'NPS').length;
     const statePolygons = publicLands.filter(l => l.managingAgency === 'STATE').length;
-    const stateTrustPolygons = publicLands.filter(l => ['SDOL', 'SFW', 'SPR', 'SDNR'].includes(l.managingAgency)).length;
+    const stateTrustPolygons = publicLands.filter(l => ['SDOL', 'SFW', 'SPR', 'SDNR', 'SLB', 'SLO', 'SDC', 'SDF', 'OTHS'].includes(l.managingAgency)).length;
     const landTrustPolygons = publicLands.filter(l => l.managingAgency === 'NGO').length;
     console.log(`Polygons: ${blmPolygons} BLM, ${usfsPolygons} USFS, ${npsPolygons} NPS, ${statePolygons} State Park, ${stateTrustPolygons} State Trust, ${landTrustPolygons} Land Trust, ${publicLands.length} total`);
 
@@ -1456,14 +1456,18 @@ const DispersedExplorer = () => {
       });
     }
 
-    // Color rules:
+    // Color rules (in priority order):
+    //   - Outside any public-land polygon (DB metadata wrong) → red warning
+    //   - Near public-land edge (likely on private inholding) → red warning
     //   - Hard/extreme access (grade4–5, very_horrible, 4wd-only) → black warning
-    //   - Known OSM camp-site (and not hard/extreme) → green
+    //   - Known OSM camp-site (and not flagged) → green
     //   - Moderate access (grade3, high-clearance) → orange
     //   - Everything else → yellow
     const diff = spot.accessDifficulty;
     let fillColor: string;
-    if (diff === 'extreme' || diff === 'hard') {
+    if (spot.outsidePublicLandPolygon || spot.nearPublicLandEdge) {
+      fillColor = '#dc2626'; // red — possible private inholding / outside polygon
+    } else if (diff === 'extreme' || diff === 'hard') {
       fillColor = '#000000';
     } else if (spot.type === 'camp-site') {
       fillColor = '#3d7a40'; // accent-mossgreen

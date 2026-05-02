@@ -203,6 +203,13 @@ export function useDispersedDatabase(
           accessDifficulty: (s as { accessDifficulty?: string }).accessDifficulty ?? null,
           // The worst-nearby road's tags (road_name, tracktype, smoothness, …)
           accessRoad: (s as { accessRoad?: Record<string, unknown> }).accessRoad ?? null,
+          // Public-land-edge proximity flag (catches spots on inholdings)
+          nearPublicLandEdge: (s as { nearPublicLandEdge?: boolean }).nearPublicLandEdge ?? false,
+          metersFromPublicLandEdge:
+            (s as { metersFromPublicLandEdge?: number | null }).metersFromPublicLandEdge ?? null,
+          // Stronger flag: spot's coords don't fall inside any public-land polygon.
+          outsidePublicLandPolygon:
+            (s as { outsidePublicLandPolygon?: boolean }).outsidePublicLandPolygon ?? false,
         }));
 
         const campgrounds: EstablishedCampground[] = (campgroundsData.campgrounds || []).map(

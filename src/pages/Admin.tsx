@@ -183,6 +183,25 @@ const Admin = () => {
             <StatCard accent="water" Icon={UserCircle} label="Signed up" value={usedCount} />
           </div>
 
+          {/* Tools — additional admin surfaces. Quick links in the same paper-2 register. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+            <button
+              onClick={() => navigate('/admin/spot-review')}
+              className="text-left bg-white dark:bg-paper-2 border border-line dark:border-line-2 rounded-[18px] px-5 py-4 hover:border-ember/40 hover:bg-ember/[0.03] transition-colors"
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-ember/10 text-ember">
+                  <Warning className="w-3.5 h-3.5" weight="regular" />
+                </span>
+                <Mono className="text-ember">Spot quality review</Mono>
+              </div>
+              <p className="text-[13px] text-ink-3 leading-[1.45]">
+                Triage spots flagged as outside any public-land polygon or near
+                an inholding edge. Vote keep / remove, then bulk-delete.
+              </p>
+            </button>
+          </div>
+
           {/* Table */}
           <div className="bg-white dark:bg-paper-2 border border-line rounded-[18px] overflow-hidden">
             <div className="overflow-x-auto">
