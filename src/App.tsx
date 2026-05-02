@@ -20,6 +20,7 @@ import Landing from "./pages/Landing";
 import RouteDetail from "./pages/RouteDetail";
 import LocationDetail from "./pages/LocationDetail";
 import SavedLocations from "./pages/SavedLocations";
+import Profile from "./pages/Profile";
 import CreateTrip from "./pages/CreateTrip";
 import TripDetail from "./pages/TripDetail";
 import DayDetail from "./pages/DayDetail";
@@ -41,6 +42,7 @@ import PhotoWeatherTest from "./pages/PhotoWeatherTest";
 import TerrainValidation from "./pages/TerrainValidation";
 import PhotoScout from "./pages/PhotoScout";
 import Admin from "./pages/Admin";
+import AdminSpotReview from "./pages/AdminSpotReview";
 import Friends from "./pages/Friends";
 import IoTest from "./pages/IoTest";
 
@@ -96,6 +98,7 @@ const App = () => (
                   <Route path="/route/:id" element={<ProtectedRoute><RouteDetail /></ProtectedRoute>} />
                   <Route path="/location/:id" element={<ProtectedRoute><LocationDetail /></ProtectedRoute>} />
                   <Route path="/saved" element={<ProtectedRoute><SavedLocations /></ProtectedRoute>} />
+                  <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                   <Route path="/create-trip" element={<ProtectedRoute><CreateTrip /></ProtectedRoute>} />
                   <Route path="/trip/:slug" element={<ProtectedRoute><TripDetail /></ProtectedRoute>} />
                   <Route path="/trip/:slug/day/:dayNumber" element={<ProtectedRoute><DayDetail /></ProtectedRoute>} />
@@ -104,6 +107,7 @@ const App = () => (
                   <Route path="/join/:token" element={<ProtectedRoute><JoinTrip /></ProtectedRoute>} />
                   <Route path="/dispersed" element={<ProtectedRoute><DispersedExplorer /></ProtectedRoute>} />
                   <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+                  <Route path="/admin/spot-review" element={<ProtectedRoute><AdminSpotReview /></ProtectedRoute>} />
                   <Route path="/friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
                   {/* Feature-gated routes */}
                   <Route path="/campsites" element={

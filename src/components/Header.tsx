@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Jeep, List, SignOut, Tent, Moon, Sun, Users, Lock, CaretDown, MapPin, CheckCircle } from "@phosphor-icons/react";
+import { Jeep, List, SignOut, Tent, Moon, Sun, Users, Lock, CaretDown, MapPin, CheckCircle, User as UserIcon } from "@phosphor-icons/react";
 import { useFriends } from "@/context/FriendsContext";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -300,6 +300,12 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
               </DropdownMenuLabel>
               <DropdownMenuSeparator className="bg-line dark:bg-line-2" />
               <DropdownMenuItem asChild>
+                <Link to="/profile" className="flex items-center cursor-pointer text-[14px]">
+                  <UserIcon className="w-4 h-4 mr-2 text-ink-2" weight="regular" />
+                  Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
                 <Link to="/friends" className="flex items-center cursor-pointer text-[14px]">
                   <Users className="w-4 h-4 mr-2 text-ink-2" weight="regular" />
                   Friends
@@ -420,6 +426,16 @@ export const Header = ({ showBorder: _showBorder = false }: HeaderProps) => {
                   )}
                 >
                   Terrain Analysis <Mono className="ml-2 text-clay">BETA</Mono>
+                </Link>
+                <Link
+                  to="/profile"
+                  onClick={closeMobileMenu}
+                  className={cn(
+                    "flex items-center px-4 py-3 rounded-full font-sans font-semibold text-[14px] transition-colors",
+                    isActive('/profile') ? "bg-ink dark:bg-ink-pine text-cream" : "text-ink hover:bg-ink/5"
+                  )}
+                >
+                  Profile
                 </Link>
                 <Link
                   to="/friends"

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Lock, Moon, SignOut, Sun, Tent, Users } from '@phosphor-icons/react';
+import { Lock, Moon, SignOut, Sun, Tent, User as UserIcon, Users } from '@phosphor-icons/react';
 import { useAuth } from '@/context/AuthContext';
 import { useFriends } from '@/context/FriendsContext';
 import { useTheme } from '@/hooks/use-theme';
@@ -66,6 +66,12 @@ export const AccountAvatarMenu = ({ size = 'default', className }: AccountAvatar
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-line dark:bg-line-2" />
+        <DropdownMenuItem asChild>
+          <Link to="/profile" className="flex items-center cursor-pointer text-[14px]">
+            <UserIcon className="w-4 h-4 mr-2 text-ink-2" weight="regular" />
+            Profile
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link to="/friends" className="flex items-center cursor-pointer text-[14px]">
             <Users className="w-4 h-4 mr-2 text-ink-2" weight="regular" />
