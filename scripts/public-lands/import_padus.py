@@ -267,7 +267,7 @@ def main() -> None:
     # `padus4_<OBJECTID>` not a content hash). Category distinguishes Fee
     # ownership polygons from Designation/Proclamation overlays.
     columns = ['OBJECTID', 'Category', 'Unit_Nm', 'Mang_Name', 'Mang_Type',
-               'Des_Tp', 'Pub_Access', 'GIS_Acres', 'State_Nm']
+               'Des_Tp', 'Pub_Access', 'GIS_Acres', 'State_Nm', 'IUCN_Cat']
     padus = gpd.read_file(PADUS_GDB, layer=PADUS_LAYER, columns=columns)
     print(f'  Loaded {len(padus)} raw polygons')
 
@@ -388,6 +388,12 @@ def main() -> None:
         des_tp = row.get('Des_Tp')
         des_label = dt_label.get(str(des_tp), des_tp) if des_tp else None
 
+        # IUCN_Cat is "N/A" / NaN for unclassified rows in PAD-US. Normalise
+        # those to NULL so downstream filters don't have to special-case them.
+        iucn = row.get('IUCN_Cat')
+        if iucn is None or (isinstance(iucn, float) and iucn != iucn) or str(iucn).strip().upper() in {'', 'N/A', 'NA'}:
+            iucn = None
+
         payload = {
             'p_external_id': external_id,
             'p_source_type': SOURCE_TYPE_MAP.get(row.get('Mang_Type', ''), 'pad_us'),
@@ -398,6 +404,7 @@ def main() -> None:
             'p_area_acres': float(row['GIS_Acres']) if row.get('GIS_Acres') else None,
             'p_dispersed_camping_allowed': dispersed_allowed(des_tp, row.get('Mang_Type')),
             'p_category': row.get('Category') or None,
+            'p_protect_class': iucn,
         }
 
         ok, err = insert_polygon(svc_key, payload)

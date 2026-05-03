@@ -120,6 +120,42 @@ To run: drop `--state UT` and run nationwide. Two prerequisites:
    (single `POST /rest/v1/public_lands` with array body) to drop wall
    time to maybe an hour.
 
+## Switch DispersedExplorer to DB-backed public-land polygons
+
+Today `src/hooks/use-public-lands.ts` fetches polygons live from three
+external APIs every pan: USA Federal Lands ArcGIS, PAD-US State Lands
+ArcGIS, BLM SMA proxy, plus Overpass for OSM-derived land. Meanwhile
+AdminSpotReview, the `derive_*` RPCs, `compute_spot_public_land_edge_
+distance`, and the new `delete_flagged_*` RPCs all use our own
+`public_lands` table. So the explorer's in/out check uses one source
+of polygons and the DB-side gates use a different one — they usually
+agree but not always.
+
+Goal: rewrite `usePublicLands` to call the DB-backed
+`get_public_lands_in_bbox` RPC and drop the external API calls. Map
+the RPC's return shape onto whatever the explorer + map components
+expect. Single source of truth across client filter, server gate,
+and admin tools.
+
+Wins:
+- No divergence between client filter and DB gate.
+- Egress goes to our own Supabase instead of three third-parties.
+- Picks up the Death Ridge coincident-polygon fix (migration 20260238)
+  for free — external APIs don't have that logic.
+- Fewer flaky external dependencies (those ArcGIS endpoints stall
+  semi-regularly).
+
+Two prerequisites must land before the cutover is clean:
+1. **Nationwide PAD-US Designations import** (above section). Without
+   it, switching the explorer to DB-backed polygons loses Wilderness/
+   NM/WSA polygon rendering outside Utah until that import is done.
+2. **Paginate `get_public_lands_in_bbox`** (next section). The 1000-
+   row PostgREST cap means dense states like UT silently lose smaller
+   polygons; need `p_offset` so the client can page through.
+
+Worth doing in this order: Designations import → RPC pagination →
+explorer cutover. Each is a self-contained piece.
+
 ## Paginate `get_public_lands_in_bbox`
 
 PostgREST silently caps RPC results at 1000 rows. After the Designations
