@@ -46,7 +46,7 @@ const FilterGroup = ({
 // Accent → static Tailwind class triples. JIT can't compile dynamic class
 // names so each accent is a flat lookup. Keeps the checkbox + dot in sync.
 type Accent =
-  | 'pin-safe' | 'pin-easy' | 'pin-moderate' | 'pin-campground'
+  | 'pin-safe' | 'pin-easy' | 'pin-moderate' | 'pin-campground' | 'pin-community'
   | 'pine-6'
   | 'land-blm' | 'land-usfs' | 'land-nps' | 'land-statepark' | 'land-statetrust' | 'land-landtrust' | 'land-tribal';
 
@@ -55,6 +55,7 @@ const ACCENT_CLASSES: Record<Accent, { bg: string; border: string; dot: string }
   'pin-easy':       { bg: 'bg-pin-easy',           border: 'border-pin-easy',           dot: 'bg-pin-easy' },
   'pin-moderate':   { bg: 'bg-pin-moderate',       border: 'border-pin-moderate',       dot: 'bg-pin-moderate' },
   'pin-campground': { bg: 'bg-pin-campground',     border: 'border-pin-campground',     dot: 'bg-pin-campground' },
+  'pin-community':  { bg: 'bg-pin-community',      border: 'border-pin-community',      dot: 'bg-pin-community' },
   'pine-6':         { bg: 'bg-pine-6',             border: 'border-pine-6',             dot: 'bg-pine-6' },
   'land-blm':        { bg: 'bg-land-blm-stroke',        border: 'border-land-blm-stroke',        dot: 'bg-land-blm-stroke' },
   'land-usfs':       { bg: 'bg-land-usfs-stroke',       border: 'border-land-usfs-stroke',       dot: 'bg-land-usfs-stroke' },
@@ -147,6 +148,7 @@ const InlinePill = ({
 
 const SPOT_TYPES: { key: string; label: string; accent: Accent }[] = [
   { key: 'known',       label: 'Known sites',     accent: 'pin-safe' },
+  { key: 'community',   label: 'Community',       accent: 'pin-community' },
   { key: 'high',        label: 'High confidence', accent: 'pin-easy' },
   { key: 'medium',      label: 'Moderate',        accent: 'pin-moderate' },
   { key: 'campgrounds', label: 'Campgrounds',     accent: 'pin-campground' },

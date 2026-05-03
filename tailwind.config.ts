@@ -75,14 +75,6 @@ export default {
   				DEFAULT: 'hsl(var(--accent))',
   				foreground: 'hsl(var(--accent-foreground))'
   			},
-  			popover: {
-  				DEFAULT: 'hsl(var(--popover))',
-  				foreground: 'hsl(var(--popover-foreground))'
-  			},
-  			card: {
-  				DEFAULT: 'hsl(var(--card))',
-  				foreground: 'hsl(var(--card-foreground))'
-  			},
 
   			// 2026 Redesign tokens — Pine + Paper
   			cream:    'hsl(var(--cream))',
@@ -121,6 +113,7 @@ export default {
   				campground: 'hsl(var(--pin-campground))',
   				moderate:   'hsl(var(--pin-moderate))',
   				hard:       'hsl(var(--pin-hard))',
+  				community:  'hsl(var(--pin-community))',
   			},
   			land: {
   				blm:        { DEFAULT: 'hsl(var(--land-blm-fill))',        stroke: 'hsl(var(--land-blm-stroke))' },
@@ -138,16 +131,6 @@ export default {
   				fourwd:    'hsl(var(--road-fourwd))',
   				atv:       'hsl(var(--road-atv))',
   			},
-  			sidebar: {
-  				DEFAULT: 'hsl(var(--sidebar-background))',
-  				foreground: 'hsl(var(--sidebar-foreground))',
-  				primary: 'hsl(var(--sidebar-primary))',
-  				'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
-  				accent: 'hsl(var(--sidebar-accent))',
-  				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
-  				border: 'hsl(var(--sidebar-border))',
-  				ring: 'hsl(var(--sidebar-ring))'
-  			}
   		},
   		borderRadius: {
   			lg: 'var(--radius)',

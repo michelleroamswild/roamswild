@@ -1039,7 +1039,11 @@ const DispersedExplorer = () => {
     console.log(`Derived spots: ${derivedSpots.length} total, ${filteredDerived.length} after filtering, ${finalDerived.length} after dedup`);
 
     // Filter out spots with score < 25 (we don't show the Unverified category)
-    const qualifiedDerived = finalDerived.filter(s => s.score >= 25);
+    // Score gate applies to algorithmically-derived spots only. Community-
+    // contributed spots (sub_kind='community') don't carry a confidence
+    // score and would always sit at 0 — bypass the gate for them so they
+    // actually surface on the map.
+    const qualifiedDerived = finalDerived.filter(s => s.subKind === 'community' || s.score >= 25);
 
     // Enrich unnamed spots with public land names
     // Track counts per land area for numbering
@@ -1075,15 +1079,19 @@ const DispersedExplorer = () => {
       // Spot type/confidence filter (multi-select)
       // If no filters selected (empty set), show all spots
       if (spotFilters.size > 0) {
-        const isKnown = spot.type === 'camp-site';
-        const isHigh = !isKnown && spot.score >= 35;
-        const isMedium = !isKnown && spot.score >= 25 && spot.score < 35;
+        const isCommunity = spot.subKind === 'community';
+        const isKnown = !isCommunity && spot.type === 'camp-site';
+        // Community spots aren't scored on the derived high/medium ramp;
+        // exclude them from those buckets so they only match the
+        // 'community' filter.
+        const isHigh = !isKnown && !isCommunity && spot.score >= 35;
+        const isMedium = !isKnown && !isCommunity && spot.score >= 25 && spot.score < 35;
 
-        // Check if spot matches any selected filter
         const matches =
-          (spotFilters.has('known') && isKnown) ||
-          (spotFilters.has('high') && isHigh) ||
-          (spotFilters.has('medium') && isMedium);
+          (spotFilters.has('known')     && isKnown) ||
+          (spotFilters.has('community') && isCommunity) ||
+          (spotFilters.has('high')      && isHigh) ||
+          (spotFilters.has('medium')    && isMedium);
 
         if (!matches) return false;
       }
@@ -1255,17 +1263,21 @@ const DispersedExplorer = () => {
 
     // Add filtered derived spots — skip any whose UUID is in the local
     // remove queue so they disappear immediately after the user marks
-    // them, without a DB round-trip.
+    // them, without a DB round-trip. sub_kind='community' rows split
+    // into the 'community' category so they get their own filter pill,
+    // legend swatch, and pin color (pink) instead of being lumped in
+    // with computed dead-ends.
     filteredPotentialSpots.forEach(spot => {
       if (removeIds.has(spot.id)) return;
       const distance = getDistanceMiles(spot.lat, spot.lng);
       const recScore = recScoreMap.get(spot.id);
+      const isCommunity = spot.subKind === 'community';
       unified.push({
-        id: `derived-${spot.id}`,
+        id: `${isCommunity ? 'community' : 'derived'}-${spot.id}`,
         name: spot.name,
         lat: spot.lat,
         lng: spot.lng,
-        category: 'derived',
+        category: isCommunity ? 'community' : 'derived',
         score: spot.score,
         spotType: spot.type,
         reasons: spot.reasons,
@@ -1540,6 +1552,7 @@ const DispersedExplorer = () => {
     // Color rules (in priority order):
     //   - Outside any public-land polygon (DB metadata wrong) → red warning
     //   - Near public-land edge (likely on private inholding) → red warning
+    //   - Community-contributed (sub_kind='community') → pink
     //   - Hard/extreme access (grade4–5, very_horrible, 4wd-only) → black warning
     //   - Known OSM camp-site (and not flagged) → green
     //   - Moderate access (grade3, high-clearance) → orange
@@ -1548,6 +1561,8 @@ const DispersedExplorer = () => {
     let fillColor: string;
     if (spot.outsidePublicLandPolygon || spot.nearPublicLandEdge) {
       fillColor = '#dc2626'; // red — possible private inholding / outside polygon
+    } else if (spot.subKind === 'community') {
+      fillColor = 'hsl(320 45% 50%)'; // pin-community pink — vouched-for user submissions
     } else if (diff === 'extreme' || diff === 'hard') {
       fillColor = '#000000';
     } else if (spot.type === 'camp-site') {

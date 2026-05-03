@@ -41,6 +41,36 @@ but if you ever want data-source highlights (USFS trail names, OSM peaks,
 etc.) the edge function would need to query each bucket inside the region's
 bbox and include it on the response.
 
+## Surprise Me — auto-derive regions from spots data
+
+Today the surprise pool is just the ~15 hand-curated rows seeded by
+`supabase/seeds/surprise_me_regions.sql` (Owyhee, Sawtooth, Olympic Coast,
+Lost Coast, etc.). The scoring layer (`region_metrics`) is rich, but the
+candidate set is fixed at whatever was hand-typed into the seed file — new
+spot imports never expand the pool. That's why the homepage "featured
+region" feels static.
+
+Plan: replace the seed list with regions auto-derived from the `spots`
+table. Cluster spots on H3 hexes (or grow polygons around dispersed-camp
+density), assign biome from the dominant public-land overlay, and hydrate
+`region_metrics` from real counts (trail count from OSM inside bbox,
+campsite count from `spots`, popularity from view/save counts, snow cover
+from a SNODAS feed, etc.). A nightly `pg_cron` job refreshes the metrics
+so seasonality actually shifts what surfaces — alpine in summer, desert
+in winter, etc.
+
+**Why deferred:** waiting until the community-spot import lands so the
+clustering pass runs over the full dataset, not the derived-only subset.
+Running it before community spots are in would produce regions that look
+right for known dispersed sites but miss whole areas that only appear
+once community contributions are merged.
+
+Bonus once the auto-derive is in: pass profile preferences (vehicle,
+home base, biome history) from the homepage into the `surprise-me` edge
+function. The function already accepts `userVehicle` and `excludeBiomes`
+but the homepage flow doesn't supply them — every user gets the same
+unfiltered surprise today.
+
 ## Pre-existing supabase typing errors
 
 `src/pages/Index.tsx` throws several "type instantiation is excessively deep"

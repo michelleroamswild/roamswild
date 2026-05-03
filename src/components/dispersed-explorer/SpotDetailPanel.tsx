@@ -147,7 +147,7 @@ export const SpotDetailPanel = ({
                 type="button"
                 onClick={onMarkForDelete}
                 title="Hide from map and queue for deletion in admin review"
-                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-mono uppercase tracking-[0.10em] text-ember hover:text-ember-stroke hover:bg-ember/10 transition-colors"
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-[8px] text-[11px] font-mono uppercase tracking-[0.10em] text-ember hover:text-ember-stroke hover:bg-ember/10 transition-colors"
               >
                 <TrashSimple className="w-3.5 h-3.5" weight="regular" />
                 Mark to delete

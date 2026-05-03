@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import type { PotentialSpot, EstablishedCampground, MVUMRoad, OSMTrack } from './use-dispersed-roads';
 import type { PublicLand } from './use-public-lands';
 
@@ -143,32 +144,76 @@ export function useDispersedDatabase(
       setError(null);
 
       try {
-        // Fetch spots, campgrounds, and roads in parallel
-        // Use high limit to get all spots - client-side handles filtering/display
-        const [spotsResponse, campgroundsResponse, roadsResponse] = await Promise.all([
-          fetch(
-            `${SUPABASE_URL}/functions/v1/dispersed-spots?lat=${lat}&lng=${lng}&radius=${radiusMiles}&include_derived=true&limit=1000`,
-            { signal: controller.signal }
-          ),
-          fetch(
-            `${SUPABASE_URL}/functions/v1/dispersed-campgrounds?lat=${lat}&lng=${lng}&radius=${radiusMiles}`,
-            { signal: controller.signal }
-          ),
-          fetch(
-            `${SUPABASE_URL}/functions/v1/dispersed-roads?lat=${lat}&lng=${lng}&radius=${radiusMiles}&limit=1000&zoom=${zoom}`,
-            { signal: controller.signal }
-          ),
-        ]);
+        // Bbox derived from lat/lng/radius. Same rough conversion the
+        // explorer uses elsewhere — 1°lat ≈ 69mi, 1°lng ≈ 50mi at
+        // continental US latitudes. Used by the direct community fetch.
+        const dLat = radiusMiles / 69;
+        const dLng = radiusMiles / 50;
+        const minLat = lat - dLat;
+        const maxLat = lat + dLat;
+        const minLng = lng - dLng;
+        const maxLng = lng + dLng;
 
+        // Four parallel fetches:
+        //   - dispersed-spots edge fn → derived dead-ends + OSM camp-sites
+        //   - dispersed-campgrounds edge fn → established campgrounds
+        //   - dispersed-roads edge fn → MVUM + OSM roads
+        //   - DIRECT PostgREST query for sub_kind='community' rows
+        //
+        // Community spots come straight from the spots table — no need
+        // to drag them through the heavy ST_DWithin geography path in
+        // get_dispersed_spots. Their amenities + extra columns already
+        // carry access_difficulty / access_road / amenity flags, so we
+        // pass those through verbatim. Side effect: when the dispersed-
+        // spots edge function 500s on cold cache, community pins still
+        // render because they came from this independent path.
+        const [spotsResponse, campgroundsResponse, roadsResponse, communityResult] =
+          await Promise.all([
+            fetch(
+              `${SUPABASE_URL}/functions/v1/dispersed-spots?lat=${lat}&lng=${lng}&radius=${radiusMiles}&include_derived=true&limit=1000`,
+              { signal: controller.signal }
+            ),
+            fetch(
+              `${SUPABASE_URL}/functions/v1/dispersed-campgrounds?lat=${lat}&lng=${lng}&radius=${radiusMiles}`,
+              { signal: controller.signal }
+            ),
+            fetch(
+              `${SUPABASE_URL}/functions/v1/dispersed-roads?lat=${lat}&lng=${lng}&radius=${radiusMiles}&limit=1000&zoom=${zoom}`,
+              { signal: controller.signal }
+            ),
+            supabase
+              .from('spots')
+              .select(
+                'id, name, latitude, longitude, kind, sub_kind, source, public_land_manager, public_land_unit, public_land_designation, land_type, amenities, extra'
+              )
+              .eq('sub_kind', 'community')
+              .gte('latitude', minLat)
+              .lte('latitude', maxLat)
+              .gte('longitude', minLng)
+              .lte('longitude', maxLng)
+              .limit(2000)
+              .abortSignal(controller.signal)
+              .then((res) => res, (err) => ({ data: null, error: err })),
+          ]);
+
+        // Edge-function spots: only fail-hard on the spots fetch when
+        // community ALSO came back empty — otherwise community alone is
+        // enough to render something useful while the edge fn recovers.
         if (!spotsResponse.ok) {
-          throw new Error(`Spots API error: ${spotsResponse.status}`);
+          const communityCount = Array.isArray(communityResult?.data) ? communityResult.data.length : 0;
+          if (communityCount === 0) {
+            throw new Error(`Spots API error: ${spotsResponse.status}`);
+          }
+          console.warn(
+            `Spots API error: ${spotsResponse.status} — falling back to community-only (${communityCount} rows)`,
+          );
         }
         if (!campgroundsResponse.ok) {
-          throw new Error(`Campgrounds API error: ${campgroundsResponse.status}`);
+          console.warn(`Campgrounds API error: ${campgroundsResponse.status}`);
         }
 
-        const spotsData = await spotsResponse.json();
-        const campgroundsData = await campgroundsResponse.json();
+        const spotsData = spotsResponse.ok ? await spotsResponse.json() : { spots: [] };
+        const campgroundsData = campgroundsResponse.ok ? await campgroundsResponse.json() : { campgrounds: [] };
 
         // Roads are optional - don't fail if they don't load
         let roadsData: { roads?: DatabaseRoad[] } = { roads: [] };
@@ -178,13 +223,25 @@ export function useDispersedDatabase(
           console.warn('Roads API error:', roadsResponse.status);
         }
 
-        // Transform to expected interfaces
-        const spots: PotentialSpot[] = (spotsData.spots || []).map((s: DatabaseSpot) => ({
+        // Transform to expected interfaces.
+        // Drop community rows from the edge-function response — we
+        // pull community separately from the direct query below to
+        // keep them independent of the heavy ST_DWithin path. Without
+        // this filter, every community spot would appear twice.
+        const edgeSpotsRaw: DatabaseSpot[] = (spotsData.spots || []).filter(
+          (s: DatabaseSpot) => (s as { subKind?: string }).subKind !== 'community',
+        );
+        const spots: PotentialSpot[] = edgeSpotsRaw.map((s: DatabaseSpot) => ({
           id: s.id,
           lat: s.lat,
           lng: s.lng,
           name: s.name || s.roadName || 'Dispersed Spot',
           type: s.type,
+          // DB-provenance fields, surfaced via 20260250 RPC. Lets the
+          // explorer's unifiedSpotList builder split sub_kind='community'
+          // out of the catch-all 'dead-end' bucket.
+          kind: (s as { kind?: string }).kind ?? undefined,
+          subKind: (s as { subKind?: string }).subKind ?? undefined,
           score: s.score,
           reasons: s.reasons,
           source: s.source,

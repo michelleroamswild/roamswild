@@ -25,6 +25,7 @@ const LAND_AGENCIES: { key: string; label: string; fill: string; stroke: string 
 // map markers, so the legend always matches what the user sees on the map.
 const SPOT_LEGEND: { dot?: string; label: string; tent?: boolean }[] = [
   { dot: 'bg-pin-safe',       label: 'Known campsite' },
+  { dot: 'bg-pin-community',  label: 'Community' },
   { dot: 'bg-pin-easy',       label: 'Easy access' },
   { dot: 'bg-pin-moderate',   label: 'Moderate' },
   { dot: 'bg-pin-hard',       label: 'Hard / extreme' },
@@ -77,7 +78,7 @@ export const FloatingLegend = ({
                     onClick={() => onToggleLandAgency(a.key)}
                     aria-pressed={on}
                     className={cn(
-                      'flex items-center gap-2 px-1.5 py-1 rounded-md transition-colors text-left',
+                      'flex items-center gap-2 px-1.5 py-1 rounded-[8px] transition-colors text-left',
                       on ? 'bg-cream dark:bg-paper' : 'opacity-40 hover:opacity-100 hover:bg-cream/60 dark:hover:bg-paper/60',
                     )}
                   >

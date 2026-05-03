@@ -1291,7 +1291,7 @@ const Index = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search a region — Moab, Olympic Peninsula, Joshua Tree…"
-                className="flex-1 border-none outline-none text-base font-sans bg-transparent placeholder:text-ink-3 py-3"
+                className="flex-1 border-none outline-none text-[15px] font-sans bg-transparent placeholder:text-ink-3 py-3"
               />
               <button
                 type="submit"
@@ -1642,10 +1642,10 @@ const Index = () => {
                       cleanRegionName(featuredRegion.explanation)}
                   </div>
                   {/* Highlights — prefer AI-generated (named feature + 1-line blurb);
-                      fall back to anchor / region highlight names with no blurb.
-                      Each highlight is a mini-card linking out to a Google Maps
-                      search for that named feature, paired with the region name
-                      so common names (e.g. "North Lake") resolve correctly. */}
+                      fall back to the flat list. Each card opens the explore
+                      map: when the highlight's name matches an anchorHighlight
+                      we use that exact point; otherwise we fall back to the
+                      region center so every card lands somewhere useful. */}
                   {(() => {
                     const ai = featuredRegion.aiHighlights ?? [];
                     const fallback = (featuredRegion.highlights ?? []).map((h) => ({
@@ -1654,9 +1654,26 @@ const Index = () => {
                     }));
                     const items = ai.length > 0 ? ai : fallback;
                     const top = items.slice(0, 4);
-                    const regionContext = prettyRegionName(cleanRegionName(featuredRegion.name));
-                    const mapsUrl = (name: string) =>
-                      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name} ${regionContext}`)}`;
+
+                    // Index anchor highlights by lower-case name so we can
+                    // fuzzy-match (substring both ways) the AI-named features.
+                    const anchorIndex = new Map<string, { lat: number; lng: number }>();
+                    (featuredRegion.anchorHighlights ?? []).forEach((a) => {
+                      if (a.name) anchorIndex.set(a.name.toLowerCase(), { lat: a.lat, lng: a.lon });
+                    });
+                    const exploreLink = (name: string) => {
+                      const lower = name.toLowerCase();
+                      let coords = anchorIndex.get(lower);
+                      if (!coords) {
+                        for (const [key, c] of anchorIndex) {
+                          if (key.includes(lower) || lower.includes(key)) { coords = c; break; }
+                        }
+                      }
+                      if (!coords) {
+                        coords = { lat: featuredRegion.center.lat, lng: featuredRegion.center.lng };
+                      }
+                      return `/dispersed?lat=${coords.lat}&lng=${coords.lng}&name=${encodeURIComponent(name)}`;
+                    };
                     return (
                       <div className="mt-8">
                         <div className="flex items-center gap-1.5">
@@ -1674,11 +1691,9 @@ const Index = () => {
                           {top.length > 0 ? (
                             <div className="flex flex-col gap-1.5">
                               {top.map((h) => (
-                                <a
+                                <Link
                                   key={h.name}
-                                  href={mapsUrl(h.name)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                  to={exploreLink(h.name)}
                                   onClick={(e) => e.stopPropagation()}
                                   className="group/hl flex items-start gap-2 rounded-[10px] border border-line dark:border-line-2 px-3 py-2.5 hover:border-pine-6 hover:bg-pine-6/5 transition-colors"
                                 >
@@ -1693,7 +1708,7 @@ const Index = () => {
                                     weight="bold"
                                     className="text-ink-3 group-hover/hl:text-pine-6 mt-0.5 flex-shrink-0 transition-colors"
                                   />
-                                </a>
+                                </Link>
                               ))}
                             </div>
                           ) : (

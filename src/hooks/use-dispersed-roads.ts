@@ -57,6 +57,12 @@ export interface PotentialSpot {
   lng: number;
   name: string;
   type: 'dead-end' | 'camp-site' | 'intersection';
+  // Optional DB-provenance fields. Populated for spots loaded from the
+  // database (via dispersed-spots edge fn) — undefined for client-only
+  // potential spots from Overpass. Used to split community-contributed
+  // spots from algorithmically-derived dead-ends in the explorer UI.
+  kind?: string;
+  subKind?: string;
   score: number;
   reasons: string[];
   source: 'mvum' | 'osm' | 'blm' | 'derived';

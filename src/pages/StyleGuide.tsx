@@ -36,7 +36,56 @@ import {
   Truck,
   Funnel,
 } from '@phosphor-icons/react';
-import { Mono, Pill, Tag, StatusDot, TopoBg } from '@/components/redesign';
+import {
+  Mono,
+  Pill,
+  Tag,
+  StatusDot,
+  TopoBg,
+  Surface,
+  EmptyState,
+  StatCard,
+  Field,
+  Banner,
+  SegmentedControl,
+  Spinner,
+  DismissibleTag,
+  SkeletonRow,
+  SkeletonCard,
+  SkeletonDayCard,
+} from '@/components/redesign';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 // 2026 Redesign Style Guide
 // Comprehensive showcase of the Pine + Paper system. Covers surfaces, ink,
@@ -46,19 +95,22 @@ import { Mono, Pill, Tag, StatusDot, TopoBg } from '@/components/redesign';
 
 // ---------- helpers ----------
 const Section = ({
+  id,
   label,
   title,
   children,
   dark,
 }: {
+  id: string;
   label: string;
   title: string;
   children: React.ReactNode;
   dark?: boolean;
 }) => (
   <section
+    id={id}
     className={[
-      'border-t px-14 py-12',
+      'scroll-mt-6 border-t px-14 py-12',
       dark ? 'border-cream/10 bg-ink-pine text-cream' : 'border-line text-ink',
     ].join(' ')}
   >
@@ -86,7 +138,7 @@ const Swatch = ({
   textOnLight?: boolean;
 }) => (
   <div className="flex flex-col gap-2">
-    <div className={`${cls} aspect-[1.6] rounded-lg border border-black/10 dark:border-white/10`} />
+    <div className={`${cls} aspect-[1.6] rounded-[10px] border border-black/10 dark:border-white/10`} />
     <div className="flex justify-between items-baseline">
       <span className={`font-sans font-semibold text-[13px] ${textOnLight ? 'text-ink' : 'text-ink dark:text-cream'}`}>{name}</span>
       <Mono size={9} className="text-ink-3">{hex}</Mono>
@@ -132,7 +184,9 @@ const StyleGuide = () => {
 
   return (
     <div className={dark ? 'dark' : ''}>
-      <div className="w-full bg-paper text-ink font-sans">
+      <div className="lg:flex lg:items-start bg-paper text-ink font-sans">
+        <StyleGuideNav />
+        <div className="flex-1 min-w-0">
         {/* HEADER */}
         <div className="relative overflow-hidden px-14 pt-14 pb-2">
           <TopoBg color="hsl(var(--ink-pine))" opacity={0.12} />
@@ -167,7 +221,7 @@ const StyleGuide = () => {
         </div>
 
         {/* 01 SURFACES */}
-        <Section label="01 · SURFACES" title="Warm neutral paper">
+        <Section id="surfaces" label="01 · SURFACES" title="Warm neutral paper">
           <div className="grid grid-cols-5 gap-3.5">
             <Swatch cls="bg-cream"   name="Cream"   hex="#FAF6EA" hsl="hsl(45 56% 95%)" />
             <Swatch cls="bg-paper"   name="Paper"   hex="#F4F0E4" hsl="hsl(43 50% 92%)" />
@@ -178,7 +232,7 @@ const StyleGuide = () => {
         </Section>
 
         {/* 02 INK */}
-        <Section label="02 · INK" title="Five steps for hierarchy">
+        <Section id="ink" label="02 · INK" title="Five steps for hierarchy">
           <div className="grid grid-cols-5 gap-3.5">
             <Swatch cls="bg-ink"        name="Ink"      hex="#13160F" hsl="hsl(80 18% 7%)" />
             <Swatch cls="bg-ink-pine"   name="Pine ink" hex="#1D2218" hsl="hsl(96 18% 11%)" />
@@ -189,7 +243,7 @@ const StyleGuide = () => {
         </Section>
 
         {/* 03 ACCENT */}
-        <Section label="03 · ACCENT" title="Pine ramp · 1 to 9">
+        <Section id="accent" label="03 · ACCENT" title="Pine ramp · 1 to 9">
           <div className="grid grid-cols-9 gap-2.5">
             {[
               { c: 'bg-pine-1', n: 'Pine 1', h: '#EEF1E4', hsl: 'hsl(78 38% 92%)' },
@@ -206,7 +260,7 @@ const StyleGuide = () => {
         </Section>
 
         {/* 04 SUPPORTING */}
-        <Section label="04 · SUPPORTING" title="Used sparingly, with intent">
+        <Section id="supporting" label="04 · SUPPORTING" title="Used sparingly, with intent">
           <div className="grid grid-cols-4 gap-3.5">
             <Swatch cls="bg-clay"  name="Clay (derived)"   hex="#A86A3C" hsl="hsl(25 47% 45%)" />
             <Swatch cls="bg-sage"  name="Sage (verified)"  hex="#7A9156" hsl="hsl(86 25% 45%)" />
@@ -216,22 +270,25 @@ const StyleGuide = () => {
         </Section>
 
         {/* 05 PINS */}
-        <Section label="05 · MAP PINS" title="Severity, ordinal">
-          <div className="grid grid-cols-5 gap-3.5">
+        <Section id="map-pins" label="05 · MAP PINS" title="Severity ramp + provenance">
+          <div className="grid grid-cols-6 gap-3.5">
             <Swatch cls="bg-pin-easy"       name="Easy"       hex="#D7AB45" hsl="hsl(45 62% 56%)" />
             <Swatch cls="bg-pin-safe"       name="Known/Safe" hex="#476E3D" hsl="hsl(96 28% 38%)" />
             <Swatch cls="bg-pin-moderate"   name="Moderate"   hex="#D9712B" hsl="hsl(24 68% 52%)" />
             <Swatch cls="bg-pin-hard"       name="Hard"       hex="#3A2A1F" hsl="hsl(20 30% 16%)" />
             <Swatch cls="bg-pin-campground" name="Campground" hex="#4979A7" hsl="hsl(206 38% 46%)" />
+            <Swatch cls="bg-pin-community"  name="Community"  hex="#B84684" hsl="hsl(320 45% 50%)" />
           </div>
           <p className="text-[13px] text-ink-3 mt-4 leading-[1.5] max-w-[620px]">
-            Hierarchy: easy → moderate → hard reads ordinally. Safe (known camp-sites) sits
-            off the severity ramp. Campground is a separate kind, blue.
+            Hierarchy: easy → moderate → hard reads ordinally. Known/Safe (OSM camp-sites)
+            sits off the severity ramp. Campground (blue) and Community (pink) are separate
+            kinds — Community pins are user-contributed dispersed spots, the warm magenta
+            pops them out from the difficulty ramp on the explorer map.
           </p>
         </Section>
 
         {/* 06 LAND OVERLAYS */}
-        <Section label="06 · LAND OVERLAYS" title="Seven agencies, all desaturated except tribal">
+        <Section id="land-overlays" label="06 · LAND OVERLAYS" title="Seven agencies, all desaturated except tribal">
           <div className="grid grid-cols-7 gap-3.5">
             <Swatch cls="bg-land-blm"        name="BLM"          hex="#BD8538" hsl="hsl(36 55% 52%)" />
             <Swatch cls="bg-land-usfs"       name="USFS"         hex="#4D8F65" hsl="hsl(140 32% 42%)" />
@@ -250,7 +307,7 @@ const StyleGuide = () => {
         </Section>
 
         {/* 07 ROADS */}
-        <Section label="07 · ROAD TIERS" title="Solid, dashed by access">
+        <Section id="road-tiers" label="07 · ROAD TIERS" title="Solid, dashed by access">
           <div className="space-y-3.5">
             {[
               { c: 'bg-road-paved',     n: 'Paved',           dash: 'solid' },
@@ -269,7 +326,7 @@ const StyleGuide = () => {
         </Section>
 
         {/* 08 TYPE */}
-        <Section label="08 · TYPE" title="One sans, one mono. That's all.">
+        <Section id="type" label="08 · TYPE" title="One sans, one mono. That's all.">
           <div className="space-y-5">
             {[
               { n: 'Display L', px: 96, lh: 0.92, w: 700, t: -0.045, sample: 'Find a quiet place to roam.' },
@@ -306,7 +363,7 @@ const StyleGuide = () => {
         </Section>
 
         {/* 09 PILLS & TAGS */}
-        <Section label="09 · PILLS & TAGS" title="One shape, three weights">
+        <Section id="pills-tags" label="09 · PILLS & TAGS" title="One shape, three weights">
           <div className="space-y-6">
             <div>
               <Mono>SOLID · primary CTA · hover me</Mono>
@@ -421,7 +478,7 @@ const StyleGuide = () => {
         </Section>
 
         {/* 10 FORM CONTROLS — interactive */}
-        <Section label="10 · FORM CONTROLS" title="Radios, checkboxes, sliders, inputs">
+        <Section id="form-controls" label="10 · FORM CONTROLS" title="Radios, checkboxes, sliders, inputs">
           <div className="grid grid-cols-2 gap-8">
             {/* Radios */}
             <div className="bg-cream dark:bg-paper-2 border border-line dark:border-line-2 rounded-[14px] px-6 py-5">
@@ -665,7 +722,7 @@ const StyleGuide = () => {
         </Section>
 
         {/* 11 STOP TYPE ICONS — restored from old guide, re-themed */}
-        <Section label="11 · STOP TYPES" title="Trip stop iconography">
+        <Section id="stop-types" label="11 · STOP TYPES" title="Trip stop iconography">
           <div className="grid grid-cols-3 gap-3">
             {[
               { Icon: Tent,       l: 'Camp',     sub: 'Established + dispersed', color: 'text-pine-6' },
@@ -692,7 +749,7 @@ const StyleGuide = () => {
         </Section>
 
         {/* 12 ICON GRID — Phosphor reference */}
-        <Section label="12 · ICONS" title="Phosphor — single weight, currentColor">
+        <Section id="icons" label="12 · ICONS" title="Phosphor — single weight, currentColor">
           <div className="grid grid-cols-8 gap-3">
             {([
               [MagnifyingGlass, 'Search'], [MapPin, 'Pin'], [MapPinArea, 'Region'],
@@ -716,9 +773,9 @@ const StyleGuide = () => {
         </Section>
 
         {/* 13 COMPONENTS — cards + list rows */}
-        <Section label="13 · COMPONENTS" title="Cards, list rows, and badges">
+        <Section id="components" label="13 · COMPONENTS" title="Cards, list rows, and badges">
           <div className="grid grid-cols-2 gap-5">
-            <article className="border border-line dark:border-line-2 rounded-xl overflow-hidden bg-white dark:bg-paper-2">
+            <article className="border border-line dark:border-line-2 rounded-[14px] overflow-hidden bg-white dark:bg-paper-2">
               <div className="h-[140px] relative bg-gradient-to-br from-[#a89779] via-[#7d6e54] to-[#4d4636]">
                 <div className="absolute inset-0" style={{ backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,255,255,.04) 0 14px, rgba(0,0,0,.06) 14px 28px)' }} />
                 <div className="absolute left-3 top-3">
@@ -740,7 +797,7 @@ const StyleGuide = () => {
               </div>
             </article>
 
-            <div className="border border-line dark:border-line-2 rounded-xl overflow-hidden bg-white dark:bg-paper-2">
+            <div className="border border-line dark:border-line-2 rounded-[14px] overflow-hidden bg-white dark:bg-paper-2">
               {[
                 { n: 'End of FR 1821A', d: '3.4 mi', sub: 'BLM · Road terminus', r: 38, dot: 'bg-pine-6' },
                 { n: 'Camp Site · Mesquite', d: '8.9 mi', sub: 'USFS · Camping', r: 35, dot: 'bg-pine-6' },
@@ -769,7 +826,7 @@ const StyleGuide = () => {
         </Section>
 
         {/* 14 TOKENS */}
-        <Section label="14 · TOKENS" title="Radii, spacing, shadow">
+        <Section id="tokens" label="14 · TOKENS" title="Radii, spacing, shadow">
           <div className="grid grid-cols-3 gap-8">
             <div>
               <Mono className="text-pine-6">RADIUS</Mono>
@@ -825,7 +882,7 @@ const StyleGuide = () => {
         </Section>
 
         {/* 15 GUARDRAILS */}
-        <Section label="15 · GUARDRAILS" title="Don'ts" dark>
+        <Section id="guardrails" label="15 · GUARDRAILS" title="Don'ts" dark>
           <div className="grid grid-cols-2 gap-4">
             {[
               'No drop shadows on tags — shape carries weight',
@@ -844,6 +901,280 @@ const StyleGuide = () => {
           </div>
         </Section>
 
+        {/* 16 SURFACE */}
+        <Section id="surface" label="16 · SURFACE" title="The card primitive">
+          <div className="grid grid-cols-2 gap-4 max-w-2xl">
+            <Surface>
+              <Mono className="text-pine-6">Default</Mono>
+              <p className="text-[14px] text-ink mt-1">
+                White on cream — the standard card treatment.
+              </p>
+            </Surface>
+            <Surface variant="paper">
+              <Mono className="text-pine-6">Paper</Mono>
+              <p className="text-[14px] text-ink mt-1">
+                Recedes into the page background.
+              </p>
+            </Surface>
+            <Surface variant="pine-tinted">
+              <Mono className="text-pine-6">Pine-tinted</Mono>
+              <p className="text-[14px] text-ink mt-1">
+                Soft pine wash for "preset" or "saved" data tiles.
+              </p>
+            </Surface>
+            <Surface variant="ink-pine">
+              <Mono className="text-ink-ondark">Ink-pine</Mono>
+              <p className="text-[14px] text-cream mt-1">
+                Dark surface for hero or dark-band cards.
+              </p>
+            </Surface>
+          </div>
+        </Section>
+
+        {/* 17 EMPTY STATE */}
+        <Section id="empty-state" label="17 · EMPTY STATE" title="No-data treatment">
+          <div className="grid grid-cols-2 gap-4 max-w-2xl">
+            <Surface padding="none">
+              <EmptyState
+                icon={Tent}
+                eyebrow="No saved trips"
+                title="Nothing saved yet."
+                description="Plan a trip and it'll show up here for next time."
+                accent="pine"
+                action={
+                  <Pill variant="solid-pine" mono={false}>
+                    <Plus className="w-3.5 h-3.5" weight="bold" />
+                    New trip
+                  </Pill>
+                }
+              />
+            </Surface>
+            <Surface padding="none">
+              <EmptyState
+                icon={MagnifyingGlass}
+                title="No spots in this area."
+                description="Pan the map or zoom out to find dispersed sites nearby."
+                accent="clay"
+              />
+            </Surface>
+          </div>
+        </Section>
+
+        {/* 18 STAT CARD */}
+        <Section id="stat-card" label="18 · STAT CARD" title="Big-number metrics">
+          <div className="grid grid-cols-3 gap-3 max-w-3xl">
+            <StatCard accent="clay" icon={Clock} label="Pending" value={12} />
+            <StatCard accent="pine" icon={Check} label="Approved" value={48} />
+            <StatCard accent="water" icon={User} label="Signed up" value={31} />
+          </div>
+        </Section>
+
+        {/* 19 FIELD */}
+        <Section id="field" label="19 · FIELD" title="Form-field wrapper">
+          <div className="space-y-5 max-w-md">
+            <Field label="Trip name" hint="Leave blank to auto-generate.">
+              <input
+                type="text"
+                placeholder="e.g. Southwest Desert Adventure"
+                className="w-full h-12 px-4 rounded-[14px] border border-line bg-white dark:bg-paper-2 text-ink text-[15px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
+              />
+            </Field>
+            <Field label="Email" optional hint="Helps us send you trip recaps.">
+              <input
+                type="email"
+                placeholder="you@email.com"
+                className="w-full h-12 px-4 rounded-[14px] border border-line bg-white dark:bg-paper-2 text-ink text-[15px] outline-none placeholder:text-ink-3 focus:border-pine-6 transition-colors"
+              />
+            </Field>
+            <Field label="Trip name" error="A trip with this name already exists.">
+              <input
+                type="text"
+                defaultValue="Southwest Desert"
+                className="w-full h-12 px-4 rounded-[14px] border border-ember bg-white dark:bg-paper-2 text-ink text-[15px] outline-none focus:border-ember transition-colors"
+              />
+            </Field>
+          </div>
+        </Section>
+
+        {/* 20 BANNER */}
+        <Section id="banner" label="20 · BANNER" title="Inline non-modal feedback">
+          <div className="space-y-3 max-w-2xl">
+            <Banner tone="info" title="Heads up." description="The trail head closes at sunset; plan the descent accordingly." />
+            <Banner tone="warning" title="Permit window narrow." description="Backcountry permits open Oct 1; reserve before then." />
+            <Banner tone="error" title="Save failed." description="Couldn't reach the server. Check your connection and try again." />
+            <Banner tone="success" title="Saved." description="Your trip is in My Trips." onDismiss={() => null} />
+          </div>
+        </Section>
+
+        {/* 21 SEGMENTED CONTROL */}
+        <Section id="segmented-control" label="21 · SEGMENTED" title="Single-select pill row">
+          <div className="space-y-4">
+            <SegmentedControlDemo />
+            <Mono className="text-ink-3 block">With counts + icons</Mono>
+            <SegmentedControlDemoCounts />
+          </div>
+        </Section>
+
+        {/* 22 SPINNER */}
+        <Section id="spinner" label="22 · SPINNER" title="Inline loading indicator">
+          <div className="flex items-center gap-6">
+            <div className="flex flex-col items-center gap-2"><Spinner size="xs" /><Mono className="text-ink-3">xs</Mono></div>
+            <div className="flex flex-col items-center gap-2"><Spinner size="sm" /><Mono className="text-ink-3">sm</Mono></div>
+            <div className="flex flex-col items-center gap-2"><Spinner size="md" /><Mono className="text-ink-3">md</Mono></div>
+            <div className="flex flex-col items-center gap-2"><Spinner size="lg" /><Mono className="text-ink-3">lg</Mono></div>
+            <div className="flex flex-col items-center gap-2"><Spinner size="xl" /><Mono className="text-ink-3">xl</Mono></div>
+            <div className="flex flex-col items-center gap-2"><Spinner size="md" tone="ink" /><Mono className="text-ink-3">ink</Mono></div>
+            <div className="flex flex-col items-center gap-2"><Spinner size="md" tone="ink-3" /><Mono className="text-ink-3">ink-3</Mono></div>
+          </div>
+        </Section>
+
+        {/* 23 DISMISSIBLE TAG */}
+        <Section id="dismissible-tag" label="23 · DISMISSIBLE TAG" title="Selection / filter chip">
+          <div className="flex flex-wrap gap-2 max-w-2xl">
+            <DismissibleTag accent="pine" onDismiss={() => null}>Moab</DismissibleTag>
+            <DismissibleTag accent="water" onDismiss={() => null}>Salt Lake City</DismissibleTag>
+            <DismissibleTag accent="ember" onDismiss={() => null}>Capitol Reef</DismissibleTag>
+            <DismissibleTag accent="clay" onDismiss={() => null}>Dispersed</DismissibleTag>
+            <DismissibleTag accent="sage" onDismiss={() => null}>Hiking</DismissibleTag>
+          </div>
+        </Section>
+
+        {/* 24 SKELETONS */}
+        <Section id="skeletons" label="24 · SKELETONS" title="Shape-aware loading states">
+          <div className="grid grid-cols-2 gap-6 max-w-3xl">
+            <div>
+              <Mono className="text-ink-3 block mb-2">Row</Mono>
+              <Surface padding="none" className="px-4 divide-y divide-line">
+                <SkeletonRow />
+                <SkeletonRow />
+                <SkeletonRow />
+              </Surface>
+            </div>
+            <div>
+              <Mono className="text-ink-3 block mb-2">Card</Mono>
+              <SkeletonCard />
+            </div>
+            <div className="col-span-2">
+              <Mono className="text-ink-3 block mb-2">Day card</Mono>
+              <SkeletonDayCard />
+            </div>
+          </div>
+        </Section>
+
+        {/* 25 DIALOG */}
+        <Section id="dialog" label="25 · DIALOG" title="Modal overlay">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Pill variant="solid-pine" mono={false}>Open dialog</Pill>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <Mono className="text-pine-6">Edit dates</Mono>
+                <DialogTitle className="font-sans font-semibold tracking-[-0.015em] text-ink text-[22px] leading-[1.15] mt-1">
+                  When are you going?
+                </DialogTitle>
+                <DialogDescription>
+                  Pick the days you'll be on the road. Changing them after generation will re-plan the trip.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="text-[13px] text-ink-3">Body content goes here.</div>
+            </DialogContent>
+          </Dialog>
+        </Section>
+
+        {/* 26 SHEET */}
+        <Section id="sheet" label="26 · SHEET" title="Side drawer">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Pill variant="ghost" mono={false}>Open sheet</Pill>
+            </SheetTrigger>
+            <SheetContent>
+              <Mono className="text-pine-6">Filters</Mono>
+              <h3 className="font-sans font-bold text-[20px] text-ink mt-1">Refine spots</h3>
+              <p className="text-[13px] text-ink-3 mt-2">Slide-in panel for secondary actions.</p>
+            </SheetContent>
+          </Sheet>
+        </Section>
+
+        {/* 27 DROPDOWN MENU */}
+        <Section id="dropdown-menu" label="27 · DROPDOWN" title="Action menu">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Pill variant="ghost" mono={false}>
+                Account
+                <CaretDown className="w-3 h-3" weight="bold" />
+              </Pill>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel>Signed in as Michelle</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem><User className="w-4 h-4 mr-2" weight="regular" />Profile</DropdownMenuItem>
+              <DropdownMenuItem><Heart className="w-4 h-4 mr-2" weight="regular" />Saved</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem><SignOut className="w-4 h-4 mr-2" weight="regular" />Sign out</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </Section>
+
+        {/* 28 SELECT */}
+        <Section id="select" label="28 · SELECT" title="Native dropdown">
+          <Select defaultValue="utah">
+            <SelectTrigger className="max-w-[280px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="utah">Utah</SelectItem>
+              <SelectItem value="arizona">Arizona</SelectItem>
+              <SelectItem value="colorado">Colorado</SelectItem>
+              <SelectItem value="oregon">Oregon</SelectItem>
+            </SelectContent>
+          </Select>
+        </Section>
+
+        {/* 29 TOOLTIP */}
+        <Section id="tooltip" label="29 · TOOLTIP" title="On-hover hint">
+          <TooltipProvider>
+            <div className="flex gap-3">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Pill variant="ghost" mono={false}>Hover me</Pill>
+                </TooltipTrigger>
+                <TooltipContent>The dark tooltip pattern — ink-pine on cream text.</TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
+        </Section>
+
+        {/* 30 TABS */}
+        <Section id="tabs" label="30 · TABS" title="Panel switcher">
+          <Tabs defaultValue="overview" className="max-w-xl">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="map">Map</TabsTrigger>
+              <TabsTrigger value="details">Details</TabsTrigger>
+            </TabsList>
+            <TabsContent value="overview" className="text-[13px] text-ink-3 mt-3">Overview content goes here.</TabsContent>
+            <TabsContent value="map" className="text-[13px] text-ink-3 mt-3">Map preview goes here.</TabsContent>
+            <TabsContent value="details" className="text-[13px] text-ink-3 mt-3">Detail rows go here.</TabsContent>
+          </Tabs>
+        </Section>
+
+        {/* 31 AVATAR */}
+        <Section id="avatar" label="31 · AVATAR" title="User identity">
+          <div className="flex items-center gap-3">
+            <Avatar>
+              <AvatarImage src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100" alt="MT" />
+              <AvatarFallback>MT</AvatarFallback>
+            </Avatar>
+            <Avatar>
+              <AvatarFallback>JR</AvatarFallback>
+            </Avatar>
+            <Avatar className="w-8 h-8">
+              <AvatarFallback className="text-[11px]">SM</AvatarFallback>
+            </Avatar>
+          </div>
+        </Section>
+
         {/* Footer */}
         <footer className="border-t border-line dark:border-line-2 px-14 py-8 bg-cream dark:bg-paper-2 flex items-center justify-between">
           <Mono>ROAMSWILD · STYLE GUIDE · 2026</Mono>
@@ -852,6 +1183,7 @@ const StyleGuide = () => {
             <Pill variant="solid-pine" mono={false} onClick={() => null}>Open map<ArrowRight size={13} weight="bold" /></Pill>
           </div>
         </footer>
+        </div>
       </div>
     </div>
   );
@@ -917,3 +1249,128 @@ const CodeChip = ({ children }: { children: React.ReactNode }) => (
     {children}
   </code>
 );
+
+// Sticky left-side navigation for the style guide. Anchor links scroll to
+// each section's id; the page is single-scroll for now.
+const NAV_GROUPS: Array<{ label: string; items: Array<{ id: string; label: string }> }> = [
+  {
+    label: 'Foundations',
+    items: [
+      { id: 'surfaces',       label: '01 · Surfaces' },
+      { id: 'ink',            label: '02 · Ink' },
+      { id: 'accent',         label: '03 · Accent' },
+      { id: 'supporting',     label: '04 · Supporting' },
+      { id: 'map-pins',       label: '05 · Map pins' },
+      { id: 'land-overlays',  label: '06 · Land overlays' },
+      { id: 'road-tiers',     label: '07 · Road tiers' },
+      { id: 'type',           label: '08 · Type' },
+    ],
+  },
+  {
+    label: 'Primitives',
+    items: [
+      { id: 'pills-tags',     label: '09 · Pills & tags' },
+      { id: 'form-controls',  label: '10 · Form controls' },
+      { id: 'stop-types',     label: '11 · Stop types' },
+      { id: 'icons',          label: '12 · Icons' },
+      { id: 'components',     label: '13 · Components' },
+    ],
+  },
+  {
+    label: 'Composition',
+    items: [
+      { id: 'surface',           label: '16 · Surface' },
+      { id: 'empty-state',       label: '17 · Empty state' },
+      { id: 'stat-card',         label: '18 · Stat card' },
+      { id: 'field',             label: '19 · Field' },
+      { id: 'banner',            label: '20 · Banner' },
+      { id: 'segmented-control', label: '21 · Segmented' },
+      { id: 'spinner',           label: '22 · Spinner' },
+      { id: 'dismissible-tag',   label: '23 · Dismissible tag' },
+      { id: 'skeletons',         label: '24 · Skeletons' },
+    ],
+  },
+  {
+    label: 'Overlays & menus',
+    items: [
+      { id: 'dialog',         label: '25 · Dialog' },
+      { id: 'sheet',          label: '26 · Sheet' },
+      { id: 'dropdown-menu',  label: '27 · Dropdown' },
+      { id: 'select',         label: '28 · Select' },
+      { id: 'tooltip',        label: '29 · Tooltip' },
+      { id: 'tabs',           label: '30 · Tabs' },
+      { id: 'avatar',         label: '31 · Avatar' },
+    ],
+  },
+  {
+    label: 'Reference',
+    items: [
+      { id: 'tokens',         label: '14 · Tokens' },
+      { id: 'guardrails',     label: '15 · Guardrails' },
+    ],
+  },
+];
+
+const StyleGuideNav = () => (
+  // Sticky on the aside itself (not on an inner div), with `self-start` so
+  // the flex item doesn't stretch to match the long content column. The
+  // nav stays pinned to the top of the viewport as the page scrolls.
+  <aside className="hidden lg:block lg:w-60 lg:flex-shrink-0 lg:sticky lg:top-0 lg:self-start lg:max-h-screen lg:overflow-y-auto border-r border-line bg-cream/95 dark:bg-paper-2/95 backdrop-blur-md">
+    <div className="px-4 py-6">
+      <Mono className="text-pine-6 px-2 mb-3 block">Style guide</Mono>
+      <nav className="space-y-5" aria-label="Style guide sections">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label}>
+            <Mono className="text-ink-3 px-2 mb-1.5 block">{group.label}</Mono>
+            <ul className="space-y-0.5">
+              {group.items.map((item) => (
+                <li key={item.id}>
+                  <a
+                    href={`#${item.id}`}
+                    className="block px-2 py-1.5 rounded-[8px] text-[12px] font-sans font-semibold tracking-[-0.005em] text-ink-2 hover:text-ink hover:bg-paper transition-colors"
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </nav>
+    </div>
+  </aside>
+);
+
+// Local demos for the SegmentedControl section.
+const SegmentedControlDemo = () => {
+  const [view, setView] = useState<'list' | 'map' | 'cards'>('list');
+  return (
+    <SegmentedControl
+      value={view}
+      onChange={setView}
+      options={[
+        { value: 'list', label: 'List' },
+        { value: 'map', label: 'Map' },
+        { value: 'cards', label: 'Cards' },
+      ]}
+      aria-label="Display mode"
+    />
+  );
+};
+
+const SegmentedControlDemoCounts = () => {
+  const [filter, setFilter] = useState<'all' | 'outside' | 'edge' | 'tribal'>('all');
+  return (
+    <SegmentedControl
+      value={filter}
+      onChange={setFilter}
+      options={[
+        { value: 'all', label: 'All flags', icon: Funnel, count: 312 },
+        { value: 'outside', label: 'Outside', count: 184 },
+        { value: 'edge', label: 'Edge', count: 92 },
+        { value: 'tribal', label: 'Tribal', count: 36 },
+      ]}
+      aria-label="Flag filter"
+    />
+  );
+};
