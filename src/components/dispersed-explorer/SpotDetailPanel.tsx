@@ -11,6 +11,7 @@ import {
   Sparkle,
   SpinnerGap,
   Tent,
+  TrashSimple,
   TreeEvergreen,
   Users,
   Warning,
@@ -48,6 +49,9 @@ interface SpotDetailPanelProps {
   onReanalyze: () => void;
   onDismissError: () => void;
   onConfirm: () => void;
+  // Soft-mark for delete: hide locally + queue for hard-delete on
+  // AdminSpotReview. Optional so non-DB-backed callers can omit it.
+  onMarkForDelete?: () => void;
 }
 
 const typeLabel = (type: PotentialSpot['type']) => {
@@ -79,6 +83,7 @@ export const SpotDetailPanel = ({
   onReanalyze,
   onDismissError,
   onConfirm,
+  onMarkForDelete,
 }: SpotDetailPanelProps) => {
   const { Icon, bg, text } = typeStyle(selectedSpot.type);
   const { image: naipImage, loading: naipLoading } = useSpotNaipImage(selectedSpot.lat, selectedSpot.lng);
@@ -124,15 +129,31 @@ export const SpotDetailPanel = ({
   return (
     <DetailShell>
       <DetailBody>
-        {/* Top bar — back link + cache indicator */}
+        {/* Top bar — back link + cache indicator + mark-for-delete.
+            The delete button only shows when (a) the parent supplied a
+            handler and (b) the spot has a UUID id (i.e., it lives in
+            the DB and AdminSpotReview can act on it). */}
         <div className="px-[18px] py-3 border-b border-line flex items-center justify-between">
           <BackLink onBack={onBack} />
-          {fromDatabase && (
-            <Mono className="text-ink-3 inline-flex items-center gap-1.5">
-              <Database className="w-3.5 h-3.5" weight="regular" />
-              Cached
-            </Mono>
-          )}
+          <div className="flex items-center gap-3">
+            {fromDatabase && (
+              <Mono className="text-ink-3 inline-flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5" weight="regular" />
+                Cached
+              </Mono>
+            )}
+            {onMarkForDelete && /^[0-9a-f-]{36}$/i.test(selectedSpot.id) && (
+              <button
+                type="button"
+                onClick={onMarkForDelete}
+                title="Hide from map and queue for deletion in admin review"
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-mono uppercase tracking-[0.10em] text-ember hover:text-ember-stroke hover:bg-ember/10 transition-colors"
+              >
+                <TrashSimple className="w-3.5 h-3.5" weight="regular" />
+                Mark to delete
+              </button>
+            )}
+          </div>
         </div>
 
         {/* NAIP aerial — full-width hero strip when available */}

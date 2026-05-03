@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { pointToSegmentMeters } from '@/utils/dispersedExplorer';
 
 // Established campground from RIDB (USFS, BLM, NPS, etc.)
 export interface EstablishedCampground {
@@ -1073,7 +1074,9 @@ function findDeadEnds(
   const filteredSpots = spots.filter(spot => {
     if (spot.type !== 'dead-end') return true;
 
-    const INTERSECTION_THRESHOLD = 0.00012; // ~12 meters - must be very close
+    // INTERSECTION_THRESHOLD (the old vertex-only check) is gone — the
+    // segment-aware version inside isNearRoadInterior owns its own
+    // INTERSECTION_METERS / ENDPOINT_METERS now.
     const PAVED_JUNCTION_THRESHOLD = 0.0003; // ~30 meters for paved road junctions
 
     // Helper to get lat/lng from coord
@@ -1124,38 +1127,31 @@ function findDeadEnds(
       return false;
     }
 
-    // Check if a point is near an interior point of a road (not its endpoints)
-    // Returns true only if the spot is near the MIDDLE of the road, not near either endpoint
+    // Check if a point lies on a road's interior (segment-aware). Walks
+    // every segment, not just vertices, so T-intersections where the
+    // side-road endpoint lands between two vertices of the main road
+    // get caught — that was the gap in the previous vertex-only logic.
+    // Skips roads whose endpoint the spot is at (real track-to-track
+    // junction, not a false dead-end).
+    const INTERSECTION_METERS = 12;
+    const ENDPOINT_METERS = 25;
+    const spotPt = { lat: spot.lat, lng: spot.lng };
     const isNearRoadInterior = (roads: { name?: string; geometry?: { coordinates?: any[] } }[]): string | null => {
       for (const road of roads) {
-        if (!road.geometry?.coordinates?.length) continue;
-        const coords = road.geometry.coordinates;
+        const coords = road.geometry?.coordinates;
+        if (!coords || coords.length < 2) continue;
 
-        // Skip roads with fewer than 5 points (too short to reliably detect "interior")
-        if (coords.length < 5) continue;
-
-        // Check if spot is near road's endpoints (which would be a track-to-track junction, keep it)
         const startPt = getLatLng(coords[0]);
         const endPt = getLatLng(coords[coords.length - 1]);
+        if (startPt && pointToSegmentMeters(spotPt, startPt, startPt) < ENDPOINT_METERS) continue;
+        if (endPt && pointToSegmentMeters(spotPt, endPt, endPt) < ENDPOINT_METERS) continue;
 
-        if (startPt) {
-          const distToStart = Math.abs(spot.lat - startPt.lat) + Math.abs(spot.lng - startPt.lng);
-          if (distToStart < INTERSECTION_THRESHOLD * 2) continue; // Near start endpoint - track junction
-        }
-        if (endPt) {
-          const distToEnd = Math.abs(spot.lat - endPt.lat) + Math.abs(spot.lng - endPt.lng);
-          if (distToEnd < INTERSECTION_THRESHOLD * 2) continue; // Near end endpoint - track junction
-        }
-
-        // Check interior points only (skip first 2 and last 2 points to avoid endpoint proximity)
-        for (let i = 2; i < coords.length - 2; i++) {
-          const pt = getLatLng(coords[i]);
-          if (pt) {
-            const latDiff = Math.abs(spot.lat - pt.lat);
-            const lngDiff = Math.abs(spot.lng - pt.lng);
-            if (latDiff < INTERSECTION_THRESHOLD && lngDiff < INTERSECTION_THRESHOLD) {
-              return road.name || 'unnamed road'; // This dead-end is near the interior of another road
-            }
+        for (let i = 0; i < coords.length - 1; i++) {
+          const a = getLatLng(coords[i]);
+          const b = getLatLng(coords[i + 1]);
+          if (!a || !b) continue;
+          if (pointToSegmentMeters(spotPt, a, b) < INTERSECTION_METERS) {
+            return road.name || 'unnamed road';
           }
         }
       }

@@ -50,9 +50,11 @@ const DispersedExplorer = () => {
   const [mapZoom, setMapZoom] = useState(12);
   const [selectedRoad, setSelectedRoad] = useState<MVUMRoad | OSMTrack | null>(null);
   const [selectedSpot, setSelectedSpot] = useState<PotentialSpot | null>(null);
-  // Land-overlay agency toggles. Empty set = nothing rendered (default).
-  // Keys: 'USFS', 'BLM', 'NPS', 'STATE_PARK', 'STATE_TRUST', 'LAND_TRUST'.
-  const [visibleLandAgencies, setVisibleLandAgencies] = useState<Set<string>>(new Set());
+  // Land-overlay agency toggles. Tribal lands are on by default so spots
+  // inside reservations are visually flagged without the user needing to
+  // hunt for a toggle. All other agencies start off.
+  // Keys: 'USFS', 'BLM', 'NPS', 'STATE_PARK', 'STATE_TRUST', 'LAND_TRUST', 'TRIBAL'.
+  const [visibleLandAgencies, setVisibleLandAgencies] = useState<Set<string>>(new Set(['TRIBAL']));
   const toggleLandAgency = useCallback((key: string) => {
     setVisibleLandAgencies((prev) => {
       const next = new Set(prev);
@@ -61,6 +63,56 @@ const DispersedExplorer = () => {
       return next;
     });
   }, []);
+  // Soft-delete queue, shared with AdminSpotReview via localStorage. Marking
+  // a spot here hides it from the map + list locally and adds its UUID to
+  // the same queue AdminSpotReview's "Delete N spots" button operates on.
+  const REMOVE_STORAGE_KEY = 'admin-spot-review-remove-v1';
+  const [removeIds, setRemoveIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(REMOVE_STORAGE_KEY);
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(REMOVE_STORAGE_KEY, JSON.stringify([...removeIds]));
+    } catch {
+      // localStorage may be unavailable (private mode, quota); not fatal —
+      // the in-memory Set still hides spots for this session.
+    }
+  }, [removeIds]);
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key !== REMOVE_STORAGE_KEY) return;
+      try {
+        setRemoveIds(new Set(JSON.parse(e.newValue || '[]') as string[]));
+      } catch {
+        setRemoveIds(new Set());
+      }
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, []);
+  const handleMarkForDelete = useCallback(() => {
+    const id = selectedSpot?.id;
+    if (!id) return;
+    // Only DB-backed (UUID) spots can be queued — AdminSpotReview deletes
+    // by UUID. Client-derived prefixed ids (e.g. "deadend-...") would be
+    // a no-op there. Just close the panel in that case.
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      setSelectedSpot(null);
+      return;
+    }
+    setRemoveIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    setSelectedSpot(null);
+  }, [selectedSpot]);
+
   const [bulkPanOpen, setBulkPanOpen] = useState(false);
   const [roadFilter, setRoadFilter] = useState<'all' | 'passenger' | 'high-clearance' | '4wd'>('all');
   // Multi-select filter for spot types/confidence - empty set means show all
@@ -875,6 +927,10 @@ const DispersedExplorer = () => {
     // - EXCLUDE spots near established campgrounds (use the campground instead)
     // - EXCLUDE spots outside public land polygons (e.g., Potash fields, private ranches)
     const filteredDerived = derivedSpots.filter((spot) => {
+      // Soft-delete queue: hide spots the user marked in the explorer.
+      // Same Set is read by AdminSpotReview's bulk-delete button.
+      if (removeIds.has(spot.id)) return false;
+
       // First check: filter out false dead-ends (actually intersections)
       // This matches the logic in use-dispersed-roads.ts for Full mode
       if (isFalseDeadEnd(spot, allRoads)) return false;
@@ -1024,7 +1080,7 @@ const DispersedExplorer = () => {
 
       return true;
     });
-  }, [potentialSpots, publicLands, mvumRoads, osmTracks, isWithinRestrictedArea, isWithinTribalLand, isNearEstablishedCampground, isLikelyEstablishedCampground, useDatabase, roadFilter, spotFilters]);
+  }, [potentialSpots, publicLands, mvumRoads, osmTracks, isWithinRestrictedArea, isWithinTribalLand, isNearEstablishedCampground, isLikelyEstablishedCampground, useDatabase, roadFilter, spotFilters, removeIds]);
 
   // Calculate top recommendations based on multiple factors
   const topRecommendations = useMemo(() => {
@@ -1175,8 +1231,11 @@ const DispersedExplorer = () => {
       recScoreMap.set(rec.spot.id, rec.recScore);
     });
 
-    // Add filtered derived spots
+    // Add filtered derived spots — skip any whose UUID is in the local
+    // remove queue so they disappear immediately after the user marks
+    // them, without a DB round-trip.
     filteredPotentialSpots.forEach(spot => {
+      if (removeIds.has(spot.id)) return;
       const distance = getDistanceMiles(spot.lat, spot.lng);
       const recScore = recScoreMap.get(spot.id);
       unified.push({
@@ -1282,7 +1341,7 @@ const DispersedExplorer = () => {
     }
 
     return unified;
-  }, [filteredPotentialSpots, allEstablishedCampgrounds, campsites, friendsCampsites, showCampgroundsFiltered, showMyCampsites, showMyCampsitesFiltered, showFriendsCampsites, getFriendById, searchLocation, topRecommendations, sortBy]);
+  }, [filteredPotentialSpots, allEstablishedCampgrounds, campsites, friendsCampsites, showCampgroundsFiltered, showMyCampsites, showMyCampsitesFiltered, showFriendsCampsites, getFriendById, searchLocation, topRecommendations, sortBy, removeIds]);
 
   // Helper to get icon for unified spot based on category and type
 
@@ -1900,6 +1959,7 @@ const DispersedExplorer = () => {
               onReanalyze={() => runSpotAnalysis(true)}
               onDismissError={() => setAiError(null)}
               onConfirm={() => setConfirmDialogOpen(true)}
+              onMarkForDelete={handleMarkForDelete}
             />
           ) : selectedCampground ? (
             <CampgroundDetailPanel campground={selectedCampground} onBack={clearAllSelections} />

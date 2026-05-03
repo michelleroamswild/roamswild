@@ -84,6 +84,20 @@ const MAX_TOTAL_POLYGONS = 5000;
 // p_offset until a partial page comes back.
 const PAGE_SIZE = 1000;
 
+// PAD-US lumps actual State Parks (Snow Canyon, Valley of Fire, Beaver
+// Dam, etc.) under Mang_Name='SPR' alongside city/local parks, historic
+// sites, and state forests. The explorer's restricted-area filter +
+// rendering both key off agency='STATE' to mean "real state park, no
+// dispersed camping". Promote SPR rows to STATE only when land_type
+// agrees — local parks and historic sites stay as SPR (rendering as
+// state-trust) so we don't lose the cyan-vs-blue distinction.
+const STATE_PARK_LAND_TYPES = new Set([
+  'State Park',
+  'State Recreation Area',
+  'State Reserve',
+  'State Reservation',
+]);
+
 interface RpcRow {
   id: string;
   name: string;
@@ -190,8 +204,10 @@ export function usePublicLands(
           const rings = extractExteriorRings(row.geojson);
           if (rings.length === 0) continue;
 
-          const agencyCode = row.managing_agency || 'FED';
-          const isTribalLand = agencyCode === 'TRIB';
+          const rawAgency = row.managing_agency || 'FED';
+          const agencyCode = rawAgency === 'SPR' && row.land_type && STATE_PARK_LAND_TYPES.has(row.land_type)
+            ? 'STATE'
+            : rawAgency;
 
           // Centroid: prefer the RPC's pre-computed value (it's the
           // PostGIS ST_Centroid of the full unsimplified boundary).
@@ -212,7 +228,10 @@ export function usePublicLands(
 
           rings.forEach((ring, ringIndex) => {
             const vertexCount = ring.length;
-            const renderOnMap = !isTribalLand && vertexCount <= MAX_RENDER_VERTICES;
+            // Tribal lands now render on the map (red bucket in DispersedMap)
+            // — used to be filter-only because there was no rendering bucket
+            // for them. The vertex cap still applies regardless of agency.
+            const renderOnMap = vertexCount <= MAX_RENDER_VERTICES;
             lands.push({
               id: `${row.source_type}-${row.id}-${ringIndex}`,
               name: row.name,

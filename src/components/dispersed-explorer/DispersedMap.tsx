@@ -151,6 +151,7 @@ export const DispersedMap = ({
         const isBLM = land.managingAgency === 'BLM';
         const isNPS = land.managingAgency === 'NPS';
         const isState = land.managingAgency === 'STATE';
+        const isTribal = land.managingAgency === 'TRIB';
         // Mirror the broadened state-trust whitelist in use-public-lands.ts.
         const isStateTrust = ['SDOL', 'SFW', 'SPR', 'SDNR', 'SLB', 'SLO', 'SDC', 'SDF', 'OTHS'].includes(land.managingAgency);
         const isLandTrust = land.managingAgency === 'NGO';
@@ -158,13 +159,14 @@ export const DispersedMap = ({
         const agencyKey = isBLM ? 'BLM'
           : isNPS ? 'NPS'
           : isState ? 'STATE_PARK'
+          : isTribal ? 'TRIBAL'
           : isStateTrust ? 'STATE_TRUST'
           : isLandTrust ? 'LAND_TRUST'
           : 'USFS';
         if (!visibleLandAgencies.has(agencyKey)) return null;
 
-        const fillColor = isBLM ? '#d97706' : isNPS ? '#7c3aed' : isState ? '#3b82f6' : isStateTrust ? '#06b6d4' : isLandTrust ? '#ec4899' : '#10b981';
-        const strokeColor = isBLM ? '#b45309' : isNPS ? '#6d28d9' : isState ? '#2563eb' : isStateTrust ? '#0891b2' : isLandTrust ? '#db2777' : '#059669';
+        const fillColor = isBLM ? '#d97706' : isNPS ? '#7c3aed' : isState ? '#3b82f6' : isTribal ? '#dc2626' : isStateTrust ? '#06b6d4' : isLandTrust ? '#ec4899' : '#10b981';
+        const strokeColor = isBLM ? '#b45309' : isNPS ? '#6d28d9' : isState ? '#2563eb' : isTribal ? '#991b1b' : isStateTrust ? '#0891b2' : isLandTrust ? '#db2777' : '#059669';
 
         return (
           <Polygon

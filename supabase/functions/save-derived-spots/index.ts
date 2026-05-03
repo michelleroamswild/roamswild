@@ -490,6 +490,21 @@ serve(async (req) => {
         p_east: bbox.east,
       });
       if (clsErr) console.warn('classify_spots_access_difficulty failed:', clsErr.message);
+
+      // Flag any spots that landed on T-intersections (side-road endpoint
+      // mid-segment of another road). The client-side false-dead-end
+      // filter catches most of these, but OSM coordinate precision means
+      // some slip through with the side road 6–15m off. Running the
+      // server-side marker on every save means anything that escapes
+      // shows up under AdminSpotReview's Intersection pill within
+      // seconds of being created.
+      const { error: intErr } = await db.rpc('mark_road_intersection_spots', {
+        p_west:  bbox.west,
+        p_south: bbox.south,
+        p_east:  bbox.east,
+        p_north: bbox.north,
+      });
+      if (intErr) console.warn('mark_road_intersection_spots failed:', intErr.message);
     }
 
     // Record that we've analysed this region

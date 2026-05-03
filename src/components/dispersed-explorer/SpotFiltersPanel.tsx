@@ -48,7 +48,7 @@ const FilterGroup = ({
 type Accent =
   | 'pin-safe' | 'pin-easy' | 'pin-moderate' | 'pin-campground'
   | 'pine-6'
-  | 'land-blm' | 'land-usfs' | 'land-nps' | 'land-statepark' | 'land-statetrust' | 'land-landtrust';
+  | 'land-blm' | 'land-usfs' | 'land-nps' | 'land-statepark' | 'land-statetrust' | 'land-landtrust' | 'land-tribal';
 
 const ACCENT_CLASSES: Record<Accent, { bg: string; border: string; dot: string }> = {
   'pin-safe':       { bg: 'bg-pin-safe',           border: 'border-pin-safe',           dot: 'bg-pin-safe' },
@@ -62,6 +62,9 @@ const ACCENT_CLASSES: Record<Accent, { bg: string; border: string; dot: string }
   'land-statepark':  { bg: 'bg-land-statepark-stroke',  border: 'border-land-statepark-stroke',  dot: 'bg-land-statepark-stroke' },
   'land-statetrust': { bg: 'bg-land-statetrust-stroke', border: 'border-land-statetrust-stroke', dot: 'bg-land-statetrust-stroke' },
   'land-landtrust':  { bg: 'bg-land-landtrust-stroke',  border: 'border-land-landtrust-stroke',  dot: 'bg-land-landtrust-stroke' },
+  // No Pine + Paper token for tribal yet — using red-700 to match the
+  // saturated-red rendering in DispersedMap and the legend swatch.
+  'land-tribal':     { bg: 'bg-red-700',                border: 'border-red-700',                dot: 'bg-red-700' },
 };
 
 // Native checkbox styled to match the design — accent fill when checked,
@@ -159,6 +162,7 @@ const LAND_MANAGERS: { key: string; label: string; accent: Accent }[] = [
   { key: 'STATE_PARK',  label: 'State park',   accent: 'land-statepark' },
   { key: 'STATE_TRUST', label: 'State trust',  accent: 'land-statetrust' },
   { key: 'LAND_TRUST',  label: 'Land trust',   accent: 'land-landtrust' },
+  { key: 'TRIBAL',      label: 'Tribal land',  accent: 'land-tribal' },
 ];
 
 export const SpotFiltersPanel = ({
