@@ -271,6 +271,28 @@ const DispersedExplorer = () => {
   const loading = useDatabase ? dbLoading : clientLoading;
   const error = useDatabase ? dbError : clientError;
 
+  // Auto-fallback: if DB mode finished loading and returned nothing for
+  // this bbox (empty region, edge-function blip, auth issue), flip the
+  // toggle off so the entire client path takes over. The client hook
+  // ran in parallel because the !useDatabase gate at line ~260 only
+  // suppresses Overpass fetches when DB hasn't been asked yet — once
+  // refreshing or the cache miss kicks it on, client data is ready to
+  // step in. This keeps downstream `useDatabase` branches coherent
+  // instead of mixing source-mode logic across the file.
+  useEffect(() => {
+    if (
+      useDatabase &&
+      !dbLoading &&
+      dbSpots.length === 0 &&
+      dbMvumRoads.length === 0 &&
+      dbOsmTracks.length === 0 &&
+      dbCampgrounds.length === 0
+    ) {
+      console.log('[DispersedExplorer] DB returned empty for this bbox — switching to client/Overpass mode');
+      setUseDatabase(false);
+    }
+  }, [useDatabase, dbLoading, dbSpots.length, dbMvumRoads.length, dbOsmTracks.length, dbCampgrounds.length]);
+
   // Auto-expand the filter panel when results land. Tracks the loading edge
   // so we only fire on the true→false transition, not on every re-render.
   useEffect(() => {

@@ -203,6 +203,63 @@ serve(async (req) => {
 
     const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // === SERVER-SIDE OWNERSHIP-POLYGON GATE ===
+    // Belt-and-suspenders against client polygon-load races AND a filter
+    // that stops urban-street tracks from accumulating in road_segments.
+    // One RPC, one round-trip: builds a bbox-wide ownership union once,
+    // then tests every input spot's lat/lng (ST_Covers) and every input
+    // track's geometry (ST_Intersects) against it. Returns indices of
+    // inputs that pass.
+    //
+    // We compute track WKTs here (not inside addRoad later) so the gate
+    // sees the same geometry that would have been inserted. Tracks with
+    // bad / unbuildable geometry are dropped at this stage too.
+    const gatePoints = spots.map((s, idx) => ({
+      idx,
+      lat: s.lat,
+      lng: s.lng,
+    }));
+    const gateTracks = osmTracks
+      .map((t, idx) => ({
+        idx,
+        wkt: buildLineStringWKT(t.geometry?.coordinates ?? []),
+      }))
+      .filter((g): g is { idx: number; wkt: string } => g.wkt !== null);
+
+    const passingSpotIdxSet = new Set<number>();
+    const passingTrackIdxSet = new Set<number>();
+    if (gatePoints.length > 0 || gateTracks.length > 0) {
+      const { data: gateData, error: gateErr } = await db.rpc(
+        "filter_inputs_by_ownership",
+        {
+          p_west: bbox.west,
+          p_south: bbox.south,
+          p_east: bbox.east,
+          p_north: bbox.north,
+          p_points: gatePoints,
+          p_tracks: gateTracks,
+        }
+      );
+      if (gateErr) {
+        // Gate errors fail closed — if the RPC croaks we'd rather skip
+        // saving than dump unfiltered data. Log + return early.
+        console.error("ownership gate failed:", gateErr.message);
+        return new Response(
+          JSON.stringify({ error: `ownership gate failed: ${gateErr.message}` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const row = Array.isArray(gateData) ? gateData[0] : gateData;
+      const ptIdx: number[] = row?.point_idx_passing ?? [];
+      const trkIdx: number[] = row?.track_idx_passing ?? [];
+      ptIdx.forEach((i) => passingSpotIdxSet.add(i));
+      trkIdx.forEach((i) => passingTrackIdxSet.add(i));
+      console.log(
+        `[ownership-gate] spots ${ptIdx.length}/${gatePoints.length} pass, ` +
+        `tracks ${trkIdx.length}/${gateTracks.length} pass`
+      );
+    }
+
     // === DISPERSED SPOTS ===
     // Dedup against rows already in the unified `spots` table (kind=dispersed_camping),
     // pad the bbox slightly so 5-decimal-rounded coords still match.
@@ -234,7 +291,11 @@ serve(async (req) => {
     const rowsToInsert: Record<string, unknown>[] = [];
     const seenInBatch = new Set<string>();
 
-    for (const spot of spots) {
+    for (let i = 0; i < spots.length; i++) {
+      const spot = spots[i];
+      // Ownership-polygon gate (server-side): drop spots whose coords
+      // didn't ST_Cover any ownership polygon in the bbox-wide union.
+      if (!passingSpotIdxSet.has(i)) continue;
       const key = coordKey(spot.lat, spot.lng);
       if (existingKeys.has(key) || seenInBatch.has(key)) continue;
       seenInBatch.add(key);
@@ -443,7 +504,14 @@ serve(async (req) => {
         });
       }
 
-      for (const t of osmTracks) {
+      for (let i = 0; i < osmTracks.length; i++) {
+        // Ownership-polygon gate: drop OSM tracks whose geometry didn't
+        // ST_Intersect any ownership polygon in the bbox-wide union.
+        // Stops urban streets / residential roads from accumulating.
+        // Note: gateTracks above filters out tracks with no buildable
+        // WKT, so a passing index here is also guaranteed to have geom.
+        if (!passingTrackIdxSet.has(i)) continue;
+        const t = osmTracks[i];
         addRoad("osm", String(t.id), buildLineStringWKT(t.geometry?.coordinates ?? []), {
           name: t.name ?? null,
           surface_type: t.surface ?? null,
