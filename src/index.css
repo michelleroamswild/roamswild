@@ -111,6 +111,11 @@
     --land-statetrust-stroke: 186 42% 32%;
     --land-landtrust-fill:  338 38% 58%;
     --land-landtrust-stroke: 338 42% 40%;
+    /* Tribal lands — deep oxblood red. Distinct from BLM clay-orange
+       (36°) and ember alerts (15°). High visibility because dispersed
+       camping inside reservations usually requires permission. */
+    --land-tribal-fill:       5 50% 42%;
+    --land-tribal-stroke:     5 58% 28%;
 
     /* Road tiers — vehicle-access colour for OSM/MVUM polylines */
     --road-paved:     206 38% 46%;
@@ -204,6 +209,7 @@
     --land-statepark-fill:  206 46% 62%;  --land-statepark-stroke:  206 50% 48%;
     --land-statetrust-fill: 186 38% 60%;  --land-statetrust-stroke: 186 42% 46%;
     --land-landtrust-fill:  338 42% 70%;  --land-landtrust-stroke:  338 46% 56%;
+    --land-tribal-fill:       5 48% 58%;  --land-tribal-stroke:       5 52% 44%;
 
     /* Road tiers — lifted lightness for visibility on dark map */
     --road-paved:     206 46% 62%;

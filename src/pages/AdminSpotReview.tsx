@@ -50,28 +50,12 @@ const STATES: Record<StateKey, StateInfo> = {
 
 // Polygon fill/stroke per managing agency. Default for anything we don't
 // recognize is the same neutral stroke we use for "Other public land."
-const AGENCY_COLORS: Record<string, { fill: string; stroke: string }> = {
-  BLM:    { fill: '#d97706', stroke: '#b45309' }, // amber
-  USFS:   { fill: '#10b981', stroke: '#059669' }, // emerald
-  NPS:    { fill: '#7c3aed', stroke: '#6d28d9' }, // violet
-  FWS:    { fill: '#0ea5e9', stroke: '#0284c7' }, // sky
-  DOD:    { fill: '#475569', stroke: '#334155' }, // slate
-  // State-trust-ish managers — broadly cyan family
-  SLB:    { fill: '#06b6d4', stroke: '#0891b2' },
-  SDOL:   { fill: '#06b6d4', stroke: '#0891b2' },
-  SDNR:   { fill: '#06b6d4', stroke: '#0891b2' },
-  SDC:    { fill: '#06b6d4', stroke: '#0891b2' },
-  SDF:    { fill: '#06b6d4', stroke: '#0891b2' },
-  SLO:    { fill: '#06b6d4', stroke: '#0891b2' },
-  SFW:    { fill: '#22c55e', stroke: '#16a34a' }, // green for state F&W
-  SPR:    { fill: '#3b82f6', stroke: '#2563eb' }, // blue for state parks
-  // Tribal lands: saturated red, rendered with thicker stroke + higher
-  // opacity so boundaries are easy to spot. Many tribal nations don't
-  // permit dispersed camping at all, so flagging spots that fall inside
-  // is a high-value review signal.
-  TRIB:   { fill: '#dc2626', stroke: '#7f1d1d' },
-};
-const DEFAULT_AGENCY_COLOR = { fill: '#6b7280', stroke: '#4b5563' }; // slate-gray
+// Agency colors come from the shared brand palette via src/lib/land-colors.ts
+// (HSL strings keyed off the same --land-* tokens DispersedMap and the
+// FloatingLegend swatches use). bucketForAgency handles the
+// SLB/SDOL/SDNR/SDC/SDF/SLO/SFW/SPR/etc. → STATE_TRUST collapse so we
+// don't need a per-code lookup here.
+import { colorsForAgency } from '@/lib/land-colors';
 
 interface PublicLandPolygon {
   id: string;
@@ -867,7 +851,7 @@ const AdminSpotReview = () => {
                   because dispersed camping is rarely permitted on tribal
                   land and admins need to see those boundaries clearly. */}
               {polygons.map((poly) => {
-                const colors = AGENCY_COLORS[poly.managingAgency] ?? DEFAULT_AGENCY_COLOR;
+                const colors = colorsForAgency(poly.managingAgency);
                 const isTribal = poly.managingAgency === 'TRIB';
                 return (
                   <Polygon

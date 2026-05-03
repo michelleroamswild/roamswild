@@ -129,6 +129,7 @@ export default {
   				statepark:  { DEFAULT: 'hsl(var(--land-statepark-fill))',  stroke: 'hsl(var(--land-statepark-stroke))' },
   				statetrust: { DEFAULT: 'hsl(var(--land-statetrust-fill))', stroke: 'hsl(var(--land-statetrust-stroke))' },
   				landtrust:  { DEFAULT: 'hsl(var(--land-landtrust-fill))',  stroke: 'hsl(var(--land-landtrust-stroke))' },
+  				tribal:     { DEFAULT: 'hsl(var(--land-tribal-fill))',     stroke: 'hsl(var(--land-tribal-stroke))' },
   			},
   			road: {
   				paved:     'hsl(var(--road-paved))',

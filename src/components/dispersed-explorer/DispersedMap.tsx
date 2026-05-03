@@ -6,6 +6,7 @@ import { MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hook
 import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
 import type { Campsite } from '@/types/campsite';
 import type { SelectedLocation } from '@/components/LocationSelector';
+import { LAND_OVERLAY_COLORS, bucketForAgency } from '@/lib/land-colors';
 
 type PublicLand = {
   id: string;
@@ -148,25 +149,13 @@ export const DispersedMap = ({
         if (!land.polygon) return null;
         if (!land.renderOnMap) return null;
 
-        const isBLM = land.managingAgency === 'BLM';
-        const isNPS = land.managingAgency === 'NPS';
-        const isState = land.managingAgency === 'STATE';
-        const isTribal = land.managingAgency === 'TRIB';
-        // Mirror the broadened state-trust whitelist in use-public-lands.ts.
-        const isStateTrust = ['SDOL', 'SFW', 'SPR', 'SDNR', 'SLB', 'SLO', 'SDC', 'SDF', 'OTHS'].includes(land.managingAgency);
-        const isLandTrust = land.managingAgency === 'NGO';
-
-        const agencyKey = isBLM ? 'BLM'
-          : isNPS ? 'NPS'
-          : isState ? 'STATE_PARK'
-          : isTribal ? 'TRIBAL'
-          : isStateTrust ? 'STATE_TRUST'
-          : isLandTrust ? 'LAND_TRUST'
-          : 'USFS';
+        // Bucket the agency code (BLM, USFS, NPS, STATE, SPR, NGO, TRIB, …)
+        // into one of the 7 overlay buckets. Then pull fill/stroke from
+        // the shared land-colors module so we stay in lockstep with the
+        // CSS tokens and the legend / filter swatches.
+        const agencyKey = bucketForAgency(land.managingAgency);
         if (!visibleLandAgencies.has(agencyKey)) return null;
-
-        const fillColor = isBLM ? '#d97706' : isNPS ? '#7c3aed' : isState ? '#3b82f6' : isTribal ? '#dc2626' : isStateTrust ? '#06b6d4' : isLandTrust ? '#ec4899' : '#10b981';
-        const strokeColor = isBLM ? '#b45309' : isNPS ? '#6d28d9' : isState ? '#2563eb' : isTribal ? '#991b1b' : isStateTrust ? '#0891b2' : isLandTrust ? '#db2777' : '#059669';
+        const { fill: fillColor, stroke: strokeColor } = LAND_OVERLAY_COLORS[agencyKey];
 
         return (
           <Polygon

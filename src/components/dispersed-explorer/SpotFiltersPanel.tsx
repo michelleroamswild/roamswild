@@ -62,9 +62,7 @@ const ACCENT_CLASSES: Record<Accent, { bg: string; border: string; dot: string }
   'land-statepark':  { bg: 'bg-land-statepark-stroke',  border: 'border-land-statepark-stroke',  dot: 'bg-land-statepark-stroke' },
   'land-statetrust': { bg: 'bg-land-statetrust-stroke', border: 'border-land-statetrust-stroke', dot: 'bg-land-statetrust-stroke' },
   'land-landtrust':  { bg: 'bg-land-landtrust-stroke',  border: 'border-land-landtrust-stroke',  dot: 'bg-land-landtrust-stroke' },
-  // No Pine + Paper token for tribal yet — using red-700 to match the
-  // saturated-red rendering in DispersedMap and the legend swatch.
-  'land-tribal':     { bg: 'bg-red-700',                border: 'border-red-700',                dot: 'bg-red-700' },
+  'land-tribal':     { bg: 'bg-land-tribal-stroke',     border: 'border-land-tribal-stroke',     dot: 'bg-land-tribal-stroke' },
 };
 
 // Native checkbox styled to match the design — accent fill when checked,

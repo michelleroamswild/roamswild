@@ -18,9 +18,7 @@ const LAND_AGENCIES: { key: string; label: string; fill: string; stroke: string 
   { key: 'STATE_PARK',  label: 'State Park',  fill: 'bg-land-statepark/40',  stroke: 'border-land-statepark-stroke' },
   { key: 'STATE_TRUST', label: 'State Trust', fill: 'bg-land-statetrust/40', stroke: 'border-land-statetrust-stroke' },
   { key: 'LAND_TRUST',  label: 'Land Trust',  fill: 'bg-land-landtrust/40',  stroke: 'border-land-landtrust-stroke' },
-  // Tribal land has no Pine + Paper token yet — using red-600 to match the
-  // saturated-red rendering in DispersedMap (and AdminSpotReview's choice).
-  { key: 'TRIBAL',      label: 'Tribal Land', fill: 'bg-red-600/40',         stroke: 'border-red-700' },
+  { key: 'TRIBAL',      label: 'Tribal Land', fill: 'bg-land-tribal/40',     stroke: 'border-land-tribal-stroke' },
 ];
 
 // Spot marker colors come straight from the pin-* tokens used by the actual

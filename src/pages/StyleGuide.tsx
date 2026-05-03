@@ -231,15 +231,22 @@ const StyleGuide = () => {
         </Section>
 
         {/* 06 LAND OVERLAYS */}
-        <Section label="06 · LAND OVERLAYS" title="Six agencies, all desaturated">
-          <div className="grid grid-cols-6 gap-3.5">
+        <Section label="06 · LAND OVERLAYS" title="Seven agencies, all desaturated except tribal">
+          <div className="grid grid-cols-7 gap-3.5">
             <Swatch cls="bg-land-blm"        name="BLM"          hex="#BD8538" hsl="hsl(36 55% 52%)" />
             <Swatch cls="bg-land-usfs"       name="USFS"         hex="#4D8F65" hsl="hsl(140 32% 42%)" />
             <Swatch cls="bg-land-nps"        name="NPS"          hex="#7A6A9E" hsl="hsl(268 28% 52%)" />
             <Swatch cls="bg-land-statepark"  name="State Park"   hex="#4A7DB5" hsl="hsl(206 42% 50%)" />
             <Swatch cls="bg-land-statetrust" name="State Trust"  hex="#4A95A4" hsl="hsl(186 36% 48%)" />
             <Swatch cls="bg-land-landtrust"  name="Land Trust"   hex="#B3677A" hsl="hsl(338 38% 58%)" />
+            <Swatch cls="bg-land-tribal"     name="Tribal"       hex="#A13E36" hsl="hsl(5 50% 42%)" />
           </div>
+          <p className="text-[13px] text-ink-3 mt-4 leading-[1.5] max-w-[620px]">
+            Tribal sits at HSL 5° — saturated oxblood, distinct from BLM's 36° clay
+            and ember alerts at 15°. Higher saturation than the rest because
+            dispersed camping inside reservations usually requires permission, so
+            the polygon outline needs to draw the eye on the explorer map.
+          </p>
         </Section>
 
         {/* 07 ROADS */}
