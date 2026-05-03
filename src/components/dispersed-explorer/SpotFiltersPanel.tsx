@@ -4,7 +4,6 @@ import { Mono } from '@/components/redesign';
 import { cn } from '@/lib/utils';
 
 type RoadFilter = 'all' | 'passenger' | 'high-clearance' | '4wd';
-type SortBy = 'distance' | 'rating' | 'recommended';
 
 interface SpotFiltersPanelProps {
   spotFilters: Set<string>;
@@ -12,8 +11,6 @@ interface SpotFiltersPanelProps {
   onClearFilters: () => void;
   roadFilter: RoadFilter;
   onChangeRoadFilter: (filter: RoadFilter) => void;
-  sortBy: SortBy;
-  onChangeSortBy: (sortBy: SortBy) => void;
   /** Optional — when present, lets users toggle land overlays from the filter
       panel (matches the design's "Land manager" section). */
   visibleLandAgencies?: Set<string>;
@@ -170,8 +167,6 @@ export const SpotFiltersPanel = ({
   onToggleFilter,
   roadFilter,
   onChangeRoadFilter,
-  sortBy,
-  onChangeSortBy,
   visibleLandAgencies,
   onToggleLandAgency,
 }: SpotFiltersPanelProps) => {
@@ -249,19 +244,6 @@ export const SpotFiltersPanel = ({
         </FilterGroup>
       )}
 
-      {/* Sort — inline pill row at the bottom of the panel */}
-      <FilterGroup title="Sort by">
-        <div className="flex flex-wrap gap-1.5">
-          {(['recommended', 'distance', 'rating'] as const).map((s) => (
-            <InlinePill
-              key={s}
-              label={s}
-              active={sortBy === s}
-              onClick={() => onChangeSortBy(s)}
-            />
-          ))}
-        </div>
-      </FilterGroup>
     </div>
   );
 };

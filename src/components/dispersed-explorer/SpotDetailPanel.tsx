@@ -54,18 +54,22 @@ interface SpotDetailPanelProps {
   onMarkForDelete?: () => void;
 }
 
-const typeLabel = (type: PotentialSpot['type']) => {
-  if (type === 'camp-site') return 'Known campsite';
-  if (type === 'dead-end') return 'Road terminus';
+const typeLabel = (spot: PotentialSpot) => {
+  if (spot.subKind === 'community') return 'Community spot';
+  if (spot.type === 'camp-site') return 'Known campsite';
+  if (spot.type === 'dead-end') return 'Road terminus';
   return 'Road junction';
 };
 
 // Map spot type → icon + accent. Keeps the hero block on each spot type
 // visually consistent with the rest of the redesign (sage/clay/water/pine).
-const typeStyle = (type: PotentialSpot['type']) => {
-  if (type === 'camp-site') return { Icon: Tent,        bg: 'bg-pin-safe/15',     text: 'text-pin-safe' };
-  if (type === 'dead-end')  return { Icon: MapPinLine,  bg: 'bg-pin-moderate/15', text: 'text-pin-moderate' };
-  return                            { Icon: Path,        bg: 'bg-pin-easy/15',     text: 'text-pin-easy' };
+// Community spots get the pin-community pink to match their map pin and
+// list-row dot — visually consistent provenance signal across surfaces.
+const typeStyle = (spot: PotentialSpot) => {
+  if (spot.subKind === 'community') return { Icon: Users,       bg: 'bg-pin-community/15', text: 'text-pin-community' };
+  if (spot.type === 'camp-site')    return { Icon: Tent,        bg: 'bg-pin-safe/15',     text: 'text-pin-safe' };
+  if (spot.type === 'dead-end')     return { Icon: MapPinLine,  bg: 'bg-pin-moderate/15', text: 'text-pin-moderate' };
+  return                                   { Icon: Path,        bg: 'bg-pin-easy/15',     text: 'text-pin-easy' };
 };
 
 export const SpotDetailPanel = ({
@@ -85,7 +89,7 @@ export const SpotDetailPanel = ({
   onConfirm,
   onMarkForDelete,
 }: SpotDetailPanelProps) => {
-  const { Icon, bg, text } = typeStyle(selectedSpot.type);
+  const { Icon, bg, text } = typeStyle(selectedSpot);
   const { image: naipImage, loading: naipLoading } = useSpotNaipImage(selectedSpot.lat, selectedSpot.lng);
   const naipYear = naipImage?.taken_at ? new Date(naipImage.taken_at).getFullYear() : null;
 
@@ -181,7 +185,7 @@ export const SpotDetailPanel = ({
         )}
 
         {/* Hero — type-colored icon, eyebrow, name, source badge */}
-        <DetailSection title={typeLabel(selectedSpot.type)} first>
+        <DetailSection title={typeLabel(selectedSpot)} first>
           <DetailHero
             Icon={Icon}
             iconBg={bg}
@@ -194,6 +198,15 @@ export const SpotDetailPanel = ({
             }
           />
         </DetailSection>
+
+        {/* User / AI-written description (community spots primarily) */}
+        {selectedSpot.description && (
+          <DetailSection title="Description">
+            <p className="text-[14px] leading-[1.55] text-ink whitespace-pre-line">
+              {selectedSpot.description}
+            </p>
+          </DetailSection>
+        )}
 
         {/* Coords */}
         <DetailSection title="Coordinates">

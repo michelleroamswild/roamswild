@@ -29,7 +29,9 @@ import { UserCampsiteDetailPanel } from '@/components/dispersed-explorer/UserCam
 import { RoadDetailPanel } from '@/components/dispersed-explorer/RoadDetailPanel';
 import { DispersedMap } from '@/components/dispersed-explorer/DispersedMap';
 import type { UnifiedSpot } from '@/components/dispersed-explorer/types';
+import { MapControls, type MapType } from '@/components/MapControls';
 import { Mono } from '@/components/redesign';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { AccountAvatarMenu } from '@/components/AccountAvatarMenu';
 
@@ -142,6 +144,12 @@ const DispersedExplorer = () => {
   const [existingCampsiteForSpot, setExistingCampsiteForSpot] = useState<Campsite | null>(null);
   const [sortBy, setSortBy] = useState<'distance' | 'rating' | 'recommended'>('recommended');
   const mapRef = useRef<google.maps.Map | null>(null);
+  // Mirror the map instance in state so MapControls re-renders when the map
+  // finishes loading (refs alone don't trigger updates).
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  // Map imagery — controlled by the styled MapControls overlay (Google's
+  // default mapType chrome is disabled).
+  const [mapTypeId, setMapTypeId] = useState<MapType>('hybrid');
 
   const { findExistingExplorerSpot, getExplorerSpots, campsites, friendsCampsites } = useCampsites();
   const { getFriendById } = useFriends();
@@ -666,13 +674,17 @@ const DispersedExplorer = () => {
   }, [selectedSpot]);
 
   // Helper to check if a point is within a restricted area
-  // Restricted: National Parks, State Parks, Tribal Lands
-  // Allowed: National Recreation Areas, Monuments, Seashores, Preserves, BLM, USFS, etc.
+  // Restricted: National Parks, Tribal Lands
+  // Allowed: State Parks (per user request — render the polygon but
+  // don't filter spots out), National Recreation Areas, Monuments,
+  // Seashores, Preserves, BLM, USFS, etc.
   const isWithinRestrictedArea = useCallback(
     (lat: number, lng: number): boolean => {
       const restrictedLands = publicLands.filter((l) => {
-        // State Parks are always restricted
-        if (l.managingAgency === 'STATE') return true;
+        // State Parks: NOT restricted from the spot-filtering side. The
+        // SPR→STATE normalization in use-public-lands.ts is for polygon
+        // rendering only. Used to filter community spots out of state
+        // parks erroneously.
 
         // Tribal lands are always restricted (need permission)
         if (l.managingAgency === 'TRIB') return true;
@@ -953,15 +965,25 @@ const DispersedExplorer = () => {
       // Same Set is read by AdminSpotReview's bulk-delete button.
       if (removeIds.has(spot.id)) return false;
 
+      // Restricted-area check applies to ALL spots, including community.
+      // No dispersed camping allowed inside National Parks / State Parks.
+      if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
+
+      // Community-contributed spots bypass the derived-dead-end heuristics.
+      // They aren't computed dead-ends — they're explicit user submissions
+      // that already passed an importer's vetting. Filtering them with
+      // isFalseDeadEnd (which presumes a "this point is on a road's
+      // interior" failure mode) and isNearEstablishedCampground (which
+      // presumes "duplicate of an established campground") incorrectly
+      // discards real, vouched-for spots. Trust the at-import flags.
+      if (spot.subKind === 'community') return true;
+
       // First check: filter out false dead-ends (actually intersections)
       // This matches the logic in use-dispersed-roads.ts for Full mode
       if (isFalseDeadEnd(spot, allRoads)) return false;
 
       // NOTE: Private road filtering is handled at database import time
       // Derived spots near private roads should not be in the database
-
-      // Exclude spots in National Parks or State Parks (dispersed camping not allowed)
-      if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
 
       // Exclude derived spots near established campgrounds (use the campground instead)
       // Uses 0.5 miles to match Full mode behavior
@@ -1012,9 +1034,14 @@ const DispersedExplorer = () => {
 
     // Remove derived spots that are very close to camp sites
     // OSM camp sites are explicitly tagged and should take precedence
-    // Use 0.06 miles (~100 meters) to match Full mode
+    // Use 0.06 miles (~100 meters) to match Full mode.
+    // Community spots bypass — they're submissions ABOUT specific
+    // locations, often within 100m of an OSM camp-site by design (the
+    // submitter is describing a real campsite they used). Discarding
+    // them as "duplicates" of an OSM tag drops real data.
     const CAMP_DEDUP_MILES = 0.06;
     const dedupedDerived = filteredDerived.filter(derived => {
+      if (derived.subKind === 'community') return true;
       const nearCampSite = campSites.some(camp => {
         const latDiff = Math.abs(derived.lat - camp.lat);
         const lngDiff = Math.abs(derived.lng - camp.lng);
@@ -1025,11 +1052,17 @@ const DispersedExplorer = () => {
       return !nearCampSite;
     });
 
-    // Also deduplicate derived spots that are very close to each other
+    // Also deduplicate derived spots that are very close to each other.
+    // Community spots are exempt: two community submissions for adjacent
+    // sites along the same road (e.g. a string of dispersed pull-offs)
+    // should both render, even when they're within 50m. Algorithmic
+    // dead-ends still get the squelch since they're noisy.
     const DERIVED_DEDUP_THRESHOLD = 0.0005; // ~50 meters
     const finalDerived = dedupedDerived.filter((spot, index, array) => {
+      if (spot.subKind === 'community') return true;
       // Keep this spot only if no earlier spot is within threshold
       return !array.slice(0, index).some(earlier => {
+        if (earlier.subKind === 'community') return false;
         const latDiff = Math.abs(spot.lat - earlier.lat);
         const lngDiff = Math.abs(spot.lng - earlier.lng);
         return latDiff < DERIVED_DEDUP_THRESHOLD && lngDiff < DERIVED_DEDUP_THRESHOLD;
@@ -1448,6 +1481,7 @@ const DispersedExplorer = () => {
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
+    setMapInstance(map);
   }, []);
 
   const onMapClick = useCallback((e: google.maps.MapMouseEvent) => {
@@ -1656,7 +1690,9 @@ const DispersedExplorer = () => {
   }, [selectedSpot, selectedCampground, selectedCampsite, selectedRoad]);
 
   const handleUnifiedSpotClick = (spot: UnifiedSpot) => {
-    if (spot.category === 'derived' && spot.originalSpot) {
+    // Community spots use the same selectedSpot path as derived — they're
+    // both PotentialSpot under the hood, just with different provenance.
+    if ((spot.category === 'derived' || spot.category === 'community') && spot.originalSpot) {
       setSelectedSpot(spot.originalSpot);
       setSelectedCampground(null);
       setSelectedCampsite(null);
@@ -1744,6 +1780,7 @@ const DispersedExplorer = () => {
               mapRef={mapRef}
               mapCenter={mapCenter}
               mapZoom={mapZoom}
+              mapTypeId={mapTypeId}
               onMapLoad={onMapLoad}
               onMapClick={onMapClick}
               searchLocation={searchLocation}
@@ -1790,6 +1827,20 @@ const DispersedExplorer = () => {
           </div>
         </div>
 
+        {/* Map controls — pine-styled zoom + map-type toggle. Bottom-right
+            on lg+ but shifted left of the results panel so it's not behind
+            it. Mobile: top-right of the map (no overlay panel there). */}
+        <div className={cn(
+          'absolute top-4 right-4 z-10 lg:top-auto lg:bottom-5 lg:right-[420px]',
+          mobileView === 'map' ? 'block' : 'hidden lg:block',
+        )}>
+          <MapControls
+            map={mapInstance}
+            mapType={mapTypeId}
+            onMapTypeChange={setMapTypeId}
+          />
+        </div>
+
         {/* Floating legend — bottom-left on mobile, bottom-center between
             cards on desktop (clears both floating cards + the bottom edge). */}
         <div className={cn(
@@ -1802,10 +1853,11 @@ const DispersedExplorer = () => {
           />
         </div>
 
-        {/* Bulk auto-pan helper — small corner pill in the upper map gutter
-            between the floating header and the cards. */}
+        {/* Bulk auto-pan helper — center-bottom of the map gutter on lg+
+            (free of the side panels and the legend). Mobile keeps its
+            existing top-right corner positioning via the inner button. */}
         <div className={cn(
-          'lg:absolute lg:bottom-5 lg:right-[420px] lg:z-10',
+          'lg:absolute lg:bottom-5 lg:left-1/2 lg:-translate-x-1/2 lg:right-auto lg:z-10',
           mobileView === 'map' ? 'block' : 'hidden lg:block',
         )}>
           {!bulkPanOpen ? (
@@ -1945,8 +1997,6 @@ const DispersedExplorer = () => {
                 onClearFilters={() => setSpotFilters(new Set())}
                 roadFilter={roadFilter}
                 onChangeRoadFilter={setRoadFilter}
-                sortBy={sortBy}
-                onChangeSortBy={setSortBy}
                 visibleLandAgencies={visibleLandAgencies}
                 onToggleLandAgency={toggleLandAgency}
               />
@@ -2010,14 +2060,29 @@ const DispersedExplorer = () => {
             />
           ) : (
             <>
-              {/* Results header */}
-              <div className="px-4 py-3 border-b border-line flex items-center justify-between gap-2">
+              {/* Results header — larger title + sort dropdown on the right
+                  (was a static mono cap reading "Sort · recommended"). The
+                  filter panel no longer carries a sort group; sort lives
+                  here next to the count instead. */}
+              <div className="px-4 py-3.5 border-b border-line flex items-center justify-between gap-3">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">Results</span>
+                  <span className="text-[18px] font-sans font-bold tracking-[-0.015em] text-ink">Results</span>
                   {searchLocation && !loading && <Mono className="text-ink-3">{unifiedSpotList.length}</Mono>}
                 </div>
                 {searchLocation && !loading && unifiedSpotList.length > 0 && (
-                  <Mono className="text-pine-6">Sort · {sortBy === 'recommended' ? 'recommended' : sortBy}</Mono>
+                  <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'distance' | 'rating' | 'recommended')}>
+                    <SelectTrigger className="w-auto h-8 pl-3 pr-2.5 gap-3 text-[12px] font-sans font-semibold rounded-full">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="text-ink-3">Sort:</span>
+                        <SelectValue />
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                      <SelectItem value="recommended">Recommended</SelectItem>
+                      <SelectItem value="distance">Distance</SelectItem>
+                      <SelectItem value="rating">Rating</SelectItem>
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
 

@@ -144,9 +144,12 @@ export function useDispersedDatabase(
       setError(null);
 
       try {
-        // Bbox derived from lat/lng/radius. Same rough conversion the
-        // explorer uses elsewhere — 1°lat ≈ 69mi, 1°lng ≈ 50mi at
-        // continental US latitudes. Used by the direct community fetch.
+        // Bbox derived from lat/lng/radius. Rough conversion: 1°lat ≈ 69mi,
+        // 1°lng ≈ 50mi at continental-US latitudes. The bbox is a square
+        // a little larger than the radius circle (corners ≈ 1.4×); the
+        // explorer's downstream client filter chain (false-dead-end,
+        // restricted areas, polygon checks, dedup) trims the corners
+        // anyway, so the looseness costs nothing.
         const dLat = radiusMiles / 69;
         const dLng = radiusMiles / 50;
         const minLat = lat - dLat;
@@ -154,65 +157,51 @@ export function useDispersedDatabase(
         const minLng = lng - dLng;
         const maxLng = lng + dLng;
 
-        // Four parallel fetches:
-        //   - dispersed-spots edge fn → derived dead-ends + OSM camp-sites
-        //   - dispersed-campgrounds edge fn → established campgrounds
-        //   - dispersed-roads edge fn → MVUM + OSM roads
-        //   - DIRECT PostgREST query for sub_kind='community' rows
-        //
-        // Community spots come straight from the spots table — no need
-        // to drag them through the heavy ST_DWithin geography path in
-        // get_dispersed_spots. Their amenities + extra columns already
-        // carry access_difficulty / access_road / amenity flags, so we
-        // pass those through verbatim. Side effect: when the dispersed-
-        // spots edge function 500s on cold cache, community pins still
-        // render because they came from this independent path.
-        const [spotsResponse, campgroundsResponse, roadsResponse, communityResult] =
-          await Promise.all([
-            fetch(
-              `${SUPABASE_URL}/functions/v1/dispersed-spots?lat=${lat}&lng=${lng}&radius=${radiusMiles}&include_derived=true&limit=1000`,
-              { signal: controller.signal }
-            ),
-            fetch(
-              `${SUPABASE_URL}/functions/v1/dispersed-campgrounds?lat=${lat}&lng=${lng}&radius=${radiusMiles}`,
-              { signal: controller.signal }
-            ),
-            fetch(
-              `${SUPABASE_URL}/functions/v1/dispersed-roads?lat=${lat}&lng=${lng}&radius=${radiusMiles}&limit=1000&zoom=${zoom}`,
-              { signal: controller.signal }
-            ),
-            supabase
-              .from('spots')
-              .select(
-                'id, name, latitude, longitude, kind, sub_kind, source, public_land_manager, public_land_unit, public_land_designation, land_type, amenities, extra'
-              )
-              .eq('sub_kind', 'community')
-              .gte('latitude', minLat)
-              .lte('latitude', maxLat)
-              .gte('longitude', minLng)
-              .lte('longitude', maxLng)
-              .limit(2000)
-              .abortSignal(controller.signal)
-              .then((res) => res, (err) => ({ data: null, error: err })),
-          ]);
+        // Three parallel fetches:
+        //   - DIRECT PostgREST query against `spots` for all kinds the
+        //     explorer renders. This replaces the old `dispersed-spots`
+        //     edge function entirely. The edge fn just wrapped a SELECT
+        //     in a slow geography ST_DWithin; every enrichment field
+        //     (access_difficulty, access_road, near/outside polygon
+        //     flags, osm_tags, derivation_reasons, confidence_score) is
+        //     persisted on the row at write time by save-derived-spots /
+        //     import-region. So a bbox SELECT covers it without calling
+        //     an edge function.
+        //   - dispersed-campgrounds edge fn → RIDB-imported campgrounds
+        //     (different table, different shape, keep edge fn for now)
+        //   - dispersed-roads edge fn → MVUM + OSM roads (server-side
+        //     simplification is real work, keep edge fn for now)
+        const [spotsResult, campgroundsResponse, roadsResponse] = await Promise.all([
+          supabase
+            .from('spots')
+            .select(
+              'id, name, description, latitude, longitude, kind, sub_kind, source, public_land_manager, public_land_unit, public_land_designation, land_type, amenities, extra'
+            )
+            .in('kind', ['dispersed_camping', 'established_campground', 'informal_camping'])
+            .gte('latitude', minLat)
+            .lte('latitude', maxLat)
+            .gte('longitude', minLng)
+            .lte('longitude', maxLng)
+            .limit(2000)
+            .abortSignal(controller.signal)
+            .then((res) => res, (err) => ({ data: null, error: err as Error })),
+          fetch(
+            `${SUPABASE_URL}/functions/v1/dispersed-campgrounds?lat=${lat}&lng=${lng}&radius=${radiusMiles}`,
+            { signal: controller.signal }
+          ),
+          fetch(
+            `${SUPABASE_URL}/functions/v1/dispersed-roads?lat=${lat}&lng=${lng}&radius=${radiusMiles}&limit=1000&zoom=${zoom}`,
+            { signal: controller.signal }
+          ),
+        ]);
 
-        // Edge-function spots: only fail-hard on the spots fetch when
-        // community ALSO came back empty — otherwise community alone is
-        // enough to render something useful while the edge fn recovers.
-        if (!spotsResponse.ok) {
-          const communityCount = Array.isArray(communityResult?.data) ? communityResult.data.length : 0;
-          if (communityCount === 0) {
-            throw new Error(`Spots API error: ${spotsResponse.status}`);
-          }
-          console.warn(
-            `Spots API error: ${spotsResponse.status} — falling back to community-only (${communityCount} rows)`,
-          );
+        if (spotsResult.error) {
+          throw new Error(`Spots query failed: ${spotsResult.error.message ?? spotsResult.error}`);
         }
         if (!campgroundsResponse.ok) {
           console.warn(`Campgrounds API error: ${campgroundsResponse.status}`);
         }
 
-        const spotsData = spotsResponse.ok ? await spotsResponse.json() : { spots: [] };
         const campgroundsData = campgroundsResponse.ok ? await campgroundsResponse.json() : { campgrounds: [] };
 
         // Roads are optional - don't fail if they don't load
@@ -223,51 +212,108 @@ export function useDispersedDatabase(
           console.warn('Roads API error:', roadsResponse.status);
         }
 
-        // Transform to expected interfaces.
-        // Drop community rows from the edge-function response — we
-        // pull community separately from the direct query below to
-        // keep them independent of the heavy ST_DWithin path. Without
-        // this filter, every community spot would appear twice.
-        const edgeSpotsRaw: DatabaseSpot[] = (spotsData.spots || []).filter(
-          (s: DatabaseSpot) => (s as { subKind?: string }).subKind !== 'community',
-        );
-        const spots: PotentialSpot[] = edgeSpotsRaw.map((s: DatabaseSpot) => ({
-          id: s.id,
-          lat: s.lat,
-          lng: s.lng,
-          name: s.name || s.roadName || 'Dispersed Spot',
-          type: s.type,
-          // DB-provenance fields, surfaced via 20260250 RPC. Lets the
-          // explorer's unifiedSpotList builder split sub_kind='community'
-          // out of the catch-all 'dead-end' bucket.
-          kind: (s as { kind?: string }).kind ?? undefined,
-          subKind: (s as { subKind?: string }).subKind ?? undefined,
-          score: s.score,
-          reasons: s.reasons,
-          source: s.source,
-          roadName: s.roadName,
-          highClearance: s.highClearance,
-          isOnMVUMRoad: s.isOnMVUMRoad,
-          isOnBLMRoad: s.isOnBLMRoad,
-          isOnPublicLand: s.isOnPublicLand,
-          passengerReachable: s.passengerReachable,
-          highClearanceReachable: s.highClearanceReachable,
-          // Classification flag from database (computed using same logic as Full mode)
-          isEstablishedCampground: s.isEstablishedCampground,
-          // Road accessibility flag (for filtering backcountry/hike-in camps)
-          isRoadAccessible: s.isRoadAccessible,
-          // Difficulty of the worst nearby road (per spots.extra.access_difficulty)
-          accessDifficulty: (s as { accessDifficulty?: string }).accessDifficulty ?? null,
-          // The worst-nearby road's tags (road_name, tracktype, smoothness, …)
-          accessRoad: (s as { accessRoad?: Record<string, unknown> }).accessRoad ?? null,
-          // Public-land-edge proximity flag (catches spots on inholdings)
-          nearPublicLandEdge: (s as { nearPublicLandEdge?: boolean }).nearPublicLandEdge ?? false,
-          metersFromPublicLandEdge:
-            (s as { metersFromPublicLandEdge?: number | null }).metersFromPublicLandEdge ?? null,
-          // Stronger flag: spot's coords don't fall inside any public-land polygon.
-          outsidePublicLandPolygon:
-            (s as { outsidePublicLandPolygon?: boolean }).outsidePublicLandPolygon ?? false,
-        }));
+        // Map raw spot rows → PotentialSpot. Pulls every enrichment
+        // field straight from the row (column or extra/amenities) — no
+        // computation, no derivation. Mirrors what dispersed-spots
+        // edge fn used to reshape, but locally and faster.
+        type RawSpot = {
+          id: string;
+          name: string | null;
+          description: string | null;
+          latitude: number;
+          longitude: number;
+          kind: string;
+          sub_kind: string | null;
+          source: string;
+          public_land_manager: string | null;
+          public_land_unit: string | null;
+          public_land_designation: string | null;
+          land_type: string | null;
+          amenities: Record<string, unknown> | null;
+          extra: Record<string, unknown> | null;
+        };
+        const rawSpots: RawSpot[] = Array.isArray(spotsResult.data) ? (spotsResult.data as RawSpot[]) : [];
+        const haversineMiles = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+          const R = 3959;
+          const dLat = (b.lat - a.lat) * Math.PI / 180;
+          const dLng = (b.lng - a.lng) * Math.PI / 180;
+          const s = Math.sin(dLat / 2) ** 2
+            + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+          return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+        };
+        const statusPriority = (status: string | undefined): number => {
+          if (status === 'admin_verified') return 0;
+          if (status === 'user_confirmed') return 1;
+          return 2;
+        };
+
+        // Sort raw rows BEFORE mapping so we can read status + score
+        // straight from extra without round-tripping through the
+        // mapped shape. status priority → confidence DESC → distance
+        // ASC mirrors the old get_dispersed_spots ORDER BY exactly.
+        rawSpots.sort((ra, rb) => {
+          const ea = (ra.extra ?? {}) as Record<string, unknown>;
+          const eb = (rb.extra ?? {}) as Record<string, unknown>;
+          const sa = statusPriority(ea.status as string | undefined);
+          const sb = statusPriority(eb.status as string | undefined);
+          if (sa !== sb) return sa - sb;
+          const ca = typeof ea.confidence_score === 'number' ? (ea.confidence_score as number) : 0;
+          const cb = typeof eb.confidence_score === 'number' ? (eb.confidence_score as number) : 0;
+          if (ca !== cb) return cb - ca;
+          const da = haversineMiles({ lat, lng }, { lat: ra.latitude, lng: ra.longitude });
+          const db = haversineMiles({ lat, lng }, { lat: rb.latitude, lng: rb.longitude });
+          return da - db;
+        });
+
+        const spots: PotentialSpot[] = rawSpots.map((row) => {
+          const extra = (row.extra ?? {}) as Record<string, unknown>;
+          const amen = (row.amenities ?? {}) as Record<string, unknown>;
+          const isCamp = row.kind === 'established_campground' || row.sub_kind === 'known';
+          const type: PotentialSpot['type'] = isCamp ? 'camp-site' : 'dead-end';
+          const isMvumAgency = row.public_land_manager === 'USFS' || row.public_land_manager === 'FS';
+          const isBlmAgency = row.public_land_manager === 'BLM';
+          // Map DB source enum → PotentialSpot source enum
+          const sourceMap: Record<string, PotentialSpot['source']> = {
+            osm: 'osm', mvum: 'mvum', blm: 'blm', usfs: 'mvum', derived: 'derived', community: 'derived', user_added: 'derived',
+          };
+          const mapped = sourceMap[row.source] ?? 'derived';
+          const vehicleReq = (amen.vehicle_required as string | undefined) ?? null;
+          return {
+            id: row.id,
+            lat: row.latitude,
+            lng: row.longitude,
+            name: row.name || (extra.road_name as string | undefined) || (extra.name_original as string | undefined) || (isCamp ? 'Campsite' : 'Dispersed spot'),
+            type,
+            kind: row.kind,
+            subKind: row.sub_kind ?? undefined,
+            description: row.description ?? undefined,
+            score: typeof extra.confidence_score === 'number' ? (extra.confidence_score as number) : 0,
+            reasons: Array.isArray(extra.derivation_reasons) ? (extra.derivation_reasons as string[]) : [],
+            source: mapped,
+            roadName: (extra.road_name as string | undefined) ?? undefined,
+            highClearance: vehicleReq !== 'passenger',
+            isOnMVUMRoad: isMvumAgency,
+            isOnBLMRoad: isBlmAgency,
+            isOnPublicLand: row.land_type === 'public',
+            passengerReachable: extra.is_passenger_reachable === true || vehicleReq === 'passenger',
+            highClearanceReachable: extra.is_high_clearance_reachable !== false && vehicleReq !== '4wd',
+            isEstablishedCampground: row.kind === 'established_campground',
+            isRoadAccessible: extra.is_road_accessible !== false,
+            accessDifficulty: (extra.access_difficulty as string | undefined) ?? null,
+            accessRoad: (extra.access_road as Record<string, unknown> | undefined) ?? null,
+            nearPublicLandEdge: extra.near_public_land_edge === true,
+            metersFromPublicLandEdge:
+              typeof extra.meters_from_public_land_edge === 'number'
+                ? (extra.meters_from_public_land_edge as number)
+                : null,
+            outsidePublicLandPolygon: extra.outside_public_land_polygon === true,
+            osmTags: (extra.osm_tags as Record<string, string> | undefined) ?? undefined,
+            landName: row.public_land_unit ?? undefined,
+            landProtectClass: row.public_land_designation ?? undefined,
+            landProtectionTitle: row.public_land_designation ?? undefined,
+          };
+        });
+
 
         const campgrounds: EstablishedCampground[] = (campgroundsData.campgrounds || []).map(
           (c: DatabaseCampground) => ({

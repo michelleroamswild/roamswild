@@ -63,6 +63,10 @@ export interface PotentialSpot {
   // spots from algorithmically-derived dead-ends in the explorer UI.
   kind?: string;
   subKind?: string;
+  // User / AI-generated description (community spots have this from the
+  // import + review pipeline; derived spots typically don't). Rendered
+  // in the detail panel below the hero block.
+  description?: string;
   score: number;
   reasons: string[];
   source: 'mvum' | 'osm' | 'blm' | 'derived';
