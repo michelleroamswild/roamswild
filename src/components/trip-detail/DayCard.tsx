@@ -110,9 +110,20 @@ export const DayCard = ({
   return (
     <div
       className={cn(
-        'border bg-white dark:bg-paper-2 rounded-[14px] overflow-hidden transition-colors',
-        isActive ? 'border-pine-6 ring-1 ring-pine-6' : 'border-line',
+        'border border-line bg-white dark:bg-paper-2 rounded-[14px] overflow-hidden transition-all duration-300',
+        // relative + z-10 so the elevation shadow renders above adjacent day
+        // cards instead of being painted over by their white surfaces. Lift
+        // on either state — whether the user expanded the card or activated
+        // preview mode.
+        (isActive || expanded) ? 'relative z-10' : '',
       )}
+      style={
+        // Floating-panel elevation token from the design system (matches the
+        // chat assistant panel) — the "pop" tier above modal elevation.
+        (isActive || expanded)
+          ? { boxShadow: '0 24px 56px rgba(29, 34, 24, 0.20), 0 4px 12px rgba(29, 34, 24, 0.10)' }
+          : undefined
+      }
     >
       {/* Day header — click to expand */}
       <div className="hover:bg-cream/40 dark:hover:bg-paper-2/40 transition-colors">
@@ -151,13 +162,13 @@ export const DayCard = ({
                   {day.drivingTime}
                 </span>
                 {day.hike && (
-                  <span className="inline-flex items-center gap-1 text-sage">
+                  <span className="inline-flex items-center gap-1">
                     <Boot className="w-3 h-3" weight="regular" />
                     Hike
                   </span>
                 )}
                 {day.campsite && (
-                  <span className="inline-flex items-center gap-1 text-clay">
+                  <span className="inline-flex items-center gap-1">
                     <Tent className="w-3 h-3" weight="regular" />
                     Camp
                   </span>
@@ -181,11 +192,10 @@ export const DayCard = ({
 
             <Pill
               variant={isActive ? 'solid-pine' : 'ghost'}
-              sm
               mono={false}
               onClick={() => (isActive ? onExitDay() : onStartDay())}
             >
-              <NavigationArrow className="w-3 h-3" weight="regular" />
+              <NavigationArrow className="w-3.5 h-3.5" weight="regular" />
               <span className="hidden sm:inline">{isActive ? 'Exit' : 'Preview'}</span>
             </Pill>
 
@@ -204,9 +214,17 @@ export const DayCard = ({
         </div>
       </div>
 
-      {/* Stops */}
-      {expanded && (
-        <div className="border-t border-line">
+      {/* Stops — grid-rows trick gives a real CSS height transition without
+          having to measure content. The inner overflow-hidden clips children
+          while the outer grid track animates from 0fr → 1fr. */}
+      <div
+        className={cn(
+          'grid transition-[grid-template-rows] [transition-duration:500ms] [transition-timing-function:cubic-bezier(.16,1,.3,1)]',
+          expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-line">
           {/* Day-1 starting location chip */}
           {isFirstDay && startLocation && (
             <Endpoint label={`Start: ${startLocation.name}`} sub="Trip starting point" />
@@ -418,8 +436,9 @@ export const DayCard = ({
             View day details
             <CaretRight className="w-3 h-3" weight="bold" />
           </Link>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

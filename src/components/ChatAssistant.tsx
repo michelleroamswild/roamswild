@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback, KeyboardEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useChatContext } from '@/context/ChatContext';
 import { useTrip } from '@/context/TripContext';
@@ -345,9 +345,18 @@ export function ChatAssistant() {
   const { user } = useAuth();
   const { isOpen, setIsOpen } = useChatContext();
   const isMobile = useIsMobile();
+  const { pathname } = useLocation();
 
   if (!user) return null;
   if (window.location.pathname.includes('-preview')) return null;
+
+  // Lift above the sticky wizard footer (~64px tall) on the create-trip flow.
+  const hasBottomBar = pathname === '/create-trip';
+  const buttonBottom = hasBottomBar
+    ? 'bottom-[max(5.5rem,calc(env(safe-area-inset-bottom)+4.5rem))]'
+    : 'bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.5rem))]';
+  const panelBottom = hasBottomBar ? 'bottom-[5.5rem]' : 'bottom-6';
+  const panelMaxHeight = hasBottomBar ? 'h-[calc(100vh-12rem)]' : 'h-[calc(100vh-8rem)]';
 
   return (
     <>
@@ -357,7 +366,8 @@ export function ChatAssistant() {
         <button
           onClick={() => setIsOpen(true)}
           className={cn(
-            'fixed bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.5rem))] right-4 sm:right-6 z-40',
+            'fixed right-4 sm:right-6 z-40',
+            buttonBottom,
             'w-14 h-14 rounded-full bg-pine-6 text-cream dark:text-ink-pine',
             'shadow-[0_10px_28px_rgba(58,74,42,.32)] hover:shadow-[0_14px_36px_rgba(58,74,42,.40)] hover:bg-pine-5 hover:scale-[1.04]',
             'transition-all flex items-center justify-center',
@@ -370,7 +380,7 @@ export function ChatAssistant() {
 
       {/* Desktop panel */}
       {!isMobile && isOpen && (
-        <div className="fixed bottom-6 right-6 z-40 w-96 max-h-[600px] h-[calc(100vh-8rem)] rounded-[18px] shadow-[0_24px_56px_rgba(29,34,24,.20),0_4px_12px_rgba(29,34,24,.10)] bg-paper border border-line dark:border-line-2 flex flex-col overflow-hidden font-sans">
+        <div className={cn('fixed right-6 z-40 w-96 max-h-[600px] rounded-[18px] shadow-[0_24px_56px_rgba(29,34,24,.20),0_4px_12px_rgba(29,34,24,.10)] bg-paper border border-line dark:border-line-2 flex flex-col overflow-hidden font-sans', panelBottom, panelMaxHeight)}>
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-line dark:border-line-2 bg-cream dark:bg-paper-2">
             <div className="flex items-center gap-2 min-w-0">

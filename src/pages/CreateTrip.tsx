@@ -4,9 +4,12 @@ import { X, CloudCheck, SpinnerGap } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Mono, Pill } from "@/components/redesign";
 import { WizardProgress } from "@/components/wizard/WizardProgress";
+import { CreateTripLoader } from "@/components/CreateTripLoader";
 import { EntryPointSelector, checkIfDrivable } from "@/components/EntryPointSelector";
 import { useTripGenerator } from "@/hooks/use-trip-generator";
 import { useTrip } from "@/context/TripContext";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { useWizard, WizardStep } from "@/hooks/use-wizard";
 import { useTripDraft, TripWizardState } from "@/hooks/use-trip-draft";
 import { TripConfig, TripDestination, LodgingType, PacePreference } from "@/types/trip";
@@ -89,6 +92,8 @@ const CreateTrip = () => {
   const stateLocation = routerLocation.state as LocationState | null;
   const { generateTrip, generating, error: generatorError } = useTripGenerator();
   const { setGeneratedTrip, tripNameExists } = useTrip();
+  const { user } = useAuth();
+  const [profileVehicleLabel, setProfileVehicleLabel] = useState<string | null>(null);
 
   // Draft auto-save
   const { draft, loading: draftLoading, saving: draftSaving, lastSaved, debouncedSave, deleteDraft, hasDraft } = useTripDraft();
@@ -210,6 +215,57 @@ const CreateTrip = () => {
       }
     }
   }, [draftLoading, draftChecked, hasDraft, draft]);
+
+  // Pull the user's saved vehicle prefs once and pre-fill the offroad
+  // selection. Skip the override when restoring from a draft (the draft is
+  // authoritative for that session). The label always renders when a profile
+  // rig exists so the user sees where the value came from.
+  useEffect(() => {
+    if (!user || !draftChecked) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('vehicle_type, drivetrain, clearance')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      const row = data as
+        | { vehicle_type: string | null; drivetrain: string | null; clearance: string | null }
+        | null;
+      if (!row || (!row.vehicle_type && !row.drivetrain && !row.clearance)) return;
+
+      const isFourWdRig =
+        row.drivetrain?.startsWith('4wd_') ||
+        row.vehicle_type === '4wd' ||
+        row.clearance === 'extra_high' ||
+        (row.vehicle_type === 'truck' && row.clearance === 'high');
+      const mapped: '4wd-high' | 'awd-medium' = isFourWdRig ? '4wd-high' : 'awd-medium';
+
+      // Build a short human label from whatever fields are set.
+      const VEHICLE_LABEL: Record<string, string> = {
+        sedan: 'Sedan', suv: 'SUV', truck: 'Truck', '4wd': '4WD rig', rv: 'RV',
+      };
+      const DRIVETRAIN_LABEL: Record<string, string> = {
+        fwd: 'FWD', awd: 'AWD', '4wd_part_time': '4WD part-time', '4wd_full_time': '4WD full-time',
+      };
+      const CLEARANCE_LABEL: Record<string, string> = {
+        standard: 'standard clearance', high: 'high clearance', extra_high: 'extra-high clearance',
+      };
+      const parts = [
+        row.vehicle_type ? VEHICLE_LABEL[row.vehicle_type] ?? row.vehicle_type : null,
+        row.drivetrain ? DRIVETRAIN_LABEL[row.drivetrain] ?? row.drivetrain : null,
+        row.clearance ? CLEARANCE_LABEL[row.clearance] ?? row.clearance : null,
+      ].filter(Boolean);
+      setProfileVehicleLabel(parts.join(' · ') || null);
+
+      // Only override the wizard default when there's no draft to restore.
+      if (!hasDraft) setOffroadVehicle(mapped);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, draftChecked, hasDraft]);
 
   // Navigate to restored step after wizard steps update
   useEffect(() => {
@@ -521,8 +577,6 @@ const CreateTrip = () => {
       return;
     }
 
-    toast.loading("Generating your trip...", { id: "generating" });
-
     try {
       const trip = await generateTrip(tripConfig);
 
@@ -531,19 +585,16 @@ const CreateTrip = () => {
         // Delete the draft since trip was created successfully
         deleteDraft();
         toast.success("Trip created!", {
-          id: "generating",
           description: generatedName,
         });
         navigate(getTripUrl(trip.config.name));
       } else {
         toast.error("Failed to generate trip", {
-          id: "generating",
           description: generatorError || "Please try again",
         });
       }
     } catch (err) {
       toast.error("Failed to generate trip", {
-        id: "generating",
         description: err instanceof Error ? err.message : "Please try again",
       });
     }
@@ -611,6 +662,7 @@ const CreateTrip = () => {
             setOffroadVehicle={setOffroadVehicle}
             pacePreference={pacePreference}
             setPacePreference={setPacePreference}
+            profileVehicleLabel={profileVehicleLabel}
           />
         );
       default:
@@ -778,6 +830,14 @@ const CreateTrip = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Trip-generation loading screen — replaces the "Creating…" pill state */}
+      {generating && (
+        <CreateTripLoader
+          tripName={tripName.trim() || (destinations[destinations.length - 1]?.name ? `${destinations[destinations.length - 1].name} Trip` : undefined)}
+          destinations={destinations}
+        />
+      )}
 
       {/* Entry Point Selector Modal */}
       {entryPointModal.place && (

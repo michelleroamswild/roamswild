@@ -3,7 +3,6 @@ import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { DayPicker } from "react-day-picker";
 
 import { cn } from "@/lib/utils";
-import { buttonVariants } from "@/components/ui/button";
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
@@ -16,28 +15,25 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
         caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-medium text-foreground",
+        caption_label: "text-sm font-medium text-ink",
         nav: "space-x-1 flex items-center",
-        nav_button: cn(
-          buttonVariants({ variant: "outline" }),
-          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
-        ),
+        nav_button: "inline-flex items-center justify-center h-7 w-7 rounded-md border border-line bg-transparent p-0 text-ink-2 opacity-60 hover:opacity-100 hover:bg-water/10 transition-colors",
         nav_button_previous: "absolute left-1",
         nav_button_next: "absolute right-1",
         table: "w-full border-collapse space-y-1",
         head_row: "flex",
-        head_cell: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",
+        head_cell: "text-ink-3 rounded-md w-9 font-mono uppercase tracking-[0.10em] text-[11px]",
         row: "flex w-full mt-2",
-        cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
-        day: cn(buttonVariants({ variant: "ghost" }), "h-9 w-9 p-0 font-normal text-foreground aria-selected:opacity-100"),
+        cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-water/40 [&:has([aria-selected])]:bg-water first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+        day: "inline-flex items-center justify-center h-9 w-9 p-0 rounded-md text-sm font-normal text-ink hover:bg-water/35 hover:text-ink transition-colors aria-selected:opacity-100",
         day_range_end: "day-range-end",
         day_selected:
-          "bg-[hsl(var(--forest))] text-white hover:bg-[hsl(var(--forest))] hover:text-white focus:bg-[hsl(var(--forest))] focus:text-white",
-        day_today: "bg-[hsl(var(--forest)_/_0.1)] text-[hsl(var(--forest))] font-semibold",
+          "bg-water text-white hover:bg-water hover:text-white focus:bg-water focus:text-white",
+        day_today: "bg-water/15 text-ink font-semibold",
         day_outside:
-          "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
-        day_disabled: "text-muted-foreground opacity-50",
-        day_range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
+          "day-outside text-ink-3 opacity-50 aria-selected:bg-water/40 aria-selected:text-ink-3 aria-selected:opacity-30",
+        day_disabled: "text-ink-3 opacity-50",
+        day_range_middle: "aria-selected:bg-water/40 aria-selected:text-ink",
         day_hidden: "invisible",
         ...classNames,
       }}

@@ -1,9 +1,7 @@
-import { Calendar, Clock, MapPin, NavigationArrow, Path, X } from '@phosphor-icons/react';
 import { DirectionsRenderer, InfoWindow, Marker } from '@react-google-maps/api';
 import { GoogleMap } from '@/components/GoogleMap';
 import { GeneratedTrip, TripConfig, TripStop } from '@/types/trip';
 import { createMarkerIcon, createSimpleMarkerIcon } from '@/utils/mapMarkers';
-import { Mono, Pill } from '@/components/redesign';
 
 interface TripMapViewProps {
   tripConfig: TripConfig;
@@ -17,9 +15,6 @@ interface TripMapViewProps {
   selectedStop: TripStop | null;
   onMapLoad: (map: google.maps.Map) => void;
   onSelectStop: (stop: TripStop | null) => void;
-  onExitDayMode: () => void;
-  onNavigateDay: () => void;
-  onStartNavigation: () => void;
 }
 
 export const TripMapView = ({
@@ -34,9 +29,6 @@ export const TripMapView = ({
   selectedStop,
   onMapLoad,
   onSelectStop,
-  onExitDayMode,
-  onNavigateDay,
-  onStartNavigation,
 }: TripMapViewProps) => {
   // Pine + Paper route stroke (cream on dark, pine on light satellite)
   const strokeColor = isDark ? '#d9d0c3' : '#3a4a2a';
@@ -205,79 +197,6 @@ export const TripMapView = ({
             </InfoWindow>
           )}
         </GoogleMap>
-
-        {/* Route info overlay */}
-        <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 right-2 sm:right-4 z-10">
-          <div className="bg-white/95 backdrop-blur-md border border-line rounded-[14px] shadow-[0_8px_22px_rgba(29,34,24,.10)] p-2.5 sm:p-3.5 font-sans">
-            {activeDay ? (
-              <div className="flex items-center justify-between flex-wrap gap-2 sm:gap-3">
-                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                  <div className="hidden sm:flex items-center justify-center w-10 h-10 bg-pine-6/12 rounded-[10px] flex-shrink-0">
-                    <span className="text-[16px] font-sans font-bold tracking-[-0.01em] text-pine-6 leading-none">
-                      {activeDay}
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[13px] sm:text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">
-                      Day {activeDay}
-                    </p>
-                    <div className="flex items-center gap-2 sm:gap-3 mt-0.5">
-                      <Mono className="text-ink-3 inline-flex items-center gap-1">
-                        <Path className="w-3 h-3" weight="regular" />
-                        {generatedTrip.days.find((d) => d.day === activeDay)?.drivingDistance}
-                      </Mono>
-                      <Mono className="text-ink-3 inline-flex items-center gap-1">
-                        <Clock className="w-3 h-3" weight="regular" />
-                        {generatedTrip.days.find((d) => d.day === activeDay)?.drivingTime}
-                      </Mono>
-                      <Mono className="text-ink-3 hidden sm:inline-flex items-center gap-1">
-                        <MapPin className="w-3 h-3" weight="regular" />
-                        {generatedTrip.days.find((d) => d.day === activeDay)?.stops.length} stops
-                      </Mono>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-                  <Pill variant="ghost" sm mono={false} onClick={onExitDayMode}>
-                    <X className="w-3.5 h-3.5" weight="regular" />
-                    <span className="hidden sm:inline">Exit day</span>
-                  </Pill>
-                  <Pill variant="solid-pine" sm mono={false} onClick={onNavigateDay}>
-                    <NavigationArrow className="w-3.5 h-3.5" weight="regular" />
-                    <span className="hidden sm:inline">Navigate day {activeDay}</span>
-                    <span className="sm:hidden">Navigate</span>
-                  </Pill>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between flex-wrap gap-2 sm:gap-3">
-                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                  <div className="inline-flex items-center gap-1">
-                    <Path className="w-3.5 h-3.5 text-pine-6" weight="regular" />
-                    <span className="text-[13px] sm:text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">
-                      {generatedTrip.totalDistance}
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-ink-3" weight="regular" />
-                    <span className="text-[13px] sm:text-[14px] text-ink">{generatedTrip.totalDrivingTime}</span>
-                  </div>
-                  <div className="hidden sm:inline-flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-clay" weight="regular" />
-                    <span className="text-[13px] sm:text-[14px] text-ink">
-                      {generatedTrip.days.length} days
-                    </span>
-                  </div>
-                </div>
-                <Pill variant="solid-pine" sm mono={false} onClick={onStartNavigation}>
-                  <NavigationArrow className="w-3.5 h-3.5" weight="regular" />
-                  <span className="hidden sm:inline">Start navigation</span>
-                  <span className="sm:hidden">Navigate</span>
-                </Pill>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

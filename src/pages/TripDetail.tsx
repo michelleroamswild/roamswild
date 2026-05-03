@@ -1070,9 +1070,18 @@ const TripDetail = () => {
       },
     };
 
+    // For round trips (or empty itineraries) the new stop appends. For
+    // one-way trips the last destination IS the end, so we insert the new
+    // stop just before it — keeping the user's chosen endpoint intact.
+    const nextDestinations = [...tripConfig.destinations];
+    if (tripConfig.returnToStart || nextDestinations.length === 0) {
+      nextDestinations.push(newDestination);
+    } else {
+      nextDestinations.splice(nextDestinations.length - 1, 0, newDestination);
+    }
     const updatedConfig = {
       ...tripConfig,
-      destinations: [...tripConfig.destinations, newDestination],
+      destinations: nextDestinations,
     };
 
     setAddDestinationModal(false);
@@ -1207,9 +1216,6 @@ const TripDetail = () => {
             selectedStop={selectedStop}
             onMapLoad={handleMapLoad}
             onSelectStop={setSelectedStop}
-            onExitDayMode={handleExitDayMode}
-            onNavigateDay={handleNavigateDay}
-            onStartNavigation={handleStartNavigation}
           />
 
           {/* Itinerary Panel */}
@@ -1327,7 +1333,12 @@ const TripDetail = () => {
       />
 
       {/* Regenerating Loading Overlay */}
-      {regenerating && <RegeneratingLoader />}
+      {regenerating && (
+        <RegeneratingLoader
+          tripName={tripConfig?.name}
+          destinations={tripConfig?.destinations}
+        />
+      )}
 
     </div>
   );

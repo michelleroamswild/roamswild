@@ -3,7 +3,6 @@ import { format } from "date-fns";
 import { CalendarBlank } from "@phosphor-icons/react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -29,19 +28,26 @@ export function DatePicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
+        <button
+          type="button"
           className={cn(
-            "h-12 w-full rounded-md border-2 border-primary bg-white dark:bg-background px-4 justify-start text-left font-normal text-base hover:bg-white dark:hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/20 transition-colors",
-            !value && "text-muted-foreground",
-            className
+            "relative w-full h-12 pl-11 pr-4 rounded-[14px] border border-line bg-white dark:bg-paper-2 text-left text-[15px] text-ink outline-none transition-colors",
+            "focus:border-pine-6 data-[state=open]:border-pine-6 hover:border-ink-3/40",
+            !value && "text-ink-3",
+            className,
           )}
         >
-          <CalendarBlank className="mr-2 h-4 w-4 text-[hsl(var(--forest))] dark:text-foreground" />
-          {value ? format(value, "MMM d, yyyy") : <span>{placeholder}</span>}
-        </Button>
+          <CalendarBlank
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-3"
+            weight="regular"
+          />
+          {value ? format(value, "MMM d, yyyy") : placeholder}
+        </button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0 bg-background" align="start">
+      <PopoverContent
+        className="w-auto p-0 border-line bg-white dark:bg-paper-2 rounded-[14px]"
+        align="start"
+      >
         <Calendar
           mode="single"
           selected={value}

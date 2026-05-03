@@ -1,4 +1,6 @@
-import { Mountains, Camera, Jeep, Check } from "@phosphor-icons/react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { Mountains, Camera, Jeep, Check, PencilSimple } from "@phosphor-icons/react";
 import { PacePreference } from "@/types/trip";
 import { Mono } from "@/components/redesign";
 import { cn } from "@/lib/utils";
@@ -31,6 +33,9 @@ interface StepActivitiesProps {
   setOffroadVehicle: (type: '4wd-high' | 'awd-medium') => void;
   pacePreference: PacePreference;
   setPacePreference: (pace: PacePreference) => void;
+  /** Human-readable rig summary from the user's profile, when set. Drives the
+   * "From your profile" hint above the vehicle radios. */
+  profileVehicleLabel?: string | null;
 }
 
 export function StepActivities({
@@ -40,11 +45,18 @@ export function StepActivities({
   setOffroadVehicle,
   pacePreference,
   setPacePreference,
+  profileVehicleLabel,
 }: StepActivitiesProps) {
   const handleActivityToggle = (id: string, checked: boolean) => {
     if (checked) setActivities([...activities, id]);
     else setActivities(activities.filter((x) => x !== id));
   };
+
+  // When the user has a profile rig saved, default to a compact "from profile"
+  // summary and reveal the radio overrides only on demand.
+  const [showVehicleOverride, setShowVehicleOverride] = useState(false);
+  const hasProfileRig = !!profileVehicleLabel;
+  const wizardVehicleLabel = offroadVehicle === '4wd-high' ? '4WD high clearance' : 'AWD medium clearance';
 
   return (
     <div className="space-y-8">
@@ -100,18 +112,56 @@ export function StepActivities({
                 {id === 'offroading' && selected && (
                   <div className="px-4 pb-4 -mt-1 ml-14 animate-fade-in">
                     <Mono className="text-ink-3 block mb-2">Your vehicle</Mono>
-                    <div className="grid sm:grid-cols-2 gap-2">
-                      <VehicleRadio
-                        checked={offroadVehicle === '4wd-high'}
-                        onChange={() => setOffroadVehicle('4wd-high')}
-                        label="4WD high clearance"
-                      />
-                      <VehicleRadio
-                        checked={offroadVehicle === 'awd-medium'}
-                        onChange={() => setOffroadVehicle('awd-medium')}
-                        label="AWD medium clearance"
-                      />
-                    </div>
+
+                    {hasProfileRig && !showVehicleOverride ? (
+                      <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-[10px] border border-pine-6/25 bg-pine-6/[0.06] dark:bg-pine-6/[0.10]">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-[8px] bg-pine-6/15 text-pine-6 flex items-center justify-center flex-shrink-0">
+                            <Jeep className="w-4 h-4" weight="regular" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[13px] font-sans font-semibold tracking-[-0.005em] text-ink truncate">
+                              {wizardVehicleLabel}
+                            </div>
+                            <div className="text-[11px] text-ink-3 truncate">
+                              From profile · {profileVehicleLabel}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowVehicleOverride(true)}
+                          className="inline-flex items-center gap-1 text-[12px] font-mono uppercase tracking-[0.10em] text-pine-6 hover:text-pine-5 flex-shrink-0"
+                        >
+                          <PencilSimple className="w-3 h-3" weight="regular" />
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid sm:grid-cols-2 gap-2">
+                          <VehicleRadio
+                            checked={offroadVehicle === '4wd-high'}
+                            onChange={() => setOffroadVehicle('4wd-high')}
+                            label="4WD high clearance"
+                          />
+                          <VehicleRadio
+                            checked={offroadVehicle === 'awd-medium'}
+                            onChange={() => setOffroadVehicle('awd-medium')}
+                            label="AWD medium clearance"
+                          />
+                        </div>
+                        {hasProfileRig && (
+                          <p className="text-[12px] text-ink-3 mt-2">
+                            Override for this trip only.{' '}
+                            <Link to="/profile" className="text-pine-6 underline underline-offset-2 hover:text-pine-5">
+                              Update your profile
+                            </Link>{' '}
+                            to change it everywhere.
+                          </p>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
               </div>

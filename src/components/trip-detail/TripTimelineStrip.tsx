@@ -48,12 +48,20 @@ export const TripTimelineStrip = ({
             </span>
           )}
 
-          {/* Destinations */}
+          {/* Destinations — for one-way trips, the Add-stop button is rendered
+              BEFORE the end chip so a new stop becomes a layover instead of a
+              new endpoint. */}
           {tripConfig.destinations.map((dest, index) => {
             const isLast = index === tripConfig.destinations.length - 1;
             const isEnd = isLast && !tripConfig.returnToStart;
             return (
               <div key={dest.id} className="flex items-center gap-2 flex-shrink-0">
+                {isEnd && (
+                  <>
+                    <AddStopButton onClick={onAddDestination} />
+                    <Connector />
+                  </>
+                )}
                 <Stop
                   accent={isEnd ? 'ember' : 'pine'}
                   label={dest.name.split(',')[0]}
@@ -64,19 +72,11 @@ export const TripTimelineStrip = ({
             );
           })}
 
-          {/* Add destination */}
+          {/* Add destination — for round trips and empty itineraries the button
+              sits at the end of the chain. (One-way trips render it inline above.) */}
           {(tripConfig.returnToStart || tripConfig.destinations.length === 0) && (
             <>
-              <button
-                onClick={onAddDestination}
-                className={cn(
-                  CHIP_BASE,
-                  'border border-dashed border-line text-ink-3 hover:text-pine-6 hover:border-pine-6 transition-colors group flex-shrink-0',
-                )}
-              >
-                <Plus className="w-3 h-3 transition-transform group-hover:rotate-90" weight="bold" />
-                Add stop
-              </button>
+              <AddStopButton onClick={onAddDestination} />
               {tripConfig.returnToStart && <Connector />}
             </>
           )}
@@ -137,4 +137,17 @@ const Stop = ({
 
 const Connector = () => (
   <CaretRight className="w-3.5 h-3.5 text-ink-3 flex-shrink-0" weight="bold" />
+);
+
+const AddStopButton = ({ onClick }: { onClick: () => void }) => (
+  <button
+    onClick={onClick}
+    className={cn(
+      CHIP_BASE,
+      'border border-dashed border-line text-ink-3 hover:text-pine-6 hover:border-pine-6 transition-colors group flex-shrink-0',
+    )}
+  >
+    <Plus className="w-3 h-3 transition-transform group-hover:rotate-90" weight="bold" />
+    Add stop
+  </button>
 );
