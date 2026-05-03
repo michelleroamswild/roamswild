@@ -87,6 +87,39 @@ piecemeal:
   same control style, popover style, and pin vocabulary. Pull them into a
   small shared module so future maps inherit the conventions automatically.
 
+## Nationwide PAD-US Designations import
+
+Designations (Wilderness, National Monuments, WSAs, ACECs, USFS Roadless
+Areas) are currently imported for Utah only — `scripts/public-lands/
+import_padus.py --include-designations --state UT`. PAD-US Fee/Easement
+is already nationwide; only the Designation overlay layer is UT-only.
+
+Not blocking: Designations are explicitly excluded from both
+`compute_spot_public_land_edge_distance` and the `derive_*` functions
+(see migration 20260233), so importing them won't reclassify any
+existing spots or pull in new ones. What they unlock:
+
+- AdminSpotReview map renders Wilderness/NM/WSA boundaries nationwide,
+  not just UT.
+- Future "spot is in Bears Ears NM / Mount Hood Wilderness" labels on
+  spot cards.
+- Proper coincident-edge handling outside UT (the Death Ridge fix in
+  20260238 unions overlapping ownership polygons; non-UT areas with
+  Designation overlays would benefit from the same logic).
+
+To run: drop `--state UT` and run nationwide. Two prerequisites:
+
+1. **Path is hardcoded.** `PADUS_GDB` constant at line 58 of
+   `import_padus.py` expects `~/Desktop/PADUS4_0Geodatabase/`. Actual
+   GDB lives at `~/Desktop/_Michelle Roams Wild/RoamsWild/
+   PADUS4_0Geodatabase/`. Make it env-var configurable
+   (`PADUS_GDB_PATH`) — one-line change.
+2. **Insert pipeline is sequential.** ~30-100k rows × ~1.5s each via
+   single REST POSTs = ~12-25 hours. Either run overnight (safe since
+   `--resume` skips already-imported rows) or batch the inserts first
+   (single `POST /rest/v1/public_lands` with array body) to drop wall
+   time to maybe an hour.
+
 ## Paginate `get_public_lands_in_bbox`
 
 PostgREST silently caps RPC results at 1000 rows. After the Designations
