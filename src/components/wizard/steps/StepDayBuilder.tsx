@@ -244,10 +244,9 @@ export function StepDayBuilder({
               zoom={10}
               className="w-full h-full"
               onLoad={handleMapLoad}
+              showMapTypeControl
               options={{
                 mapTypeId: 'hybrid',
-                mapTypeControl: true,
-                mapTypeControlOptions: { position: google.maps.ControlPosition?.TOP_RIGHT },
               }}
             >
               <Marker

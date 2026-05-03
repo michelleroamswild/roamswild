@@ -55,6 +55,8 @@ interface DispersedMapProps {
   mapRef: React.MutableRefObject<google.maps.Map | null>;
   mapCenter: { lat: number; lng: number };
   mapZoom: number;
+  /** Map base imagery — controlled by the parent's MapControls toggle. */
+  mapTypeId?: google.maps.MapTypeId | string;
   onMapLoad: (map: google.maps.Map) => void;
   onMapClick: (e: google.maps.MapMouseEvent) => void;
 
@@ -93,6 +95,7 @@ interface DispersedMapProps {
 export const DispersedMap = ({
   mapCenter,
   mapZoom,
+  mapTypeId = 'hybrid',
   onMapLoad,
   onMapClick,
   searchLocation,
@@ -128,12 +131,9 @@ export const DispersedMap = ({
       className="w-full h-full"
       onLoad={onMapLoad}
       onClick={onMapClick}
+      mapControls={false}
       options={{
-        mapTypeId: 'hybrid',
-        mapTypeControl: true,
-        mapTypeControlOptions: {
-          position: typeof google !== 'undefined' ? google.maps.ControlPosition?.TOP_RIGHT : undefined,
-        },
+        mapTypeId,
       }}
     >
       {/* Search location marker */}

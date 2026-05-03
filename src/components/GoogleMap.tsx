@@ -1,7 +1,8 @@
 import { GoogleMap as GoogleMapComponent } from '@react-google-maps/api';
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { useGoogleMaps } from './GoogleMapsProvider';
 import { useTheme } from '@/hooks/use-theme';
+import { MapControls, type MapType } from './MapControls';
 
 // Earth-tone styled map to match the app theme (light mode)
 const lightMapStyles = [
@@ -111,11 +112,36 @@ interface GoogleMapProps {
   onClick?: (e: google.maps.MapMouseEvent) => void;
   onLoad?: (map: google.maps.Map) => void;
   options?: google.maps.MapOptions;
+  /** Pine + Paper styled zoom + map-type controls. Default `auto` renders
+   *  them top-right and disables Google's default chrome. Pass `false` to
+   *  render no controls (consumer handles their own — e.g. DispersedExplorer
+   *  positions its MapControls externally to clear the results panel). */
+  mapControls?: 'auto' | false;
+  /** When the wrapper renders auto controls, show the map-type toggle too. */
+  showMapTypeControl?: boolean;
 }
 
-export function GoogleMap({ center, zoom = 10, children, className, onClick, onLoad, options }: GoogleMapProps) {
+export function GoogleMap({
+  center,
+  zoom = 10,
+  children,
+  className,
+  onClick,
+  onLoad,
+  options,
+  mapControls = 'auto',
+  showMapTypeControl = false,
+}: GoogleMapProps) {
   const { isLoaded, loadError } = useGoogleMaps();
   const { isDark } = useTheme();
+  // Mirror the loaded map in state so the auto MapControls overlay can
+  // re-render once the map is ready (refs alone don't trigger updates).
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  // Track current mapType for the toggle. Initial seed comes from caller's
+  // options or roadmap.
+  const [mapTypeId, setMapTypeId] = useState<MapType>(
+    (options?.mapTypeId as MapType) ?? 'roadmap',
+  );
 
   if (loadError) {
     return (
@@ -134,26 +160,60 @@ export function GoogleMap({ center, zoom = 10, children, className, onClick, onL
   }
 
   // Don't apply custom styles for satellite/hybrid map types
-  const isSatellite = options?.mapTypeId === 'satellite' || options?.mapTypeId === 'hybrid';
+  const effectiveType = (options?.mapTypeId as string) ?? mapTypeId;
+  const isSatellite = effectiveType === 'satellite' || effectiveType === 'hybrid';
+
+  const showAutoControls = mapControls === 'auto';
+
+  const handleLoad = (map: google.maps.Map) => {
+    setMapInstance(map);
+    onLoad?.(map);
+  };
+
+  const handleMapTypeChange = (next: MapType) => {
+    setMapTypeId(next);
+    if (mapInstance) mapInstance.setMapTypeId(next);
+  };
 
   return (
-    <GoogleMapComponent
-      mapContainerClassName={className || "w-full h-full"}
-      center={center}
-      zoom={zoom}
-      options={{
-        styles: isSatellite ? undefined : (isDark ? darkMapStyles : lightMapStyles),
-        disableDefaultUI: false,
-        zoomControl: true,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: true,
-        ...options,
-      }}
-      onClick={onClick}
-      onLoad={onLoad}
-    >
-      {children}
-    </GoogleMapComponent>
+    <div className="relative w-full h-full">
+      <GoogleMapComponent
+        mapContainerClassName={className || "w-full h-full"}
+        center={center}
+        zoom={zoom}
+        options={{
+          styles: isSatellite ? undefined : (isDark ? darkMapStyles : lightMapStyles),
+          // Always disable Google's default chrome — the pine MapControls
+          // overlay (or the consumer, when mapControls={false}) covers it.
+          // Consumers can re-enable any individual control via the `options`
+          // spread when they specifically want Google's chrome.
+          disableDefaultUI: true,
+          zoomControl: false,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+          rotateControl: false,
+          scaleControl: false,
+          ...options,
+        }}
+        onClick={onClick}
+        onLoad={handleLoad}
+      >
+        {children}
+      </GoogleMapComponent>
+      {showAutoControls && (
+        <div className="absolute top-3 right-3 z-10">
+          <MapControls
+            map={mapInstance}
+            mapType={mapTypeId}
+            onMapTypeChange={handleMapTypeChange}
+            showZoom
+            // Map type toggle is opt-in — most pages just need zoom.
+            // Pages like LocationDetail / CampsiteDetail can pass it on.
+            {...(showMapTypeControl ? {} : { mapType: null })}
+          />
+        </div>
+      )}
+    </div>
   );
 }

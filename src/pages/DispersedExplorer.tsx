@@ -1828,10 +1828,11 @@ const DispersedExplorer = () => {
         </div>
 
         {/* Map controls — pine-styled zoom + map-type toggle. Bottom-right
-            on lg+ but shifted left of the results panel so it's not behind
-            it. Mobile: top-right of the map (no overlay panel there). */}
+            on lg+ but shifted past the results panel (panel ends at 425px
+            from the right edge: 20px gap + 400px width) plus a 20px
+            breathing margin. Mobile: top-right of the map. */}
         <div className={cn(
-          'absolute top-4 right-4 z-10 lg:top-auto lg:bottom-5 lg:right-[420px]',
+          'absolute top-4 right-4 z-10 lg:top-auto lg:bottom-5 lg:right-[445px]',
           mobileView === 'map' ? 'block' : 'hidden lg:block',
         )}>
           <MapControls
