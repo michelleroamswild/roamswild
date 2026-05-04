@@ -33,6 +33,7 @@ import { LocationSelector, type SelectedLocation } from '@/components/LocationSe
 import { GoogleMap } from '@/components/GoogleMap';
 import { useGoogleMaps } from '@/components/GoogleMapsProvider';
 import { Marker } from '@react-google-maps/api';
+import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { useTrip } from '@/context/TripContext';
 import { useAuth } from '@/context/AuthContext';
 import { useSavedLocations } from '@/context/SavedLocationsContext';

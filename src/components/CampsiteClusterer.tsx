@@ -3,6 +3,8 @@ import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markercluste
 import type { Campsite } from '@/types/campsite';
 import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
 
+// Migrated from deprecated google.maps.Marker → google.maps.marker.AdvancedMarkerElement.
+
 interface CampsiteClustererProps {
   map: google.maps.Map | null;
   campsites: Campsite[];
@@ -10,26 +12,32 @@ interface CampsiteClustererProps {
   selectedCampsiteId: string | null;
 }
 
+const buildClusterContent = (count: number): HTMLElement => {
+  const size = Math.min(24 + Math.log2(count) * 8, 56);
+  const div = document.createElement('div');
+  div.style.width = `${size}px`;
+  div.style.height = `${size}px`;
+  div.style.borderRadius = '50%';
+  div.style.backgroundColor = '#a855f7';
+  div.style.border = '2px solid #ffffff';
+  div.style.display = 'flex';
+  div.style.alignItems = 'center';
+  div.style.justifyContent = 'center';
+  div.style.color = '#ffffff';
+  div.style.fontFamily = 'Manrope, sans-serif';
+  div.style.fontSize = size > 40 ? '14px' : '12px';
+  div.style.fontWeight = '700';
+  div.style.opacity = '0.9';
+  div.style.cursor = 'pointer';
+  div.textContent = String(count);
+  return div;
+};
+
 const createClusterRenderer = () => ({
   render: ({ count, position }: { count: number; position: google.maps.LatLng }) => {
-    const size = Math.min(24 + Math.log2(count) * 8, 56);
-
-    return new google.maps.Marker({
+    return new google.maps.marker.AdvancedMarkerElement({
       position,
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        fillColor: '#a855f7',
-        fillOpacity: 0.9,
-        strokeColor: '#ffffff',
-        strokeWeight: 2,
-        scale: size / 2,
-      },
-      label: {
-        text: String(count),
-        color: '#ffffff',
-        fontSize: size > 40 ? '14px' : '12px',
-        fontWeight: 'bold',
-      },
+      content: buildClusterContent(count),
       title: `${count} campsites`,
       zIndex: count + 100,
     });
@@ -43,7 +51,7 @@ export function CampsiteClusterer({
   selectedCampsiteId,
 }: CampsiteClustererProps) {
   const clustererRef = useRef<MarkerClusterer | null>(null);
-  const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
+  const markersRef = useRef<Map<string, google.maps.marker.AdvancedMarkerElement>>(new Map());
   const campsitesKeyRef = useRef<string>('');
 
   const handleClick = useCallback((campsite: Campsite) => {
@@ -65,23 +73,23 @@ export function CampsiteClusterer({
     }
     markersRef.current.clear();
 
-    const markers: google.maps.Marker[] = [];
+    const markers: google.maps.marker.AdvancedMarkerElement[] = [];
 
     campsites
       .filter(c => isFinite(c.lat) && isFinite(c.lng))
       .forEach(campsite => {
         const isSelected = selectedCampsiteId === campsite.id;
-        const marker = new google.maps.Marker({
+        const marker = new google.maps.marker.AdvancedMarkerElement({
           position: { lat: campsite.lat, lng: campsite.lng },
           title: campsite.name,
-          icon: createSimpleMarkerIcon('camp', {
+          content: createSimpleMarkerIcon('camp', {
             isActive: isSelected,
             size: isSelected ? 10 : 8,
           }),
           zIndex: isSelected ? 1000 : 1,
         });
 
-        marker.addListener('click', () => handleClick(campsite));
+        marker.addListener('gmp-click', () => handleClick(campsite));
         markers.push(marker);
         markersRef.current.set(campsite.id, marker);
       });
@@ -112,11 +120,11 @@ export function CampsiteClusterer({
   useEffect(() => {
     markersRef.current.forEach((marker, id) => {
       const isSelected = selectedCampsiteId === id;
-      marker.setIcon(createSimpleMarkerIcon('camp', {
+      marker.content = createSimpleMarkerIcon('camp', {
         isActive: isSelected,
         size: isSelected ? 10 : 8,
-      }));
-      marker.setZIndex(isSelected ? 1000 : 1);
+      });
+      marker.zIndex = isSelected ? 1000 : 1;
     });
   }, [selectedCampsiteId]);
 

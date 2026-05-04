@@ -182,6 +182,10 @@ export function GoogleMap({
         center={center}
         zoom={zoom}
         options={{
+          // Vector Map ID — required for AdvancedMarkerElement to render.
+          // When mapId is set, Google Maps disregards the `styles` option
+          // (vector styling is configured in Cloud Console for the Map ID).
+          mapId: import.meta.env.VITE_GOOGLE_MAPS_MAP_ID as string | undefined,
           styles: isSatellite ? undefined : (isDark ? darkMapStyles : lightMapStyles),
           // Always disable Google's default chrome — the pine MapControls
           // overlay (or the consumer, when mapControls={false}) covers it.

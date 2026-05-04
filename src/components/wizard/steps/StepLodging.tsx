@@ -16,8 +16,8 @@ const LODGING_OPTIONS: Array<{
 const CAMPSITE_SELECTION_OPTIONS = [
   {
     id: 'best-each-night',
-    label: 'Different camp each night',
-    description: "We'll find the best available campsite for each night of your route.",
+    label: 'Close to my activities',
+    description: "We'll find the best campsite each night near where you'll be exploring.",
     baseCampMode: false,
     icon: MapPinSimpleArea,
   },

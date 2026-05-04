@@ -1,15 +1,26 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markerclusterer';
 import type { Cluster } from '@googlemaps/markerclusterer';
 import type { PotentialSpot } from '@/hooks/use-dispersed-roads';
+
+// Migrated from deprecated google.maps.Marker → google.maps.marker.AdvancedMarkerElement
+// per the Feb 2024 deprecation notice. Marker bug fixes will not be addressed
+// going forward; AdvancedMarkerElement uses a DOM-based content model that
+// renders cleaner without the icon-redraw flicker pattern.
 
 interface SpotClustererProps {
   map: google.maps.Map | null;
   spots: PotentialSpot[];
   onSpotClick: (spot: PotentialSpot) => void;
   selectedSpot: PotentialSpot | null;
-  getMarkerIcon: (spot: PotentialSpot, isSelected: boolean) => google.maps.Symbol | google.maps.Icon;
+  /** Build the marker's DOM content. Returns an HTMLElement that gets
+      assigned to `AdvancedMarkerElement.content`. */
+  getMarkerIcon: (spot: PotentialSpot, isSelected: boolean) => HTMLElement;
 }
+
+// AdvancedMarkerElement doesn't carry an arbitrary props bag like the old
+// Marker class; we stash kind on a known property name we own.
+type SpotAdvancedMarker = google.maps.marker.AdvancedMarkerElement & { spotKind?: string };
 
 // Map a kind → pin color (kept in sync with DispersedExplorer's
 // getSpotMarkerIcon and the --pin-* tokens in src/index.css).
@@ -25,40 +36,44 @@ const kindToColor = (kind: string | undefined): string => {
   }
 };
 
-// Custom renderer for cluster markers — colored by the dominant kind in
-// the cluster. A cluster of mostly dispersed pins reads as moss green,
-// mostly water reads as grey-green, etc.
+// Build the DOM content for a cluster bubble — colored by dominant kind.
+const buildClusterContent = (count: number, color: string): HTMLElement => {
+  const size = Math.min(24 + Math.log2(count) * 8, 56);
+  const div = document.createElement('div');
+  div.style.width = `${size}px`;
+  div.style.height = `${size}px`;
+  div.style.borderRadius = '50%';
+  div.style.backgroundColor = color;
+  div.style.border = '2.5px solid hsl(36 23% 97%)';
+  div.style.display = 'flex';
+  div.style.alignItems = 'center';
+  div.style.justifyContent = 'center';
+  div.style.color = '#ffffff';
+  div.style.fontFamily = 'Manrope, sans-serif';
+  div.style.fontSize = size > 40 ? '14px' : '12px';
+  div.style.fontWeight = '700';
+  div.style.opacity = '0.9';
+  div.style.cursor = 'pointer';
+  div.textContent = String(count);
+  return div;
+};
+
 const createClusterRenderer = () => ({
   render: ({ count, position, markers }: Cluster) => {
-    // Tally kinds inside the cluster, pick the most common
+    // Tally kinds inside the cluster, pick the most common.
     const tally = new Map<string, number>();
     markers.forEach((m) => {
-      const kind = (m as google.maps.Marker).get?.('spotKind') as string | undefined;
-      const k = kind ?? 'unknown';
+      const k = (m as SpotAdvancedMarker).spotKind ?? 'unknown';
       tally.set(k, (tally.get(k) ?? 0) + 1);
     });
     let dominant: string | undefined;
     let max = 0;
     tally.forEach((c, k) => { if (c > max) { max = c; dominant = k; } });
     const color = kindToColor(dominant);
-    const size = Math.min(24 + Math.log2(count) * 8, 56);
 
-    return new google.maps.Marker({
+    return new google.maps.marker.AdvancedMarkerElement({
       position,
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        fillColor: color,
-        fillOpacity: 0.9,
-        strokeColor: 'hsl(36 23% 97%)',  // cream
-        strokeWeight: 2.5,
-        scale: size / 2,
-      },
-      label: {
-        text: String(count),
-        color: '#ffffff',
-        fontSize: size > 40 ? '14px' : '12px',
-        fontWeight: 'bold',
-      },
+      content: buildClusterContent(count, color),
       title: `${count} camping spots - zoom in to see details`,
       zIndex: count + 100, // Clusters above individual markers
     });
@@ -70,72 +85,79 @@ export function SpotClusterer({
   spots,
   onSpotClick,
   selectedSpot,
-  getMarkerIcon
+  getMarkerIcon,
 }: SpotClustererProps) {
   const clustererRef = useRef<MarkerClusterer | null>(null);
-  const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
+  const markersRef = useRef<Map<string, SpotAdvancedMarker>>(new Map());
   const spotsRef = useRef<string>('');
+  // Track which spot id is currently selected so the icon-update effect
+  // only swaps content on markers whose selection state actually changed
+  // (at most two: the previously-selected and the newly-selected). Without
+  // this guard the effect fires `marker.content = newDom` on every marker
+  // every render, which flashes the entire pin set on each parent re-render.
+  const selectedIdRef = useRef<string | null>(null);
 
-  // Stable click handler
-  const handleSpotClick = useCallback((spot: PotentialSpot) => {
-    onSpotClick(spot);
-  }, [onSpotClick]);
+  // Pin the click handler in a ref so unstable inline-arrow callers from
+  // the parent (e.g. `onSpotClusterClick={(spot) => { … }}`) don't cascade
+  // a new reference into the cluster-build effect's deps. Without this,
+  // every parent re-render rebuilt the entire cluster from scratch — the
+  // dominant cause of pin flicker.
+  const onSpotClickRef = useRef(onSpotClick);
+  onSpotClickRef.current = onSpotClick;
 
   // Initialize or update clusterer when map or spots change
   useEffect(() => {
     if (!map) return;
 
-    // Create a stable key for spots to detect changes
-    const spotsKey = spots.map(s => s.id).sort().join(',');
-
-    // Only recreate if spots actually changed
+    const spotsKey = spots.map((s) => s.id).sort().join(',');
     if (spotsKey === spotsRef.current && clustererRef.current) {
       return;
     }
     spotsRef.current = spotsKey;
 
-    // Clean up existing clusterer
     if (clustererRef.current) {
       clustererRef.current.clearMarkers();
       clustererRef.current.setMap(null);
     }
     markersRef.current.clear();
 
-    // Create markers for all spots
-    const markers: google.maps.Marker[] = [];
+    const markers: SpotAdvancedMarker[] = [];
 
     spots
       .filter((spot) => isFinite(spot.lat) && isFinite(spot.lng))
       .forEach((spot) => {
         const isSelected = selectedSpot?.id === spot.id;
-        const marker = new google.maps.Marker({
+        const marker = new google.maps.marker.AdvancedMarkerElement({
           position: { lat: spot.lat, lng: spot.lng },
           title: `${spot.name} (Score: ${spot.score})`,
-          icon: getMarkerIcon(spot, isSelected),
+          content: getMarkerIcon(spot, isSelected),
           zIndex: isSelected ? 1000 : spot.score,
-        });
-        // Stash kind on the marker so the cluster renderer can pick the
-        // dominant-kind color when this marker rolls up into a cluster.
-        marker.set('spotKind', spot.kind);
-
-        marker.addListener('click', () => handleSpotClick(spot));
+        }) as SpotAdvancedMarker;
+        // Stash kind for the cluster renderer's dominant-kind tally.
+        marker.spotKind = spot.kind;
+        // AdvancedMarkerElement uses 'gmp-click' (vs 'click' on the old class).
+        // Read through the ref so the listener picks up the latest handler
+        // without needing the cluster-build effect to depend on it.
+        marker.addListener('gmp-click', () => onSpotClickRef.current(spot));
         markers.push(marker);
         markersRef.current.set(spot.id, marker);
       });
 
-    // Create clusterer with SuperCluster algorithm
     const clusterer = new MarkerClusterer({
       map,
       markers,
       renderer: createClusterRenderer(),
       algorithm: new SuperClusterAlgorithm({
-        radius: 60,   // Cluster radius in pixels
-        maxZoom: 13,  // Stop clustering at zoom 14+
-        minPoints: 3, // Minimum points to form a cluster
+        radius: 60,
+        maxZoom: 13,
+        minPoints: 3,
       }),
     });
 
     clustererRef.current = clusterer;
+
+    // Seed the selection ref now that markers are freshly built.
+    selectedIdRef.current = selectedSpot?.id ?? null;
 
     return () => {
       if (clustererRef.current) {
@@ -145,18 +167,38 @@ export function SpotClusterer({
       }
       markersRef.current.clear();
     };
-  }, [map, spots, getMarkerIcon, handleSpotClick, selectedSpot?.id]);
+    // Deps intentionally minimal: only the data and the map-rendering inputs.
+    // selectedSpot?.id is handled by the icon-update effect below.
+    // The click handler is pinned via onSpotClickRef so it's not in deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, spots, getMarkerIcon]);
 
-  // Update selected marker appearance
+  // Update selected marker appearance — only touch the two markers whose
+  // selection state actually flipped (previously-selected and newly-selected).
+  // Reassigning `marker.content = …` triggers a DOM swap on the map, which
+  // is what reads as flicker when done across all 200+ pins per render.
   useEffect(() => {
-    markersRef.current.forEach((marker, spotId) => {
-      const spot = spots.find(s => s.id === spotId);
-      if (!spot) return;
+    const newId = selectedSpot?.id ?? null;
+    const oldId = selectedIdRef.current;
+    if (newId === oldId) return;
 
-      const isSelected = selectedSpot?.id === spotId;
-      marker.setIcon(getMarkerIcon(spot, isSelected));
-      marker.setZIndex(isSelected ? 1000 : spot.score);
-    });
+    if (oldId) {
+      const prev = markersRef.current.get(oldId);
+      const prevSpot = spots.find((s) => s.id === oldId);
+      if (prev && prevSpot) {
+        prev.content = getMarkerIcon(prevSpot, false);
+        prev.zIndex = prevSpot.score;
+      }
+    }
+    if (newId) {
+      const next = markersRef.current.get(newId);
+      const nextSpot = spots.find((s) => s.id === newId);
+      if (next && nextSpot) {
+        next.content = getMarkerIcon(nextSpot, true);
+        next.zIndex = 1000;
+      }
+    }
+    selectedIdRef.current = newId;
   }, [selectedSpot?.id, spots, getMarkerIcon]);
 
   return null; // This component manages markers imperatively

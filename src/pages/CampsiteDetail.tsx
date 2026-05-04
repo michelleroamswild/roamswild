@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { GoogleMap } from '@/components/GoogleMap';
-import { Marker } from '@react-google-maps/api';
+import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { useCampsites } from '@/context/CampsitesContext';
 import { useAuth } from '@/context/AuthContext';
 import { Campsite, CampsiteFormData, CampsiteType, RoadAccess, CampsiteVisibility } from '@/types/campsite';
@@ -68,6 +68,7 @@ const CampsiteDetail = () => {
 
   const [campsite, setCampsite] = useState<Campsite | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -257,10 +258,12 @@ const CampsiteDetail = () => {
               center={{ lat: campsite.lat, lng: campsite.lng }}
               zoom={14}
               className="w-full h-full"
+              onLoad={setMapInstance}
             >
-              <Marker
+              <AdvancedMarker
+                map={mapInstance}
                 position={{ lat: campsite.lat, lng: campsite.lng }}
-                icon={createSimpleMarkerIcon('camp', { size: 10 })}
+                content={createSimpleMarkerIcon('camp', { size: 10 })}
               />
             </GoogleMap>
           </div>

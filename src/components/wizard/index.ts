@@ -4,5 +4,6 @@ export { StepTripBasics } from './steps/StepTripBasics';
 export { StepBuildMethod } from './steps/StepBuildMethod';
 export { StepDestinations } from './steps/StepDestinations';
 export { StepLodging } from './steps/StepLodging';
+export { StepPreferences } from './steps/StepPreferences';
 export { StepActivities } from './steps/StepActivities';
 export { StepDayBuilder } from './steps/StepDayBuilder';

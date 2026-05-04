@@ -27,7 +27,8 @@ import { Slider } from '@/components/ui/slider';
 import { PacePreference, LodgingType } from '@/types/trip';
 import { useSavedLocations } from '@/context/SavedLocationsContext';
 import { GoogleMap } from '@/components/GoogleMap';
-import { Marker, InfoWindow } from '@react-google-maps/api';
+import { InfoWindow } from '@react-google-maps/api';
+import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { useNearbyPlaces, GoogleSavedPlace } from '@/hooks/use-nearby-places';
 import { useNearbyHikes, HikeResult } from '@/hooks/use-nearby-hikes';
 import { usePhotoHotspots, PhotoHotspot } from '@/hooks/use-photo-hotspots';
@@ -205,6 +206,7 @@ const LocationDetail = () => {
   const { generateTrip, generating } = useTripGenerator();
 
   const [selectedHike, setSelectedHike] = useState<HikeResult | null>(null);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const [elevation, setElevation] = useState<number | null>(null);
 
   const [tripDuration, setTripDuration] = useState<number[]>([3]);
@@ -432,17 +434,20 @@ const LocationDetail = () => {
                 center={{ lat: location.lat, lng: location.lng }}
                 zoom={hikes.length > 0 ? 11 : 13}
                 className="w-full h-full"
+                onLoad={setMapInstance}
               >
-                <Marker
+                <AdvancedMarker
+                  map={mapInstance}
                   position={{ lat: location.lat, lng: location.lng }}
-                  icon={createMarkerIcon('viewpoint', { size: 40 })}
+                  content={createMarkerIcon('viewpoint', { size: 40 })}
                 />
                 {hikes.map((hike) => (
-                  <Marker
+                  <AdvancedMarker
                     key={hike.id}
+                    map={mapInstance}
                     position={{ lat: hike.lat, lng: hike.lng }}
                     title={hike.name}
-                    icon={createMarkerIcon('hike', { size: MARKER_SIZE })}
+                    content={createMarkerIcon('hike', { size: MARKER_SIZE })}
                     onClick={() => setSelectedHike(hike)}
                   />
                 ))}

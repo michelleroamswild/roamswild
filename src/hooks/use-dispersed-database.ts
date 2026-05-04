@@ -171,25 +171,34 @@ export function useDispersedDatabase(
         //     (different table, different shape, keep edge fn for now)
         //   - dispersed-roads edge fn → MVUM + OSM roads (server-side
         //     simplification is real work, keep edge fn for now)
-        const [spotsResult, campgroundsResponse, roadsResponse] = await Promise.all([
+        // Split the spots fetch into two narrower queries (camping + utility)
+        // running in parallel. The wider 6-kind IN clause was tripping the
+        // planner into seq-scan during high-write windows; smaller IN sets
+        // stick to the index more reliably and fail/recover independently.
+        const spotsCommonSelect =
+          'id, name, description, latitude, longitude, kind, sub_kind, source, public_land_manager, public_land_unit, public_land_designation, land_type, amenities, extra';
+
+        const [campingSpotsResult, utilitySpotsResult, campgroundsResponse, roadsResponse] = await Promise.all([
           supabase
             .from('spots')
-            .select(
-              'id, name, description, latitude, longitude, kind, sub_kind, source, public_land_manager, public_land_unit, public_land_designation, land_type, amenities, extra'
-            )
-            .in('kind', [
-              'dispersed_camping',
-              'established_campground',
-              'informal_camping',
-              'water',
-              'shower',
-              'laundromat',
-            ])
+            .select(spotsCommonSelect)
+            .in('kind', ['dispersed_camping', 'established_campground', 'informal_camping'])
             .gte('latitude', minLat)
             .lte('latitude', maxLat)
             .gte('longitude', minLng)
             .lte('longitude', maxLng)
             .limit(2000)
+            .abortSignal(controller.signal)
+            .then((res) => res, (err) => ({ data: null, error: err as Error })),
+          supabase
+            .from('spots')
+            .select(spotsCommonSelect)
+            .in('kind', ['water', 'shower', 'laundromat'])
+            .gte('latitude', minLat)
+            .lte('latitude', maxLat)
+            .gte('longitude', minLng)
+            .lte('longitude', maxLng)
+            .limit(500)
             .abortSignal(controller.signal)
             .then((res) => res, (err) => ({ data: null, error: err as Error })),
           fetch(
@@ -202,9 +211,24 @@ export function useDispersedDatabase(
           ),
         ]);
 
-        if (spotsResult.error) {
-          throw new Error(`Spots query failed: ${spotsResult.error.message ?? spotsResult.error}`);
+        // Camping query is required; utility query is best-effort — if the
+        // DB stresses out and only the wider one fails, we still want
+        // camping spots to render. Log the failure and continue.
+        if (campingSpotsResult.error) {
+          throw new Error(`Spots query failed: ${campingSpotsResult.error.message ?? campingSpotsResult.error}`);
         }
+        if (utilitySpotsResult.error) {
+          console.warn('Utility spots query failed (continuing without):', utilitySpotsResult.error.message ?? utilitySpotsResult.error);
+        }
+
+        // Merge — same shape, just two source queries.
+        const spotsResult = {
+          data: [
+            ...(campingSpotsResult.data ?? []),
+            ...(utilitySpotsResult.data ?? []),
+          ],
+          error: null as null,
+        };
         if (!campgroundsResponse.ok) {
           console.warn(`Campgrounds API error: ${campgroundsResponse.status}`);
         }

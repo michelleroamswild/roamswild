@@ -24,7 +24,7 @@ import {
 import { LocationSelector, SelectedLocation } from '@/components/LocationSelector';
 import { Header } from '@/components/Header';
 import { GoogleMap } from '@/components/GoogleMap';
-import { Marker } from '@react-google-maps/api';
+import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { formatTime, getSunTimes, formatAzimuth, SunTimes } from '@/utils/sunCalc';
 import { analyzeHorizonProfile, getElevation, HorizonProfile } from '@/utils/terrainVisibility';
 import { analyzePhotoConditions, PhotoForecast, OpenMeteoHourly } from '@/utils/photoConditionsAnalyzer';
@@ -125,6 +125,16 @@ interface PhotoWeatherTestProps {
 
 export default function PhotoWeatherTest({ previewMode = false, initialLocation = null }: PhotoWeatherTestProps) {
   const [location, setLocation] = useState<SelectedLocation | null>(initialLocation);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  const pinContent = useMemo(() => {
+    const div = document.createElement('div');
+    div.style.width = '20px';
+    div.style.height = '20px';
+    div.style.borderRadius = '50%';
+    div.style.backgroundColor = '#EA4335';
+    div.style.border = '2px solid #ffffff';
+    return div;
+  }, []);
   const [openMeteoData, setOpenMeteoData] = useState<OpenMeteoResponse | null>(null);
   const [openMeteoLoading, setOpenMeteoLoading] = useState(false);
   const [horizonProfile, setHorizonProfile] = useState<HorizonProfile | null>(null);
@@ -393,9 +403,17 @@ export default function PhotoWeatherTest({ previewMode = false, initialLocation 
               center={mapCenter}
               zoom={location ? 10 : 6}
               className="w-full h-full"
+              onLoad={setMapInstance}
               options={{ mapTypeId: 'satellite' }}
             >
-              {location && <Marker position={{ lat: location.lat, lng: location.lng }} title={location.name} />}
+              {location && (
+                <AdvancedMarker
+                  map={mapInstance}
+                  position={{ lat: location.lat, lng: location.lng }}
+                  title={location.name}
+                  content={pinContent}
+                />
+              )}
             </GoogleMap>
           </div>
         )}

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Marker, InfoWindow, DirectionsRenderer } from '@react-google-maps/api';
+import { InfoWindow, DirectionsRenderer } from '@react-google-maps/api';
 import { GoogleMap } from './GoogleMap';
+import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { RouteStop, StopType } from '@/types/maps';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -26,6 +27,7 @@ interface RouteMapProps {
 export function RouteMap({ stops, className, showDirections = true, onStopClick }: RouteMapProps) {
   const [selectedStop, setSelectedStop] = useState<RouteStop | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const { isDark } = useTheme();
 
   // Calculate center from stops
@@ -73,17 +75,28 @@ export function RouteMap({ stops, className, showDirections = true, onStopClick 
     onStopClick?.(stop);
   }, [onStopClick]);
 
-  const getMarkerIcon = (type: StopType, index: number) => ({
-    path: google.maps.SymbolPath.CIRCLE,
-    fillColor: markerColors[type],
-    fillOpacity: 1,
-    strokeColor: '#ffffff',
-    strokeWeight: 2,
-    scale: 12,
-  });
+  // Numbered circle pin — DOM element for AdvancedMarkerElement.content.
+  const buildStopPin = (type: StopType, index: number): HTMLElement => {
+    const div = document.createElement('div');
+    div.style.width = '24px';
+    div.style.height = '24px';
+    div.style.borderRadius = '50%';
+    div.style.backgroundColor = markerColors[type];
+    div.style.border = '2px solid #ffffff';
+    div.style.display = 'flex';
+    div.style.alignItems = 'center';
+    div.style.justifyContent = 'center';
+    div.style.color = '#ffffff';
+    div.style.fontSize = '12px';
+    div.style.fontWeight = '700';
+    div.style.fontFamily = 'Manrope, sans-serif';
+    div.style.cursor = 'pointer';
+    div.textContent = String(index + 1);
+    return div;
+  };
 
   return (
-    <GoogleMap center={center} zoom={9} className={className}>
+    <GoogleMap center={center} zoom={9} className={className} onLoad={setMapInstance}>
       {/* Route directions line */}
       {directions && (
         <DirectionsRenderer
@@ -101,16 +114,11 @@ export function RouteMap({ stops, className, showDirections = true, onStopClick 
 
       {/* Stop markers */}
       {stops.map((stop, index) => (
-        <Marker
+        <AdvancedMarker
           key={stop.id}
+          map={mapInstance}
           position={stop.coordinates}
-          icon={getMarkerIcon(stop.type, index)}
-          label={{
-            text: String(index + 1),
-            color: '#ffffff',
-            fontSize: '12px',
-            fontWeight: 'bold',
-          }}
+          content={buildStopPin(stop.type, index)}
           onClick={() => handleMarkerClick(stop)}
         />
       ))}

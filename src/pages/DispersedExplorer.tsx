@@ -318,10 +318,19 @@ const DispersedExplorer = () => {
     loading: clientLoading,
     error: clientError,
   } = useDispersedRoads(
-    // Fire when in client mode OR mid-refresh (Re-analyse runs alongside DB mode
-    // so the user keeps seeing pins while we fetch fresh data in the background).
-    (!useDatabase || refreshing) ? (searchLocation?.lat ?? null) : null,
-    (!useDatabase || refreshing) ? (searchLocation?.lng ?? null) : null,
+    // Hold the legacy derive pipeline until the region-cache check completes.
+    // Without this gate, every initial render with searchLocation set would
+    // fire the client-side derive (200+ "Filtering dead-end…" logs) for a
+    // tick before useDatabase flipped to true on a cache hit. The pipeline
+    // races the cache resolution; by the time we settle on DB mode the
+    // wasted work is already done.
+    //
+    // Fire only when:
+    //   - cache check has resolved AND we're in client mode (cache miss), OR
+    //   - mid-refresh (Re-analyse runs alongside DB mode so the user keeps
+    //     seeing pins while we fetch fresh data in the background).
+    cacheChecked && (!useDatabase || refreshing) ? (searchLocation?.lat ?? null) : null,
+    cacheChecked && (!useDatabase || refreshing) ? (searchLocation?.lng ?? null) : null,
     RADIUS_MILES,
     reanalyseBust
   );
@@ -1636,43 +1645,48 @@ const DispersedExplorer = () => {
   }, [osmTracks, roadFilter]);
 
   // Get marker icon for a spot — pin color = kind, full stop.
-  const getSpotMarkerIcon = useCallback((spot: PotentialSpot, isSelected: boolean) => {
-    // Pin color = kind, no overrides. Quality flags (outside polygon, near
-    // private edge) and provenance (community source) surface elsewhere
-    // (Signals chips on the detail panel) — they don't change the pin fill.
+  // Builds the DOM content for an AdvancedMarkerElement pin (a styled
+  // <div> circle). Replaces the old SymbolPath.CIRCLE icon since the
+  // legacy google.maps.Marker class is deprecated and won't get bug fixes.
+  const getSpotMarkerIcon = useCallback((spot: PotentialSpot, isSelected: boolean): HTMLElement => {
     let fillColor: string;
     // Trust `kind` first — only fall back to `type` for runtime-derived
     // spots that have no kind. Otherwise rows like dispersed_camping +
     // sub_kind='known' (mapped to type='camp-site') would render blue.
     if (spot.kind === 'dispersed_camping') {
-      fillColor = 'hsl(96 28% 38%)';   // --pin-dispersed (moss green)
+      fillColor = 'hsl(96 28% 38%)';   // --pin-dispersed
     } else if (spot.kind === 'established_campground') {
-      fillColor = 'hsl(206 38% 46%)';  // --pin-campground (blue)
+      fillColor = 'hsl(206 38% 46%)';  // --pin-campground
     } else if (spot.kind === 'informal_camping') {
-      fillColor = 'hsl(45 62% 56%)';   // --pin-informal (gold)
+      fillColor = 'hsl(45 62% 56%)';   // --pin-informal
     } else if (!spot.kind && spot.type === 'camp-site') {
       fillColor = 'hsl(206 38% 46%)';  // --pin-campground (OSM camp-site fallback)
     } else if (!spot.kind && spot.type === 'dead-end') {
       fillColor = 'hsl(96 28% 38%)';   // --pin-dispersed (runtime-derived fallback)
     } else if (spot.kind === 'water') {
-      fillColor = 'hsl(150 13% 65%)';  // --pin-water (grey-green)
+      fillColor = 'hsl(150 13% 65%)';  // --pin-water
     } else if (spot.kind === 'shower') {
-      fillColor = 'hsl(250 22% 60%)';  // --pin-shower (soft periwinkle)
+      fillColor = 'hsl(250 22% 60%)';  // --pin-shower
     } else if (spot.kind === 'laundromat') {
-      fillColor = 'hsl(24 68% 52%)';   // --pin-laundromat (orange)
+      fillColor = 'hsl(24 68% 52%)';   // --pin-laundromat
     } else {
-      fillColor = 'hsl(30 14% 50%)';   // unknown / no kind — warm grey
+      fillColor = 'hsl(30 14% 50%)';   // unknown / no kind
     }
 
-    const size = isSelected ? 12 : 9;
-    return {
-      path: google.maps.SymbolPath.CIRCLE,
-      fillColor,
-      fillOpacity: 1,
-      strokeColor: isSelected ? '#3f3e2c' : 'hsl(36 23% 97%)',  // cream
-      strokeWeight: isSelected ? 2.5 : 2,
-      scale: size,
-    };
+    // SymbolPath.CIRCLE used `scale` as radius. We translate to diameter
+    // for the DOM circle: scale 9 → 18px diameter, scale 12 → 24px.
+    const diameter = (isSelected ? 12 : 9) * 2;
+    const strokeWidth = isSelected ? 2.5 : 2;
+    const strokeColor = isSelected ? '#3f3e2c' : 'hsl(36 23% 97%)';
+
+    const div = document.createElement('div');
+    div.style.width = `${diameter}px`;
+    div.style.height = `${diameter}px`;
+    div.style.borderRadius = '50%';
+    div.style.backgroundColor = fillColor;
+    div.style.border = `${strokeWidth}px solid ${strokeColor}`;
+    div.style.cursor = 'pointer';
+    return div;
   }, []);
 
   const getSpotIcon = (type: PotentialSpot['type']) => {

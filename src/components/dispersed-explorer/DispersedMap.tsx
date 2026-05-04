@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { X } from '@phosphor-icons/react';
-import { InfoWindow, Marker, Polygon, Polyline } from '@react-google-maps/api';
+import { InfoWindow, Polygon, Polyline } from '@react-google-maps/api';
+import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { GoogleMap } from '@/components/GoogleMap';
 import { SpotClusterer } from '@/components/SpotClusterer';
 import { MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
@@ -23,14 +25,43 @@ const getMVUMColor = (road: MVUMRoad) => {
   return '#22c55e';
 };
 
-const getOSMColor = (track: OSMTrack) => {
-  if (track.fourWdOnly) return '#ef4444';
-  if (track.tracktype === 'grade5' || track.tracktype === 'grade4') return '#ef4444';
-  if (track.tracktype === 'grade3') return '#f97316';
-  if (track.tracktype === 'grade2') return '#f97316';
-  if (track.tracktype === 'grade1') return '#3b82f6';
-  if (track.highway === 'track') return '#f97316';
-  return '#eab308';
+// Temporary: render every OSM track in black while we work on filtering
+// out tracks that aren't on public land. Tracktype-based color ramp will
+// come back once the data side is sorted.
+const getOSMColor = (_track: OSMTrack) => '#000000';
+
+// Builds a circle pin as an HTMLElement for AdvancedMarkerElement.content.
+// scale follows the same convention as the old SymbolPath.CIRCLE icons —
+// 9 → 18px diameter (default), 12 → 24px (active).
+const buildCirclePin = (
+  fillColor: string,
+  scale: number,
+  isActive: boolean,
+): HTMLElement => {
+  const diameter = scale * 2;
+  const strokeWidth = isActive ? 2.5 : 2;
+  const strokeColor = isActive ? '#3f3e2c' : 'hsl(36 23% 97%)';
+  const div = document.createElement('div');
+  div.style.width = `${diameter}px`;
+  div.style.height = `${diameter}px`;
+  div.style.borderRadius = '50%';
+  div.style.backgroundColor = fillColor;
+  div.style.border = `${strokeWidth}px solid ${strokeColor}`;
+  div.style.cursor = 'pointer';
+  return div;
+};
+
+// Default Google "red pin" replacement for the search-location marker.
+// Plain SVG so it renders with the standard pin look without needing
+// google.maps.Marker. Anchored at the bottom tip.
+const buildSearchPin = (): HTMLElement => {
+  const div = document.createElement('div');
+  div.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="27" height="43" viewBox="0 0 27 43">
+    <path d="M13.5 0C6.0442 0 0 6.0442 0 13.5C0 24.0938 13.5 43 13.5 43C13.5 43 27 24.0938 27 13.5C27 6.0442 20.9558 0 13.5 0Z" fill="#EA4335" stroke="#B31412" stroke-width="1"/>
+    <circle cx="13.5" cy="13.5" r="5" fill="#B31412"/>
+  </svg>`;
+  div.style.transform = 'translateY(-50%)'; // bottom-tip anchor
+  return div;
 };
 
 const toLatLngPath = (coordinates: any[]): google.maps.LatLngLiteral[] => {
@@ -73,7 +104,7 @@ interface DispersedMapProps {
   filteredPotentialSpots: PotentialSpot[];
   selectedSpot: PotentialSpot | null;
   onSpotClusterClick: (spot: PotentialSpot) => void;
-  getSpotMarkerIcon: (spot: PotentialSpot, isSelected: boolean) => google.maps.Icon | google.maps.Symbol;
+  getSpotMarkerIcon: (spot: PotentialSpot, isSelected: boolean) => HTMLElement;
 
   showCampgroundsFiltered: boolean;
   allEstablishedCampgrounds: EstablishedCampground[];
@@ -124,6 +155,10 @@ export const DispersedMap = ({
   onDismissMapTap,
   onOpenSaveFromMap,
 }: DispersedMapProps) => {
+  // Stable DOM element for the search-location pin (no state, never changes
+  // appearance). Prevents AdvancedMarker from re-running its content effect.
+  const searchPinContent = useMemo(() => buildSearchPin(), []);
+
   return (
     <GoogleMap
       center={mapCenter}
@@ -138,9 +173,11 @@ export const DispersedMap = ({
     >
       {/* Search location marker */}
       {searchLocation && (
-        <Marker
+        <AdvancedMarker
+          map={mapRef.current}
           position={{ lat: searchLocation.lat, lng: searchLocation.lng }}
           title={searchLocation.name}
+          content={searchPinContent}
         />
       )}
 
@@ -148,15 +185,9 @@ export const DispersedMap = ({
       {publicLands.map((land) => {
         if (!land.polygon) return null;
         if (!land.renderOnMap) return null;
-
-        // Bucket the agency code (BLM, USFS, NPS, STATE, SPR, NGO, TRIB, …)
-        // into one of the 7 overlay buckets. Then pull fill/stroke from
-        // the shared land-colors module so we stay in lockstep with the
-        // CSS tokens and the legend / filter swatches.
         const agencyKey = bucketForAgency(land.managingAgency);
         if (!visibleLandAgencies.has(agencyKey)) return null;
         const { fill: fillColor, stroke: strokeColor } = LAND_OVERLAY_COLORS[agencyKey];
-
         return (
           <Polygon
             key={land.id}
@@ -262,23 +293,24 @@ export const DispersedMap = ({
       {/* Established Campgrounds */}
       {showCampgroundsFiltered && allEstablishedCampgrounds
         .filter((cg) => isFinite(cg.lat) && isFinite(cg.lng))
-        .map((cg) => (
-          <Marker
-            key={cg.id}
-            position={{ lat: cg.lat, lng: cg.lng }}
-            title={cg.name}
-            icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              fillColor: 'hsl(206 38% 46%)',  // --pin-campground
-              fillOpacity: 1,
-              strokeColor: selectedCampground === cg ? '#3f3e2c' : 'hsl(36 23% 97%)',  // cream
-              strokeWeight: selectedCampground === cg ? 2.5 : 2,
-              scale: selectedCampground === cg ? 12 : 9,
-            }}
-            onClick={() => onSelectCampground(cg)}
-            zIndex={selectedCampground === cg ? 1001 : 500}
-          />
-        ))}
+        .map((cg) => {
+          const isActive = selectedCampground === cg;
+          return (
+            <AdvancedMarker
+              key={cg.id}
+              map={mapRef.current}
+              position={{ lat: cg.lat, lng: cg.lng }}
+              title={cg.name}
+              content={buildCirclePin(
+                'hsl(206 38% 46%)', // --pin-campground
+                isActive ? 12 : 9,
+                isActive,
+              )}
+              zIndex={isActive ? 1001 : 500}
+              onClick={() => onSelectCampground(cg)}
+            />
+          );
+        })}
 
       {/* User's Saved Campsites */}
       {showMyCampsites && showMyCampsitesFiltered && campsites
@@ -286,20 +318,18 @@ export const DispersedMap = ({
         .map((cs) => {
           const isActive = selectedCampsite?.id === cs.id;
           return (
-            <Marker
+            <AdvancedMarker
               key={`my-${cs.id}`}
+              map={mapRef.current}
               position={{ lat: cs.lat, lng: cs.lng }}
               title={cs.name}
-              icon={{
-                path: google.maps.SymbolPath.CIRCLE,
-                fillColor: 'hsl(295 32% 42%)',  // --pin-mine (deep plum)
-                fillOpacity: 1,
-                strokeColor: isActive ? '#3f3e2c' : 'hsl(36 23% 97%)',  // cream
-                strokeWeight: isActive ? 2.5 : 2,
-                scale: isActive ? 12 : 9,
-              }}
-              onClick={() => onSelectCampsite(cs)}
+              content={buildCirclePin(
+                'hsl(295 32% 42%)', // --pin-mine (deep plum)
+                isActive ? 12 : 9,
+                isActive,
+              )}
               zIndex={isActive ? 1002 : 600}
+              onClick={() => onSelectCampsite(cs)}
             />
           );
         })}
