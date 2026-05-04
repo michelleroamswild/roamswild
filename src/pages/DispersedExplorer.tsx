@@ -14,7 +14,6 @@ import { useGoogleMaps } from '@/components/GoogleMapsProvider';
 import { Header } from '@/components/Header';
 import { ConfirmSpotDialog } from '@/components/ConfirmSpotDialog';
 import { AddCampsiteModal } from '@/components/AddCampsiteModal';
-import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
 import type { Campsite } from '@/types/campsite';
 import { isPointInPolygon, isWithinAnyPublicLand, findContainingLand, isFalseDeadEnd } from '@/utils/dispersedExplorer';
 import { FloatingLegend } from '@/components/dispersed-explorer/FloatingLegend';
@@ -107,18 +106,56 @@ const DispersedExplorer = () => {
       setSelectedSpot(null);
       return;
     }
+    // Toggle: clicking the trash on a marked spot un-marks it. Panel stays
+    // open so the icon swap (trash ↔ filled check) gives instant feedback
+    // and the user can undo without re-finding the spot.
     setRemoveIds((prev) => {
       const next = new Set(prev);
-      next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
-    setSelectedSpot(null);
   }, [selectedSpot]);
 
   const [bulkPanOpen, setBulkPanOpen] = useState(false);
   const [roadFilter, setRoadFilter] = useState<'all' | 'passenger' | 'high-clearance' | '4wd'>('all');
   // Multi-select filter for spot types/confidence - empty set means show all
   const [spotFilters, setSpotFilters] = useState<Set<string>>(new Set());
+  // Source sub-filter under Dispersed (Known / Derived / Community).
+  // Empty set = all sources. Only applied when 'dispersed' is in spotFilters.
+  const [dispersedSourceFilters, setDispersedSourceFilters] = useState<Set<string>>(new Set());
+  const toggleDispersedSource = useCallback((key: string) => {
+    setDispersedSourceFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+  // Source-bucket classifier (Known / Derived / Community) for the
+  // Dispersed sub-filter. Reads sub_kind first because legacy rows carry
+  // provenance there ('community' / 'derived' / 'known' values that
+  // pre-date the source field), then falls back to dbSource for newer
+  // rows. Runtime-derived spots (no DB id, from road geometry) have
+  // neither and land in 'derived' via the fallback.
+  const classifyDispersedSource = (spot: PotentialSpot): 'known' | 'derived' | 'community' => {
+    if (spot.dbSource === 'community') return 'community';
+    if (spot.subKind === 'derived')   return 'derived';
+    if (spot.subKind === 'known')     return 'known';
+    const s = spot.dbSource;
+    if (s === 'community' || s === 'user_added') return 'community';
+    if (!s || s === 'derived') return 'derived';
+    return 'known';  // ridb / usfs / blm / nps / fws / mvum / padus / osm
+  };
+  // True only for algorithmically-derived dispersed spots. Heuristic
+  // filters (false-dead-end, near-campground, score gate, dedup) apply
+  // ONLY to these — Known + Community + Utilities are vouched-for data
+  // and skip every heuristic gate.
+  const isAlgorithmicDerived = (spot: PotentialSpot): boolean => {
+    // Anything that isn't a dispersed-camping row isn't algorithmic.
+    // Utilities, established_campground, informal_camping → not derived.
+    if (spot.kind && spot.kind !== 'dispersed_camping') return false;
+    return classifyDispersedSource(spot) === 'derived';
+  };
   const [recommendationPage, setRecommendationPage] = useState(0);
   const [spotsToShow, setSpotsToShow] = useState(30);
   const [osrmDistances, setOsrmDistances] = useState<Record<string, number>>({});
@@ -969,14 +1006,10 @@ const DispersedExplorer = () => {
       // No dispersed camping allowed inside National Parks / State Parks.
       if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
 
-      // Community-contributed spots bypass the derived-dead-end heuristics.
-      // They aren't computed dead-ends — they're explicit user submissions
-      // that already passed an importer's vetting. Filtering them with
-      // isFalseDeadEnd (which presumes a "this point is on a road's
-      // interior" failure mode) and isNearEstablishedCampground (which
-      // presumes "duplicate of an established campground") incorrectly
-      // discards real, vouched-for spots. Trust the at-import flags.
-      if (spot.subKind === 'community') return true;
+      // Heuristic gates (false-dead-end, near-campground, score gate,
+      // dedup) apply ONLY to algorithmically-derived spots. Vouched-for
+      // data (Known / Community / Utilities) bypasses all of them.
+      if (!isAlgorithmicDerived(spot)) return true;
 
       // First check: filter out false dead-ends (actually intersections)
       // This matches the logic in use-dispersed-roads.ts for Full mode
@@ -1041,7 +1074,9 @@ const DispersedExplorer = () => {
     // them as "duplicates" of an OSM tag drops real data.
     const CAMP_DEDUP_MILES = 0.06;
     const dedupedDerived = filteredDerived.filter(derived => {
-      if (derived.subKind === 'community') return true;
+      // Camp-site dedup is a derive-pipeline cleanup. Vouched-for data
+      // (Known / Community / Utilities) bypasses it.
+      if (!isAlgorithmicDerived(derived)) return true;
       const nearCampSite = campSites.some(camp => {
         const latDiff = Math.abs(derived.lat - camp.lat);
         const lngDiff = Math.abs(derived.lng - camp.lng);
@@ -1059,10 +1094,12 @@ const DispersedExplorer = () => {
     // dead-ends still get the squelch since they're noisy.
     const DERIVED_DEDUP_THRESHOLD = 0.0005; // ~50 meters
     const finalDerived = dedupedDerived.filter((spot, index, array) => {
-      if (spot.subKind === 'community') return true;
-      // Keep this spot only if no earlier spot is within threshold
+      // 50m self-dedup applies only to algorithmically-derived spots.
+      if (!isAlgorithmicDerived(spot)) return true;
+      // Keep this spot only if no earlier algorithmically-derived spot
+      // is within threshold (vouched-for earlier rows don't count).
       return !array.slice(0, index).some(earlier => {
-        if (earlier.subKind === 'community') return false;
+        if (!isAlgorithmicDerived(earlier)) return false;
         const latDiff = Math.abs(spot.lat - earlier.lat);
         const lngDiff = Math.abs(spot.lng - earlier.lng);
         return latDiff < DERIVED_DEDUP_THRESHOLD && lngDiff < DERIVED_DEDUP_THRESHOLD;
@@ -1071,17 +1108,12 @@ const DispersedExplorer = () => {
 
     console.log(`Derived spots: ${derivedSpots.length} total, ${filteredDerived.length} after filtering, ${finalDerived.length} after dedup`);
 
-    // Filter out spots with score < 25 (we don't show the Unverified category)
-    // Score gate applies to algorithmically-derived spots only. Community-
-    // contributed spots (sub_kind='community') don't carry a confidence
-    // score and would always sit at 0 — bypass the gate for them so they
-    // actually surface on the map.
-    const qualifiedDerived = finalDerived.filter(s => s.subKind === 'community' || s.score >= 25);
+    // Score gate removed — quality scoring will be revisited later.
 
     // Enrich unnamed spots with public land names
     // Track counts per land area for numbering
     const landCounts = new Map<string, number>();
-    const enrichedDerived = qualifiedDerived.map(spot => {
+    const enrichedDerived = finalDerived.map(spot => {
       // Only enrich spots with coordinate-based names (starting with "Dispersed")
       if (!spot.name.startsWith('Dispersed ')) return spot;
 
@@ -1109,41 +1141,47 @@ const DispersedExplorer = () => {
 
     // Apply filters
     return allSpots.filter((spot) => {
-      // Spot type/confidence filter (multi-select)
-      // If no filters selected (empty set), show all spots
+      // Soft-delete queue applies to every spot category (community + known
+      // camp-sites slip past the derived-only filter above, so guard here).
+      if (removeIds.has(spot.id)) return false;
+
+      // Kind-family filter (multi-select). Empty set = show all. We trust
+      // `kind` first; `type` is only a fallback for runtime-derived spots
+      // (from road geometry) that have no kind set. Otherwise rows like
+      // dispersed_camping + sub_kind='known' (which the hook maps to
+      // type='camp-site') would leak into the Established filter.
       if (spotFilters.size > 0) {
-        const isCommunity = spot.subKind === 'community';
-        const isKnown = !isCommunity && spot.type === 'camp-site';
-        // Community spots aren't scored on the derived high/medium ramp;
-        // exclude them from those buckets so they only match the
-        // 'community' filter.
-        const isHigh = !isKnown && !isCommunity && spot.score >= 35;
-        const isMedium = !isKnown && !isCommunity && spot.score >= 25 && spot.score < 35;
+        const isDispersed   = spot.kind ? spot.kind === 'dispersed_camping' : spot.type === 'dead-end';
+        const isEstablished = spot.kind ? spot.kind === 'established_campground' : spot.type === 'camp-site';
+        const isInformal    = spot.kind === 'informal_camping';
+        const isWater       = spot.kind === 'water';
+        const isShower      = spot.kind === 'shower';
+        const isLaundromat  = spot.kind === 'laundromat';
 
         const matches =
-          (spotFilters.has('known')     && isKnown) ||
-          (spotFilters.has('community') && isCommunity) ||
-          (spotFilters.has('high')      && isHigh) ||
-          (spotFilters.has('medium')    && isMedium);
+          (spotFilters.has('dispersed')   && isDispersed)   ||
+          (spotFilters.has('established') && isEstablished) ||
+          (spotFilters.has('informal')    && isInformal)    ||
+          (spotFilters.has('water')       && isWater)       ||
+          (spotFilters.has('shower')      && isShower)      ||
+          (spotFilters.has('laundromat')  && isLaundromat);
 
         if (!matches) return false;
+
+        // Source sub-filter — only applies to Dispersed when active.
+        if (isDispersed && dispersedSourceFilters.size > 0) {
+          const bucket = classifyDispersedSource(spot);
+          if (!dispersedSourceFilters.has(bucket)) return false;
+        }
       }
 
-      // Road type filter based on ROUTE REACHABILITY
-      if (roadFilter !== 'all') {
-        if (roadFilter === 'passenger') {
-          // Only show spots that are REACHABLE via passenger-accessible roads
-          if (spot.passengerReachable !== true) return false;
-        } else if (roadFilter === 'high-clearance') {
-          // Show spots reachable by high-clearance vehicles (passenger + high-clearance roads, no 4WD)
-          if (spot.highClearanceReachable !== true) return false;
-        }
-        // '4wd' filter - show all spots (4WD can get anywhere)
-      }
+      // Vehicle-access spot filter removed — see TODO.md "Vehicle access
+      // + access difficulty cleanup". Bringing it back requires the data
+      // to actually be trustworthy.
 
       return true;
     });
-  }, [potentialSpots, publicLands, mvumRoads, osmTracks, isWithinRestrictedArea, isWithinTribalLand, isNearEstablishedCampground, isLikelyEstablishedCampground, useDatabase, roadFilter, spotFilters, removeIds]);
+  }, [potentialSpots, publicLands, mvumRoads, osmTracks, isWithinRestrictedArea, isWithinTribalLand, isNearEstablishedCampground, isLikelyEstablishedCampground, useDatabase, roadFilter, spotFilters, dispersedSourceFilters, removeIds]);
 
   // Calculate top recommendations based on multiple factors
   const topRecommendations = useMemo(() => {
@@ -1266,9 +1304,20 @@ const DispersedExplorer = () => {
     });
   }, []);
 
+  // Whenever any filter changes, close the detail panel + map popovers and
+  // drop back to the results list for the new filter set. Watches every
+  // filter input — spot kinds, source sub-filter, road overlay, land
+  // managers — so any toggle resets the view.
+  useEffect(() => {
+    setSelectedSpot(null);
+    setSelectedCampground(null);
+    setSelectedCampsite(null);
+    setSelectedRoad(null);
+  }, [spotFilters, dispersedSourceFilters, roadFilter, visibleLandAgencies]);
+
   // Computed visibility for campgrounds and user campsites based on filters
   // They show when: no filters are selected, OR their specific filter is selected
-  const showCampgroundsFiltered = spotFilters.size === 0 || spotFilters.has('campgrounds');
+  const showCampgroundsFiltered = spotFilters.size === 0 || spotFilters.has('established');
   const showMyCampsitesFiltered = spotFilters.size === 0 || spotFilters.has('mine');
 
   // Create unified list of all spots (derived, campgrounds, user campsites)
@@ -1304,7 +1353,7 @@ const DispersedExplorer = () => {
       if (removeIds.has(spot.id)) return;
       const distance = getDistanceMiles(spot.lat, spot.lng);
       const recScore = recScoreMap.get(spot.id);
-      const isCommunity = spot.subKind === 'community';
+      const isCommunity = spot.dbSource === 'community';
       unified.push({
         id: `${isCommunity ? 'community' : 'derived'}-${spot.id}`,
         name: spot.name,
@@ -1559,64 +1608,45 @@ const DispersedExplorer = () => {
     });
   }, [osmTracks, roadFilter]);
 
-  // Check if a spot has been confirmed in the database
-  const isSpotConfirmed = useCallback((spot: PotentialSpot): Campsite | null => {
-    // Check if this spot exists in explorerSpots (within ~50m)
-    const radiusDegrees = 50 / 111000;
-    return explorerSpots.find(es =>
-      Math.abs(es.lat - spot.lat) < radiusDegrees &&
-      Math.abs(es.lng - spot.lng) < radiusDegrees
-    ) || null;
-  }, [explorerSpots]);
-
-  // Get marker icon for a spot
-  // - Purple dots for confirmed spots and OSM camp-sites
-  // - Simple colored circles for derived/potential spots
+  // Get marker icon for a spot — pin color = kind, full stop.
   const getSpotMarkerIcon = useCallback((spot: PotentialSpot, isSelected: boolean) => {
-    const confirmedSpot = isSpotConfirmed(spot);
-
-    // Confirmed spots get purple dot
-    if (confirmedSpot) {
-      return createSimpleMarkerIcon('camp', {
-        isActive: isSelected,
-        size: isSelected ? 10 : 8
-      });
-    }
-
-    // Color rules (in priority order):
-    //   - Outside any public-land polygon (DB metadata wrong) → red warning
-    //   - Near public-land edge (likely on private inholding) → red warning
-    //   - Community-contributed (sub_kind='community') → pink
-    //   - Hard/extreme access (grade4–5, very_horrible, 4wd-only) → black warning
-    //   - Known OSM camp-site (and not flagged) → green
-    //   - Moderate access (grade3, high-clearance) → orange
-    //   - Everything else → yellow
-    const diff = spot.accessDifficulty;
+    // Pin color = kind, no overrides. Quality flags (outside polygon, near
+    // private edge) and provenance (community source) surface elsewhere
+    // (Signals chips on the detail panel) — they don't change the pin fill.
     let fillColor: string;
-    if (spot.outsidePublicLandPolygon || spot.nearPublicLandEdge) {
-      fillColor = '#dc2626'; // red — possible private inholding / outside polygon
-    } else if (spot.subKind === 'community') {
-      fillColor = 'hsl(320 45% 50%)'; // pin-community pink — vouched-for user submissions
-    } else if (diff === 'extreme' || diff === 'hard') {
-      fillColor = '#000000';
-    } else if (spot.type === 'camp-site') {
-      fillColor = '#3d7a40'; // accent-mossgreen
-    } else if (diff === 'moderate') {
-      fillColor = '#f97316'; // orange
+    // Trust `kind` first — only fall back to `type` for runtime-derived
+    // spots that have no kind. Otherwise rows like dispersed_camping +
+    // sub_kind='known' (mapped to type='camp-site') would render blue.
+    if (spot.kind === 'dispersed_camping') {
+      fillColor = 'hsl(96 28% 38%)';   // --pin-dispersed (moss green)
+    } else if (spot.kind === 'established_campground') {
+      fillColor = 'hsl(206 38% 46%)';  // --pin-campground (blue)
+    } else if (spot.kind === 'informal_camping') {
+      fillColor = 'hsl(45 62% 56%)';   // --pin-informal (gold)
+    } else if (!spot.kind && spot.type === 'camp-site') {
+      fillColor = 'hsl(206 38% 46%)';  // --pin-campground (OSM camp-site fallback)
+    } else if (!spot.kind && spot.type === 'dead-end') {
+      fillColor = 'hsl(96 28% 38%)';   // --pin-dispersed (runtime-derived fallback)
+    } else if (spot.kind === 'water') {
+      fillColor = 'hsl(150 13% 65%)';  // --pin-water (grey-green)
+    } else if (spot.kind === 'shower') {
+      fillColor = 'hsl(250 22% 60%)';  // --pin-shower (soft periwinkle)
+    } else if (spot.kind === 'laundromat') {
+      fillColor = 'hsl(24 68% 52%)';   // --pin-laundromat (orange)
     } else {
-      fillColor = '#eab308'; // yellow
+      fillColor = 'hsl(30 14% 50%)';   // unknown / no kind — warm grey
     }
 
-    const size = isSelected ? 10 : 7;
+    const size = isSelected ? 12 : 9;
     return {
       path: google.maps.SymbolPath.CIRCLE,
       fillColor,
       fillOpacity: 1,
-      strokeColor: isSelected ? '#3f3e2c' : '#ffffff',
-      strokeWeight: isSelected ? 2 : 1,
+      strokeColor: isSelected ? '#3f3e2c' : 'hsl(36 23% 97%)',  // cream
+      strokeWeight: isSelected ? 2.5 : 2,
       scale: size,
     };
-  }, [isSpotConfirmed]);
+  }, []);
 
   const getSpotIcon = (type: PotentialSpot['type']) => {
     switch (type) {
@@ -1998,6 +2028,8 @@ const DispersedExplorer = () => {
                 onClearFilters={() => setSpotFilters(new Set())}
                 roadFilter={roadFilter}
                 onChangeRoadFilter={setRoadFilter}
+                dispersedSourceFilters={dispersedSourceFilters}
+                onToggleDispersedSource={toggleDispersedSource}
                 visibleLandAgencies={visibleLandAgencies}
                 onToggleLandAgency={toggleLandAgency}
               />
@@ -2048,6 +2080,7 @@ const DispersedExplorer = () => {
               onDismissError={() => setAiError(null)}
               onConfirm={() => setConfirmDialogOpen(true)}
               onMarkForDelete={handleMarkForDelete}
+              isMarkedForDelete={!!selectedSpot && removeIds.has(selectedSpot.id)}
             />
           ) : selectedCampground ? (
             <CampgroundDetailPanel campground={selectedCampground} onBack={clearAllSelections} />
@@ -2113,8 +2146,8 @@ const DispersedExplorer = () => {
                       onClearFilters={() => setSpotFilters(new Set())}
                       roadFilter={roadFilter}
                       onChangeRoadFilter={setRoadFilter}
-                      sortBy={sortBy}
-                      onChangeSortBy={setSortBy}
+                      dispersedSourceFilters={dispersedSourceFilters}
+                      onToggleDispersedSource={toggleDispersedSource}
                       visibleLandAgencies={visibleLandAgencies}
                       onToggleLandAgency={toggleLandAgency}
                     />

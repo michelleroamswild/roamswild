@@ -177,7 +177,14 @@ export function useDispersedDatabase(
             .select(
               'id, name, description, latitude, longitude, kind, sub_kind, source, public_land_manager, public_land_unit, public_land_designation, land_type, amenities, extra'
             )
-            .in('kind', ['dispersed_camping', 'established_campground', 'informal_camping'])
+            .in('kind', [
+              'dispersed_camping',
+              'established_campground',
+              'informal_camping',
+              'water',
+              'shower',
+              'laundromat',
+            ])
             .gte('latitude', minLat)
             .lte('latitude', maxLat)
             .gte('longitude', minLng)
@@ -277,6 +284,7 @@ export function useDispersedDatabase(
             osm: 'osm', mvum: 'mvum', blm: 'blm', usfs: 'mvum', derived: 'derived', community: 'derived', user_added: 'derived',
           };
           const mapped = sourceMap[row.source] ?? 'derived';
+          const dbSource = row.source;
           const vehicleReq = (amen.vehicle_required as string | undefined) ?? null;
           return {
             id: row.id,
@@ -290,6 +298,8 @@ export function useDispersedDatabase(
             score: typeof extra.confidence_score === 'number' ? (extra.confidence_score as number) : 0,
             reasons: Array.isArray(extra.derivation_reasons) ? (extra.derivation_reasons as string[]) : [],
             source: mapped,
+            dbSource,
+            amenities: amen,
             roadName: (extra.road_name as string | undefined) ?? undefined,
             highClearance: vehicleReq !== 'passenger',
             isOnMVUMRoad: isMvumAgency,

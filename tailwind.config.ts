@@ -114,6 +114,13 @@ export default {
   				moderate:   'hsl(var(--pin-moderate))',
   				hard:       'hsl(var(--pin-hard))',
   				community:  'hsl(var(--pin-community))',
+  				// Kind-based (one hue per top-level kind)
+  				dispersed:  'hsl(var(--pin-dispersed))',
+  				informal:   'hsl(var(--pin-informal))',
+  				water:      'hsl(var(--pin-water))',
+  				shower:     'hsl(var(--pin-shower))',
+  				laundromat: 'hsl(var(--pin-laundromat))',
+  				mine:       'hsl(var(--pin-mine))',
   			},
   			land: {
   				blm:        { DEFAULT: 'hsl(var(--land-blm-fill))',        stroke: 'hsl(var(--land-blm-stroke))' },

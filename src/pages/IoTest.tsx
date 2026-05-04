@@ -65,6 +65,9 @@ interface ImportedSpot {
   // True when extra.ai_review_pending was set at insert time (newly
   // imported community rows awaiting AI summary + manual review).
   ai_review_pending?: boolean;
+  // True when extra.ai_summarized was set by summarize_pending_descriptions.py
+  // — the row's description has been AI-rewritten and is ready for review.
+  ai_summarized?: boolean;
   _layer: LayerKey;
   _key: string;
 }
@@ -105,6 +108,7 @@ function flattenSpotRow(row: SpotRow): Omit<ImportedSpot, '_layer' | '_key'> {
     land_type:               row.land_type,
     name_original:    (e.name_original as string) || undefined,
     ai_review_pending: e.ai_review_pending === true,
+    ai_summarized:    e.ai_summarized === true,
   };
 }
 
@@ -195,6 +199,10 @@ export default function IoTest() {
   // post-AI-summary review pass. Spots without the flag (already
   // reviewed in earlier import waves) are hidden in this mode.
   const [showNewOnly, setShowNewOnly] = useState(false);
+  // "AI-analyzed" mode: rows that have been through
+  // summarize_pending_descriptions.py and now have extra.ai_summarized=true.
+  // Mutually exclusive with showNewOnly so the badge counts stay readable.
+  const [showSummarizedOnly, setShowSummarizedOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
@@ -330,22 +338,27 @@ export default function IoTest() {
   }, [layerData, reviewMode, reviewKeys, approved, showApproved, removed, showRemoved]);
 
   // Flat list of currently-visible spots, sorted alphabetically by name.
-  // "Newly imported" mode pulls from every layer (regardless of the
-  // per-layer enabled toggle) and scopes to ai_review_pending=true rows
-  // so the side panel mirrors what's on the map.
+  // "Newly imported" / "AI-analyzed" modes pull from every layer (regardless
+  // of per-layer enabled toggle) and scope to the matching flag so the side
+  // panel mirrors what's on the map.
+  const reviewMask: ((s: ImportedSpot) => boolean) | null = showNewOnly
+    ? (s) => !!s.ai_review_pending
+    : showSummarizedOnly
+      ? (s) => !!s.ai_summarized
+      : null;
   const visibleSpots: ImportedSpot[] = useMemo(() => {
     const out: ImportedSpot[] = [];
     for (const k of Object.keys(filteredLayerData) as LayerKey[]) {
-      if (enabled[k] || showNewOnly) {
-        const rows = showNewOnly
-          ? filteredLayerData[k].filter((s) => s.ai_review_pending)
+      if (enabled[k] || reviewMask) {
+        const rows = reviewMask
+          ? filteredLayerData[k].filter(reviewMask)
           : filteredLayerData[k];
         out.push(...rows);
       }
     }
     out.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     return out;
-  }, [filteredLayerData, enabled, showNewOnly]);
+  }, [filteredLayerData, enabled, reviewMask]);
 
   const totalLoaded = visibleSpots.length;
   const selectedSpot = useMemo(
@@ -569,22 +582,37 @@ export default function IoTest() {
               </button>
             );
           })}
-          {/* "Newly imported" toggle — when on, scopes the visible
-              layers to spots flagged extra.ai_review_pending=true.
-              Populates after migrate_community_to_spots.py runs and
-              tags freshly-inserted rows. */}
+          {/* "Newly imported" — extra.ai_review_pending=true (still
+              awaiting the description-summarizer pass). */}
           <button
-            onClick={() => setShowNewOnly((v) => !v)}
+            onClick={() => { setShowNewOnly((v) => !v); setShowSummarizedOnly(false); }}
             className={cn(
               'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-sans font-semibold tracking-[0.01em] transition-colors border',
               showNewOnly ? 'bg-white border-ember text-ember' : 'bg-transparent border-transparent text-ink-3 opacity-60',
             )}
-            title="Show only spots flagged ai_review_pending=true (newly imported, awaiting AI summary review)"
+            title="Show only spots flagged ai_review_pending=true (newly imported, awaiting AI summary)"
           >
             <span className="inline-block w-2.5 h-2.5 rounded-full bg-ember" />
             <span>Newly imported</span>
             <Mono className={showNewOnly ? 'text-ember/70' : 'text-ink-3/70'}>
               ({Object.values(layerData).flat().filter((s) => s.ai_review_pending).length})
+            </Mono>
+          </button>
+          {/* "AI-analyzed" — extra.ai_summarized=true (description has
+              been rewritten by summarize_pending_descriptions.py and is
+              ready for human review). */}
+          <button
+            onClick={() => { setShowSummarizedOnly((v) => !v); setShowNewOnly(false); }}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-sans font-semibold tracking-[0.01em] transition-colors border',
+              showSummarizedOnly ? 'bg-white border-pine text-pine' : 'bg-transparent border-transparent text-ink-3 opacity-60',
+            )}
+            title="Show only spots flagged ai_summarized=true (description rewritten by AI, awaiting review)"
+          >
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-pine" />
+            <span>AI-analyzed</span>
+            <Mono className={showSummarizedOnly ? 'text-pine/70' : 'text-ink-3/70'}>
+              ({Object.values(layerData).flat().filter((s) => s.ai_summarized).length})
             </Mono>
           </button>
         </div>
@@ -604,10 +632,10 @@ export default function IoTest() {
               // user doesn't have to manually toggle each one — the
               // whole point of the mode is to show the entire batch
               // of freshly-imported rows in one view.
-              const layerOn = enabled[layer.key] || showNewOnly;
+              const layerOn = enabled[layer.key] || !!reviewMask;
               if (!layerOn) return null;
-              const spots = showNewOnly
-                ? filteredLayerData[layer.key].filter((s) => s.ai_review_pending)
+              const spots = reviewMask
+                ? filteredLayerData[layer.key].filter(reviewMask)
                 : filteredLayerData[layer.key];
               if (spots.length === 0) return null;
               return (
@@ -670,6 +698,8 @@ export default function IoTest() {
                         {s.sub_kind && ` · ${s.sub_kind.replace(/_/g, ' ')}`}
                         {s.public_land_manager && ` · ${s.public_land_manager}`}
                         {s.source !== 'community' && ` · ${s.source}`}
+                        {' · '}
+                        {s.lat.toFixed(5)}, {s.lng.toFixed(5)}
                       </Mono>
                     </div>
                     <div className="shrink-0 flex items-center gap-0.5">

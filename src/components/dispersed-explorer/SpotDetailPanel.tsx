@@ -1,18 +1,17 @@
-import { ReactNode } from 'react';
 import {
   ArrowSquareOut,
-  Car,
   CheckCircle,
   Crosshair,
   Database,
-  Jeep,
-  MapPinLine,
+  Drop,
   Path,
+  Shower,
   Sparkle,
   SpinnerGap,
   Tent,
   TrashSimple,
   TreeEvergreen,
+  TShirt,
   Users,
   Warning,
 } from '@phosphor-icons/react';
@@ -51,25 +50,45 @@ interface SpotDetailPanelProps {
   onConfirm: () => void;
   // Soft-mark for delete: hide locally + queue for hard-delete on
   // AdminSpotReview. Optional so non-DB-backed callers can omit it.
+  // Toggle: clicking again on a marked spot un-marks it.
   onMarkForDelete?: () => void;
+  /** True when the selected spot is currently in the "marked for delete"
+   *  set. Drives the icon swap (trash → filled check) + tooltip wording. */
+  isMarkedForDelete?: boolean;
 }
 
-const typeLabel = (spot: PotentialSpot) => {
-  if (spot.subKind === 'community') return 'Community spot';
-  if (spot.type === 'camp-site') return 'Known campsite';
-  if (spot.type === 'dead-end') return 'Road terminus';
-  return 'Road junction';
+export const typeLabel = (spot: PotentialSpot): string => {
+  // Dispersed: show source-bucket breadcrumb (matches the filter UI).
+  if (spot.kind === 'dispersed_camping') {
+    if (spot.dbSource === 'community' || spot.subKind === 'community') return 'Dispersed > Community';
+    if (spot.subKind === 'known') return 'Dispersed > Known';
+    return 'Dispersed > Derived';
+  }
+  if (spot.kind === 'established_campground') return 'Established';
+  if (spot.kind === 'informal_camping')       return 'Informal';
+  if (spot.kind === 'water')                  return 'Water';
+  if (spot.kind === 'shower')                 return 'Shower';
+  if (spot.kind === 'laundromat')             return 'Laundromat';
+  // Runtime-derived spots (no kind set, came from road geometry).
+  if (spot.type === 'camp-site') return 'Established';
+  return 'Dispersed > Derived';
 };
 
-// Map spot type → icon + accent. Keeps the hero block on each spot type
-// visually consistent with the rest of the redesign (sage/clay/water/pine).
-// Community spots get the pin-community pink to match their map pin and
-// list-row dot — visually consistent provenance signal across surfaces.
+// Map top-level `kind` → icon + accent. Pin colors mirror the explorer
+// map markers (--pin-* tokens). Source / sub_kind don't change the icon.
 const typeStyle = (spot: PotentialSpot) => {
-  if (spot.subKind === 'community') return { Icon: Users,       bg: 'bg-pin-community/15', text: 'text-pin-community' };
-  if (spot.type === 'camp-site')    return { Icon: Tent,        bg: 'bg-pin-safe/15',     text: 'text-pin-safe' };
-  if (spot.type === 'dead-end')     return { Icon: MapPinLine,  bg: 'bg-pin-moderate/15', text: 'text-pin-moderate' };
-  return                                   { Icon: Path,        bg: 'bg-pin-easy/15',     text: 'text-pin-easy' };
+  switch (spot.kind) {
+    case 'dispersed_camping':       return { Icon: Tent,         bg: 'bg-pin-dispersed/15',  text: 'text-pin-dispersed'  };
+    case 'established_campground':  return { Icon: Tent,         bg: 'bg-pin-campground/15', text: 'text-pin-campground' };
+    case 'informal_camping':        return { Icon: Tent,         bg: 'bg-pin-informal/15',   text: 'text-pin-informal'   };
+    case 'water':                   return { Icon: Drop,         bg: 'bg-pin-water/15',      text: 'text-pin-water'      };
+    case 'shower':                  return { Icon: Shower,   bg: 'bg-pin-shower/15',     text: 'text-pin-shower'     };
+    case 'laundromat':              return { Icon: TShirt,       bg: 'bg-pin-laundromat/15', text: 'text-pin-laundromat' };
+    default:
+      // Runtime-derived spots without a kind set (from road geometry).
+      if (spot.type === 'camp-site') return { Icon: Tent, bg: 'bg-pin-campground/15', text: 'text-pin-campground' };
+      return { Icon: Tent, bg: 'bg-pin-dispersed/15', text: 'text-pin-dispersed' };
+  }
 };
 
 export const SpotDetailPanel = ({
@@ -88,81 +107,65 @@ export const SpotDetailPanel = ({
   onDismissError,
   onConfirm,
   onMarkForDelete,
+  isMarkedForDelete = false,
 }: SpotDetailPanelProps) => {
   const { Icon, bg, text } = typeStyle(selectedSpot);
   const { image: naipImage, loading: naipLoading } = useSpotNaipImage(selectedSpot.lat, selectedSpot.lng);
   const naipYear = naipImage?.taken_at ? new Date(naipImage.taken_at).getFullYear() : null;
 
-  // Consolidated tags (excluding the source/derived flag — that lives in the
-  // hero badge slot). Maps land/road flags to the redesign accent palette.
-  const tags: { key: string; label: ReactNode; variant: Parameters<typeof DetailTag>[0]['variant'] }[] = [];
-  // Surface quality flags first — they're the strongest "this might not be
-  // a usable spot" signals and should be the most prominent chips.
-  if (selectedSpot.outsidePublicLandPolygon) {
-    tags.push({
-      key: 'outside',
-      variant: 'ember',
-      label: 'Not on public land (no polygon contains it)',
-    });
-  } else if (selectedSpot.nearPublicLandEdge) {
-    const meters = selectedSpot.metersFromPublicLandEdge;
-    const detail = meters != null ? ` (${Math.round(meters)}m)` : '';
-    tags.push({
-      key: 'edge',
-      variant: 'ember',
-      label: `Possible private inholding${detail}`,
-    });
-  }
-  if (selectedSpot.isOnMVUMRoad) tags.push({ key: 'mvum', variant: 'sage', label: 'USFS MVUM' });
-  if (selectedSpot.isOnBLMRoad)  tags.push({ key: 'blm', variant: 'clay', label: 'BLM' });
-  if (selectedSpot.isOnPublicLand && !selectedSpot.isOnMVUMRoad && !selectedSpot.isOnBLMRoad) {
-    tags.push({ key: 'public', variant: 'sage', label: 'Public land' });
-  }
-  if (selectedSpot.passengerReachable) {
-    tags.push({ key: 'pass', variant: 'pine', label: <><Car className="w-3 h-3" weight="regular" /> Passenger</> });
-  }
-  if (selectedSpot.highClearanceReachable && !selectedSpot.passengerReachable) {
-    tags.push({ key: 'hc', variant: 'clay', label: <><Jeep className="w-3 h-3" weight="regular" /> High clearance</> });
-  }
-  if (selectedSpot.roadName) tags.push({ key: 'road', variant: 'ghost', label: selectedSpot.roadName });
-  selectedSpot.reasons.forEach((reason, i) => {
-    if (reason.toLowerCase() === 'on public land') return;
-    tags.push({ key: `reason-${i}`, variant: 'ghost', label: reason });
-  });
-
   return (
     <DetailShell>
       <DetailBody>
         {/* Top bar — back link + cache indicator + mark-for-delete.
-            The delete button only shows when (a) the parent supplied a
-            handler and (b) the spot has a UUID id (i.e., it lives in
-            the DB and AdminSpotReview can act on it). */}
-        <div className="px-[18px] py-3 border-b border-line flex items-center justify-between">
+            Sticky so it stays visible as the rest of the panel scrolls.
+            Cached + Mark-for-delete are icon-only since both are debug
+            affordances; their tooltips carry the meaning. The delete icon
+            only shows when (a) the parent supplied a handler and (b) the
+            spot has a UUID id (i.e., it lives in the DB and AdminSpotReview
+            can act on it). */}
+        <div className="sticky top-0 z-10 bg-white dark:bg-paper-2 px-[18px] py-3 border-b border-line flex items-center justify-between">
           <BackLink onBack={onBack} />
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
             {fromDatabase && (
-              <Mono className="text-ink-3 inline-flex items-center gap-1.5">
+              <span
+                title="Loaded from cached spot data"
+                aria-label="Cached"
+                className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-3"
+              >
                 <Database className="w-3.5 h-3.5" weight="regular" />
-                Cached
-              </Mono>
+              </span>
             )}
             {onMarkForDelete && /^[0-9a-f-]{36}$/i.test(selectedSpot.id) && (
               <button
                 type="button"
                 onClick={onMarkForDelete}
-                title="Hide from map and queue for deletion in admin review"
-                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-[8px] text-[11px] font-mono uppercase tracking-[0.10em] text-ember hover:text-ember-stroke hover:bg-ember/10 transition-colors"
+                title={isMarkedForDelete
+                  ? 'Marked for deletion — click to undo'
+                  : 'Hide from map and queue for deletion in admin review'}
+                aria-label={isMarkedForDelete ? 'Undo mark for delete' : 'Mark for delete'}
+                aria-pressed={isMarkedForDelete}
+                className={cn(
+                  'inline-flex items-center justify-center w-7 h-7 rounded-full transition-colors',
+                  isMarkedForDelete
+                    ? 'text-pine-6 bg-pine-6/10 hover:bg-pine-6/15'
+                    : 'text-ember hover:bg-ember/10',
+                )}
               >
-                <TrashSimple className="w-3.5 h-3.5" weight="regular" />
-                Mark to delete
+                {isMarkedForDelete ? (
+                  <CheckCircle className="w-3.5 h-3.5" weight="fill" />
+                ) : (
+                  <TrashSimple className="w-3.5 h-3.5" weight="regular" />
+                )}
               </button>
             )}
           </div>
         </div>
 
-        {/* NAIP aerial — full-width hero strip when available */}
+        {/* NAIP aerial — full-width hero strip when available. Hover to
+            zoom in on the imagery (~10% scale, slight ease) so users can
+            inspect terrain detail without leaving the panel. */}
         {(naipLoading || naipImage) && (
-          <div className="relative aspect-[4/3] bg-paper-2 overflow-hidden border-b border-line">
+          <div className="group/naip relative aspect-[4/3] bg-paper-2 overflow-hidden border-b border-line">
             {naipLoading && !naipImage && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <SpinnerGap className="w-5 h-5 animate-spin text-ink-3" />
@@ -173,7 +176,7 @@ export const SpotDetailPanel = ({
                 <img
                   src={naipImage.storage_url}
                   alt="Aerial view"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover/naip:scale-110"
                   loading="lazy"
                 />
                 <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-ink/80 dark:bg-ink-pine/80 text-cream text-[10px] font-mono uppercase tracking-[0.10em] font-semibold">
@@ -191,13 +194,19 @@ export const SpotDetailPanel = ({
             iconBg={bg}
             iconText={text}
             title={selectedSpot.name || 'Unnamed spot'}
-            badge={
-              selectedSpot.source === 'derived' ? (
-                <DetailTag variant="clay">Derived</DetailTag>
-              ) : undefined
-            }
           />
         </DetailSection>
+
+        {/* Sub-kind chip (character: wild / pullout / boondocking_lot,
+            etc.) — drop legacy provenance values that leak into sub_kind. */}
+        {selectedSpot.subKind
+          && !['community', 'derived', 'known', 'campground'].includes(selectedSpot.subKind) && (
+          <DetailSection title="Type">
+            <DetailTag variant="ghost">
+              {selectedSpot.subKind.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+            </DetailTag>
+          </DetailSection>
+        )}
 
         {/* User / AI-written description (community spots primarily) */}
         {selectedSpot.description && (
@@ -217,6 +226,36 @@ export const SpotDetailPanel = ({
             onCopy={onCopyCoords}
           />
         </DetailSection>
+
+        {/* Amenities — raw bag from the DB, rendered as label/value pairs
+            for booleans and enums alike. See AMENITIES.md for vocab. */}
+        {selectedSpot.amenities && Object.keys(selectedSpot.amenities).length > 0 && (
+          <DetailSection title="Amenities">
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(selectedSpot.amenities).map(([k, v]) => {
+                if (v === false || v === null || v === undefined || v === '') return null;
+                const prettify = (s: string) =>
+                  s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+                const label = prettify(k);
+                let valStr: string | null;
+                if (v === true) {
+                  valStr = null;
+                } else if (typeof v === 'object') {
+                  valStr = JSON.stringify(v);
+                } else if (typeof v === 'string') {
+                  valStr = prettify(v);
+                } else {
+                  valStr = String(v);
+                }
+                return (
+                  <DetailTag key={k} variant="ghost">
+                    {valStr ? `${label}: ${valStr}` : label}
+                  </DetailTag>
+                );
+              })}
+            </div>
+          </DetailSection>
+        )}
 
         {/* Access difficulty + the OSM road tags that produced it */}
         {selectedSpot.accessDifficulty && selectedSpot.accessDifficulty !== 'unknown' && (() => {
@@ -265,19 +304,6 @@ export const SpotDetailPanel = ({
                   Verified
                 </span>
               )}
-            </div>
-          </DetailSection>
-        )}
-
-        {/* Tag cloud */}
-        {tags.length > 0 && (
-          <DetailSection title="Signals">
-            <div className="flex flex-wrap gap-1.5">
-              {tags.map((t) => (
-                <DetailTag key={t.key} variant={t.variant}>
-                  {t.label}
-                </DetailTag>
-              ))}
             </div>
           </DetailSection>
         )}

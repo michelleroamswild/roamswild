@@ -270,20 +270,23 @@ const StyleGuide = () => {
         </Section>
 
         {/* 05 PINS */}
-        <Section id="map-pins" label="05 · MAP PINS" title="Severity ramp + provenance">
-          <div className="grid grid-cols-6 gap-3.5">
-            <Swatch cls="bg-pin-easy"       name="Easy"       hex="#D7AB45" hsl="hsl(45 62% 56%)" />
-            <Swatch cls="bg-pin-safe"       name="Known/Safe" hex="#476E3D" hsl="hsl(96 28% 38%)" />
-            <Swatch cls="bg-pin-moderate"   name="Moderate"   hex="#D9712B" hsl="hsl(24 68% 52%)" />
-            <Swatch cls="bg-pin-hard"       name="Hard"       hex="#3A2A1F" hsl="hsl(20 30% 16%)" />
+        <Section id="map-pins" label="05 · MAP PINS" title="One hue per kind">
+          <div className="grid grid-cols-7 gap-3.5">
+            <Swatch cls="bg-pin-dispersed"  name="Dispersed"  hex="#476E3D" hsl="hsl(96 28% 38%)" />
             <Swatch cls="bg-pin-campground" name="Campground" hex="#4979A7" hsl="hsl(206 38% 46%)" />
-            <Swatch cls="bg-pin-community"  name="Community"  hex="#B84684" hsl="hsl(320 45% 50%)" />
+            <Swatch cls="bg-pin-informal"   name="Informal"   hex="#D7AB45" hsl="hsl(45 62% 56%)" />
+            <Swatch cls="bg-pin-water"      name="Water"      hex="#9AB1A3" hsl="hsl(150 13% 65%)" />
+            <Swatch cls="bg-pin-shower"     name="Shower"     hex="#9089BD" hsl="hsl(250 22% 60%)" />
+            <Swatch cls="bg-pin-laundromat" name="Laundromat" hex="#D9712B" hsl="hsl(24 68% 52%)" />
+            <Swatch cls="bg-pin-mine"       name="My sites"   hex="#88498D" hsl="hsl(295 32% 42%)" />
           </div>
           <p className="text-[13px] text-ink-3 mt-4 leading-[1.5] max-w-[620px]">
-            Hierarchy: easy → moderate → hard reads ordinally. Known/Safe (OSM camp-sites)
-            sits off the severity ramp. Campground (blue) and Community (pink) are separate
-            kinds — Community pins are user-contributed dispersed spots, the warm magenta
-            pops them out from the difficulty ramp on the explorer map.
+            Top-level <code className="font-mono text-[12px]">kind</code> drives pin color, full stop.
+            Dispersed = moss green, Campground = blue, Informal = gold, Water = soft grey-green
+            (matches the map-water accent), Shower = soft periwinkle, Laundromat = orange. The
+            user's saved campsites use a dusty plum on top of all of the above. Spots with no kind
+            fall back to warm grey. Hues are kept clear of land-overlay tokens (BLM 36°, USFS 140°,
+            NPS 268°) so pins read on top.
           </p>
         </Section>
 

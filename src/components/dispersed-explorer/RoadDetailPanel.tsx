@@ -185,8 +185,9 @@ export const RoadDetailPanel = ({ road, fromDatabase, onBack }: RoadDetailPanelP
   return (
     <DetailShell>
       <DetailBody>
-        {/* Top bar — back link + cache indicator if loaded from DB */}
-        <div className="px-[18px] py-3 border-b border-line flex items-center justify-between">
+        {/* Top bar — back link + cache indicator if loaded from DB.
+            Sticky so it stays visible as the body scrolls. */}
+        <div className="sticky top-0 z-10 bg-white dark:bg-paper-2 px-[18px] py-3 border-b border-line flex items-center justify-between">
           <BackLink onBack={onBack} />
           {fromDatabase && (
             <Mono className="text-ink-3 inline-flex items-center gap-1.5">

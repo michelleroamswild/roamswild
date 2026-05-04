@@ -112,7 +112,11 @@ type FilterMode = 'unreviewed' | 'all' | 'keep' | 'remove';
 // TRIB polygon — most tribal nations don't permit dispersed camping.
 // 'intersection' surfaces spots flagged by mark_road_intersection_spots
 // (T-intersection false-positive dead-ends).
-type FlagFilter = 'all' | 'outside' | 'edge' | 'sampled' | 'tribal' | 'intersection';
+// 'outside' and 'tribal' filters were removed from the UI — outside-polygon
+// spots are already auto-flagged elsewhere, and tribal land is rendered as
+// a polygon overlay rather than a triage queue. Keep the union narrow to
+// match the rendered pills.
+type FlagFilter = 'all' | 'edge' | 'sampled' | 'intersection';
 
 // ----- helpers --------------------------------------------------------------
 
@@ -477,10 +481,8 @@ const AdminSpotReview = () => {
   const visible = useMemo(() => {
     let next = spotsWithTribal;
     // Flag-type filter
-    if (flagFilter === 'outside') next = next.filter((s) => s.outsidePolygon);
-    else if (flagFilter === 'edge') next = next.filter((s) => !s.outsidePolygon && s.nearEdge);
+    if (flagFilter === 'edge') next = next.filter((s) => !s.outsidePolygon && s.nearEdge);
     else if (flagFilter === 'sampled') next = next.filter((s) => s.qualitySampled);
-    else if (flagFilter === 'tribal') next = next.filter((s) => s.inTribal);
     else if (flagFilter === 'intersection') next = next.filter((s) => s.atIntersection);
     // Review-state filter
     if (filter === 'keep') next = next.filter((s) => keepIds.has(s.id));
@@ -728,24 +730,20 @@ const AdminSpotReview = () => {
               (a separate dimension — "has been cross-checked"), red for
               tribal (a separate spatial flag — "lat/lng falls inside a
               TRIB polygon"). */}
-          {(['all', 'outside', 'edge', 'sampled', 'tribal', 'intersection'] as const).map((mode) => {
+          {(['all', 'edge', 'sampled', 'intersection'] as const).map((mode) => {
             const active = flagFilter === mode;
             const label =
               mode === 'all' ? 'All flags'
-              : mode === 'outside' ? 'Outside'
               : mode === 'edge' ? 'Edge'
               : mode === 'sampled' ? 'Sampled'
-              : mode === 'tribal' ? 'Tribal'
               : 'Intersection';
             const count =
               mode === 'all' ? flagCounts.all
-              : mode === 'outside' ? flagCounts.outside
               : mode === 'edge' ? flagCounts.edge
               : mode === 'sampled' ? flagCounts.sampled
-              : mode === 'tribal' ? flagCounts.tribal
               : flagCounts.intersection;
             const isSampled = mode === 'sampled';
-            const isTribal = mode === 'tribal';
+            const isTribal = false; // tribal pill removed; flag retained to keep classNames structurally identical
             const isIntersection = mode === 'intersection';
             return (
               <button

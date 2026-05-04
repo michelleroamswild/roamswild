@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markerclusterer';
+import type { Cluster } from '@googlemaps/markerclusterer';
 import type { PotentialSpot } from '@/hooks/use-dispersed-roads';
 
 interface SpotClustererProps {
@@ -10,11 +11,36 @@ interface SpotClustererProps {
   getMarkerIcon: (spot: PotentialSpot, isSelected: boolean) => google.maps.Symbol | google.maps.Icon;
 }
 
-// Custom renderer for cluster markers
+// Map a kind → pin color (kept in sync with DispersedExplorer's
+// getSpotMarkerIcon and the --pin-* tokens in src/index.css).
+const kindToColor = (kind: string | undefined): string => {
+  switch (kind) {
+    case 'dispersed_camping':       return 'hsl(96 28% 38%)';   // --pin-dispersed
+    case 'established_campground':  return 'hsl(206 38% 46%)';  // --pin-campground
+    case 'informal_camping':        return 'hsl(45 62% 56%)';   // --pin-informal
+    case 'water':                   return 'hsl(150 13% 65%)';  // --pin-water
+    case 'shower':                  return 'hsl(250 22% 60%)';  // --pin-shower
+    case 'laundromat':              return 'hsl(24 68% 52%)';   // --pin-laundromat
+    default:                        return 'hsl(30 14% 50%)';   // unknown / no kind
+  }
+};
+
+// Custom renderer for cluster markers — colored by the dominant kind in
+// the cluster. A cluster of mostly dispersed pins reads as moss green,
+// mostly water reads as grey-green, etc.
 const createClusterRenderer = () => ({
-  render: ({ count, position }: { count: number; position: google.maps.LatLng }) => {
-    // Color gradient based on count: yellow -> green -> blue -> purple
-    const color = count > 50 ? '#7c3aed' : count > 20 ? '#3b82f6' : count > 10 ? '#10b981' : '#eab308';
+  render: ({ count, position, markers }: Cluster) => {
+    // Tally kinds inside the cluster, pick the most common
+    const tally = new Map<string, number>();
+    markers.forEach((m) => {
+      const kind = (m as google.maps.Marker).get?.('spotKind') as string | undefined;
+      const k = kind ?? 'unknown';
+      tally.set(k, (tally.get(k) ?? 0) + 1);
+    });
+    let dominant: string | undefined;
+    let max = 0;
+    tally.forEach((c, k) => { if (c > max) { max = c; dominant = k; } });
+    const color = kindToColor(dominant);
     const size = Math.min(24 + Math.log2(count) * 8, 56);
 
     return new google.maps.Marker({
@@ -23,8 +49,8 @@ const createClusterRenderer = () => ({
         path: google.maps.SymbolPath.CIRCLE,
         fillColor: color,
         fillOpacity: 0.9,
-        strokeColor: '#ffffff',
-        strokeWeight: 2,
+        strokeColor: 'hsl(36 23% 97%)',  // cream
+        strokeWeight: 2.5,
         scale: size / 2,
       },
       label: {
@@ -88,6 +114,9 @@ export function SpotClusterer({
           icon: getMarkerIcon(spot, isSelected),
           zIndex: isSelected ? 1000 : spot.score,
         });
+        // Stash kind on the marker so the cluster renderer can pick the
+        // dominant-kind color when this marker rolls up into a cluster.
+        marker.set('spotKind', spot.kind);
 
         marker.addListener('click', () => handleSpotClick(spot));
         markers.push(marker);

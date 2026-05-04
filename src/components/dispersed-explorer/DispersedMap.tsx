@@ -3,7 +3,6 @@ import { InfoWindow, Marker, Polygon, Polyline } from '@react-google-maps/api';
 import { GoogleMap } from '@/components/GoogleMap';
 import { SpotClusterer } from '@/components/SpotClusterer';
 import { MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
-import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
 import type { Campsite } from '@/types/campsite';
 import type { SelectedLocation } from '@/components/LocationSelector';
 import { LAND_OVERLAY_COLORS, bucketForAgency } from '@/lib/land-colors';
@@ -269,11 +268,11 @@ export const DispersedMap = ({
             title={cg.name}
             icon={{
               path: google.maps.SymbolPath.CIRCLE,
-              fillColor: '#3b82f6',
+              fillColor: 'hsl(206 38% 46%)',  // --pin-campground
               fillOpacity: 1,
-              strokeColor: selectedCampground === cg ? '#1e3a8a' : '#ffffff',
-              strokeWeight: selectedCampground === cg ? 2 : 1,
-              scale: selectedCampground === cg ? 10 : 8,
+              strokeColor: selectedCampground === cg ? '#3f3e2c' : 'hsl(36 23% 97%)',  // cream
+              strokeWeight: selectedCampground === cg ? 2.5 : 2,
+              scale: selectedCampground === cg ? 12 : 9,
             }}
             onClick={() => onSelectCampground(cg)}
             zIndex={selectedCampground === cg ? 1001 : 500}
@@ -283,19 +282,26 @@ export const DispersedMap = ({
       {/* User's Saved Campsites */}
       {showMyCampsites && showMyCampsitesFiltered && campsites
         .filter((cs) => isFinite(cs.lat) && isFinite(cs.lng))
-        .map((cs) => (
-          <Marker
-            key={`my-${cs.id}`}
-            position={{ lat: cs.lat, lng: cs.lng }}
-            title={cs.name}
-            icon={createSimpleMarkerIcon('camp', {
-              isActive: selectedCampsite?.id === cs.id,
-              size: selectedCampsite?.id === cs.id ? 10 : 8
-            })}
-            onClick={() => onSelectCampsite(cs)}
-            zIndex={selectedCampsite?.id === cs.id ? 1002 : 600}
-          />
-        ))}
+        .map((cs) => {
+          const isActive = selectedCampsite?.id === cs.id;
+          return (
+            <Marker
+              key={`my-${cs.id}`}
+              position={{ lat: cs.lat, lng: cs.lng }}
+              title={cs.name}
+              icon={{
+                path: google.maps.SymbolPath.CIRCLE,
+                fillColor: 'hsl(295 32% 42%)',  // --pin-mine (deep plum)
+                fillOpacity: 1,
+                strokeColor: isActive ? '#3f3e2c' : 'hsl(36 23% 97%)',  // cream
+                strokeWeight: isActive ? 2.5 : 2,
+                scale: isActive ? 12 : 9,
+              }}
+              onClick={() => onSelectCampsite(cs)}
+              zIndex={isActive ? 1002 : 600}
+            />
+          );
+        })}
 
       {/* Info window for selected potential spot */}
       {selectedSpot && (
@@ -318,7 +324,7 @@ export const DispersedMap = ({
               </button>
             </div>
             <p className="text-gray-500 text-xs mt-0.5">
-              {selectedSpot.type === 'camp-site' ? 'Known Campsite' : selectedSpot.type === 'dead-end' ? 'Road Terminus' : 'Road Junction'}
+              {typeLabel(selectedSpot)}
             </p>
           </div>
         </InfoWindow>

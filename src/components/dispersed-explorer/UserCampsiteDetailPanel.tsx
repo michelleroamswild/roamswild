@@ -30,8 +30,8 @@ export const UserCampsiteDetailPanel = ({ campsite, onBack }: UserCampsiteDetail
   return (
     <DetailShell>
       <DetailBody>
-        {/* Top bar — back link */}
-        <div className="px-[18px] py-3 border-b border-line">
+        {/* Top bar — back link, sticky as the body scrolls. */}
+        <div className="sticky top-0 z-10 bg-white dark:bg-paper-2 px-[18px] py-3 border-b border-line">
           <BackLink onBack={onBack} />
         </div>
 

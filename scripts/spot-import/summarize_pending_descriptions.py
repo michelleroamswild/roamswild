@@ -258,8 +258,10 @@ def main():
                 errors += 1
                 continue
 
-        # Clear the pending flag from extra
+        # Clear the pending flag and mark as AI-summarized (so iotest can
+        # surface a "AI-analyzed" review filter separate from "Newly imported")
         extra.pop('ai_review_pending', None)
+        extra['ai_summarized'] = True
 
         if args.preview and not args.apply and i < args.preview:
             print()

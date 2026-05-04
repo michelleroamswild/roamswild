@@ -70,6 +70,15 @@ export interface PotentialSpot {
   score: number;
   reasons: string[];
   source: 'mvum' | 'osm' | 'blm' | 'derived';
+  /** Raw DB source string preserved from the spots table — used by the
+      Dispersed > Known/Derived/Community sub-filter. The legacy `source`
+      field above clobbers community/user_added to 'derived', so this
+      uncollapsed value is needed for filtering. */
+  dbSource?: string;
+  /** Raw amenities bag from the DB (pet_friendly, toilets, water,
+      vehicle_required, etc. — see AMENITIES.md for the canonical
+      vocab). Rendered in the detail panel. */
+  amenities?: Record<string, unknown>;
   roadName?: string;
   highClearance?: boolean;
   isOnMVUMRoad?: boolean; // True if this spot is on a USFS MVUM road (definitely public land)
