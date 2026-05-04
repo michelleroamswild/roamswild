@@ -1725,10 +1725,12 @@ export function useTripGenerator() {
         let arrivalLegDistance = fullLegDistance;
         let arrivalLegMinutes = fullLegMinutes;
 
-        if (fullLegMinutes > maxDrivingMinutes && daysAtDest > 1) {
-          // Reserve at least 1 day for arrival; cap travel days accordingly.
-          const idealTravelDays = Math.floor(fullLegMinutes / maxDrivingMinutes);
-          const travelDaysToInsert = Math.min(idealTravelDays, daysAtDest - 1);
+        if (fullLegMinutes > maxDrivingMinutes) {
+          // Insert as many travel days as needed to keep every day under the
+          // user's max-drive cap. Travel days are added on top of the
+          // destination's allotted days, so the trip total grows when a leg
+          // is long. The TripDetail header surfaces this extension.
+          const travelDaysToInsert = Math.floor(fullLegMinutes / maxDrivingMinutes);
           const segmentMiles = fullLegDistance * (maxDrivingMinutes / fullLegMinutes);
 
           for (let t = 0; t < travelDaysToInsert; t++) {
@@ -1743,18 +1745,12 @@ export function useTripGenerator() {
             }
             const camp = camps[0];
 
-            const travelStop: TripStop = {
-              id: `travel-${dayNumber}`,
-              name: `Drive toward ${dest.name}`,
-              type: 'viewpoint',
-              coordinates: stopCoords,
-              duration: `Day ${t + 1} of ${travelDaysToInsert + 1} on the road`,
-              distance: `${Math.round(segmentMiles)} mi from ${arrivalFromName}`,
-              description: `Long haul to ${dest.name} — overnight stop near the route`,
-              day: dayNumber,
-            };
-
-            const travelDayStops: TripStop[] = [travelStop];
+            // On a travel day the day-card already surfaces the drive
+            // distance/time. When we found a campsite, that camp IS the
+            // day's only meaningful stop — adding a separate "Drive toward X"
+            // viewpoint just clutters the timeline. Fall back to the marker
+            // only when no camp was found so the day isn't empty.
+            const travelDayStops: TripStop[] = [];
             if (camp) {
               const campTypeDesc = (lodgingPref === 'established' || lodgingPref === 'campground')
                 ? 'Established campground'
@@ -1766,11 +1762,22 @@ export function useTripGenerator() {
                 coordinates: { lat: camp.lat, lng: camp.lng },
                 duration: 'Overnight',
                 distance: `${camp.distance.toFixed(1)} mi off route`,
-                description: camp.note || `Travel-day overnight (${campTypeDesc})`,
+                description: camp.note || `Overnight stopover en route to ${dest.name} — ${campTypeDesc}`,
                 day: dayNumber,
                 note: camp.note,
                 bookingUrl: camp.bookingUrl,
                 isReservable: camp.isReservable,
+              });
+            } else {
+              travelDayStops.push({
+                id: `travel-${dayNumber}`,
+                name: `Drive toward ${dest.name}`,
+                type: 'viewpoint',
+                coordinates: stopCoords,
+                duration: `Day ${t + 1} of ${travelDaysToInsert + 1} on the road`,
+                distance: `${Math.round(segmentMiles)} mi from ${arrivalFromName}`,
+                description: `Long haul to ${dest.name} — no nearby campsite found, plan an overnight near this point`,
+                day: dayNumber,
               });
             }
 
@@ -1785,7 +1792,6 @@ export function useTripGenerator() {
             totalDistanceMiles += segmentMiles;
             totalDrivingMinutes += maxDrivingMinutes;
             dayNumber++;
-            daysAtDest--;
 
             arrivalFromCoords = stopCoords;
             arrivalFromName = camp ? camp.name : `Day ${t + 1} stop`;
@@ -1814,7 +1820,8 @@ export function useTripGenerator() {
             dayDistanceMiles += arrivalLegDistance;
             dayDrivingMinutes += arrivalLegMinutes;
 
-            // Add destination as a viewpoint stop
+            // Mark the arrival as the destination — the user is landing here
+            // for the first time.
             const destinationStop: TripStop = {
               id: `dest-${dayNumber}`,
               name: dest.name,
@@ -1827,21 +1834,24 @@ export function useTripGenerator() {
               placeId: dest.placeId,
             };
             dayStops.push(destinationStop);
-          } else {
-            // Extra day at destination - add an "explore" stop
-            const exploreStop: TripStop = {
-              id: `explore-${dayNumber}`,
-              name: `Explore ${dest.name}`,
+          } else if (dest.exploreTown) {
+            // Extra day with town-exploration opt-in: surface a real activity
+            // stop so the day reads as "time in {town}" instead of just a
+            // hike + camp.
+            dayStops.push({
+              id: `town-${dayNumber}`,
+              name: `Time in ${dest.name}`,
               type: 'viewpoint',
               coordinates: dest.coordinates,
-              duration: `Day ${dayAtDest + 1} of ${daysAtDest} at ${dest.name}`,
-              distance: 'Staying in area',
-              description: `Recommended extra day to explore the ${dest.name} area`,
+              duration: 'Half-day in town',
+              distance: `Day ${dayAtDest + 1} of ${daysAtDest} at ${dest.name}`,
+              description: `Wander downtown, grab a meal, browse local shops`,
               day: dayNumber,
               placeId: dest.placeId,
-            };
-            dayStops.push(exploreStop);
+            });
           }
+          // Otherwise the destination just acts as a geographic anchor — extra
+          // days run on hike + same-camp overnight without a redundant pin.
 
           // Find a unique hike for this day (based on pace preference)
           let hike: TripStop | undefined;
