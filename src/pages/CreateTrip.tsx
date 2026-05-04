@@ -67,7 +67,7 @@ const CreateTrip = () => {
   const routerLocation = useLocation();
   const stateLocation = routerLocation.state as LocationState | null;
   const { generateTrip, generating, error: generatorError } = useTripGenerator();
-  const { setGeneratedTrip, tripNameExists } = useTrip();
+  const { setGeneratedTrip, tripNameExists, saveTrip } = useTrip();
   const { user } = useAuth();
   const [profileVehicleLabel, setProfileVehicleLabel] = useState<string | null>(null);
 
@@ -588,7 +588,14 @@ const CreateTrip = () => {
 
       if (trip) {
         setGeneratedTrip(trip);
-        // Delete the draft since trip was created successfully
+        // Persist to Supabase so /trip/<slug> survives a reload. saveTrip
+        // updates generatedTrip with the DB-generated id when it inserts.
+        try {
+          await saveTrip(trip);
+        } catch (saveErr) {
+          // Non-fatal — the trip is still in memory, but reload won't restore it.
+          console.warn('Failed to persist new trip:', saveErr);
+        }
         deleteDraft();
         toast.success("Trip created!", {
           description: generatedName,

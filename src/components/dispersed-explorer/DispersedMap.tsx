@@ -25,10 +25,19 @@ const getMVUMColor = (road: MVUMRoad) => {
   return '#22c55e';
 };
 
-// Temporary: render every OSM track in black while we work on filtering
-// out tracks that aren't on public land. Tracktype-based color ramp will
-// come back once the data side is sorted.
-const getOSMColor = (_track: OSMTrack) => '#000000';
+// Color OSM tracks by tracktype / vehicle requirement. Public-land
+// filtering happens server-side now (get_road_segments INNER JOINs to
+// public_lands), so anything reaching this function is on dispersed-
+// camping-allowed land and gets a visibility-tuned color ramp.
+const getOSMColor = (track: OSMTrack) => {
+  if (track.fourWdOnly) return '#ef4444';                                            // red — 4WD only
+  if (track.tracktype === 'grade5' || track.tracktype === 'grade4') return '#ef4444'; // red — 4WD
+  if (track.tracktype === 'grade3') return '#f97316';                                 // orange — high clearance
+  if (track.tracktype === 'grade2') return '#f97316';                                 // orange — gravel
+  if (track.tracktype === 'grade1') return '#3b82f6';                                 // blue — paved
+  if (track.highway === 'track') return '#f97316';                                    // orange — track default
+  return '#eab308';                                                                   // yellow — unclassified
+};
 
 // Builds a circle pin as an HTMLElement for AdvancedMarkerElement.content.
 // scale follows the same convention as the old SymbolPath.CIRCLE icons —

@@ -1022,9 +1022,15 @@ const TripDetail = () => {
         const tripWithSameId = {
           ...newTrip,
           id: generatedTrip?.id || newTrip.id,
+          config: updatedConfig,
         };
         setGeneratedTrip(tripWithSameId);
         setTripConfig(updatedConfig);
+        try {
+          await saveTrip(tripWithSameId);
+        } catch (saveErr) {
+          console.warn('Failed to persist regenerated trip:', saveErr);
+        }
         toast.success('Trip regenerated!', {
           id: toastId,
           description: 'Your trip has been updated with the new location.',
@@ -1105,9 +1111,16 @@ const TripDetail = () => {
         const tripWithSameId = {
           ...newTrip,
           id: generatedTrip?.id || newTrip.id,
+          config: updatedConfig,
         };
         setGeneratedTrip(tripWithSameId);
         setTripConfig(updatedConfig);
+        // Persist so the new destination survives a reload.
+        try {
+          await saveTrip(tripWithSameId);
+        } catch (saveErr) {
+          console.warn('Failed to persist regenerated trip:', saveErr);
+        }
         toast.success('Destination added!', {
           id: toastId,
           description: 'Your trip has been updated.',
