@@ -6,6 +6,10 @@ export interface SpotNaipImage {
   width: number | null;
   height: number | null;
   taken_at: string | null;
+  /** True when the image already has a centered pin baked into the JPEG
+      (legacy chips). Frontend should suppress its CSS pin overlay in that
+      case to avoid double-rendering. */
+  pinBaked: boolean;
 }
 
 /**
@@ -37,7 +41,7 @@ export function useSpotNaipImage(lat: number | null, lng: number | null) {
 
       const { data, error } = await supabase
         .from('spots')
-        .select('id, spot_images!inner(storage_url, width, height, taken_at, source)')
+        .select('id, spot_images!inner(storage_url, width, height, taken_at, source, metadata)')
         .eq('latitude', latStr)
         .eq('longitude', lngStr)
         .eq('spot_images.source', 'naip')
@@ -51,7 +55,7 @@ export function useSpotNaipImage(lat: number | null, lng: number | null) {
         return;
       }
 
-      const images = ((data as { spot_images?: Array<{ source: string | null; storage_url: string; width: number | null; height: number | null; taken_at: string | null }> }).spot_images) ?? [];
+      const images = ((data as { spot_images?: Array<{ source: string | null; storage_url: string; width: number | null; height: number | null; taken_at: string | null; metadata?: Record<string, unknown> | null }> }).spot_images) ?? [];
       const naip = images[0] ?? null;
       setImage(naip
         ? {
@@ -59,6 +63,7 @@ export function useSpotNaipImage(lat: number | null, lng: number | null) {
             width: naip.width,
             height: naip.height,
             taken_at: naip.taken_at,
+            pinBaked: (naip.metadata && naip.metadata.pin_baked) === true,
           }
         : null);
       setLoading(false);

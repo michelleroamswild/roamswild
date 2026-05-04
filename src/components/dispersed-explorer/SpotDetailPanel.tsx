@@ -182,6 +182,14 @@ export const SpotDetailPanel = ({
                   className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover/naip:scale-110"
                   loading="lazy"
                 />
+                {/* Centered location pin — overlaid client-side so the
+                    design can change without regenerating chips. Suppress
+                    on legacy chips that have the pin baked into the JPEG. */}
+                {!naipImage.pinBaked && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center transition-transform duration-500 ease-out group-hover/naip:scale-110">
+                    <div className="w-3.5 h-3.5 rounded-full bg-cream border-[2px] border-ink shadow-[0_2px_6px_rgba(0,0,0,0.45)]" />
+                  </div>
+                )}
                 <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-ink/80 dark:bg-ink-pine/80 text-cream text-[10px] font-mono uppercase tracking-[0.10em] font-semibold">
                   NAIP{naipYear ? ` · ${naipYear}` : ''}
                 </div>
