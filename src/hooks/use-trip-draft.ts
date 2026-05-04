@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
-import { TripStop, LodgingType, PacePreference } from '@/types/trip';
+import { TripStop, LodgingType, PacePreference, DestinationActivity, TravelStyle, GeoBounds } from '@/types/trip';
 import { BuildMethod } from '@/components/wizard/steps/StepBuildMethod';
 
 // State for a single day in manual trip building
@@ -23,6 +23,11 @@ interface LocationData {
   lng: number;
   placeId: string;
   days?: number;
+  // Destination-only fields (start/end leave these undefined).
+  isRegion?: boolean;
+  bounds?: GeoBounds;
+  aiActivities?: boolean;
+  activities?: DestinationActivity[];
 }
 
 // Complete wizard state to be saved
@@ -45,6 +50,9 @@ export interface TripWizardState {
   activities: string[];
   offroadVehicle: '4wd-high' | 'awd-medium';
   pacePreference: PacePreference;
+  travelStyle: TravelStyle;
+  maxDrivingHours: number;
+  activitiesMode: 'ai' | 'manual';
 
   // Manual flow state
   manualDays: ManualDayState[];

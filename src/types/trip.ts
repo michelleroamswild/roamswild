@@ -1,5 +1,20 @@
 import { Coordinates, StopType } from './maps';
 
+export interface GeoBounds {
+  ne: Coordinates;
+  sw: Coordinates;
+}
+
+export interface DestinationActivity {
+  id: string;
+  name: string;
+  placeId?: string;
+  coordinates?: Coordinates;
+  type?: ActivityType;
+  notes?: string;
+  source: 'user' | 'ai-suggestion';
+}
+
 export interface TripDestination {
   id: string;
   placeId: string;
@@ -7,6 +22,16 @@ export interface TripDestination {
   address: string;
   coordinates: Coordinates;
   daysAtDestination?: number; // Optional user-specified days at this destination
+  // Region support: when true, this destination represents an area (e.g.
+  // "Oregon Coast") rather than a single point. The generator should expand
+  // it into specific stops within `bounds`.
+  isRegion?: boolean;
+  bounds?: GeoBounds;
+  // Activity sourcing for this destination. When `aiActivities` is true (the
+  // default), the AI fills in highlights/attractions. When false, only the
+  // user-picked entries in `activities` are used.
+  aiActivities?: boolean;
+  activities?: DestinationActivity[];
 }
 
 export interface TripStop {
@@ -42,6 +67,9 @@ export type VehicleType = 'sedan' | 'suv' | '4wd' | 'rv';
 export type LodgingType = 'dispersed' | 'campground' | 'cabin' | 'hotel' | 'mixed' | 'other';
 export type ActivityType = 'hiking' | 'biking' | 'climbing' | 'fishing' | 'photography' | 'wildlife' | 'offroading';
 export type PacePreference = 'relaxed' | 'moderate' | 'packed';
+// Direct = drive straight, minimal detours. Scenic = find cool stops along
+// the way. Surfaced when total drive is long enough to matter.
+export type TravelStyle = 'direct' | 'scenic';
 
 export interface DestinationLodging {
   destinationId: string;
@@ -79,6 +107,7 @@ export interface TripConfig {
   dailyStartTime?: string; // Time to start activities each day (HH:MM)
   returnToCampTime?: string; // Time to be back at camp each day (HH:MM)
   pacePreference?: PacePreference;
+  travelStyle?: TravelStyle;
   maxDrivingHoursPerDay?: number; // Maximum hours of driving per day
   travelOnlyFinalDay?: boolean; // No activities on final day (travel only)
   completedAt?: string; // ISO date string when trip was marked complete

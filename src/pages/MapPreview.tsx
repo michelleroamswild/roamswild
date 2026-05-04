@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback } from 'react';
-import { Polyline, Marker, Polygon } from '@react-google-maps/api';
+import { Polyline, Polygon } from '@react-google-maps/api';
+import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { GoogleMap } from '@/components/GoogleMap';
 import { useDispersedRoads, MVUMRoad, OSMTrack, PotentialSpot } from '@/hooks/use-dispersed-roads';
 import { usePublicLands } from '@/hooks/use-public-lands';
@@ -112,6 +113,21 @@ const MapPreview = () => {
   const { campsites } = useCampsites();
 
   const [selectedSpot, setSelectedSpot] = useState<PotentialSpot | null>(null);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  // Helper: build a circle pin DOM element for AdvancedMarkerElement.content.
+  const buildCircle = (fillColor: string, scale: number, strokeColor = '#ffffff', strokeWidth = 1): HTMLElement => {
+    const div = document.createElement('div');
+    const d = scale * 2;
+    div.style.width = `${d}px`;
+    div.style.height = `${d}px`;
+    div.style.borderRadius = '50%';
+    div.style.backgroundColor = fillColor;
+    div.style.border = `${strokeWidth}px solid ${strokeColor}`;
+    div.style.cursor = 'pointer';
+    return div;
+  };
+  const moabContent = useMemo(() => buildCircle('#EA4335', 8, '#B31412', 2), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const [analysis, setAnalysis] = useState<CampsiteAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
@@ -192,6 +208,7 @@ const MapPreview = () => {
         center={MOAB}
         zoom={14}
         className="w-full h-full"
+        onLoad={setMapInstance}
         options={{
           mapTypeId: 'hybrid',
           mapTypeControl: true,
@@ -200,7 +217,7 @@ const MapPreview = () => {
           },
         }}
       >
-        <Marker position={MOAB} title="Moab, UT" />
+        <AdvancedMarker map={mapInstance} position={MOAB} title="Moab, UT" content={moabContent} />
 
         {publicLands.map((land) => {
           if (!land.polygon || !land.renderOnMap) return null;
@@ -293,17 +310,16 @@ const MapPreview = () => {
             else if (spot.score >= 35) fillColor = '#c89b3c';
             else if (spot.score >= 25) fillColor = '#b08856';
             return (
-              <Marker
+              <AdvancedMarker
                 key={`spot-${spot.id}`}
+                map={mapInstance}
                 position={{ lat: spot.lat, lng: spot.lng }}
-                icon={{
-                  path: google.maps.SymbolPath.CIRCLE,
-                  fillColor: isSelected ? '#ffffff' : fillColor,
-                  fillOpacity: 1,
-                  strokeColor: isSelected ? fillColor : '#ffffff',
-                  strokeWeight: isSelected ? 3 : 1,
-                  scale: isSelected ? 10 : 7,
-                }}
+                content={buildCircle(
+                  isSelected ? '#ffffff' : fillColor,
+                  isSelected ? 10 : 7,
+                  isSelected ? fillColor : '#ffffff',
+                  isSelected ? 3 : 1,
+                )}
                 zIndex={isSelected ? 900 : 400}
                 onClick={() => handleSpotClick(spot)}
               />
@@ -313,18 +329,12 @@ const MapPreview = () => {
         {establishedCampgrounds
           .filter((cg) => isFinite(cg.lat) && isFinite(cg.lng))
           .map((cg) => (
-            <Marker
+            <AdvancedMarker
               key={cg.id}
+              map={mapInstance}
               position={{ lat: cg.lat, lng: cg.lng }}
               title={cg.name}
-              icon={{
-                path: google.maps.SymbolPath.CIRCLE,
-                fillColor: '#3a7aa0',
-                fillOpacity: 1,
-                strokeColor: '#ffffff',
-                strokeWeight: 1,
-                scale: 8,
-              }}
+              content={buildCircle('#3a7aa0', 8)}
               zIndex={500}
             />
           ))}
@@ -332,11 +342,12 @@ const MapPreview = () => {
         {campsites
           .filter((cs) => isFinite(cs.lat) && isFinite(cs.lng))
           .map((cs) => (
-            <Marker
+            <AdvancedMarker
               key={`my-${cs.id}`}
+              map={mapInstance}
               position={{ lat: cs.lat, lng: cs.lng }}
               title={cs.name}
-              icon={createSimpleMarkerIcon('camp', { isActive: false, size: 8 })}
+              content={createSimpleMarkerIcon('camp', { isActive: false, size: 8 })}
               zIndex={600}
             />
           ))}

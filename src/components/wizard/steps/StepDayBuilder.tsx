@@ -24,7 +24,8 @@ import { MapLocationPicker } from '@/components/MapLocationPicker';
 import { useAreaRecommendations, AreaRecommendation } from '@/hooks/use-area-recommendations';
 import { CampsiteSelectorPanel } from '../CampsiteSelectorPanel';
 import { GoogleMap } from '@/components/GoogleMap';
-import { Marker, InfoWindow } from '@react-google-maps/api';
+import { InfoWindow } from '@react-google-maps/api';
+import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { createMarkerIcon, createSimpleMarkerIcon } from '@/utils/mapMarkers';
 import { Mono, Pill } from '@/components/redesign';
 import { cn } from '@/lib/utils';
@@ -244,57 +245,49 @@ export function StepDayBuilder({
               zoom={10}
               className="w-full h-full"
               onLoad={handleMapLoad}
+              showMapTypeControl
               options={{
                 mapTypeId: 'hybrid',
-                mapTypeControl: true,
-                mapTypeControlOptions: { position: google.maps.ControlPosition?.TOP_RIGHT },
               }}
             >
-              <Marker
+              <AdvancedMarker
+                map={map}
                 position={{ lat: area.lat, lng: area.lng }}
-                icon={createMarkerIcon('start', { size: 32 }) || undefined}
+                content={createMarkerIcon('start', { size: 32 })}
                 title={area.name}
               />
 
               {recommendations.map((rec) => (
-                <Marker
+                <AdvancedMarker
                   key={rec.id}
+                  map={map}
                   position={{ lat: rec.lat, lng: rec.lng }}
-                  icon={
-                    createMarkerIcon(getMarkerType(rec.type), {
-                      size: 32,
-                      isActive: selectedMarker?.id === rec.id,
-                      customColor: isAdded(rec) ? '#9ca3af' : undefined,
-                    }) || undefined
-                  }
+                  content={createMarkerIcon(getMarkerType(rec.type), {
+                    size: 32,
+                    isActive: selectedMarker?.id === rec.id,
+                    customColor: isAdded(rec) ? '#9ca3af' : undefined,
+                  })}
                   onClick={() => setSelectedMarker(rec)}
-                  opacity={isAdded(rec) ? 0.5 : 1}
                 />
               ))}
 
-              {stops.map((stop, index) => (
-                <Marker
+              {stops.map((stop) => (
+                <AdvancedMarker
                   key={stop.id}
+                  map={map}
                   position={stop.coordinates}
-                  icon={
-                    createMarkerIcon(stop.type === 'hike' ? 'hike' : stop.type === 'viewpoint' ? 'photo' : 'default', {
-                      size: 36,
-                      isActive: true,
-                    }) || undefined
-                  }
-                  label={{
-                    text: String(index + 1),
-                    color: '#ffffff',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                  }}
+                  content={createMarkerIcon(
+                    stop.type === 'hike' ? 'hike' : stop.type === 'viewpoint' ? 'photo' : 'default',
+                    { size: 36, isActive: true },
+                  )}
                 />
               ))}
 
               {campsite && (
-                <Marker
+                <AdvancedMarker
+                  map={map}
                   position={campsite.coordinates}
-                  icon={createSimpleMarkerIcon('camp', { size: 8, isActive: true }) || undefined}
+                  content={createSimpleMarkerIcon('camp', { size: 8, isActive: true })}
                   title={campsite.name}
                 />
               )}

@@ -127,6 +127,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
   const { importFromCSV } = useCampsites();
   const { isLoaded: googleMapsLoaded } = useGoogleMaps();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const [isImporting, setIsImporting] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -149,9 +150,14 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
     onClose();
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  // Shared between the <input> change and the drop handler so file pickers
+  // and drag-and-drop both run the exact same parse + validation pipeline.
+  const processFile = async (file: File) => {
     if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setParseError('Please drop a CSV file (.csv).');
+      return;
+    }
 
     setSelectedFile(file);
     setParseError(null);
@@ -226,6 +232,11 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
     }
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) void processFile(file);
+  };
+
   const handleImport = async () => {
     if (!parsedData) return;
 
@@ -254,7 +265,7 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-md border-line bg-white dark:bg-paper-2 rounded-[18px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl border-line bg-white dark:bg-paper-2 rounded-[18px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <Mono className="text-pine-6 flex items-center gap-1.5">
             <UploadSimple className="w-3.5 h-3.5" weight="regular" />
@@ -287,15 +298,48 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
             </ol>
           </div>
 
-          {/* File Upload */}
+          {/* File Upload — click anywhere on the dashed dropzone to browse,
+              or drag a CSV onto it. The drop handler funnels through the
+              same processFile() pipeline so parse + validation behave
+              identically for both entry points. */}
           <div className="space-y-1.5">
             <Mono className="text-ink-2 block">CSV file</Mono>
             <div
               className={cn(
                 'border border-dashed rounded-[14px] p-6 text-center cursor-pointer transition-colors',
-                selectedFile ? 'border-pine-6 bg-pine-6/[0.04]' : 'border-line hover:border-ink-3/40 hover:bg-cream dark:hover:bg-paper-2',
+                isDragging
+                  ? 'border-pine-6 bg-pine-6/[0.10]'
+                  : selectedFile
+                    ? 'border-pine-6 bg-pine-6/[0.04]'
+                    : 'border-line hover:border-ink-3/40 hover:bg-cream dark:hover:bg-paper-2',
               )}
               onClick={() => fileInputRef.current?.click()}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragging(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                if (!isDragging) setIsDragging(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                // Only clear when the cursor actually leaves the dropzone
+                // (not when it crosses into a child element).
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                setIsDragging(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragging(false);
+                const file = e.dataTransfer?.files?.[0];
+                if (file) void processFile(file);
+              }}
             >
               <input
                 ref={fileInputRef}
@@ -310,16 +354,23 @@ export function ImportCampsitesModal({ isOpen, onClose }: ImportCampsitesModalPr
                   <div className="inline-flex items-center justify-center w-8 h-8 rounded-[10px] bg-pine-6 text-cream dark:text-ink-pine">
                     <FileIcon className="w-4 h-4" weight="regular" />
                   </div>
-                  <span className="text-[14px] font-sans font-semibold text-ink truncate max-w-[260px]">
+                  <span className="text-[14px] font-sans font-semibold text-ink truncate max-w-[420px]">
                     {selectedFile.name}
                   </span>
                 </div>
               ) : (
                 <>
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-sage/15 text-sage mb-2.5">
+                  <div className={cn(
+                    'inline-flex items-center justify-center w-12 h-12 rounded-full mb-2.5 transition-colors',
+                    isDragging ? 'bg-pine-6 text-cream' : 'bg-sage/15 text-sage',
+                  )}>
                     <UploadSimple className="w-5 h-5" weight="regular" />
                   </div>
-                  <p className="text-[13px] text-ink-3">Click to select a CSV file</p>
+                  <p className="text-[13px] text-ink-3">
+                    {isDragging
+                      ? 'Drop your CSV here'
+                      : 'Drag a CSV here, or click to browse'}
+                  </p>
                 </>
               )}
             </div>

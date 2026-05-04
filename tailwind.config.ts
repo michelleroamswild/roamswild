@@ -75,14 +75,6 @@ export default {
   				DEFAULT: 'hsl(var(--accent))',
   				foreground: 'hsl(var(--accent-foreground))'
   			},
-  			popover: {
-  				DEFAULT: 'hsl(var(--popover))',
-  				foreground: 'hsl(var(--popover-foreground))'
-  			},
-  			card: {
-  				DEFAULT: 'hsl(var(--card))',
-  				foreground: 'hsl(var(--card-foreground))'
-  			},
 
   			// 2026 Redesign tokens — Pine + Paper
   			cream:    'hsl(var(--cream))',
@@ -121,6 +113,14 @@ export default {
   				campground: 'hsl(var(--pin-campground))',
   				moderate:   'hsl(var(--pin-moderate))',
   				hard:       'hsl(var(--pin-hard))',
+  				community:  'hsl(var(--pin-community))',
+  				// Kind-based (one hue per top-level kind)
+  				dispersed:  'hsl(var(--pin-dispersed))',
+  				informal:   'hsl(var(--pin-informal))',
+  				water:      'hsl(var(--pin-water))',
+  				shower:     'hsl(var(--pin-shower))',
+  				laundromat: 'hsl(var(--pin-laundromat))',
+  				mine:       'hsl(var(--pin-mine))',
   			},
   			land: {
   				blm:        { DEFAULT: 'hsl(var(--land-blm-fill))',        stroke: 'hsl(var(--land-blm-stroke))' },
@@ -129,6 +129,7 @@ export default {
   				statepark:  { DEFAULT: 'hsl(var(--land-statepark-fill))',  stroke: 'hsl(var(--land-statepark-stroke))' },
   				statetrust: { DEFAULT: 'hsl(var(--land-statetrust-fill))', stroke: 'hsl(var(--land-statetrust-stroke))' },
   				landtrust:  { DEFAULT: 'hsl(var(--land-landtrust-fill))',  stroke: 'hsl(var(--land-landtrust-stroke))' },
+  				tribal:     { DEFAULT: 'hsl(var(--land-tribal-fill))',     stroke: 'hsl(var(--land-tribal-stroke))' },
   			},
   			road: {
   				paved:     'hsl(var(--road-paved))',
@@ -137,16 +138,6 @@ export default {
   				fourwd:    'hsl(var(--road-fourwd))',
   				atv:       'hsl(var(--road-atv))',
   			},
-  			sidebar: {
-  				DEFAULT: 'hsl(var(--sidebar-background))',
-  				foreground: 'hsl(var(--sidebar-foreground))',
-  				primary: 'hsl(var(--sidebar-primary))',
-  				'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
-  				accent: 'hsl(var(--sidebar-accent))',
-  				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
-  				border: 'hsl(var(--sidebar-border))',
-  				ring: 'hsl(var(--sidebar-ring))'
-  			}
   		},
   		borderRadius: {
   			lg: 'var(--radius)',

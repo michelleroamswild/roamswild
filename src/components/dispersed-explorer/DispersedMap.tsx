@@ -1,11 +1,14 @@
+import { useMemo } from 'react';
 import { X } from '@phosphor-icons/react';
-import { InfoWindow, Marker, Polygon, Polyline } from '@react-google-maps/api';
+import { InfoWindow, Polygon, Polyline } from '@react-google-maps/api';
+import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { GoogleMap } from '@/components/GoogleMap';
 import { SpotClusterer } from '@/components/SpotClusterer';
 import { MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hooks/use-dispersed-roads';
-import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
 import type { Campsite } from '@/types/campsite';
 import type { SelectedLocation } from '@/components/LocationSelector';
+import { LAND_OVERLAY_COLORS, bucketForAgency } from '@/lib/land-colors';
+import { typeLabel } from './SpotDetailPanel';
 
 type PublicLand = {
   id: string;
@@ -22,14 +25,52 @@ const getMVUMColor = (road: MVUMRoad) => {
   return '#22c55e';
 };
 
+// Color OSM tracks by tracktype / vehicle requirement. Public-land
+// filtering happens server-side now (get_road_segments INNER JOINs to
+// public_lands), so anything reaching this function is on dispersed-
+// camping-allowed land and gets a visibility-tuned color ramp.
 const getOSMColor = (track: OSMTrack) => {
-  if (track.fourWdOnly) return '#ef4444';
-  if (track.tracktype === 'grade5' || track.tracktype === 'grade4') return '#ef4444';
-  if (track.tracktype === 'grade3') return '#f97316';
-  if (track.tracktype === 'grade2') return '#f97316';
-  if (track.tracktype === 'grade1') return '#3b82f6';
-  if (track.highway === 'track') return '#f97316';
-  return '#eab308';
+  if (track.fourWdOnly) return '#ef4444';                                            // red — 4WD only
+  if (track.tracktype === 'grade5' || track.tracktype === 'grade4') return '#ef4444'; // red — 4WD
+  if (track.tracktype === 'grade3') return '#f97316';                                 // orange — high clearance
+  if (track.tracktype === 'grade2') return '#f97316';                                 // orange — gravel
+  if (track.tracktype === 'grade1') return '#3b82f6';                                 // blue — paved
+  if (track.highway === 'track') return '#f97316';                                    // orange — track default
+  return '#eab308';                                                                   // yellow — unclassified
+};
+
+// Builds a circle pin as an HTMLElement for AdvancedMarkerElement.content.
+// scale follows the same convention as the old SymbolPath.CIRCLE icons —
+// 9 → 18px diameter (default), 12 → 24px (active).
+const buildCirclePin = (
+  fillColor: string,
+  scale: number,
+  isActive: boolean,
+): HTMLElement => {
+  const diameter = scale * 2;
+  const strokeWidth = isActive ? 2.5 : 2;
+  const strokeColor = isActive ? '#3f3e2c' : 'hsl(36 23% 97%)';
+  const div = document.createElement('div');
+  div.style.width = `${diameter}px`;
+  div.style.height = `${diameter}px`;
+  div.style.borderRadius = '50%';
+  div.style.backgroundColor = fillColor;
+  div.style.border = `${strokeWidth}px solid ${strokeColor}`;
+  div.style.cursor = 'pointer';
+  return div;
+};
+
+// Default Google "red pin" replacement for the search-location marker.
+// Plain SVG so it renders with the standard pin look without needing
+// google.maps.Marker. Anchored at the bottom tip.
+const buildSearchPin = (): HTMLElement => {
+  const div = document.createElement('div');
+  div.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="27" height="43" viewBox="0 0 27 43">
+    <path d="M13.5 0C6.0442 0 0 6.0442 0 13.5C0 24.0938 13.5 43 13.5 43C13.5 43 27 24.0938 27 13.5C27 6.0442 20.9558 0 13.5 0Z" fill="#EA4335" stroke="#B31412" stroke-width="1"/>
+    <circle cx="13.5" cy="13.5" r="5" fill="#B31412"/>
+  </svg>`;
+  div.style.transform = 'translateY(-50%)'; // bottom-tip anchor
+  return div;
 };
 
 const toLatLngPath = (coordinates: any[]): google.maps.LatLngLiteral[] => {
@@ -54,6 +95,8 @@ interface DispersedMapProps {
   mapRef: React.MutableRefObject<google.maps.Map | null>;
   mapCenter: { lat: number; lng: number };
   mapZoom: number;
+  /** Map base imagery — controlled by the parent's MapControls toggle. */
+  mapTypeId?: google.maps.MapTypeId | string;
   onMapLoad: (map: google.maps.Map) => void;
   onMapClick: (e: google.maps.MapMouseEvent) => void;
 
@@ -70,7 +113,7 @@ interface DispersedMapProps {
   filteredPotentialSpots: PotentialSpot[];
   selectedSpot: PotentialSpot | null;
   onSpotClusterClick: (spot: PotentialSpot) => void;
-  getSpotMarkerIcon: (spot: PotentialSpot, isSelected: boolean) => google.maps.Icon | google.maps.Symbol;
+  getSpotMarkerIcon: (spot: PotentialSpot, isSelected: boolean) => HTMLElement;
 
   showCampgroundsFiltered: boolean;
   allEstablishedCampgrounds: EstablishedCampground[];
@@ -92,6 +135,7 @@ interface DispersedMapProps {
 export const DispersedMap = ({
   mapCenter,
   mapZoom,
+  mapTypeId = 'hybrid',
   onMapLoad,
   onMapClick,
   searchLocation,
@@ -120,6 +164,10 @@ export const DispersedMap = ({
   onDismissMapTap,
   onOpenSaveFromMap,
 }: DispersedMapProps) => {
+  // Stable DOM element for the search-location pin (no state, never changes
+  // appearance). Prevents AdvancedMarker from re-running its content effect.
+  const searchPinContent = useMemo(() => buildSearchPin(), []);
+
   return (
     <GoogleMap
       center={mapCenter}
@@ -127,19 +175,18 @@ export const DispersedMap = ({
       className="w-full h-full"
       onLoad={onMapLoad}
       onClick={onMapClick}
+      mapControls={false}
       options={{
-        mapTypeId: 'hybrid',
-        mapTypeControl: true,
-        mapTypeControlOptions: {
-          position: typeof google !== 'undefined' ? google.maps.ControlPosition?.TOP_RIGHT : undefined,
-        },
+        mapTypeId,
       }}
     >
       {/* Search location marker */}
       {searchLocation && (
-        <Marker
+        <AdvancedMarker
+          map={mapRef.current}
           position={{ lat: searchLocation.lat, lng: searchLocation.lng }}
           title={searchLocation.name}
+          content={searchPinContent}
         />
       )}
 
@@ -147,27 +194,9 @@ export const DispersedMap = ({
       {publicLands.map((land) => {
         if (!land.polygon) return null;
         if (!land.renderOnMap) return null;
-
-        const isBLM = land.managingAgency === 'BLM';
-        const isNPS = land.managingAgency === 'NPS';
-        const isState = land.managingAgency === 'STATE';
-        const isTribal = land.managingAgency === 'TRIB';
-        // Mirror the broadened state-trust whitelist in use-public-lands.ts.
-        const isStateTrust = ['SDOL', 'SFW', 'SPR', 'SDNR', 'SLB', 'SLO', 'SDC', 'SDF', 'OTHS'].includes(land.managingAgency);
-        const isLandTrust = land.managingAgency === 'NGO';
-
-        const agencyKey = isBLM ? 'BLM'
-          : isNPS ? 'NPS'
-          : isState ? 'STATE_PARK'
-          : isTribal ? 'TRIBAL'
-          : isStateTrust ? 'STATE_TRUST'
-          : isLandTrust ? 'LAND_TRUST'
-          : 'USFS';
+        const agencyKey = bucketForAgency(land.managingAgency);
         if (!visibleLandAgencies.has(agencyKey)) return null;
-
-        const fillColor = isBLM ? '#d97706' : isNPS ? '#7c3aed' : isState ? '#3b82f6' : isTribal ? '#dc2626' : isStateTrust ? '#06b6d4' : isLandTrust ? '#ec4899' : '#10b981';
-        const strokeColor = isBLM ? '#b45309' : isNPS ? '#6d28d9' : isState ? '#2563eb' : isTribal ? '#991b1b' : isStateTrust ? '#0891b2' : isLandTrust ? '#db2777' : '#059669';
-
+        const { fill: fillColor, stroke: strokeColor } = LAND_OVERLAY_COLORS[agencyKey];
         return (
           <Polygon
             key={land.id}
@@ -273,40 +302,46 @@ export const DispersedMap = ({
       {/* Established Campgrounds */}
       {showCampgroundsFiltered && allEstablishedCampgrounds
         .filter((cg) => isFinite(cg.lat) && isFinite(cg.lng))
-        .map((cg) => (
-          <Marker
-            key={cg.id}
-            position={{ lat: cg.lat, lng: cg.lng }}
-            title={cg.name}
-            icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              fillColor: '#3b82f6',
-              fillOpacity: 1,
-              strokeColor: selectedCampground === cg ? '#1e3a8a' : '#ffffff',
-              strokeWeight: selectedCampground === cg ? 2 : 1,
-              scale: selectedCampground === cg ? 10 : 8,
-            }}
-            onClick={() => onSelectCampground(cg)}
-            zIndex={selectedCampground === cg ? 1001 : 500}
-          />
-        ))}
+        .map((cg) => {
+          const isActive = selectedCampground === cg;
+          return (
+            <AdvancedMarker
+              key={cg.id}
+              map={mapRef.current}
+              position={{ lat: cg.lat, lng: cg.lng }}
+              title={cg.name}
+              content={buildCirclePin(
+                'hsl(206 38% 46%)', // --pin-campground
+                isActive ? 12 : 9,
+                isActive,
+              )}
+              zIndex={isActive ? 1001 : 500}
+              onClick={() => onSelectCampground(cg)}
+            />
+          );
+        })}
 
       {/* User's Saved Campsites */}
       {showMyCampsites && showMyCampsitesFiltered && campsites
         .filter((cs) => isFinite(cs.lat) && isFinite(cs.lng))
-        .map((cs) => (
-          <Marker
-            key={`my-${cs.id}`}
-            position={{ lat: cs.lat, lng: cs.lng }}
-            title={cs.name}
-            icon={createSimpleMarkerIcon('camp', {
-              isActive: selectedCampsite?.id === cs.id,
-              size: selectedCampsite?.id === cs.id ? 10 : 8
-            })}
-            onClick={() => onSelectCampsite(cs)}
-            zIndex={selectedCampsite?.id === cs.id ? 1002 : 600}
-          />
-        ))}
+        .map((cs) => {
+          const isActive = selectedCampsite?.id === cs.id;
+          return (
+            <AdvancedMarker
+              key={`my-${cs.id}`}
+              map={mapRef.current}
+              position={{ lat: cs.lat, lng: cs.lng }}
+              title={cs.name}
+              content={buildCirclePin(
+                'hsl(295 32% 42%)', // --pin-mine (deep plum)
+                isActive ? 12 : 9,
+                isActive,
+              )}
+              zIndex={isActive ? 1002 : 600}
+              onClick={() => onSelectCampsite(cs)}
+            />
+          );
+        })}
 
       {/* Info window for selected potential spot */}
       {selectedSpot && (
@@ -329,7 +364,7 @@ export const DispersedMap = ({
               </button>
             </div>
             <p className="text-gray-500 text-xs mt-0.5">
-              {selectedSpot.type === 'camp-site' ? 'Known Campsite' : selectedSpot.type === 'dead-end' ? 'Road Terminus' : 'Road Junction'}
+              {typeLabel(selectedSpot)}
             </p>
           </div>
         </InfoWindow>

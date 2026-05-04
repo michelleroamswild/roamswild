@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { GoogleMap } from '@/components/GoogleMap';
-import { Marker } from '@react-google-maps/api';
+import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { useCampsites } from '@/context/CampsitesContext';
 import { useAuth } from '@/context/AuthContext';
 import { Campsite, CampsiteFormData, CampsiteType, RoadAccess, CampsiteVisibility } from '@/types/campsite';
@@ -68,6 +68,7 @@ const CampsiteDetail = () => {
 
   const [campsite, setCampsite] = useState<Campsite | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -257,10 +258,12 @@ const CampsiteDetail = () => {
               center={{ lat: campsite.lat, lng: campsite.lng }}
               zoom={14}
               className="w-full h-full"
+              onLoad={setMapInstance}
             >
-              <Marker
+              <AdvancedMarker
+                map={mapInstance}
                 position={{ lat: campsite.lat, lng: campsite.lng }}
-                icon={createSimpleMarkerIcon('camp', { size: 10 })}
+                content={createSimpleMarkerIcon('camp', { size: 10 })}
               />
             </GoogleMap>
           </div>
@@ -387,9 +390,11 @@ const CampsiteDetail = () => {
         isOpen={deleteModalOpen}
         onClose={() => setDeleteModalOpen(false)}
         onConfirm={handleDelete}
-        title="Delete campsite"
-        description="Are you sure you want to delete this campsite? This action cannot be undone."
+        title="Remove from your sites"
+        description="Remove this campsite from your saved sites?"
         itemName={campsite.name}
+        helperText="This removes it from your collection only. The original spot stays in the explorer and you can save it again anytime."
+        confirmLabel="Remove"
       />
     </div>
   );

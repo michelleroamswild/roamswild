@@ -721,14 +721,23 @@ const TripDetail = () => {
     );
   };
 
-  // Calculate map center and all stops
-  const allStops = generatedTrip.days.flatMap((day) => day.stops);
-  const mapCenter = allStops.length > 0
-    ? {
-        lat: allStops.reduce((sum, s) => sum + s.coordinates.lat, 0) / allStops.length,
-        lng: allStops.reduce((sum, s) => sum + s.coordinates.lng, 0) / allStops.length,
-      }
-    : { lat: 37.7749, lng: -122.4194 }; // Default to SF if no stops
+  // Calculate map center and all stops. Memoized so map callbacks/effects
+  // stay referentially stable — otherwise selecting a stop re-renders this
+  // component, recomputes allStops, invalidates fitMapBounds, fires the
+  // refit effect, and the map jumps mid-interaction.
+  const allStops = useMemo(
+    () => generatedTrip.days.flatMap((day) => day.stops),
+    [generatedTrip.days],
+  );
+  const mapCenter = useMemo(
+    () => (allStops.length > 0
+      ? {
+          lat: allStops.reduce((sum, s) => sum + s.coordinates.lat, 0) / allStops.length,
+          lng: allStops.reduce((sum, s) => sum + s.coordinates.lng, 0) / allStops.length,
+        }
+      : { lat: 37.7749, lng: -122.4194 }),
+    [allStops],
+  );
 
   // Fit map bounds to show all markers
   const fitMapBounds = useCallback((map: google.maps.Map, stopsToFit?: typeof allStops) => {
@@ -1013,9 +1022,15 @@ const TripDetail = () => {
         const tripWithSameId = {
           ...newTrip,
           id: generatedTrip?.id || newTrip.id,
+          config: updatedConfig,
         };
         setGeneratedTrip(tripWithSameId);
         setTripConfig(updatedConfig);
+        try {
+          await saveTrip(tripWithSameId);
+        } catch (saveErr) {
+          console.warn('Failed to persist regenerated trip:', saveErr);
+        }
         toast.success('Trip regenerated!', {
           id: toastId,
           description: 'Your trip has been updated with the new location.',
@@ -1096,9 +1111,16 @@ const TripDetail = () => {
         const tripWithSameId = {
           ...newTrip,
           id: generatedTrip?.id || newTrip.id,
+          config: updatedConfig,
         };
         setGeneratedTrip(tripWithSameId);
         setTripConfig(updatedConfig);
+        // Persist so the new destination survives a reload.
+        try {
+          await saveTrip(tripWithSameId);
+        } catch (saveErr) {
+          console.warn('Failed to persist regenerated trip:', saveErr);
+        }
         toast.success('Destination added!', {
           id: toastId,
           description: 'Your trip has been updated.',

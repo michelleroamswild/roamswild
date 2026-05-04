@@ -62,6 +62,12 @@ interface ImportedSpot {
   land_type: string | null;
   // Misc
   name_original?: string;
+  // True when extra.ai_review_pending was set at insert time (newly
+  // imported community rows awaiting AI summary + manual review).
+  ai_review_pending?: boolean;
+  // True when extra.ai_summarized was set by summarize_pending_descriptions.py
+  // — the row's description has been AI-rewritten and is ready for review.
+  ai_summarized?: boolean;
   _layer: LayerKey;
   _key: string;
 }
@@ -101,6 +107,8 @@ function flattenSpotRow(row: SpotRow): Omit<ImportedSpot, '_layer' | '_key'> {
     public_access:           row.public_access,
     land_type:               row.land_type,
     name_original:    (e.name_original as string) || undefined,
+    ai_review_pending: e.ai_review_pending === true,
+    ai_summarized:    e.ai_summarized === true,
   };
 }
 
@@ -154,8 +162,10 @@ const reviewKey = (lat: number, lng: number) =>
 
 const displayName = (s: ImportedSpot) => s.name || 'Unnamed';
 
-const US_CENTER = { lat: 39.5, lng: -98.5 };
-const US_ZOOM = 4;
+// Default to Gemini Bridges Trail, Moab — troubleshooting CSV diff.
+// Bump back to nationwide (lat 39.5, lng -98.5, zoom 4) when done.
+const US_CENTER = { lat: 38.573982, lng: -109.792586 };
+const US_ZOOM = 14;
 
 const ACCESS_LABEL: Record<string, string> = {
   OA: 'Open Access', RA: 'Restricted Access', UK: 'Access Unknown', XA: 'Closed Access',
@@ -182,6 +192,17 @@ export default function IoTest() {
   });
   const [reviewKeys, setReviewKeys] = useState<Set<string>>(new Set());
   const [reviewMode, setReviewMode] = useState(false);
+  // "Newly imported" mode: when on, scope the visible layers to spots
+  // whose `extra.ai_review_pending === true` flag is set. The import
+  // pipeline (scripts/spot-import/migrate_community_to_spots.py) tags
+  // freshly-inserted rows with this flag so they show up here for the
+  // post-AI-summary review pass. Spots without the flag (already
+  // reviewed in earlier import waves) are hidden in this mode.
+  const [showNewOnly, setShowNewOnly] = useState(false);
+  // "AI-analyzed" mode: rows that have been through
+  // summarize_pending_descriptions.py and now have extra.ai_summarized=true.
+  // Mutually exclusive with showNewOnly so the badge counts stay readable.
+  const [showSummarizedOnly, setShowSummarizedOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
@@ -241,12 +262,19 @@ export default function IoTest() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Scope iotest strictly to community-pipeline rows. Derived dead-
+      // ends (source='derived', sub_kind='derived'), RIDB-imported
+      // established campgrounds, and OSM camp-sites all share the same
+      // `spots` table; without this filter the "Dispersed" layer
+      // intermixes derived dead-ends with community submissions and
+      // overstates the community count when reviewing.
       const PAGE_SIZE = 1000;
       const all: SpotRow[] = [];
       for (let from = 0; ; from += PAGE_SIZE) {
         const { data, error: dbError } = await supabase
           .from('spots')
           .select('id,name,description,latitude,longitude,kind,sub_kind,source,source_external_id,public_land_unit,public_land_manager,public_land_designation,public_access,land_type,amenities,extra')
+          .eq('source', 'community')
           .range(from, from + PAGE_SIZE - 1);
         if (cancelled) return;
         if (dbError) { setError(dbError.message); return; }
@@ -274,6 +302,7 @@ export default function IoTest() {
     })();
     return () => { cancelled = true; };
   }, []);
+
 
   const buildIcon = useMemo(() => (color: string): google.maps.Symbol => ({
     path: google.maps.SymbolPath.CIRCLE,
@@ -308,15 +337,28 @@ export default function IoTest() {
     return out;
   }, [layerData, reviewMode, reviewKeys, approved, showApproved, removed, showRemoved]);
 
-  // Flat list of currently-visible spots, sorted alphabetically by name
+  // Flat list of currently-visible spots, sorted alphabetically by name.
+  // "Newly imported" / "AI-analyzed" modes pull from every layer (regardless
+  // of per-layer enabled toggle) and scope to the matching flag so the side
+  // panel mirrors what's on the map.
+  const reviewMask: ((s: ImportedSpot) => boolean) | null = showNewOnly
+    ? (s) => !!s.ai_review_pending
+    : showSummarizedOnly
+      ? (s) => !!s.ai_summarized
+      : null;
   const visibleSpots: ImportedSpot[] = useMemo(() => {
     const out: ImportedSpot[] = [];
     for (const k of Object.keys(filteredLayerData) as LayerKey[]) {
-      if (enabled[k]) out.push(...filteredLayerData[k]);
+      if (enabled[k] || reviewMask) {
+        const rows = reviewMask
+          ? filteredLayerData[k].filter(reviewMask)
+          : filteredLayerData[k];
+        out.push(...rows);
+      }
     }
     out.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     return out;
-  }, [filteredLayerData, enabled]);
+  }, [filteredLayerData, enabled, reviewMask]);
 
   const totalLoaded = visibleSpots.length;
   const selectedSpot = useMemo(
@@ -540,6 +582,39 @@ export default function IoTest() {
               </button>
             );
           })}
+          {/* "Newly imported" — extra.ai_review_pending=true (still
+              awaiting the description-summarizer pass). */}
+          <button
+            onClick={() => { setShowNewOnly((v) => !v); setShowSummarizedOnly(false); }}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-sans font-semibold tracking-[0.01em] transition-colors border',
+              showNewOnly ? 'bg-white border-ember text-ember' : 'bg-transparent border-transparent text-ink-3 opacity-60',
+            )}
+            title="Show only spots flagged ai_review_pending=true (newly imported, awaiting AI summary)"
+          >
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-ember" />
+            <span>Newly imported</span>
+            <Mono className={showNewOnly ? 'text-ember/70' : 'text-ink-3/70'}>
+              ({Object.values(layerData).flat().filter((s) => s.ai_review_pending).length})
+            </Mono>
+          </button>
+          {/* "AI-analyzed" — extra.ai_summarized=true (description has
+              been rewritten by summarize_pending_descriptions.py and is
+              ready for human review). */}
+          <button
+            onClick={() => { setShowSummarizedOnly((v) => !v); setShowNewOnly(false); }}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-sans font-semibold tracking-[0.01em] transition-colors border',
+              showSummarizedOnly ? 'bg-white border-pine text-pine' : 'bg-transparent border-transparent text-ink-3 opacity-60',
+            )}
+            title="Show only spots flagged ai_summarized=true (description rewritten by AI, awaiting review)"
+          >
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-pine" />
+            <span>AI-analyzed</span>
+            <Mono className={showSummarizedOnly ? 'text-pine/70' : 'text-ink-3/70'}>
+              ({Object.values(layerData).flat().filter((s) => s.ai_summarized).length})
+            </Mono>
+          </button>
         </div>
       </div>
 
@@ -552,15 +627,25 @@ export default function IoTest() {
             onLoad={setMapInstance}
             options={{ mapTypeId: satellite ? 'hybrid' : 'roadmap' }}
           >
-            {mapsLoaded && LAYERS.map((layer) => (
-              enabled[layer.key] && filteredLayerData[layer.key].length > 0 ? (
+            {mapsLoaded && LAYERS.map((layer) => {
+              // "Newly imported" mode force-renders every layer so the
+              // user doesn't have to manually toggle each one — the
+              // whole point of the mode is to show the entire batch
+              // of freshly-imported rows in one view.
+              const layerOn = enabled[layer.key] || !!reviewMask;
+              if (!layerOn) return null;
+              const spots = reviewMask
+                ? filteredLayerData[layer.key].filter(reviewMask)
+                : filteredLayerData[layer.key];
+              if (spots.length === 0) return null;
+              return (
                 <MarkerClusterer
                   key={layer.key}
                   options={{ gridSize: 60, maxZoom: 12, minimumClusterSize: 4 }}
                 >
                   {(clusterer) => (
                     <>
-                      {filteredLayerData[layer.key].map((s) => (
+                      {spots.map((s) => (
                         <Marker
                           key={`${layer.key}-${s._key}`}
                           position={{ lat: s.lat, lng: s.lng }}
@@ -572,8 +657,8 @@ export default function IoTest() {
                     </>
                   )}
                 </MarkerClusterer>
-              ) : null
-            ))}
+              );
+            })}
           </GoogleMap>
         </div>
 
@@ -613,6 +698,8 @@ export default function IoTest() {
                         {s.sub_kind && ` · ${s.sub_kind.replace(/_/g, ' ')}`}
                         {s.public_land_manager && ` · ${s.public_land_manager}`}
                         {s.source !== 'community' && ` · ${s.source}`}
+                        {' · '}
+                        {s.lat.toFixed(5)}, {s.lng.toFixed(5)}
                       </Mono>
                     </div>
                     <div className="shrink-0 flex items-center gap-0.5">

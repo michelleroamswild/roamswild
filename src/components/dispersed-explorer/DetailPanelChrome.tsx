@@ -35,10 +35,10 @@ export const DetailActions = ({ children }: { children: ReactNode }) => (
 export const BackLink = ({ onBack }: { onBack: () => void }) => (
   <button
     onClick={onBack}
-    className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.10em] font-semibold text-ink-3 hover:text-ink transition-colors"
+    className="inline-flex items-center gap-1.5 text-[12px] font-sans font-semibold tracking-[-0.005em] text-ink-3 hover:text-ink transition-colors"
   >
     <ArrowLeft className="w-3.5 h-3.5" weight="bold" />
-    Back to results
+    Back
   </button>
 );
 
@@ -60,7 +60,7 @@ export const DetailHero = ({
   eyebrow?: ReactNode;
   badge?: ReactNode;
 }) => (
-  <div className="flex items-start gap-3">
+  <div className="flex items-center gap-3">
     <div className={cn('w-12 h-12 rounded-[12px] flex items-center justify-center flex-shrink-0', iconBg, iconText)}>
       <Icon className="w-5 h-5" weight="regular" />
     </div>

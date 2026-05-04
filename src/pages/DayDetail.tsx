@@ -28,7 +28,8 @@ import {
 } from '@phosphor-icons/react';
 import { useTrip } from '@/context/TripContext';
 import { GoogleMap } from '@/components/GoogleMap';
-import { Marker, DirectionsRenderer } from '@react-google-maps/api';
+import { DirectionsRenderer } from '@react-google-maps/api';
+import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { TripStop } from '@/types/trip';
 import { toast } from 'sonner';
 import { AlternativeHikesModal } from '@/components/AlternativeHikesModal';
@@ -120,6 +121,7 @@ const DayDetail = () => {
   const { generatedTrip, loadSavedTripBySlug, updateTripStop, removeTripStop, addTripStop } = useTrip();
 
   const [mapsLoaded, setMapsLoaded] = useState(false);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [hikeModalOpen, setHikeModalOpen] = useState(false);
   const [selectedHikeForSwap, setSelectedHikeForSwap] = useState<TripStop | null>(null);
@@ -419,7 +421,7 @@ const DayDetail = () => {
                 center={directions ? undefined : mapCenter}
                 zoom={10}
                 className="w-full h-full"
-                onLoad={() => setMapsLoaded(true)}
+                onLoad={(m) => { setMapsLoaded(true); setMapInstance(m); }}
                 options={{ mapTypeId: 'satellite' }}
               >
                 {directions && (
@@ -437,18 +439,20 @@ const DayDetail = () => {
                 )}
 
                 {dayNum === 1 && (generatedTrip.config.startLocation || generatedTrip.config.baseLocation) && (
-                  <Marker
+                  <AdvancedMarker
+                    map={mapInstance}
                     position={(generatedTrip.config.startLocation || generatedTrip.config.baseLocation)!.coordinates}
-                    icon={createMarkerIcon('start', { isActive: true, size: 36 })}
+                    content={createMarkerIcon('start', { isActive: true, size: 36 })}
                     title={(generatedTrip.config.startLocation || generatedTrip.config.baseLocation)!.name}
                   />
                 )}
 
                 {day.stops.map((stop) => (
-                  <Marker
+                  <AdvancedMarker
                     key={stop.id}
+                    map={mapInstance}
                     position={stop.coordinates}
-                    icon={createMarkerIcon(stop.type, { isActive: true, size: 36 })}
+                    content={createMarkerIcon(stop.type, { isActive: true, size: 36 })}
                     title={stop.name}
                   />
                 ))}

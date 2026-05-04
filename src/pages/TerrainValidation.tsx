@@ -94,7 +94,7 @@ export default function TerrainValidation() {
 
   // Map reference and overlays
   const [map, setMap] = useState<google.maps.Map | null>(null);
-  const [mapOverlays, setMapOverlays] = useState<(google.maps.Polygon | google.maps.Marker)[]>([]);
+  const [mapOverlays, setMapOverlays] = useState<(google.maps.Polygon | google.maps.marker.AdvancedMarkerElement)[]>([]);
 
   // Get selected subject and standing
   const selectedSubject = useMemo(() => {
@@ -201,8 +201,9 @@ export default function TerrainValidation() {
     mapOverlays.forEach((overlay) => {
       if (overlay instanceof google.maps.Polygon) {
         overlay.setMap(null);
-      } else if (overlay instanceof google.maps.Marker) {
-        overlay.setMap(null);
+      } else {
+        // AdvancedMarkerElement — nullify map prop to remove from canvas.
+        overlay.map = null;
       }
     });
 
@@ -211,7 +212,7 @@ export default function TerrainValidation() {
       return;
     }
 
-    const newOverlays: (google.maps.Polygon | google.maps.Marker)[] = [];
+    const newOverlays: (google.maps.Polygon | google.maps.marker.AdvancedMarkerElement)[] = [];
 
     // Subject polygons
     if (layers.subjects) {
@@ -232,19 +233,17 @@ export default function TerrainValidation() {
 
         newOverlays.push(polygon);
 
-        // Add centroid marker for subject
-        const centroidMarker = new google.maps.Marker({
+        // Centroid marker — directional arrow showing subject's face direction.
+        // SVG triangle replacing the deprecated SymbolPath.BACKWARD_CLOSED_ARROW.
+        const arrowDiv = document.createElement('div');
+        const fill = isSelected ? '#f59e0b' : '#8b5cf6';
+        arrowDiv.innerHTML = `<svg width="20" height="20" viewBox="0 0 20 20" style="transform: rotate(${subject.properties.face_direction_deg}deg)">
+          <path d="M10 2 L4 18 L10 14 L16 18 Z" fill="${fill}" stroke="#fff" stroke-width="1"/>
+        </svg>`;
+        const centroidMarker = new google.maps.marker.AdvancedMarkerElement({
           position: { lat: subject.centroid.lat, lng: subject.centroid.lon },
           map,
-          icon: {
-            path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-            scale: 5,
-            fillColor: isSelected ? '#f59e0b' : '#8b5cf6',
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 1,
-            rotation: subject.properties.face_direction_deg,
-          },
+          content: arrowDiv,
           title: `Subject #${subject.subject_id} - Face: ${subject.properties.face_direction_deg.toFixed(0)}°`,
         });
 
@@ -255,17 +254,16 @@ export default function TerrainValidation() {
     // Standing locations
     if (layers.standing) {
       result.standing_locations.forEach((standing) => {
-        const marker = new google.maps.Marker({
+        const dotDiv = document.createElement('div');
+        dotDiv.style.width = '20px';
+        dotDiv.style.height = '20px';
+        dotDiv.style.borderRadius = '50%';
+        dotDiv.style.backgroundColor = '#10b981';
+        dotDiv.style.border = '2px solid #fff';
+        const marker = new google.maps.marker.AdvancedMarkerElement({
           position: { lat: standing.location.lat, lng: standing.location.lon },
           map,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: '#10b981',
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 2,
-          },
+          content: dotDiv,
           title: `Standing #${standing.standing_id} for Subject #${standing.subject_id}`,
         });
 

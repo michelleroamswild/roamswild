@@ -1,5 +1,7 @@
-import { DirectionsRenderer, InfoWindow, Marker } from '@react-google-maps/api';
+import { useState } from 'react';
+import { DirectionsRenderer, InfoWindow } from '@react-google-maps/api';
 import { GoogleMap } from '@/components/GoogleMap';
+import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { GeneratedTrip, TripConfig, TripStop } from '@/types/trip';
 import { createMarkerIcon, createSimpleMarkerIcon } from '@/utils/mapMarkers';
 
@@ -22,7 +24,6 @@ export const TripMapView = ({
   generatedTrip,
   allStops,
   mapCenter,
-  isDark,
   activeDay,
   directions,
   dayDirections,
@@ -30,8 +31,17 @@ export const TripMapView = ({
   onMapLoad,
   onSelectStop,
 }: TripMapViewProps) => {
-  // Pine + Paper route stroke (cream on dark, pine on light satellite)
-  const strokeColor = isDark ? '#d9d0c3' : '#3a4a2a';
+  // Cream stroke for the route — readable against satellite imagery in both themes.
+  const strokeColor = `hsl(${
+    typeof window !== 'undefined'
+      ? getComputedStyle(document.documentElement).getPropertyValue('--cream').trim() || '45 56% 95%'
+      : '45 56% 95%'
+  })`;
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  const handleLoad = (map: google.maps.Map) => {
+    setMapInstance(map);
+    onMapLoad(map);
+  };
 
   return (
     <div className="order-2 lg:order-1 h-[280px] sm:h-[400px] lg:h-[calc(100vh-120px)] lg:sticky lg:top-[120px]">
@@ -40,7 +50,7 @@ export const TripMapView = ({
           center={mapCenter}
           zoom={8}
           className="w-full h-full"
-          onLoad={onMapLoad}
+          onLoad={handleLoad}
           options={{ mapTypeId: 'satellite' }}
         >
           {activeDay !== null && dayDirections ? (
@@ -64,9 +74,10 @@ export const TripMapView = ({
           ) : null}
 
           {!activeDay && (tripConfig.startLocation || tripConfig.baseLocation) && (
-            <Marker
+            <AdvancedMarker
+              map={mapInstance}
               position={(tripConfig.startLocation || tripConfig.baseLocation)!.coordinates}
-              icon={createMarkerIcon('start', { size: 36 })}
+              content={createMarkerIcon('start')}
               title={
                 tripConfig.startLocation
                   ? `Start: ${tripConfig.startLocation.name}`
@@ -80,10 +91,11 @@ export const TripMapView = ({
               const startLoc = tripConfig.startLocation || tripConfig.baseLocation;
               if (startLoc) {
                 return (
-                  <Marker
+                  <AdvancedMarker
                     key="day-origin-start"
+                    map={mapInstance}
                     position={startLoc.coordinates}
-                    icon={createMarkerIcon('start', { isActive: true, size: 36 })}
+                    content={createMarkerIcon('start', { isActive: true })}
                     title={`Start: ${startLoc.name}`}
                   />
                 );
@@ -94,10 +106,11 @@ export const TripMapView = ({
                 const campsite = prevDay?.stops.find((s) => s.type === 'camp');
                 if (campsite) {
                   return (
-                    <Marker
+                    <AdvancedMarker
                       key="day-origin-camp"
+                      map={mapInstance}
                       position={campsite.coordinates}
-                      icon={createSimpleMarkerIcon('camp', { isActive: true, size: 8 })}
+                      content={createSimpleMarkerIcon('camp', { isActive: true, size: 8 })}
                       title={`From: ${campsite.name}`}
                     />
                   );
@@ -111,10 +124,11 @@ export const TripMapView = ({
             activeDay === generatedTrip.days.length &&
             tripConfig.returnToStart &&
             (tripConfig.startLocation || tripConfig.baseLocation) && (
-              <Marker
+              <AdvancedMarker
                 key="day-destination-end"
+                map={mapInstance}
                 position={(tripConfig.startLocation || tripConfig.baseLocation)!.coordinates}
-                icon={createMarkerIcon('end', { isActive: true, size: 36 })}
+                content={createMarkerIcon('end', { isActive: true })}
                 title={`End: ${(tripConfig.startLocation || tripConfig.baseLocation)!.name}`}
               />
             )}
@@ -123,10 +137,11 @@ export const TripMapView = ({
             const endStop = allStops.find((s) => s.type === 'end');
             if (endStop) {
               return (
-                <Marker
+                <AdvancedMarker
                   key="trip-end-marker"
+                  map={mapInstance}
                   position={endStop.coordinates}
-                  icon={createMarkerIcon('end', { size: 36 })}
+                  content={createMarkerIcon('end')}
                   title={`End: ${endStop.name}`}
                 />
               );
@@ -139,10 +154,11 @@ export const TripMapView = ({
             const endStop = dayStops.find((s) => s.type === 'end');
             if (endStop) {
               return (
-                <Marker
+                <AdvancedMarker
                   key="day-end-marker"
+                  map={mapInstance}
                   position={endStop.coordinates}
-                  icon={createMarkerIcon('end', { isActive: true, size: 36 })}
+                  content={createMarkerIcon('end', { isActive: true })}
                   title={`End: ${endStop.name}`}
                 />
               );
@@ -153,17 +169,22 @@ export const TripMapView = ({
           {(activeDay ? generatedTrip.days.find((d) => d.day === activeDay)?.stops || [] : allStops)
             .filter((stop) => stop.type !== 'end')
             .map((stop) => (
-              <Marker
+              <AdvancedMarker
                 key={stop.id}
+                map={mapInstance}
                 position={stop.coordinates}
-                icon={createMarkerIcon(stop.type, { isActive: !!activeDay, size: 36 })}
+                content={createMarkerIcon(stop.type, { isActive: !!activeDay })}
                 title={stop.name}
                 onClick={() => onSelectStop(stop)}
               />
             ))}
 
           {selectedStop && (
-            <InfoWindow position={selectedStop.coordinates} onCloseClick={() => onSelectStop(null)}>
+            <InfoWindow
+              position={selectedStop.coordinates}
+              onCloseClick={() => onSelectStop(null)}
+              options={{ pixelOffset: new google.maps.Size(0, -32) }}
+            >
               <div className="p-1 min-w-[200px] font-sans">
                 <h4 className="text-[14px] font-semibold tracking-[-0.005em] text-ink">
                   {selectedStop.name}

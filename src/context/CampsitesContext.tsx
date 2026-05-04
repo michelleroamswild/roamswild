@@ -36,7 +36,9 @@ interface CampsitesContextType {
   fetchPublicCampsites: () => Promise<void>;
   searchNearbyCampsites: (lat: number, lng: number, radiusMiles: number) => Promise<Campsite[]>;
 
-  // Explorer spot confirmations
+  // Explorer spot — quick save (bookmark only, no confirmation row).
+  saveExplorerSpot: (spot: PotentialSpot) => Promise<Campsite | null>;
+  // Explorer spot confirmations — heavier "I've been here" flow with notes.
   confirmExplorerSpot: (spot: PotentialSpot, notes?: string) => Promise<Campsite | null>;
   hasUserConfirmed: (campsiteId: string) => Promise<boolean>;
   getExplorerSpots: (lat: number, lng: number, radiusMiles: number) => Promise<Campsite[]>;
@@ -437,6 +439,74 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Quick-save an explorer spot to the user's saved campsites. Distinct
+  // from confirmExplorerSpot — this only bookmarks the spot. It does NOT
+  // record a `spot_confirmations` row (which conveys "I've been here"
+  // ground-truth verification). Use this when the user hits "Save" in the
+  // detail panel; use confirmExplorerSpot when they go through the full
+  // "Confirm spot" dialog.
+  const saveExplorerSpot = async (spot: PotentialSpot): Promise<Campsite | null> => {
+    if (!user) return null;
+
+    try {
+      // Already in the user's collection? No-op, return what's there.
+      const existing = await findExistingExplorerSpot(spot.lat, spot.lng);
+      if (existing && existing.userId === user.id) return existing;
+
+      const originalSpotData: OriginalSpotData = {
+        score: spot.score,
+        reasons: spot.reasons,
+        roadName: spot.roadName,
+        spotType: spot.type,
+      };
+
+      const rowData = campsiteToRow(
+        {
+          name: spot.name || spot.roadName || `Campsite at ${spot.lat.toFixed(4)}, ${spot.lng.toFixed(4)}`,
+          lat: spot.lat,
+          lng: spot.lng,
+          type: 'dispersed',
+          visibility: 'private',
+          roadAccess: spot.highClearance ? '4wd_moderate' : '2wd',
+          sourceType: 'explorer',
+          originalSpotData,
+        },
+        user.id,
+      );
+
+      // Link to canonical potential_spots row when one exists for these
+      // coordinates (same lookup as confirmExplorerSpot).
+      const eps = 0.0001;
+      const { data: matchingSpot } = await supabase
+        .from('potential_spots')
+        .select('id')
+        .gte('lat', spot.lat - eps)
+        .lte('lat', spot.lat + eps)
+        .gte('lng', spot.lng - eps)
+        .lte('lng', spot.lng + eps)
+        .limit(1)
+        .maybeSingle();
+
+      const { data: newSpot, error: insertError } = await supabase
+        .from('campsites')
+        .insert({ ...rowData, potential_spot_id: matchingSpot?.id ?? null })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('Failed to save explorer spot:', insertError);
+        return null;
+      }
+
+      const created = campsiteFromRow(newSpot as CampsiteRow);
+      setCampsites((prev) => [created, ...prev]);
+      return created;
+    } catch (err) {
+      console.error('Error saving explorer spot:', err);
+      return null;
+    }
+  };
+
   // Confirm an explorer spot (create new or add confirmation to existing)
   const confirmExplorerSpot = async (spot: PotentialSpot, notes?: string): Promise<Campsite | null> => {
     if (!user) return null;
@@ -607,6 +677,7 @@ export function CampsitesProvider({ children }: { children: ReactNode }) {
         exportToGeoJSON,
         fetchPublicCampsites,
         searchNearbyCampsites,
+        saveExplorerSpot,
         confirmExplorerSpot,
         hasUserConfirmed,
         getExplorerSpots,

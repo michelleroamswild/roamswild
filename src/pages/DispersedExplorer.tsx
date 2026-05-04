@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { useSearchParams, useLocation, Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { MapPin, MagnifyingGlass, Path, SpinnerGap, Tent, Drop, MapPinLine, Jeep, Funnel, ArrowRight, Plus, Minus, Copy, CheckCircle } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import { LocationSelector, SelectedLocation } from '@/components/LocationSelector';
@@ -14,7 +15,6 @@ import { useGoogleMaps } from '@/components/GoogleMapsProvider';
 import { Header } from '@/components/Header';
 import { ConfirmSpotDialog } from '@/components/ConfirmSpotDialog';
 import { AddCampsiteModal } from '@/components/AddCampsiteModal';
-import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
 import type { Campsite } from '@/types/campsite';
 import { isPointInPolygon, isWithinAnyPublicLand, findContainingLand, isFalseDeadEnd } from '@/utils/dispersedExplorer';
 import { FloatingLegend } from '@/components/dispersed-explorer/FloatingLegend';
@@ -29,7 +29,9 @@ import { UserCampsiteDetailPanel } from '@/components/dispersed-explorer/UserCam
 import { RoadDetailPanel } from '@/components/dispersed-explorer/RoadDetailPanel';
 import { DispersedMap } from '@/components/dispersed-explorer/DispersedMap';
 import type { UnifiedSpot } from '@/components/dispersed-explorer/types';
+import { MapControls, type MapType } from '@/components/MapControls';
 import { Mono } from '@/components/redesign';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { AccountAvatarMenu } from '@/components/AccountAvatarMenu';
 
@@ -105,18 +107,56 @@ const DispersedExplorer = () => {
       setSelectedSpot(null);
       return;
     }
+    // Toggle: clicking the trash on a marked spot un-marks it. Panel stays
+    // open so the icon swap (trash ↔ filled check) gives instant feedback
+    // and the user can undo without re-finding the spot.
     setRemoveIds((prev) => {
       const next = new Set(prev);
-      next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
-    setSelectedSpot(null);
   }, [selectedSpot]);
 
   const [bulkPanOpen, setBulkPanOpen] = useState(false);
   const [roadFilter, setRoadFilter] = useState<'all' | 'passenger' | 'high-clearance' | '4wd'>('all');
   // Multi-select filter for spot types/confidence - empty set means show all
   const [spotFilters, setSpotFilters] = useState<Set<string>>(new Set());
+  // Source sub-filter under Dispersed (Known / Derived / Community).
+  // Empty set = all sources. Only applied when 'dispersed' is in spotFilters.
+  const [dispersedSourceFilters, setDispersedSourceFilters] = useState<Set<string>>(new Set());
+  const toggleDispersedSource = useCallback((key: string) => {
+    setDispersedSourceFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+  // Source-bucket classifier (Known / Derived / Community) for the
+  // Dispersed sub-filter. Reads sub_kind first because legacy rows carry
+  // provenance there ('community' / 'derived' / 'known' values that
+  // pre-date the source field), then falls back to dbSource for newer
+  // rows. Runtime-derived spots (no DB id, from road geometry) have
+  // neither and land in 'derived' via the fallback.
+  const classifyDispersedSource = (spot: PotentialSpot): 'known' | 'derived' | 'community' => {
+    if (spot.dbSource === 'community') return 'community';
+    if (spot.subKind === 'derived')   return 'derived';
+    if (spot.subKind === 'known')     return 'known';
+    const s = spot.dbSource;
+    if (s === 'community' || s === 'user_added') return 'community';
+    if (!s || s === 'derived') return 'derived';
+    return 'known';  // ridb / usfs / blm / nps / fws / mvum / padus / osm
+  };
+  // True only for algorithmically-derived dispersed spots. Heuristic
+  // filters (false-dead-end, near-campground, score gate, dedup) apply
+  // ONLY to these — Known + Community + Utilities are vouched-for data
+  // and skip every heuristic gate.
+  const isAlgorithmicDerived = (spot: PotentialSpot): boolean => {
+    // Anything that isn't a dispersed-camping row isn't algorithmic.
+    // Utilities, established_campground, informal_camping → not derived.
+    if (spot.kind && spot.kind !== 'dispersed_camping') return false;
+    return classifyDispersedSource(spot) === 'derived';
+  };
   const [recommendationPage, setRecommendationPage] = useState(0);
   const [spotsToShow, setSpotsToShow] = useState(30);
   const [osrmDistances, setOsrmDistances] = useState<Record<string, number>>({});
@@ -142,8 +182,31 @@ const DispersedExplorer = () => {
   const [existingCampsiteForSpot, setExistingCampsiteForSpot] = useState<Campsite | null>(null);
   const [sortBy, setSortBy] = useState<'distance' | 'rating' | 'recommended'>('recommended');
   const mapRef = useRef<google.maps.Map | null>(null);
+  // Mirror the map instance in state so MapControls re-renders when the map
+  // finishes loading (refs alone don't trigger updates).
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  // Map imagery — controlled by the styled MapControls overlay (Google's
+  // default mapType chrome is disabled).
+  const [mapTypeId, setMapTypeId] = useState<MapType>('hybrid');
 
-  const { findExistingExplorerSpot, getExplorerSpots, campsites, friendsCampsites } = useCampsites();
+  const { findExistingExplorerSpot, getExplorerSpots, saveExplorerSpot, campsites, friendsCampsites } = useCampsites();
+
+  // Quick "Save spot" flow — bookmark only, no confirmation/notes dialog.
+  // The dialog version is still triggered by onConfirm → setConfirmDialogOpen.
+  // Defined here (after useCampsites) so saveExplorerSpot is in scope for
+  // the dependency array; placing it earlier hits the const TDZ.
+  const handleSaveSpot = useCallback(async () => {
+    const spot = selectedSpot;
+    if (!spot) return;
+    const result = await saveExplorerSpot(spot);
+    if (result) {
+      toast.success(`Saved "${result.name}"`, {
+        description: 'Added to your campsites.',
+      });
+    } else {
+      toast.error('Failed to save spot');
+    }
+  }, [selectedSpot, saveExplorerSpot]);
   const { getFriendById } = useFriends();
   const { user } = useAuth();
   const [explorerSpots, setExplorerSpots] = useState<Campsite[]>([]);
@@ -255,10 +318,19 @@ const DispersedExplorer = () => {
     loading: clientLoading,
     error: clientError,
   } = useDispersedRoads(
-    // Fire when in client mode OR mid-refresh (Re-analyse runs alongside DB mode
-    // so the user keeps seeing pins while we fetch fresh data in the background).
-    (!useDatabase || refreshing) ? (searchLocation?.lat ?? null) : null,
-    (!useDatabase || refreshing) ? (searchLocation?.lng ?? null) : null,
+    // Hold the legacy derive pipeline until the region-cache check completes.
+    // Without this gate, every initial render with searchLocation set would
+    // fire the client-side derive (200+ "Filtering dead-end…" logs) for a
+    // tick before useDatabase flipped to true on a cache hit. The pipeline
+    // races the cache resolution; by the time we settle on DB mode the
+    // wasted work is already done.
+    //
+    // Fire only when:
+    //   - cache check has resolved AND we're in client mode (cache miss), OR
+    //   - mid-refresh (Re-analyse runs alongside DB mode so the user keeps
+    //     seeing pins while we fetch fresh data in the background).
+    cacheChecked && (!useDatabase || refreshing) ? (searchLocation?.lat ?? null) : null,
+    cacheChecked && (!useDatabase || refreshing) ? (searchLocation?.lng ?? null) : null,
     RADIUS_MILES,
     reanalyseBust
   );
@@ -270,6 +342,28 @@ const DispersedExplorer = () => {
   const establishedCampgrounds = useDatabase ? dbCampgrounds : clientCampgrounds;
   const loading = useDatabase ? dbLoading : clientLoading;
   const error = useDatabase ? dbError : clientError;
+
+  // Auto-fallback: if DB mode finished loading and returned nothing for
+  // this bbox (empty region, edge-function blip, auth issue), flip the
+  // toggle off so the entire client path takes over. The client hook
+  // ran in parallel because the !useDatabase gate at line ~260 only
+  // suppresses Overpass fetches when DB hasn't been asked yet — once
+  // refreshing or the cache miss kicks it on, client data is ready to
+  // step in. This keeps downstream `useDatabase` branches coherent
+  // instead of mixing source-mode logic across the file.
+  useEffect(() => {
+    if (
+      useDatabase &&
+      !dbLoading &&
+      dbSpots.length === 0 &&
+      dbMvumRoads.length === 0 &&
+      dbOsmTracks.length === 0 &&
+      dbCampgrounds.length === 0
+    ) {
+      console.log('[DispersedExplorer] DB returned empty for this bbox — switching to client/Overpass mode');
+      setUseDatabase(false);
+    }
+  }, [useDatabase, dbLoading, dbSpots.length, dbMvumRoads.length, dbOsmTracks.length, dbCampgrounds.length]);
 
   // Auto-expand the filter panel when results land. Tracks the loading edge
   // so we only fire on the true→false transition, not on every re-render.
@@ -596,16 +690,25 @@ const DispersedExplorer = () => {
     }
   }, [selectedSpot, findExistingExplorerSpot]);
 
-  // Load cached AI analysis when a spot is selected
+  // The active AI target — either the selected potential spot or the
+  // user's selected saved campsite. Both render the same AI assessment
+  // section, both cache by lat/lng coordinates.
+  const aiTarget = selectedSpot
+    ? { lat: selectedSpot.lat, lng: selectedSpot.lng }
+    : selectedCampsite
+      ? { lat: selectedCampsite.lat, lng: selectedCampsite.lng }
+      : null;
+
+  // Load cached AI analysis when an AI target is selected
   useEffect(() => {
-    if (!selectedSpot) {
+    if (!aiTarget) {
       setAiAnalysis(null);
       setAiError(null);
       setAiCheckingCache(false);
       return;
     }
 
-    const cacheKey = `${selectedSpot.lat.toFixed(5)},${selectedSpot.lng.toFixed(5)}`;
+    const cacheKey = `${aiTarget.lat.toFixed(5)},${aiTarget.lng.toFixed(5)}`;
     const cached = analysisCache.current.get(cacheKey);
     if (cached) {
       setAiAnalysis(cached);
@@ -623,10 +726,10 @@ const DispersedExplorer = () => {
     supabase
       .from('spot_analyses')
       .select('analysis')
-      .gte('lat', selectedSpot.lat - eps)
-      .lte('lat', selectedSpot.lat + eps)
-      .gte('lng', selectedSpot.lng - eps)
-      .lte('lng', selectedSpot.lng + eps)
+      .gte('lat', aiTarget.lat - eps)
+      .lte('lat', aiTarget.lat + eps)
+      .gte('lng', aiTarget.lng - eps)
+      .lte('lng', aiTarget.lng + eps)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -641,16 +744,20 @@ const DispersedExplorer = () => {
       });
 
     return () => { cancelled = true; };
-  }, [selectedSpot]);
+  }, [aiTarget?.lat, aiTarget?.lng]);
 
   // Helper to check if a point is within a restricted area
-  // Restricted: National Parks, State Parks, Tribal Lands
-  // Allowed: National Recreation Areas, Monuments, Seashores, Preserves, BLM, USFS, etc.
+  // Restricted: National Parks, Tribal Lands
+  // Allowed: State Parks (per user request — render the polygon but
+  // don't filter spots out), National Recreation Areas, Monuments,
+  // Seashores, Preserves, BLM, USFS, etc.
   const isWithinRestrictedArea = useCallback(
     (lat: number, lng: number): boolean => {
       const restrictedLands = publicLands.filter((l) => {
-        // State Parks are always restricted
-        if (l.managingAgency === 'STATE') return true;
+        // State Parks: NOT restricted from the spot-filtering side. The
+        // SPR→STATE normalization in use-public-lands.ts is for polygon
+        // rendering only. Used to filter community spots out of state
+        // parks erroneously.
 
         // Tribal lands are always restricted (need permission)
         if (l.managingAgency === 'TRIB') return true;
@@ -931,15 +1038,21 @@ const DispersedExplorer = () => {
       // Same Set is read by AdminSpotReview's bulk-delete button.
       if (removeIds.has(spot.id)) return false;
 
+      // Restricted-area check applies to ALL spots, including community.
+      // No dispersed camping allowed inside National Parks / State Parks.
+      if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
+
+      // Heuristic gates (false-dead-end, near-campground, score gate,
+      // dedup) apply ONLY to algorithmically-derived spots. Vouched-for
+      // data (Known / Community / Utilities) bypasses all of them.
+      if (!isAlgorithmicDerived(spot)) return true;
+
       // First check: filter out false dead-ends (actually intersections)
       // This matches the logic in use-dispersed-roads.ts for Full mode
       if (isFalseDeadEnd(spot, allRoads)) return false;
 
       // NOTE: Private road filtering is handled at database import time
       // Derived spots near private roads should not be in the database
-
-      // Exclude spots in National Parks or State Parks (dispersed camping not allowed)
-      if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
 
       // Exclude derived spots near established campgrounds (use the campground instead)
       // Uses 0.5 miles to match Full mode behavior
@@ -990,9 +1103,16 @@ const DispersedExplorer = () => {
 
     // Remove derived spots that are very close to camp sites
     // OSM camp sites are explicitly tagged and should take precedence
-    // Use 0.06 miles (~100 meters) to match Full mode
+    // Use 0.06 miles (~100 meters) to match Full mode.
+    // Community spots bypass — they're submissions ABOUT specific
+    // locations, often within 100m of an OSM camp-site by design (the
+    // submitter is describing a real campsite they used). Discarding
+    // them as "duplicates" of an OSM tag drops real data.
     const CAMP_DEDUP_MILES = 0.06;
     const dedupedDerived = filteredDerived.filter(derived => {
+      // Camp-site dedup is a derive-pipeline cleanup. Vouched-for data
+      // (Known / Community / Utilities) bypasses it.
+      if (!isAlgorithmicDerived(derived)) return true;
       const nearCampSite = campSites.some(camp => {
         const latDiff = Math.abs(derived.lat - camp.lat);
         const lngDiff = Math.abs(derived.lng - camp.lng);
@@ -1003,11 +1123,19 @@ const DispersedExplorer = () => {
       return !nearCampSite;
     });
 
-    // Also deduplicate derived spots that are very close to each other
+    // Also deduplicate derived spots that are very close to each other.
+    // Community spots are exempt: two community submissions for adjacent
+    // sites along the same road (e.g. a string of dispersed pull-offs)
+    // should both render, even when they're within 50m. Algorithmic
+    // dead-ends still get the squelch since they're noisy.
     const DERIVED_DEDUP_THRESHOLD = 0.0005; // ~50 meters
     const finalDerived = dedupedDerived.filter((spot, index, array) => {
-      // Keep this spot only if no earlier spot is within threshold
+      // 50m self-dedup applies only to algorithmically-derived spots.
+      if (!isAlgorithmicDerived(spot)) return true;
+      // Keep this spot only if no earlier algorithmically-derived spot
+      // is within threshold (vouched-for earlier rows don't count).
       return !array.slice(0, index).some(earlier => {
+        if (!isAlgorithmicDerived(earlier)) return false;
         const latDiff = Math.abs(spot.lat - earlier.lat);
         const lngDiff = Math.abs(spot.lng - earlier.lng);
         return latDiff < DERIVED_DEDUP_THRESHOLD && lngDiff < DERIVED_DEDUP_THRESHOLD;
@@ -1016,13 +1144,12 @@ const DispersedExplorer = () => {
 
     console.log(`Derived spots: ${derivedSpots.length} total, ${filteredDerived.length} after filtering, ${finalDerived.length} after dedup`);
 
-    // Filter out spots with score < 25 (we don't show the Unverified category)
-    const qualifiedDerived = finalDerived.filter(s => s.score >= 25);
+    // Score gate removed — quality scoring will be revisited later.
 
     // Enrich unnamed spots with public land names
     // Track counts per land area for numbering
     const landCounts = new Map<string, number>();
-    const enrichedDerived = qualifiedDerived.map(spot => {
+    const enrichedDerived = finalDerived.map(spot => {
       // Only enrich spots with coordinate-based names (starting with "Dispersed")
       if (!spot.name.startsWith('Dispersed ')) return spot;
 
@@ -1050,37 +1177,47 @@ const DispersedExplorer = () => {
 
     // Apply filters
     return allSpots.filter((spot) => {
-      // Spot type/confidence filter (multi-select)
-      // If no filters selected (empty set), show all spots
-      if (spotFilters.size > 0) {
-        const isKnown = spot.type === 'camp-site';
-        const isHigh = !isKnown && spot.score >= 35;
-        const isMedium = !isKnown && spot.score >= 25 && spot.score < 35;
+      // Soft-delete queue applies to every spot category (community + known
+      // camp-sites slip past the derived-only filter above, so guard here).
+      if (removeIds.has(spot.id)) return false;
 
-        // Check if spot matches any selected filter
+      // Kind-family filter (multi-select). Empty set = show all. We trust
+      // `kind` first; `type` is only a fallback for runtime-derived spots
+      // (from road geometry) that have no kind set. Otherwise rows like
+      // dispersed_camping + sub_kind='known' (which the hook maps to
+      // type='camp-site') would leak into the Established filter.
+      if (spotFilters.size > 0) {
+        const isDispersed   = spot.kind ? spot.kind === 'dispersed_camping' : spot.type === 'dead-end';
+        const isEstablished = spot.kind ? spot.kind === 'established_campground' : spot.type === 'camp-site';
+        const isInformal    = spot.kind === 'informal_camping';
+        const isWater       = spot.kind === 'water';
+        const isShower      = spot.kind === 'shower';
+        const isLaundromat  = spot.kind === 'laundromat';
+
         const matches =
-          (spotFilters.has('known') && isKnown) ||
-          (spotFilters.has('high') && isHigh) ||
-          (spotFilters.has('medium') && isMedium);
+          (spotFilters.has('dispersed')   && isDispersed)   ||
+          (spotFilters.has('established') && isEstablished) ||
+          (spotFilters.has('informal')    && isInformal)    ||
+          (spotFilters.has('water')       && isWater)       ||
+          (spotFilters.has('shower')      && isShower)      ||
+          (spotFilters.has('laundromat')  && isLaundromat);
 
         if (!matches) return false;
+
+        // Source sub-filter — only applies to Dispersed when active.
+        if (isDispersed && dispersedSourceFilters.size > 0) {
+          const bucket = classifyDispersedSource(spot);
+          if (!dispersedSourceFilters.has(bucket)) return false;
+        }
       }
 
-      // Road type filter based on ROUTE REACHABILITY
-      if (roadFilter !== 'all') {
-        if (roadFilter === 'passenger') {
-          // Only show spots that are REACHABLE via passenger-accessible roads
-          if (spot.passengerReachable !== true) return false;
-        } else if (roadFilter === 'high-clearance') {
-          // Show spots reachable by high-clearance vehicles (passenger + high-clearance roads, no 4WD)
-          if (spot.highClearanceReachable !== true) return false;
-        }
-        // '4wd' filter - show all spots (4WD can get anywhere)
-      }
+      // Vehicle-access spot filter removed — see TODO.md "Vehicle access
+      // + access difficulty cleanup". Bringing it back requires the data
+      // to actually be trustworthy.
 
       return true;
     });
-  }, [potentialSpots, publicLands, mvumRoads, osmTracks, isWithinRestrictedArea, isWithinTribalLand, isNearEstablishedCampground, isLikelyEstablishedCampground, useDatabase, roadFilter, spotFilters, removeIds]);
+  }, [potentialSpots, publicLands, mvumRoads, osmTracks, isWithinRestrictedArea, isWithinTribalLand, isNearEstablishedCampground, isLikelyEstablishedCampground, useDatabase, roadFilter, spotFilters, dispersedSourceFilters, removeIds]);
 
   // Calculate top recommendations based on multiple factors
   const topRecommendations = useMemo(() => {
@@ -1203,9 +1340,20 @@ const DispersedExplorer = () => {
     });
   }, []);
 
+  // Whenever any filter changes, close the detail panel + map popovers and
+  // drop back to the results list for the new filter set. Watches every
+  // filter input — spot kinds, source sub-filter, road overlay, land
+  // managers — so any toggle resets the view.
+  useEffect(() => {
+    setSelectedSpot(null);
+    setSelectedCampground(null);
+    setSelectedCampsite(null);
+    setSelectedRoad(null);
+  }, [spotFilters, dispersedSourceFilters, roadFilter, visibleLandAgencies]);
+
   // Computed visibility for campgrounds and user campsites based on filters
   // They show when: no filters are selected, OR their specific filter is selected
-  const showCampgroundsFiltered = spotFilters.size === 0 || spotFilters.has('campgrounds');
+  const showCampgroundsFiltered = spotFilters.size === 0 || spotFilters.has('established');
   const showMyCampsitesFiltered = spotFilters.size === 0 || spotFilters.has('mine');
 
   // Create unified list of all spots (derived, campgrounds, user campsites)
@@ -1233,17 +1381,21 @@ const DispersedExplorer = () => {
 
     // Add filtered derived spots — skip any whose UUID is in the local
     // remove queue so they disappear immediately after the user marks
-    // them, without a DB round-trip.
+    // them, without a DB round-trip. sub_kind='community' rows split
+    // into the 'community' category so they get their own filter pill,
+    // legend swatch, and pin color (pink) instead of being lumped in
+    // with computed dead-ends.
     filteredPotentialSpots.forEach(spot => {
       if (removeIds.has(spot.id)) return;
       const distance = getDistanceMiles(spot.lat, spot.lng);
       const recScore = recScoreMap.get(spot.id);
+      const isCommunity = spot.dbSource === 'community';
       unified.push({
-        id: `derived-${spot.id}`,
+        id: `${isCommunity ? 'community' : 'derived'}-${spot.id}`,
         name: spot.name,
         lat: spot.lat,
         lng: spot.lng,
-        category: 'derived',
+        category: isCommunity ? 'community' : 'derived',
         score: spot.score,
         spotType: spot.type,
         reasons: spot.reasons,
@@ -1414,6 +1566,7 @@ const DispersedExplorer = () => {
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
+    setMapInstance(map);
   }, []);
 
   const onMapClick = useCallback((e: google.maps.MapMouseEvent) => {
@@ -1491,61 +1644,50 @@ const DispersedExplorer = () => {
     });
   }, [osmTracks, roadFilter]);
 
-  // Check if a spot has been confirmed in the database
-  const isSpotConfirmed = useCallback((spot: PotentialSpot): Campsite | null => {
-    // Check if this spot exists in explorerSpots (within ~50m)
-    const radiusDegrees = 50 / 111000;
-    return explorerSpots.find(es =>
-      Math.abs(es.lat - spot.lat) < radiusDegrees &&
-      Math.abs(es.lng - spot.lng) < radiusDegrees
-    ) || null;
-  }, [explorerSpots]);
-
-  // Get marker icon for a spot
-  // - Purple dots for confirmed spots and OSM camp-sites
-  // - Simple colored circles for derived/potential spots
-  const getSpotMarkerIcon = useCallback((spot: PotentialSpot, isSelected: boolean) => {
-    const confirmedSpot = isSpotConfirmed(spot);
-
-    // Confirmed spots get purple dot
-    if (confirmedSpot) {
-      return createSimpleMarkerIcon('camp', {
-        isActive: isSelected,
-        size: isSelected ? 10 : 8
-      });
-    }
-
-    // Color rules (in priority order):
-    //   - Outside any public-land polygon (DB metadata wrong) → red warning
-    //   - Near public-land edge (likely on private inholding) → red warning
-    //   - Hard/extreme access (grade4–5, very_horrible, 4wd-only) → black warning
-    //   - Known OSM camp-site (and not flagged) → green
-    //   - Moderate access (grade3, high-clearance) → orange
-    //   - Everything else → yellow
-    const diff = spot.accessDifficulty;
+  // Get marker icon for a spot — pin color = kind, full stop.
+  // Builds the DOM content for an AdvancedMarkerElement pin (a styled
+  // <div> circle). Replaces the old SymbolPath.CIRCLE icon since the
+  // legacy google.maps.Marker class is deprecated and won't get bug fixes.
+  const getSpotMarkerIcon = useCallback((spot: PotentialSpot, isSelected: boolean): HTMLElement => {
     let fillColor: string;
-    if (spot.outsidePublicLandPolygon || spot.nearPublicLandEdge) {
-      fillColor = '#dc2626'; // red — possible private inholding / outside polygon
-    } else if (diff === 'extreme' || diff === 'hard') {
-      fillColor = '#000000';
-    } else if (spot.type === 'camp-site') {
-      fillColor = '#3d7a40'; // accent-mossgreen
-    } else if (diff === 'moderate') {
-      fillColor = '#f97316'; // orange
+    // Trust `kind` first — only fall back to `type` for runtime-derived
+    // spots that have no kind. Otherwise rows like dispersed_camping +
+    // sub_kind='known' (mapped to type='camp-site') would render blue.
+    if (spot.kind === 'dispersed_camping') {
+      fillColor = 'hsl(96 28% 38%)';   // --pin-dispersed
+    } else if (spot.kind === 'established_campground') {
+      fillColor = 'hsl(206 38% 46%)';  // --pin-campground
+    } else if (spot.kind === 'informal_camping') {
+      fillColor = 'hsl(45 62% 56%)';   // --pin-informal
+    } else if (!spot.kind && spot.type === 'camp-site') {
+      fillColor = 'hsl(206 38% 46%)';  // --pin-campground (OSM camp-site fallback)
+    } else if (!spot.kind && spot.type === 'dead-end') {
+      fillColor = 'hsl(96 28% 38%)';   // --pin-dispersed (runtime-derived fallback)
+    } else if (spot.kind === 'water') {
+      fillColor = 'hsl(150 13% 65%)';  // --pin-water
+    } else if (spot.kind === 'shower') {
+      fillColor = 'hsl(250 22% 60%)';  // --pin-shower
+    } else if (spot.kind === 'laundromat') {
+      fillColor = 'hsl(24 68% 52%)';   // --pin-laundromat
     } else {
-      fillColor = '#eab308'; // yellow
+      fillColor = 'hsl(30 14% 50%)';   // unknown / no kind
     }
 
-    const size = isSelected ? 10 : 7;
-    return {
-      path: google.maps.SymbolPath.CIRCLE,
-      fillColor,
-      fillOpacity: 1,
-      strokeColor: isSelected ? '#3f3e2c' : '#ffffff',
-      strokeWeight: isSelected ? 2 : 1,
-      scale: size,
-    };
-  }, [isSpotConfirmed]);
+    // SymbolPath.CIRCLE used `scale` as radius. We translate to diameter
+    // for the DOM circle: scale 9 → 18px diameter, scale 12 → 24px.
+    const diameter = (isSelected ? 12 : 9) * 2;
+    const strokeWidth = isSelected ? 2.5 : 2;
+    const strokeColor = isSelected ? '#3f3e2c' : 'hsl(36 23% 97%)';
+
+    const div = document.createElement('div');
+    div.style.width = `${diameter}px`;
+    div.style.height = `${diameter}px`;
+    div.style.borderRadius = '50%';
+    div.style.backgroundColor = fillColor;
+    div.style.border = `${strokeWidth}px solid ${strokeColor}`;
+    div.style.cursor = 'pointer';
+    return div;
+  }, []);
 
   const getSpotIcon = (type: PotentialSpot['type']) => {
     switch (type) {
@@ -1560,17 +1702,11 @@ const DispersedExplorer = () => {
   const totalRoads = mvumRoads.length + osmTracks.length;
 
   const runSpotAnalysis = async (force: boolean = false) => {
-    if (!selectedSpot) return;
-    if (aiAnalysis && !force) return;
-    if (force) {
-      setAiAnalysis(null);
-      setAiError(null);
-    }
-    setAiAnalyzing(true);
-    setAiError(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('analyze-campsite', {
-        body: {
+    // Pull payload from whichever target is active (potential spot or
+    // user's saved campsite). Coords are the cache key; the rest is
+    // best-effort context the analyze-campsite function reads when it has it.
+    const body: Record<string, unknown> = selectedSpot
+      ? {
           lat: selectedSpot.lat,
           lng: selectedSpot.lng,
           name: selectedSpot.name,
@@ -1583,12 +1719,30 @@ const DispersedExplorer = () => {
           passengerReachable: selectedSpot.passengerReachable,
           highClearanceReachable: selectedSpot.highClearanceReachable,
           highClearance: selectedSpot.highClearance,
-          ...(force && { force: true }),
-        },
+        }
+      : selectedCampsite
+        ? {
+            lat: selectedCampsite.lat,
+            lng: selectedCampsite.lng,
+            name: selectedCampsite.name,
+            type: 'camp-site',
+          }
+        : null;
+    if (!body) return;
+    if (aiAnalysis && !force) return;
+    if (force) {
+      setAiAnalysis(null);
+      setAiError(null);
+    }
+    setAiAnalyzing(true);
+    setAiError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-campsite', {
+        body: { ...body, ...(force && { force: true }) },
       });
       if (error) throw error;
       setAiAnalysis(data.analysis);
-      analysisCache.current.set(`${selectedSpot.lat.toFixed(5)},${selectedSpot.lng.toFixed(5)}`, data.analysis);
+      analysisCache.current.set(`${(body.lat as number).toFixed(5)},${(body.lng as number).toFixed(5)}`, data.analysis);
     } catch (err: unknown) {
       setAiError(err instanceof Error ? err.message : 'Analysis failed');
     } finally {
@@ -1619,7 +1773,9 @@ const DispersedExplorer = () => {
   }, [selectedSpot, selectedCampground, selectedCampsite, selectedRoad]);
 
   const handleUnifiedSpotClick = (spot: UnifiedSpot) => {
-    if (spot.category === 'derived' && spot.originalSpot) {
+    // Community spots use the same selectedSpot path as derived — they're
+    // both PotentialSpot under the hood, just with different provenance.
+    if ((spot.category === 'derived' || spot.category === 'community') && spot.originalSpot) {
       setSelectedSpot(spot.originalSpot);
       setSelectedCampground(null);
       setSelectedCampsite(null);
@@ -1707,6 +1863,7 @@ const DispersedExplorer = () => {
               mapRef={mapRef}
               mapCenter={mapCenter}
               mapZoom={mapZoom}
+              mapTypeId={mapTypeId}
               onMapLoad={onMapLoad}
               onMapClick={onMapClick}
               searchLocation={searchLocation}
@@ -1753,6 +1910,21 @@ const DispersedExplorer = () => {
           </div>
         </div>
 
+        {/* Map controls — pine-styled zoom + map-type toggle. Bottom-right
+            on lg+ but shifted past the results panel (panel ends at 425px
+            from the right edge: 20px gap + 400px width) plus a 20px
+            breathing margin. Mobile: top-right of the map. */}
+        <div className={cn(
+          'absolute top-4 right-4 z-10 lg:top-auto lg:bottom-5 lg:right-[445px]',
+          mobileView === 'map' ? 'block' : 'hidden lg:block',
+        )}>
+          <MapControls
+            map={mapInstance}
+            mapType={mapTypeId}
+            onMapTypeChange={setMapTypeId}
+          />
+        </div>
+
         {/* Floating legend — bottom-left on mobile, bottom-center between
             cards on desktop (clears both floating cards + the bottom edge). */}
         <div className={cn(
@@ -1765,10 +1937,11 @@ const DispersedExplorer = () => {
           />
         </div>
 
-        {/* Bulk auto-pan helper — small corner pill in the upper map gutter
-            between the floating header and the cards. */}
+        {/* Bulk auto-pan helper — center-bottom of the map gutter on lg+
+            (free of the side panels and the legend). Mobile keeps its
+            existing top-right corner positioning via the inner button. */}
         <div className={cn(
-          'lg:absolute lg:bottom-5 lg:right-[420px] lg:z-10',
+          'lg:absolute lg:bottom-5 lg:left-1/2 lg:-translate-x-1/2 lg:right-auto lg:z-10',
           mobileView === 'map' ? 'block' : 'hidden lg:block',
         )}>
           {!bulkPanOpen ? (
@@ -1908,8 +2081,8 @@ const DispersedExplorer = () => {
                 onClearFilters={() => setSpotFilters(new Set())}
                 roadFilter={roadFilter}
                 onChangeRoadFilter={setRoadFilter}
-                sortBy={sortBy}
-                onChangeSortBy={setSortBy}
+                dispersedSourceFilters={dispersedSourceFilters}
+                onToggleDispersedSource={toggleDispersedSource}
                 visibleLandAgencies={visibleLandAgencies}
                 onToggleLandAgency={toggleLandAgency}
               />
@@ -1958,13 +2131,25 @@ const DispersedExplorer = () => {
               onAnalyze={() => runSpotAnalysis(false)}
               onReanalyze={() => runSpotAnalysis(true)}
               onDismissError={() => setAiError(null)}
+              onSave={handleSaveSpot}
               onConfirm={() => setConfirmDialogOpen(true)}
               onMarkForDelete={handleMarkForDelete}
+              isMarkedForDelete={!!selectedSpot && removeIds.has(selectedSpot.id)}
             />
           ) : selectedCampground ? (
             <CampgroundDetailPanel campground={selectedCampground} onBack={clearAllSelections} />
           ) : selectedCampsite ? (
-            <UserCampsiteDetailPanel campsite={selectedCampsite} onBack={clearAllSelections} />
+            <UserCampsiteDetailPanel
+              campsite={selectedCampsite}
+              onBack={clearAllSelections}
+              aiAnalysis={aiAnalysis}
+              aiAnalyzing={aiAnalyzing}
+              aiCheckingCache={aiCheckingCache}
+              aiError={aiError}
+              onAnalyze={() => runSpotAnalysis(false)}
+              onReanalyze={() => runSpotAnalysis(true)}
+              onDismissError={() => setAiError(null)}
+            />
           ) : selectedRoad ? (
             <RoadDetailPanel
               road={selectedRoad}
@@ -1973,14 +2158,29 @@ const DispersedExplorer = () => {
             />
           ) : (
             <>
-              {/* Results header */}
-              <div className="px-4 py-3 border-b border-line flex items-center justify-between gap-2">
+              {/* Results header — larger title + sort dropdown on the right
+                  (was a static mono cap reading "Sort · recommended"). The
+                  filter panel no longer carries a sort group; sort lives
+                  here next to the count instead. */}
+              <div className="px-4 py-3.5 border-b border-line flex items-center justify-between gap-3">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">Results</span>
+                  <span className="text-[18px] font-sans font-bold tracking-[-0.015em] text-ink">Results</span>
                   {searchLocation && !loading && <Mono className="text-ink-3">{unifiedSpotList.length}</Mono>}
                 </div>
                 {searchLocation && !loading && unifiedSpotList.length > 0 && (
-                  <Mono className="text-pine-6">Sort · {sortBy === 'recommended' ? 'recommended' : sortBy}</Mono>
+                  <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'distance' | 'rating' | 'recommended')}>
+                    <SelectTrigger className="w-auto h-8 pl-3 pr-2.5 gap-3 text-[12px] font-sans font-semibold rounded-full">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="text-ink-3">Sort:</span>
+                        <SelectValue />
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                      <SelectItem value="recommended">Recommended</SelectItem>
+                      <SelectItem value="distance">Distance</SelectItem>
+                      <SelectItem value="rating">Rating</SelectItem>
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
 
@@ -2010,8 +2210,8 @@ const DispersedExplorer = () => {
                       onClearFilters={() => setSpotFilters(new Set())}
                       roadFilter={roadFilter}
                       onChangeRoadFilter={setRoadFilter}
-                      sortBy={sortBy}
-                      onChangeSortBy={setSortBy}
+                      dispersedSourceFilters={dispersedSourceFilters}
+                      onToggleDispersedSource={toggleDispersedSource}
                       visibleLandAgencies={visibleLandAgencies}
                       onToggleLandAgency={toggleLandAgency}
                     />

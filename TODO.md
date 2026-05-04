@@ -19,6 +19,11 @@ session. What's left is hosting the Python worker.
   `naip_backfill_queue`. Reuses the same Fly worker — no separate bulk infra.
 - **Why deferred:** worth waiting until more derived spots are loaded so the
   bulk backfill isn't immediately stale.
+- **Specifically pending: NAIP for the May-2026 community import (~14,572
+  rows).** Those rows landed during the spot-import refresh and have no
+  satellite imagery yet — they'll either lazy-backfill as users open them
+  (slow) or get bulk-enqueued by the admin tool above (fast, once the
+  worker is up). Either way, blocked on the worker rollout below.
 
 ## Spot-quality filters rebuild
 
@@ -40,6 +45,36 @@ highlights via Claude (cached in `region_ai_enrichments`), which is fine —
 but if you ever want data-source highlights (USFS trail names, OSM peaks,
 etc.) the edge function would need to query each bucket inside the region's
 bbox and include it on the response.
+
+## Surprise Me — auto-derive regions from spots data
+
+Today the surprise pool is just the ~15 hand-curated rows seeded by
+`supabase/seeds/surprise_me_regions.sql` (Owyhee, Sawtooth, Olympic Coast,
+Lost Coast, etc.). The scoring layer (`region_metrics`) is rich, but the
+candidate set is fixed at whatever was hand-typed into the seed file — new
+spot imports never expand the pool. That's why the homepage "featured
+region" feels static.
+
+Plan: replace the seed list with regions auto-derived from the `spots`
+table. Cluster spots on H3 hexes (or grow polygons around dispersed-camp
+density), assign biome from the dominant public-land overlay, and hydrate
+`region_metrics` from real counts (trail count from OSM inside bbox,
+campsite count from `spots`, popularity from view/save counts, snow cover
+from a SNODAS feed, etc.). A nightly `pg_cron` job refreshes the metrics
+so seasonality actually shifts what surfaces — alpine in summer, desert
+in winter, etc.
+
+**Why deferred:** waiting until the community-spot import lands so the
+clustering pass runs over the full dataset, not the derived-only subset.
+Running it before community spots are in would produce regions that look
+right for known dispersed sites but miss whole areas that only appear
+once community contributions are merged.
+
+Bonus once the auto-derive is in: pass profile preferences (vehicle,
+home base, biome history) from the homepage into the `surprise-me` edge
+function. The function already accepts `userVehicle` and `excludeBiomes`
+but the homepage flow doesn't supply them — every user gets the same
+unfiltered surprise today.
 
 ## Pre-existing supabase typing errors
 
@@ -175,6 +210,65 @@ Deferred because the truncated view is good enough for state-level
 review work — the missing polygons are typically smaller agency rows
 behind the giant NMs / forests visually, and the admin still sees the
 big picture.
+
+## Vehicle access + access difficulty cleanup for OSM camp_pitch rows
+
+The dead-end derivation pipeline runs an access-classification walk on
+every imported OSM `tourism=camp_pitch` row. For pitches **inside
+managed campgrounds** (Jaycee Park on Potash Road, Site 1/4/6, etc.),
+the final approach — the campground's interior path between the
+parking lot and the pitch — isn't tagged as a road in OSM. The
+classifier hits that gap and fires three wrong values:
+
+- `extra.is_road_accessible: false`
+- `extra.is_passenger_reachable: false`
+- `extra.access_difficulty: "moderate"`
+
+…even though `extra.access_road.surface = "paved"` and
+`four_wd_only = false` for the actual approach (Potash Road in the
+Moab case). These get propagated into `amenities.vehicle_required:
+"high_clearance"` via `migrate_derived_to_spots.py:120`, so the
+detail panel ends up showing "Moderate access · Surface paved · Vehicle
+Required: High Clearance" — internally contradictory and wrong for
+real campgrounds.
+
+Affects most of the 1,199 `kind=dispersed_camping AND sub_kind=known
+AND source=osm` rows in Moab (and equivalent OSM camp_pitch counts
+elsewhere nationally).
+
+**Fix path:**
+
+1. **Data cleanup migration.** For rows where
+   `kind=dispersed_camping AND source=osm AND extra.osm_tags.tourism
+   IN ('camp_pitch', 'camp_site') AND extra.access_road.surface =
+   'paved' AND extra.access_road.four_wd_only = false`:
+   - Set `extra.access_difficulty = 'easy'`
+   - Set `extra.is_passenger_reachable = true`
+   - Set `extra.is_road_accessible = true`
+   - Clear `amenities.vehicle_required`
+2. **Importer fix.** Future OSM `tourism=camp_pitch` imports should
+   skip the road-walk classifier entirely — they're inside managed
+   campgrounds, default to passenger-reachable.
+3. **Optional: re-classify properly.** If we want a real difficulty
+   rating for these, walk to the campground entrance polygon (PAD-US
+   federal-lands or OSM `leisure=park` boundary) instead of stopping
+   at the OSM road graph.
+
+**Why deferred:** the user wants spot list + filter accuracy first
+(this round). The display contradiction is ugly but not blocking
+camping-site discovery.
+
+**Status: Vehicle access filter REMOVED from the explorer UI** in
+`SpotFiltersPanel.tsx` (the Any / Passenger / HC+ / 4WD only pill row)
+and from the spot filtering logic in `DispersedExplorer.tsx`'s
+`filteredPotentialSpots` useMemo. The `roadFilter` state + setter and
+its road-overlay use (filtering MVUM road lines on the map) are
+intentionally left in place so we can wire the filter back in once
+the underlying access classification is trustworthy. When restoring,
+the filter pills go back into the FilterGroup right above "Land
+manager", and the spot filter clause goes back into
+`filteredPotentialSpots` keyed off `spot.passengerReachable` /
+`spot.highClearanceReachable`.
 
 ## Navigation flicker between pages
 

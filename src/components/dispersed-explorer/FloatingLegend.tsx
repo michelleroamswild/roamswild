@@ -18,15 +18,14 @@ const LAND_AGENCIES: { key: string; label: string; fill: string; stroke: string 
   { key: 'STATE_PARK',  label: 'State Park',  fill: 'bg-land-statepark/40',  stroke: 'border-land-statepark-stroke' },
   { key: 'STATE_TRUST', label: 'State Trust', fill: 'bg-land-statetrust/40', stroke: 'border-land-statetrust-stroke' },
   { key: 'LAND_TRUST',  label: 'Land Trust',  fill: 'bg-land-landtrust/40',  stroke: 'border-land-landtrust-stroke' },
-  // Tribal land has no Pine + Paper token yet — using red-600 to match the
-  // saturated-red rendering in DispersedMap (and AdminSpotReview's choice).
-  { key: 'TRIBAL',      label: 'Tribal Land', fill: 'bg-red-600/40',         stroke: 'border-red-700' },
+  { key: 'TRIBAL',      label: 'Tribal Land', fill: 'bg-land-tribal/40',     stroke: 'border-land-tribal-stroke' },
 ];
 
 // Spot marker colors come straight from the pin-* tokens used by the actual
 // map markers, so the legend always matches what the user sees on the map.
 const SPOT_LEGEND: { dot?: string; label: string; tent?: boolean }[] = [
   { dot: 'bg-pin-safe',       label: 'Known campsite' },
+  { dot: 'bg-pin-community',  label: 'Community' },
   { dot: 'bg-pin-easy',       label: 'Easy access' },
   { dot: 'bg-pin-moderate',   label: 'Moderate' },
   { dot: 'bg-pin-hard',       label: 'Hard / extreme' },
@@ -79,7 +78,7 @@ export const FloatingLegend = ({
                     onClick={() => onToggleLandAgency(a.key)}
                     aria-pressed={on}
                     className={cn(
-                      'flex items-center gap-2 px-1.5 py-1 rounded-md transition-colors text-left',
+                      'flex items-center gap-2 px-1.5 py-1 rounded-[8px] transition-colors text-left',
                       on ? 'bg-cream dark:bg-paper' : 'opacity-40 hover:opacity-100 hover:bg-cream/60 dark:hover:bg-paper/60',
                     )}
                   >

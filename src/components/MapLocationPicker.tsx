@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react';
-import { Marker } from '@react-google-maps/api';
+import { useState, useCallback, useMemo } from 'react';
 import { MapPin, MagnifyingGlass, Crosshair } from '@phosphor-icons/react';
 import { GoogleMap } from '@/components/GoogleMap';
+import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { PlaceSearch } from '@/components/PlaceSearch';
 import { Mono, Pill } from '@/components/redesign';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,16 @@ export function MapLocationPicker({ onSelectLocation, onCancel, initialCenter }:
   const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral>(defaultCenter);
   const [mapZoom, setMapZoom] = useState(defaultZoom);
   const [selectedLocation, setSelectedLocation] = useState<SelectedLocation | null>(null);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  const pinContent = useMemo(() => {
+    const div = document.createElement('div');
+    div.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="27" height="43" viewBox="0 0 27 43">
+      <path d="M13.5 0C6.0442 0 0 6.0442 0 13.5C0 24.0938 13.5 43 13.5 43C13.5 43 27 24.0938 27 13.5C27 6.0442 20.9558 0 13.5 0Z" fill="#EA4335" stroke="#B31412" stroke-width="1"/>
+      <circle cx="13.5" cy="13.5" r="5" fill="#B31412"/>
+    </svg>`;
+    div.style.transform = 'translateY(-50%)';
+    return div;
+  }, []);
   const [locationName, setLocationName] = useState('');
 
   const handleMapClick = useCallback((e: google.maps.MapMouseEvent) => {
@@ -100,12 +110,14 @@ export function MapLocationPicker({ onSelectLocation, onCancel, initialCenter }:
           center={mapCenter}
           zoom={mapZoom}
           onClick={handleMapClick}
+          onLoad={setMapInstance}
           className="w-full h-full"
         >
           {selectedLocation && (
-            <Marker
+            <AdvancedMarker
+              map={mapInstance}
               position={{ lat: selectedLocation.lat, lng: selectedLocation.lng }}
-              animation={google.maps.Animation.DROP}
+              content={pinContent}
             />
           )}
         </GoogleMap>

@@ -31,12 +31,19 @@ from fetch_chip import (
 )
 
 
-def list_spots_in_bbox(bbox, key, max_total=None):
+def list_spots_in_bbox(bbox, key, max_total=None, kind=None, sub_kind=None):
+    """Fetch spots in bbox, optionally filtered by kind and/or sub_kind.
+    Both filters accept a single value (PostgREST eq) — pass None to skip."""
     south, west, north, east = bbox
     PAGE = 1000
     offset = 0
     rows = []
     headers = {'apikey': key, 'Authorization': f'Bearer {key}'}
+    extra_filters = ''
+    if kind:
+        extra_filters += f'&kind=eq.{kind}'
+    if sub_kind:
+        extra_filters += f'&sub_kind=eq.{sub_kind}'
     while True:
         if max_total and len(rows) >= max_total:
             break
@@ -44,6 +51,7 @@ def list_spots_in_bbox(bbox, key, max_total=None):
             f'select=id,name,latitude,longitude'
             f'&latitude=gte.{south}&latitude=lte.{north}'
             f'&longitude=gte.{west}&longitude=lte.{east}'
+            f'{extra_filters}'
             f'&order=id&limit={PAGE}&offset={offset}'
         )
         page = http_get(f'{SUPABASE_URL}/rest/v1/spots?{q}', headers)
@@ -74,16 +82,19 @@ def has_naip_image_set(spot_ids, key):
 
 
 def process_spot(spot, supa_key):
-    """Returns (outcome, message)."""
+    """Returns (outcome, message). New chips skip the baked-in pin —
+    the frontend overlays it client-side so the design can change without
+    regenerating imagery. metadata.pin_baked=false records that fact."""
     spot_id = spot['id']
     try:
         item = find_naip_item(float(spot['latitude']), float(spot['longitude']))
         if not item:
             return 'no_scene', 'no NAIP coverage'
-        jpeg, size = fetch_chip(item, float(spot['latitude']), float(spot['longitude']))
+        # with_pin=False: raw imagery; pin renders client-side.
+        jpeg, size = fetch_chip(item, float(spot['latitude']), float(spot['longitude']), with_pin=False)
         storage_key = f'naip/{spot_id}.jpg'
         url = upload_to_r2(jpeg, storage_key)
-        status = insert_spot_image(spot_id, url, storage_key, item, size, supa_key)
+        status = insert_spot_image(spot_id, url, storage_key, item, size, supa_key, pin_baked=False)
         if 200 <= status < 300:
             return 'ok', f'{len(jpeg) // 1024}KB'
         return 'error', f'insert HTTP {status}'
@@ -97,6 +108,8 @@ def main():
     parser.add_argument('--limit', type=int, help='process at most N spots')
     parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--dry-run', action='store_true', help='count only, no work')
+    parser.add_argument('--kind', help='Filter to a single spots.kind value (e.g. dispersed_camping)')
+    parser.add_argument('--sub-kind', dest='sub_kind', help='Filter to a single spots.sub_kind value (e.g. derived, known, community)')
     args = parser.parse_args()
 
     bbox = tuple(float(x) for x in args.bbox.split(','))
@@ -110,8 +123,16 @@ def main():
     if not supa_key:
         sys.exit('SUPABASE_SERVICE_ROLE_KEY missing')
 
-    spots = list_spots_in_bbox(bbox, supa_key, args.limit)
-    print(f'spots in bbox: {len(spots)}')
+    spots = list_spots_in_bbox(
+        bbox, supa_key, args.limit,
+        kind=args.kind, sub_kind=args.sub_kind,
+    )
+    label = (
+        f' kind={args.kind}' if args.kind else ''
+    ) + (
+        f' sub_kind={args.sub_kind}' if args.sub_kind else ''
+    )
+    print(f'spots in bbox{label}: {len(spots)}')
 
     # Filter out already-done spots in bulk
     done_set = has_naip_image_set([s['id'] for s in spots], supa_key)

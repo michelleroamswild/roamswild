@@ -228,7 +228,14 @@ def upload_to_r2(jpeg_bytes, storage_key):
     return f'{base}/{storage_key}'
 
 
-def insert_spot_image(spot_id, storage_url, storage_key, item, size, supa_key):
+def insert_spot_image(spot_id, storage_url, storage_key, item, size, supa_key, pin_baked=False):
+    """Insert a spot_images row for a freshly-uploaded NAIP chip.
+
+    `pin_baked` records whether the centered location pin is rendered into
+    the JPEG pixels. Default False — new chips are raw imagery and the pin
+    is overlaid client-side. Set True only for legacy/regenerate flows
+    that still bake the pin in.
+    """
     taken = item.datetime
     if taken is None:
         taken = item.properties.get('start_datetime')
@@ -244,6 +251,7 @@ def insert_spot_image(spot_id, storage_url, storage_key, item, size, supa_key):
         'height': size[1],
         'is_primary': True,
         'satellite_size': f'{size[0]}x{size[1]}',
+        'metadata': {'pin_baked': bool(pin_baked)},
     }
     return http_post(
         f'{SUPABASE_URL}/rest/v1/spot_images',
@@ -262,7 +270,11 @@ def main():
     parser.add_argument('spot_id')
     parser.add_argument('--insert', action='store_true', help='write spot_images row')
     parser.add_argument('--force', action='store_true', help='regenerate even if one exists')
-    parser.add_argument('--no-pin', action='store_true', help='skip the centered location pin')
+    # Default behavior: skip the baked-in pin. The frontend overlays one
+    # client-side via CSS so the design can change without regenerating
+    # imagery. Pass --pin to revert to the legacy baked-in pin.
+    parser.add_argument('--pin', action='store_true', help='bake the centered location pin into the JPEG (legacy)')
+    parser.add_argument('--no-pin', action='store_true', help='[deprecated] kept for backwards compat — same as the default now')
     args = parser.parse_args()
 
     load_env()
@@ -294,15 +306,16 @@ def main():
         sys.exit('  no NAIP scene found at this point (outside US coverage?)')
     print(f'  scene: {item.id}  date: {(item.datetime or item.properties.get("start_datetime"))}')
 
-    jpeg, size = fetch_chip(item, float(spot['latitude']), float(spot['longitude']), with_pin=not args.no_pin)
-    print(f'  chip: {size[0]}x{size[1]}  {len(jpeg) / 1024:.0f} KB')
+    with_pin = bool(args.pin)
+    jpeg, size = fetch_chip(item, float(spot['latitude']), float(spot['longitude']), with_pin=with_pin)
+    print(f'  chip: {size[0]}x{size[1]}  {len(jpeg) / 1024:.0f} KB  (pin_baked={with_pin})')
 
     storage_key = f'naip/{args.spot_id}.jpg'
     url = upload_to_r2(jpeg, storage_key)
     print(f'  uploaded: {url}')
 
     if args.insert:
-        status = insert_spot_image(args.spot_id, url, storage_key, item, size, supa_key)
+        status = insert_spot_image(args.spot_id, url, storage_key, item, size, supa_key, pin_baked=with_pin)
         print(f'  spot_images row: HTTP {status}')
 
 

@@ -50,28 +50,12 @@ const STATES: Record<StateKey, StateInfo> = {
 
 // Polygon fill/stroke per managing agency. Default for anything we don't
 // recognize is the same neutral stroke we use for "Other public land."
-const AGENCY_COLORS: Record<string, { fill: string; stroke: string }> = {
-  BLM:    { fill: '#d97706', stroke: '#b45309' }, // amber
-  USFS:   { fill: '#10b981', stroke: '#059669' }, // emerald
-  NPS:    { fill: '#7c3aed', stroke: '#6d28d9' }, // violet
-  FWS:    { fill: '#0ea5e9', stroke: '#0284c7' }, // sky
-  DOD:    { fill: '#475569', stroke: '#334155' }, // slate
-  // State-trust-ish managers — broadly cyan family
-  SLB:    { fill: '#06b6d4', stroke: '#0891b2' },
-  SDOL:   { fill: '#06b6d4', stroke: '#0891b2' },
-  SDNR:   { fill: '#06b6d4', stroke: '#0891b2' },
-  SDC:    { fill: '#06b6d4', stroke: '#0891b2' },
-  SDF:    { fill: '#06b6d4', stroke: '#0891b2' },
-  SLO:    { fill: '#06b6d4', stroke: '#0891b2' },
-  SFW:    { fill: '#22c55e', stroke: '#16a34a' }, // green for state F&W
-  SPR:    { fill: '#3b82f6', stroke: '#2563eb' }, // blue for state parks
-  // Tribal lands: saturated red, rendered with thicker stroke + higher
-  // opacity so boundaries are easy to spot. Many tribal nations don't
-  // permit dispersed camping at all, so flagging spots that fall inside
-  // is a high-value review signal.
-  TRIB:   { fill: '#dc2626', stroke: '#7f1d1d' },
-};
-const DEFAULT_AGENCY_COLOR = { fill: '#6b7280', stroke: '#4b5563' }; // slate-gray
+// Agency colors come from the shared brand palette via src/lib/land-colors.ts
+// (HSL strings keyed off the same --land-* tokens DispersedMap and the
+// FloatingLegend swatches use). bucketForAgency handles the
+// SLB/SDOL/SDNR/SDC/SDF/SLO/SFW/SPR/etc. → STATE_TRUST collapse so we
+// don't need a per-code lookup here.
+import { colorsForAgency } from '@/lib/land-colors';
 
 interface PublicLandPolygon {
   id: string;
@@ -128,7 +112,11 @@ type FilterMode = 'unreviewed' | 'all' | 'keep' | 'remove';
 // TRIB polygon — most tribal nations don't permit dispersed camping.
 // 'intersection' surfaces spots flagged by mark_road_intersection_spots
 // (T-intersection false-positive dead-ends).
-type FlagFilter = 'all' | 'outside' | 'edge' | 'sampled' | 'tribal' | 'intersection';
+// 'outside' and 'tribal' filters were removed from the UI — outside-polygon
+// spots are already auto-flagged elsewhere, and tribal land is rendered as
+// a polygon overlay rather than a triage queue. Keep the union narrow to
+// match the rendered pills.
+type FlagFilter = 'all' | 'edge' | 'sampled' | 'intersection';
 
 // ----- helpers --------------------------------------------------------------
 
@@ -493,10 +481,8 @@ const AdminSpotReview = () => {
   const visible = useMemo(() => {
     let next = spotsWithTribal;
     // Flag-type filter
-    if (flagFilter === 'outside') next = next.filter((s) => s.outsidePolygon);
-    else if (flagFilter === 'edge') next = next.filter((s) => !s.outsidePolygon && s.nearEdge);
+    if (flagFilter === 'edge') next = next.filter((s) => !s.outsidePolygon && s.nearEdge);
     else if (flagFilter === 'sampled') next = next.filter((s) => s.qualitySampled);
-    else if (flagFilter === 'tribal') next = next.filter((s) => s.inTribal);
     else if (flagFilter === 'intersection') next = next.filter((s) => s.atIntersection);
     // Review-state filter
     if (filter === 'keep') next = next.filter((s) => keepIds.has(s.id));
@@ -744,24 +730,20 @@ const AdminSpotReview = () => {
               (a separate dimension — "has been cross-checked"), red for
               tribal (a separate spatial flag — "lat/lng falls inside a
               TRIB polygon"). */}
-          {(['all', 'outside', 'edge', 'sampled', 'tribal', 'intersection'] as const).map((mode) => {
+          {(['all', 'edge', 'sampled', 'intersection'] as const).map((mode) => {
             const active = flagFilter === mode;
             const label =
               mode === 'all' ? 'All flags'
-              : mode === 'outside' ? 'Outside'
               : mode === 'edge' ? 'Edge'
               : mode === 'sampled' ? 'Sampled'
-              : mode === 'tribal' ? 'Tribal'
               : 'Intersection';
             const count =
               mode === 'all' ? flagCounts.all
-              : mode === 'outside' ? flagCounts.outside
               : mode === 'edge' ? flagCounts.edge
               : mode === 'sampled' ? flagCounts.sampled
-              : mode === 'tribal' ? flagCounts.tribal
               : flagCounts.intersection;
             const isSampled = mode === 'sampled';
-            const isTribal = mode === 'tribal';
+            const isTribal = false; // tribal pill removed; flag retained to keep classNames structurally identical
             const isIntersection = mode === 'intersection';
             return (
               <button
@@ -867,7 +849,7 @@ const AdminSpotReview = () => {
                   because dispersed camping is rarely permitted on tribal
                   land and admins need to see those boundaries clearly. */}
               {polygons.map((poly) => {
-                const colors = AGENCY_COLORS[poly.managingAgency] ?? DEFAULT_AGENCY_COLOR;
+                const colors = colorsForAgency(poly.managingAgency);
                 const isTribal = poly.managingAgency === 'TRIB';
                 return (
                   <Polygon

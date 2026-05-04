@@ -19,7 +19,10 @@ export interface UnifiedSpot {
   name: string;
   lat: number;
   lng: number;
-  category: 'derived' | 'campground' | 'mine' | 'friend';
+  // 'community' = user-contributed dispersed spot from the seeded
+  // community dataset (sub_kind='community' in spots). Different
+  // provenance from algorithmically-derived dead-ends.
+  category: 'derived' | 'community' | 'campground' | 'mine' | 'friend';
   sharedBy?: string;
   score?: number;
   spotType?: 'dead-end' | 'camp-site' | 'intersection';

@@ -70,6 +70,12 @@ serve(async (req) => {
         // Use name from database (for OSM camp sites), fallback to road_name, then default
         name: row.name || row.road_name || "Dispersed Spot",
         type: mapSpotType(row.spot_type),
+        // Pass through DB kind/sub_kind so the explorer can distinguish
+        // community-contributed spots (sub_kind='community') from
+        // derived dead-ends — both come back with type='dead-end' but
+        // they need different visual treatment + filter buckets.
+        kind: row.kind || null,
+        subKind: row.sub_kind || null,
         score: parseFloat(row.confidence_score) || 0,
         reasons: row.derivation_reasons || [],
         // 'osm' = actual OSM-tagged camp_site/camp_pitch entity (a "known" site).

@@ -34,3 +34,6 @@ dist-ssr
 scripts/spot-import/*.json
 scripts/spot-import/logs/
 public/test-data/
+
+# Claude Code local state (session locks, per-machine settings)
+.claude/

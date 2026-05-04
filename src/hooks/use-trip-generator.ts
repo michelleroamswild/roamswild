@@ -1690,13 +1690,116 @@ export function useTripGenerator() {
       let dayNumber = 1;
       let usedHikeIds = new Set<string>();
 
+      // Cap any single day's drive at the user's preference (default 8 hrs).
+      const maxDrivingMinutes = (config.maxDrivingHoursPerDay ?? 8) * 60;
+      const interpolateCoord = (
+        from: { lat: number; lng: number },
+        to: { lat: number; lng: number },
+        fraction: number,
+      ) => ({
+        lat: from.lat + (to.lat - from.lat) * fraction,
+        lng: from.lng + (to.lng - from.lng) * fraction,
+      });
+
       // Process each destination
       for (let destIdx = 0; destIdx < numDestinations; destIdx++) {
         const dest = config.destinations[destIdx];
-        const daysAtDest = daysPerDestination[destIdx];
+        let daysAtDest = daysPerDestination[destIdx];
         const prevPoint = destIdx === 0 ? config.startLocation : config.destinations[destIdx - 1];
         const campsite = destinationCampsites.get(dest.id);
         const availableHikes = destinationHikes.get(dest.id) || [];
+
+        // If the leg from prevPoint to dest exceeds the daily drive cap,
+        // break it into N travel days, each ending at a campsite near the
+        // daily stopping point. The arrival day starts from that campsite.
+        const fullLegDistance = getDistanceMiles(
+          prevPoint.coordinates.lat,
+          prevPoint.coordinates.lng,
+          dest.coordinates.lat,
+          dest.coordinates.lng,
+        );
+        const fullLegMinutes = (fullLegDistance / 45) * 60;
+
+        let arrivalFromCoords: { lat: number; lng: number } = prevPoint.coordinates;
+        let arrivalFromName = prevPoint.name;
+        let arrivalLegDistance = fullLegDistance;
+        let arrivalLegMinutes = fullLegMinutes;
+
+        if (fullLegMinutes > maxDrivingMinutes && daysAtDest > 1) {
+          // Reserve at least 1 day for arrival; cap travel days accordingly.
+          const idealTravelDays = Math.floor(fullLegMinutes / maxDrivingMinutes);
+          const travelDaysToInsert = Math.min(idealTravelDays, daysAtDest - 1);
+          const segmentMiles = fullLegDistance * (maxDrivingMinutes / fullLegMinutes);
+
+          for (let t = 0; t < travelDaysToInsert; t++) {
+            const fraction = ((t + 1) * maxDrivingMinutes) / fullLegMinutes;
+            const stopCoords = interpolateCoord(prevPoint.coordinates, dest.coordinates, fraction);
+
+            // Find a campsite near the daily stopping point. Start tight,
+            // expand if nothing comes back.
+            let camps = await findNearbyCampsites(stopCoords.lat, stopCoords.lng, 30, lodgingPref);
+            if (camps.length === 0) {
+              camps = await findNearbyCampsites(stopCoords.lat, stopCoords.lng, 60, lodgingPref);
+            }
+            const camp = camps[0];
+
+            const travelStop: TripStop = {
+              id: `travel-${dayNumber}`,
+              name: `Drive toward ${dest.name}`,
+              type: 'viewpoint',
+              coordinates: stopCoords,
+              duration: `Day ${t + 1} of ${travelDaysToInsert + 1} on the road`,
+              distance: `${Math.round(segmentMiles)} mi from ${arrivalFromName}`,
+              description: `Long haul to ${dest.name} — overnight stop near the route`,
+              day: dayNumber,
+            };
+
+            const travelDayStops: TripStop[] = [travelStop];
+            if (camp) {
+              const campTypeDesc = (lodgingPref === 'established' || lodgingPref === 'campground')
+                ? 'Established campground'
+                : 'Dispersed camping';
+              travelDayStops.push({
+                id: camp.id || `travel-camp-${dayNumber}`,
+                name: camp.name,
+                type: 'camp',
+                coordinates: { lat: camp.lat, lng: camp.lng },
+                duration: 'Overnight',
+                distance: `${camp.distance.toFixed(1)} mi off route`,
+                description: camp.note || `Travel-day overnight (${campTypeDesc})`,
+                day: dayNumber,
+                note: camp.note,
+                bookingUrl: camp.bookingUrl,
+                isReservable: camp.isReservable,
+              });
+            }
+
+            days.push({
+              day: dayNumber,
+              stops: travelDayStops,
+              campsite: travelDayStops.find(s => s.type === 'camp'),
+              drivingDistance: `${Math.round(segmentMiles)} mi`,
+              drivingTime: `${Math.floor(maxDrivingMinutes / 60)}h ${Math.round(maxDrivingMinutes % 60)}m`,
+            });
+
+            totalDistanceMiles += segmentMiles;
+            totalDrivingMinutes += maxDrivingMinutes;
+            dayNumber++;
+            daysAtDest--;
+
+            arrivalFromCoords = stopCoords;
+            arrivalFromName = camp ? camp.name : `Day ${t + 1} stop`;
+          }
+
+          // Recompute the remaining leg from the last travel campsite to dest.
+          arrivalLegDistance = getDistanceMiles(
+            arrivalFromCoords.lat,
+            arrivalFromCoords.lng,
+            dest.coordinates.lat,
+            dest.coordinates.lng,
+          );
+          arrivalLegMinutes = (arrivalLegDistance / 45) * 60;
+        }
 
         for (let dayAtDest = 0; dayAtDest < daysAtDest; dayAtDest++) {
           const dayStops: TripStop[] = [];
@@ -1705,17 +1808,11 @@ export function useTripGenerator() {
           const isArrivalDay = dayAtDest === 0;
           const isLastDayAtDest = dayAtDest === daysAtDest - 1;
 
-          // On arrival day, add travel from previous point
+          // On arrival day, add travel from previous point (or last travel
+          // campsite if we inserted travel days above).
           if (isArrivalDay) {
-            const legDistance = getDistanceMiles(
-              prevPoint.coordinates.lat,
-              prevPoint.coordinates.lng,
-              dest.coordinates.lat,
-              dest.coordinates.lng
-            );
-            const legDrivingMinutes = (legDistance / 45) * 60;
-            dayDistanceMiles += legDistance;
-            dayDrivingMinutes += legDrivingMinutes;
+            dayDistanceMiles += arrivalLegDistance;
+            dayDrivingMinutes += arrivalLegMinutes;
 
             // Add destination as a viewpoint stop
             const destinationStop: TripStop = {
@@ -1724,7 +1821,7 @@ export function useTripGenerator() {
               type: 'viewpoint',
               coordinates: dest.coordinates,
               duration: daysAtDest > 1 ? `Exploring (Day 1 of ${daysAtDest})` : '1-2h explore',
-              distance: `${legDistance.toFixed(0)} mi from ${prevPoint.name}`,
+              distance: `${arrivalLegDistance.toFixed(0)} mi from ${arrivalFromName}`,
               description: dest.address,
               day: dayNumber,
               placeId: dest.placeId,

@@ -1898,7 +1898,7 @@ export default function PhotoScout() {
           />
 
           {/* Legend */}
-          <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3 text-sm">
+          <div className="absolute bottom-4 left-4 bg-white dark:bg-paper-2 border border-line rounded-[12px] shadow-[0_8px_22px_rgba(29,34,24,.10)] p-3 text-[13px] text-ink">
             <div className="font-semibold mb-2">Legend</div>
             <div className="space-y-1.5">
               {/* Always visible markers */}
@@ -1962,7 +1962,7 @@ export default function PhotoScout() {
                     type="checkbox"
                     checked={showAnalysisZones}
                     onChange={(e) => setShowAnalysisZones(e.target.checked)}
-                    className="w-4 h-4 rounded border-line text-clay focus:ring-purple-500"
+                    className="w-4 h-4 rounded border-line text-clay focus:ring-pine-6/40"
                   />
                   <span>Show analysis zones</span>
                 </label>
@@ -2210,7 +2210,7 @@ export default function PhotoScout() {
             )}
 
             {/* Calibration Panel - collapsible */}
-            <div className="border rounded-lg bg-white dark:bg-ink">
+            <div className="border border-line rounded-[14px] bg-white dark:bg-paper-2">
               <button
                 onClick={() => setCalibrationPanelOpen(!calibrationPanelOpen)}
                 className="w-full flex items-center justify-between p-3 hover:bg-cream dark:hover:bg-ink transition-colors"
@@ -2295,7 +2295,7 @@ export default function PhotoScout() {
                       checked={useTunedRanking}
                       onChange={(e) => setUseTunedRanking(e.target.checked)}
                       disabled={!tunedWeights}
-                      className="rounded border-line text-clay focus:ring-purple-500 disabled:opacity-50"
+                      className="rounded border-line text-clay focus:ring-pine-6/40 disabled:opacity-50"
                     />
                   </div>
 
@@ -2308,7 +2308,7 @@ export default function PhotoScout() {
             </div>
 
             {error && (
-              <div className="p-4 bg-ember/[0.06] dark:bg-ember/[0.10] text-ember dark:text-ember rounded-lg">
+              <div className="p-4 bg-ember/[0.06] dark:bg-ember/[0.10] text-ember dark:text-ember rounded-[14px] border border-ember/30">
                 {error}
               </div>
             )}
@@ -2578,7 +2578,7 @@ export default function PhotoScout() {
                   {/* More Options - collapsed by default */}
                   {moreOptions.length > 0 && (
                     <Collapsible className="mt-2">
-                      <CollapsibleTrigger className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-cream hover:bg-cream rounded-lg text-sm text-ink-2 hover:text-ink transition-colors">
+                      <CollapsibleTrigger className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-cream hover:bg-cream rounded-[12px] text-[13px] text-ink-2 hover:text-ink transition-colors">
                         <CaretDown className="w-4 h-4" />
                         <span>+{moreOptions.length} more overlook{moreOptions.length !== 1 ? "s" : ""}</span>
                       </CollapsibleTrigger>

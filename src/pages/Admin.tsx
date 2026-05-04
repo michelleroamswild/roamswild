@@ -12,7 +12,7 @@ import {
 } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
-import { Header } from '@/components/Header';
+import { AdminLayout } from '@/components/AdminLayout';
 import { Mono, Pill } from '@/components/redesign';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -144,66 +144,27 @@ const Admin = () => {
   const usedCount = entries.filter((e) => e.used_at).length;
 
   return (
-    <div className="bg-cream dark:bg-paper text-ink font-sans min-h-screen">
-      <Header />
-
-      {/* Hero strip */}
-      <section className="relative overflow-hidden bg-cream dark:bg-paper-2 -mt-16 md:-mt-20">
-        <div className="relative max-w-[1440px] mx-auto px-6 md:px-14 pt-28 md:pt-36 pb-10 md:pb-14">
-          <div className="flex flex-wrap items-end justify-between gap-6">
-            <div>
-              <Mono className="text-pine-6">
-                Admin · {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
-              </Mono>
-              <h1 className="font-sans font-bold tracking-[-0.035em] leading-[1] text-[44px] md:text-[64px] m-0 text-ink mt-2.5">
-                Waitlist.
-              </h1>
-              <p className="text-[14px] text-ink-3 mt-3 max-w-md">
-                Approve early access signups and send invite codes.
-              </p>
-            </div>
-          </div>
+    <AdminLayout
+      eyebrow={`${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`}
+      title="Users"
+      description="Approve early-access signups and send invite codes."
+    >
+      {error && (
+        <div className="mb-6 flex items-start gap-2 px-4 py-3 rounded-[14px] border border-ember/30 bg-ember/[0.06]">
+          <Warning className="w-4 h-4 flex-shrink-0 mt-0.5 text-ember" weight="regular" />
+          <p className="text-[13px] text-ember leading-[1.5]">{error}</p>
         </div>
-      </section>
+      )}
 
-      {/* List section — paper-2 surface */}
-      <section className="bg-paper-2 min-h-[calc(100vh-300px)]">
-        <div className="max-w-[1440px] mx-auto px-6 md:px-14 py-10 md:py-14">
-          {error && (
-            <div className="mb-8 flex items-start gap-2 px-4 py-3 rounded-[14px] border border-ember/30 bg-ember/[0.06]">
-              <Warning className="w-4 h-4 flex-shrink-0 mt-0.5 text-ember" weight="regular" />
-              <p className="text-[13px] text-ember leading-[1.5]">{error}</p>
-            </div>
-          )}
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        <StatCard accent="clay" Icon={Clock} label="Pending" value={pendingCount} />
+        <StatCard accent="pine" Icon={CheckCircle} label="Approved" value={approvedCount} />
+        <StatCard accent="water" Icon={UserCircle} label="Signed up" value={usedCount} />
+      </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
-            <StatCard accent="clay" Icon={Clock} label="Pending" value={pendingCount} />
-            <StatCard accent="pine" Icon={CheckCircle} label="Approved" value={approvedCount} />
-            <StatCard accent="water" Icon={UserCircle} label="Signed up" value={usedCount} />
-          </div>
-
-          {/* Tools — additional admin surfaces. Quick links in the same paper-2 register. */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
-            <button
-              onClick={() => navigate('/admin/spot-review')}
-              className="text-left bg-white dark:bg-paper-2 border border-line dark:border-line-2 rounded-[18px] px-5 py-4 hover:border-ember/40 hover:bg-ember/[0.03] transition-colors"
-            >
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-ember/10 text-ember">
-                  <Warning className="w-3.5 h-3.5" weight="regular" />
-                </span>
-                <Mono className="text-ember">Spot quality review</Mono>
-              </div>
-              <p className="text-[13px] text-ink-3 leading-[1.45]">
-                Triage spots flagged as outside any public-land polygon or near
-                an inholding edge. Vote keep / remove, then bulk-delete.
-              </p>
-            </button>
-          </div>
-
-          {/* Table */}
-          <div className="bg-white dark:bg-paper-2 border border-line rounded-[18px] overflow-hidden">
+      {/* Table */}
+      <div className="bg-white dark:bg-paper-2 border border-line rounded-[18px] overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-cream dark:bg-paper-2 border-b border-line">
@@ -331,10 +292,8 @@ const Admin = () => {
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
-      </section>
-    </div>
+      </div>
+    </AdminLayout>
   );
 };
 

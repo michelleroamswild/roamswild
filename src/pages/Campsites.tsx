@@ -489,9 +489,11 @@ const Campsites = () => {
         isOpen={deleteModal.isOpen}
         onClose={() => setDeleteModal({ isOpen: false, id: '', name: '' })}
         onConfirm={handleConfirmDelete}
-        title="Delete campsite"
-        description="Are you sure you want to delete this campsite? This action cannot be undone."
+        title="Remove from your sites"
+        description="Remove this campsite from your saved sites?"
         itemName={deleteModal.name}
+        helperText="This removes it from your collection only. The original spot stays in the explorer and you can save it again anytime."
+        confirmLabel="Remove"
       />
     </div>
   );

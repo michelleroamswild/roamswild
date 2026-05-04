@@ -1,26 +1,22 @@
-import { ReactNode } from 'react';
 import {
   ArrowSquareOut,
-  Car,
   CheckCircle,
-  Crosshair,
   Database,
-  Jeep,
-  MapPinLine,
-  Path,
-  Sparkle,
+  Drop,
+  Shower,
   SpinnerGap,
   Tent,
   TrashSimple,
   TreeEvergreen,
+  TShirt,
   Users,
-  Warning,
 } from '@phosphor-icons/react';
 import { PotentialSpot } from '@/hooks/use-dispersed-roads';
 import { useSpotNaipImage } from '@/hooks/use-spot-naip-image';
 import type { Campsite } from '@/types/campsite';
 import type { SpotAIAnalysis } from './types';
 import { Mono, Pill } from '@/components/redesign';
+import { AiAssessmentSection } from './AiAssessmentSection';
 import { cn } from '@/lib/utils';
 import {
   DetailShell,
@@ -48,24 +44,53 @@ interface SpotDetailPanelProps {
   onAnalyze: () => void;
   onReanalyze: () => void;
   onDismissError: () => void;
+  /** Quick bookmark — saves the spot to the user's campsites without
+   *  the heavier "I've been here" notes/road-access flow. */
+  onSave: () => void;
+  /** "I've been here" ground-truth confirmation flow. Currently surfaced
+   *  via the dedicated ConfirmSpotDialog (notes + road access form). */
   onConfirm: () => void;
   // Soft-mark for delete: hide locally + queue for hard-delete on
   // AdminSpotReview. Optional so non-DB-backed callers can omit it.
+  // Toggle: clicking again on a marked spot un-marks it.
   onMarkForDelete?: () => void;
+  /** True when the selected spot is currently in the "marked for delete"
+   *  set. Drives the icon swap (trash → filled check) + tooltip wording. */
+  isMarkedForDelete?: boolean;
 }
 
-const typeLabel = (type: PotentialSpot['type']) => {
-  if (type === 'camp-site') return 'Known campsite';
-  if (type === 'dead-end') return 'Road terminus';
-  return 'Road junction';
+export const typeLabel = (spot: PotentialSpot): string => {
+  // Dispersed: show source-bucket breadcrumb (matches the filter UI).
+  if (spot.kind === 'dispersed_camping') {
+    if (spot.dbSource === 'community' || spot.subKind === 'community') return 'Dispersed > Community';
+    if (spot.subKind === 'known') return 'Dispersed > Known';
+    return 'Dispersed > Derived';
+  }
+  if (spot.kind === 'established_campground') return 'Established';
+  if (spot.kind === 'informal_camping')       return 'Informal';
+  if (spot.kind === 'water')                  return 'Water';
+  if (spot.kind === 'shower')                 return 'Shower';
+  if (spot.kind === 'laundromat')             return 'Laundromat';
+  // Runtime-derived spots (no kind set, came from road geometry).
+  if (spot.type === 'camp-site') return 'Established';
+  return 'Dispersed > Derived';
 };
 
-// Map spot type → icon + accent. Keeps the hero block on each spot type
-// visually consistent with the rest of the redesign (sage/clay/water/pine).
-const typeStyle = (type: PotentialSpot['type']) => {
-  if (type === 'camp-site') return { Icon: Tent,        bg: 'bg-pin-safe/15',     text: 'text-pin-safe' };
-  if (type === 'dead-end')  return { Icon: MapPinLine,  bg: 'bg-pin-moderate/15', text: 'text-pin-moderate' };
-  return                            { Icon: Path,        bg: 'bg-pin-easy/15',     text: 'text-pin-easy' };
+// Map top-level `kind` → icon + accent. Pin colors mirror the explorer
+// map markers (--pin-* tokens). Source / sub_kind don't change the icon.
+const typeStyle = (spot: PotentialSpot) => {
+  switch (spot.kind) {
+    case 'dispersed_camping':       return { Icon: Tent,         bg: 'bg-pin-dispersed/15',  text: 'text-pin-dispersed'  };
+    case 'established_campground':  return { Icon: Tent,         bg: 'bg-pin-campground/15', text: 'text-pin-campground' };
+    case 'informal_camping':        return { Icon: Tent,         bg: 'bg-pin-informal/15',   text: 'text-pin-informal'   };
+    case 'water':                   return { Icon: Drop,         bg: 'bg-pin-water/15',      text: 'text-pin-water'      };
+    case 'shower':                  return { Icon: Shower,   bg: 'bg-pin-shower/15',     text: 'text-pin-shower'     };
+    case 'laundromat':              return { Icon: TShirt,       bg: 'bg-pin-laundromat/15', text: 'text-pin-laundromat' };
+    default:
+      // Runtime-derived spots without a kind set (from road geometry).
+      if (spot.type === 'camp-site') return { Icon: Tent, bg: 'bg-pin-campground/15', text: 'text-pin-campground' };
+      return { Icon: Tent, bg: 'bg-pin-dispersed/15', text: 'text-pin-dispersed' };
+  }
 };
 
 export const SpotDetailPanel = ({
@@ -82,83 +107,68 @@ export const SpotDetailPanel = ({
   onAnalyze,
   onReanalyze,
   onDismissError,
+  onSave,
   onConfirm,
   onMarkForDelete,
+  isMarkedForDelete = false,
 }: SpotDetailPanelProps) => {
-  const { Icon, bg, text } = typeStyle(selectedSpot.type);
+  const { Icon, bg, text } = typeStyle(selectedSpot);
   const { image: naipImage, loading: naipLoading } = useSpotNaipImage(selectedSpot.lat, selectedSpot.lng);
   const naipYear = naipImage?.taken_at ? new Date(naipImage.taken_at).getFullYear() : null;
-
-  // Consolidated tags (excluding the source/derived flag — that lives in the
-  // hero badge slot). Maps land/road flags to the redesign accent palette.
-  const tags: { key: string; label: ReactNode; variant: Parameters<typeof DetailTag>[0]['variant'] }[] = [];
-  // Surface quality flags first — they're the strongest "this might not be
-  // a usable spot" signals and should be the most prominent chips.
-  if (selectedSpot.outsidePublicLandPolygon) {
-    tags.push({
-      key: 'outside',
-      variant: 'ember',
-      label: 'Not on public land (no polygon contains it)',
-    });
-  } else if (selectedSpot.nearPublicLandEdge) {
-    const meters = selectedSpot.metersFromPublicLandEdge;
-    const detail = meters != null ? ` (${Math.round(meters)}m)` : '';
-    tags.push({
-      key: 'edge',
-      variant: 'ember',
-      label: `Possible private inholding${detail}`,
-    });
-  }
-  if (selectedSpot.isOnMVUMRoad) tags.push({ key: 'mvum', variant: 'sage', label: 'USFS MVUM' });
-  if (selectedSpot.isOnBLMRoad)  tags.push({ key: 'blm', variant: 'clay', label: 'BLM' });
-  if (selectedSpot.isOnPublicLand && !selectedSpot.isOnMVUMRoad && !selectedSpot.isOnBLMRoad) {
-    tags.push({ key: 'public', variant: 'sage', label: 'Public land' });
-  }
-  if (selectedSpot.passengerReachable) {
-    tags.push({ key: 'pass', variant: 'pine', label: <><Car className="w-3 h-3" weight="regular" /> Passenger</> });
-  }
-  if (selectedSpot.highClearanceReachable && !selectedSpot.passengerReachable) {
-    tags.push({ key: 'hc', variant: 'clay', label: <><Jeep className="w-3 h-3" weight="regular" /> High clearance</> });
-  }
-  if (selectedSpot.roadName) tags.push({ key: 'road', variant: 'ghost', label: selectedSpot.roadName });
-  selectedSpot.reasons.forEach((reason, i) => {
-    if (reason.toLowerCase() === 'on public land') return;
-    tags.push({ key: `reason-${i}`, variant: 'ghost', label: reason });
-  });
 
   return (
     <DetailShell>
       <DetailBody>
         {/* Top bar — back link + cache indicator + mark-for-delete.
-            The delete button only shows when (a) the parent supplied a
-            handler and (b) the spot has a UUID id (i.e., it lives in
-            the DB and AdminSpotReview can act on it). */}
-        <div className="px-[18px] py-3 border-b border-line flex items-center justify-between">
+            Sticky so it stays visible as the rest of the panel scrolls.
+            Cached + Mark-for-delete are icon-only since both are debug
+            affordances; their tooltips carry the meaning. The delete icon
+            only shows when (a) the parent supplied a handler and (b) the
+            spot has a UUID id (i.e., it lives in the DB and AdminSpotReview
+            can act on it). */}
+        <div className="sticky top-0 z-10 bg-white dark:bg-paper-2 px-[18px] py-3 border-b border-line flex items-center justify-between">
           <BackLink onBack={onBack} />
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
             {fromDatabase && (
-              <Mono className="text-ink-3 inline-flex items-center gap-1.5">
+              <span
+                title="Loaded from cached spot data"
+                aria-label="Cached"
+                className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-3"
+              >
                 <Database className="w-3.5 h-3.5" weight="regular" />
-                Cached
-              </Mono>
+              </span>
             )}
             {onMarkForDelete && /^[0-9a-f-]{36}$/i.test(selectedSpot.id) && (
               <button
                 type="button"
                 onClick={onMarkForDelete}
-                title="Hide from map and queue for deletion in admin review"
-                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-mono uppercase tracking-[0.10em] text-ember hover:text-ember-stroke hover:bg-ember/10 transition-colors"
+                title={isMarkedForDelete
+                  ? 'Marked for deletion — click to undo'
+                  : 'Hide from map and queue for deletion in admin review'}
+                aria-label={isMarkedForDelete ? 'Undo mark for delete' : 'Mark for delete'}
+                aria-pressed={isMarkedForDelete}
+                className={cn(
+                  'inline-flex items-center justify-center w-7 h-7 rounded-full transition-colors',
+                  isMarkedForDelete
+                    ? 'text-pine-6 bg-pine-6/10 hover:bg-pine-6/15'
+                    : 'text-ember hover:bg-ember/10',
+                )}
               >
-                <TrashSimple className="w-3.5 h-3.5" weight="regular" />
-                Mark to delete
+                {isMarkedForDelete ? (
+                  <CheckCircle className="w-3.5 h-3.5" weight="fill" />
+                ) : (
+                  <TrashSimple className="w-3.5 h-3.5" weight="regular" />
+                )}
               </button>
             )}
           </div>
         </div>
 
-        {/* NAIP aerial — full-width hero strip when available */}
+        {/* NAIP aerial — full-width hero strip when available. Hover to
+            zoom in on the imagery (~10% scale, slight ease) so users can
+            inspect terrain detail without leaving the panel. */}
         {(naipLoading || naipImage) && (
-          <div className="relative aspect-[4/3] bg-paper-2 overflow-hidden border-b border-line">
+          <div className="group/naip relative aspect-[4/3] bg-paper-2 overflow-hidden border-b border-line">
             {naipLoading && !naipImage && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <SpinnerGap className="w-5 h-5 animate-spin text-ink-3" />
@@ -169,9 +179,17 @@ export const SpotDetailPanel = ({
                 <img
                   src={naipImage.storage_url}
                   alt="Aerial view"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover/naip:scale-110"
                   loading="lazy"
                 />
+                {/* Centered location pin — overlaid client-side so the
+                    design can change without regenerating chips. Suppress
+                    on legacy chips that have the pin baked into the JPEG. */}
+                {!naipImage.pinBaked && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center transition-transform duration-500 ease-out group-hover/naip:scale-110">
+                    <div className="w-3.5 h-3.5 rounded-full bg-cream border-[2px] border-ink shadow-[0_2px_6px_rgba(0,0,0,0.45)]" />
+                  </div>
+                )}
                 <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-ink/80 dark:bg-ink-pine/80 text-cream text-[10px] font-mono uppercase tracking-[0.10em] font-semibold">
                   NAIP{naipYear ? ` · ${naipYear}` : ''}
                 </div>
@@ -181,19 +199,34 @@ export const SpotDetailPanel = ({
         )}
 
         {/* Hero — type-colored icon, eyebrow, name, source badge */}
-        <DetailSection title={typeLabel(selectedSpot.type)} first>
+        <DetailSection title={typeLabel(selectedSpot)} first>
           <DetailHero
             Icon={Icon}
             iconBg={bg}
             iconText={text}
             title={selectedSpot.name || 'Unnamed spot'}
-            badge={
-              selectedSpot.source === 'derived' ? (
-                <DetailTag variant="clay">Derived</DetailTag>
-              ) : undefined
-            }
           />
         </DetailSection>
+
+        {/* Sub-kind chip (character: wild / pullout / boondocking_lot,
+            etc.) — drop legacy provenance values that leak into sub_kind. */}
+        {selectedSpot.subKind
+          && !['community', 'derived', 'known', 'campground'].includes(selectedSpot.subKind) && (
+          <DetailSection title="Type">
+            <DetailTag variant="ghost">
+              {selectedSpot.subKind.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+            </DetailTag>
+          </DetailSection>
+        )}
+
+        {/* User / AI-written description (community spots primarily) */}
+        {selectedSpot.description && (
+          <DetailSection title="Description">
+            <p className="text-[14px] leading-[1.55] text-ink whitespace-pre-line">
+              {selectedSpot.description}
+            </p>
+          </DetailSection>
+        )}
 
         {/* Coords */}
         <DetailSection title="Coordinates">
@@ -204,6 +237,36 @@ export const SpotDetailPanel = ({
             onCopy={onCopyCoords}
           />
         </DetailSection>
+
+        {/* Amenities — raw bag from the DB, rendered as label/value pairs
+            for booleans and enums alike. See AMENITIES.md for vocab. */}
+        {selectedSpot.amenities && Object.keys(selectedSpot.amenities).length > 0 && (
+          <DetailSection title="Amenities">
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(selectedSpot.amenities).map(([k, v]) => {
+                if (v === false || v === null || v === undefined || v === '') return null;
+                const prettify = (s: string) =>
+                  s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+                const label = prettify(k);
+                let valStr: string | null;
+                if (v === true) {
+                  valStr = null;
+                } else if (typeof v === 'object') {
+                  valStr = JSON.stringify(v);
+                } else if (typeof v === 'string') {
+                  valStr = prettify(v);
+                } else {
+                  valStr = String(v);
+                }
+                return (
+                  <DetailTag key={k} variant="ghost">
+                    {valStr ? `${label}: ${valStr}` : label}
+                  </DetailTag>
+                );
+              })}
+            </div>
+          </DetailSection>
+        )}
 
         {/* Access difficulty + the OSM road tags that produced it */}
         {selectedSpot.accessDifficulty && selectedSpot.accessDifficulty !== 'unknown' && (() => {
@@ -256,19 +319,6 @@ export const SpotDetailPanel = ({
           </DetailSection>
         )}
 
-        {/* Tag cloud */}
-        {tags.length > 0 && (
-          <DetailSection title="Signals">
-            <div className="flex flex-wrap gap-1.5">
-              {tags.map((t) => (
-                <DetailTag key={t.key} variant={t.variant}>
-                  {t.label}
-                </DetailTag>
-              ))}
-            </div>
-          </DetailSection>
-        )}
-
         {/* Public-land entity */}
         {selectedSpot.landName && (
           <DetailSection title="Public land">
@@ -293,80 +343,26 @@ export const SpotDetailPanel = ({
         {/* OSM tag details (camp-site only) */}
         {selectedSpot.osmTags && <OsmTagDetails tags={selectedSpot.osmTags} />}
 
-        {/* AI Analysis */}
-        <DetailSection title="AI assessment">
-          {aiCheckingCache && !aiAnalysis && (
-            <div className="flex items-center gap-2 py-2 text-ink-3">
-              <SpinnerGap className="w-4 h-4 animate-spin" />
-              <span className="text-[13px]">Checking for cached analysis…</span>
-            </div>
-          )}
-
-          {!aiCheckingCache && !aiAnalysis && !aiAnalyzing && !aiError && (
-            <div className="space-y-3">
-              <p className="text-[13px] text-ink-3 leading-[1.55]">
-                Get an AI-powered assessment of this spot's campability from satellite imagery.
-              </p>
-              <Pill variant="solid-pine" mono={false} onClick={onAnalyze} className="!w-full !justify-center">
-                <Sparkle className="w-4 h-4" weight="fill" />
-                Analyze
-              </Pill>
-            </div>
-          )}
-
-          {aiAnalyzing && !aiAnalysis && (
-            <div className="flex flex-col items-center py-5 gap-2">
-              <SpinnerGap className="w-5 h-5 animate-spin text-pine-6" />
-              <Mono className="text-pine-6">Analyzing satellite imagery…</Mono>
-            </div>
-          )}
-
-          {aiError && (
-            <div className="space-y-2">
-              <p className="text-[13px] text-ember">{aiError}</p>
-              <Pill variant="ghost" sm mono={false} onClick={onDismissError} className="!w-full !justify-center">
-                Retry
-              </Pill>
-            </div>
-          )}
-
-          {aiAnalysis && (
-            <div className="space-y-3">
-              {/* Score card — accent based on overall campability */}
-              <AiScoreCard analysis={aiAnalysis} />
-
-              {/* Factor grid */}
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: 'Ground',  Icon: Crosshair,    data: aiAnalysis.ground },
-                  { label: 'Access',  Icon: Path,         data: aiAnalysis.access },
-                  { label: 'Cover',   Icon: TreeEvergreen, data: aiAnalysis.cover },
-                  { label: 'Hazards', Icon: Warning,      data: aiAnalysis.hazards },
-                ].map(({ label, Icon: FIcon, data }) => (
-                  <FactorTile key={label} label={label} Icon={FIcon} data={data} />
-                ))}
-              </div>
-
-              {/* Trail */}
-              {aiAnalysis.trail && (
-                <FactorTile label="Trail" Icon={Path} data={aiAnalysis.trail} />
-              )}
-
-              {/* Best use */}
-              <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] border border-pine-6/30 bg-pine-6/[0.06]">
-                <Tent className="w-4 h-4 text-pine-6 flex-shrink-0" weight="regular" />
-                <p className="text-[13px] font-sans font-semibold text-ink">{aiAnalysis.bestUse}</p>
-              </div>
-
-              <Pill variant="ghost" sm mono={false} onClick={onReanalyze} className="!w-full !justify-center">
-                Re-analyze
-              </Pill>
-            </div>
-          )}
-        </DetailSection>
+        {/* AI Analysis — campability assessment is meaningless for utility
+            kinds (water spigots, showers, laundromats), so hide for those. */}
+        {selectedSpot.kind !== 'water'
+          && selectedSpot.kind !== 'shower'
+          && selectedSpot.kind !== 'laundromat' && (
+          <AiAssessmentSection
+            aiAnalysis={aiAnalysis}
+            aiAnalyzing={aiAnalyzing}
+            aiCheckingCache={aiCheckingCache}
+            aiError={aiError}
+            onAnalyze={onAnalyze}
+            onReanalyze={onReanalyze}
+            onDismissError={onDismissError}
+          />
+        )}
       </DetailBody>
 
-      {/* Sticky actions */}
+      {/* Sticky actions. Save Spot is camping-only — utility kinds (water,
+          shower, laundromat) are points of interest, not bookmarkable
+          campsites, so we hide the save affordance for those. */}
       <DetailActions>
         <Pill
           variant="solid-pine"
@@ -379,73 +375,14 @@ export const SpotDetailPanel = ({
           <ArrowSquareOut className="w-3.5 h-3.5" weight="regular" />
           Open in Maps
         </Pill>
-        <Pill variant="ghost" mono={false} onClick={onConfirm} className="!w-full !justify-center">
-          <CheckCircle className="w-3.5 h-3.5" weight={existingCampsiteForSpot ? 'fill' : 'regular'} />
-          {existingCampsiteForSpot ? 'Confirmed' : 'Confirm spot'}
-        </Pill>
+        {!['water', 'shower', 'laundromat'].includes(selectedSpot.kind ?? '') && (
+          <Pill variant="ghost" mono={false} onClick={onSave} className="!w-full !justify-center">
+            <CheckCircle className="w-3.5 h-3.5" weight={existingCampsiteForSpot ? 'fill' : 'regular'} />
+            {existingCampsiteForSpot ? 'Saved' : 'Save spot'}
+          </Pill>
+        )}
       </DetailActions>
     </DetailShell>
-  );
-};
-
-// === AI score card ========================================================
-const SCORE_TIERS = [
-  { min: 70, label: 'Great campsite',   bg: 'bg-pin-safe/[0.10]',     border: 'border-pin-safe/40',     pill: 'bg-pin-safe' },
-  { min: 50, label: 'Decent spot',      bg: 'bg-pin-easy/[0.10]',     border: 'border-pin-easy/40',     pill: 'bg-pin-easy' },
-  { min: 30, label: 'Marginal',         bg: 'bg-pin-moderate/[0.10]', border: 'border-pin-moderate/40', pill: 'bg-pin-moderate' },
-  { min: 0,  label: 'Not recommended',  bg: 'bg-ember/[0.08]',        border: 'border-ember/40',        pill: 'bg-ember' },
-];
-
-const AiScoreCard = ({ analysis }: { analysis: SpotAIAnalysis }) => {
-  const tier = SCORE_TIERS.find((t) => analysis.campabilityScore >= t.min) ?? SCORE_TIERS[SCORE_TIERS.length - 1];
-  return (
-    <div className={cn('p-4 rounded-[12px] border', tier.bg, tier.border)}>
-      <div className="flex items-center gap-3">
-        <div className={cn('w-14 h-14 rounded-[10px] flex items-center justify-center text-cream font-sans font-bold text-[22px] tracking-[-0.02em] flex-shrink-0', tier.pill)}>
-          {analysis.campabilityScore}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">{tier.label}</p>
-          <Mono className="text-ink-3 block mt-0.5">{analysis.confidence} confidence</Mono>
-        </div>
-      </div>
-      <p className="text-[13px] text-ink leading-[1.55] mt-3">{analysis.summary}</p>
-    </div>
-  );
-};
-
-// === Factor tile (Ground/Access/Cover/Hazards/Trail) =====================
-type FactorRating = string;
-type FactorData = { rating: FactorRating; detail: string };
-
-// Maps a rating string → an accent. Pine (good), clay (fair), ember (bad).
-const ratingAccent = (rating: FactorRating): { bg: string; text: string } => {
-  if (['good', 'none', 'easy'].includes(rating))                               return { bg: 'bg-pin-safe/15',     text: 'text-pin-safe' };
-  if (['fair', 'minor', 'moderate'].includes(rating))                          return { bg: 'bg-pin-easy/15',     text: 'text-pin-easy' };
-  if (['poor', 'significant', 'difficult'].includes(rating))                   return { bg: 'bg-pin-moderate/15', text: 'text-pin-moderate' };
-  if (['extreme'].includes(rating))                                            return { bg: 'bg-ember/15',        text: 'text-ember' };
-  return                                                                              { bg: 'bg-paper-2',         text: 'text-ink-3' };
-};
-
-const FactorTile = ({
-  label,
-  Icon,
-  data,
-}: {
-  label: string;
-  Icon: typeof Path;
-  data: FactorData;
-}) => {
-  const { bg, text } = ratingAccent(data.rating);
-  return (
-    <div className={cn('p-2.5 rounded-[10px]', bg)}>
-      <div className="flex items-center gap-1.5 mb-1">
-        <Icon className={cn('w-3.5 h-3.5', text)} weight="regular" />
-        <Mono className={text}>{label}</Mono>
-        <Mono className={cn('ml-auto opacity-70', text)}>{data.rating}</Mono>
-      </div>
-      <p className={cn('text-[12px] leading-snug', text)}>{data.detail}</p>
-    </div>
   );
 };
 

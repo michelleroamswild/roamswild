@@ -1,7 +1,9 @@
 import { createContext, useContext, ReactNode } from 'react';
 import { useLoadScript } from '@react-google-maps/api';
 
-const libraries: ("places" | "geometry" | "drawing")[] = ["places"];
+// "marker" is required for google.maps.marker.AdvancedMarkerElement —
+// the recommended replacement for the deprecated google.maps.Marker.
+const libraries: ("places" | "geometry" | "drawing" | "marker")[] = ["places", "marker"];
 
 interface GoogleMapsContextType {
   isLoaded: boolean;
