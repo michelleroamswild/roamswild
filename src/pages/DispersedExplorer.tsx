@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { useSearchParams, useLocation, Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { MapPin, MagnifyingGlass, Path, SpinnerGap, Tent, Drop, MapPinLine, Jeep, Funnel, ArrowRight, Plus, Minus, Copy, CheckCircle } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import { LocationSelector, SelectedLocation } from '@/components/LocationSelector';
@@ -96,6 +97,21 @@ const DispersedExplorer = () => {
     window.addEventListener('storage', handler);
     return () => window.removeEventListener('storage', handler);
   }, []);
+  // Quick "Save spot" flow — bookmark only, no confirmation/notes dialog.
+  // The dialog version is still triggered by onConfirm → setConfirmDialogOpen.
+  const handleSaveSpot = useCallback(async () => {
+    const spot = selectedSpot;
+    if (!spot) return;
+    const result = await saveExplorerSpot(spot);
+    if (result) {
+      toast.success(`Saved "${result.name}"`, {
+        description: 'Added to your campsites.',
+      });
+    } else {
+      toast.error('Failed to save spot');
+    }
+  }, [selectedSpot, saveExplorerSpot]);
+
   const handleMarkForDelete = useCallback(() => {
     const id = selectedSpot?.id;
     if (!id) return;
@@ -188,7 +204,7 @@ const DispersedExplorer = () => {
   // default mapType chrome is disabled).
   const [mapTypeId, setMapTypeId] = useState<MapType>('hybrid');
 
-  const { findExistingExplorerSpot, getExplorerSpots, campsites, friendsCampsites } = useCampsites();
+  const { findExistingExplorerSpot, getExplorerSpots, saveExplorerSpot, campsites, friendsCampsites } = useCampsites();
   const { getFriendById } = useFriends();
   const { user } = useAuth();
   const [explorerSpots, setExplorerSpots] = useState<Campsite[]>([]);
@@ -663,16 +679,25 @@ const DispersedExplorer = () => {
     }
   }, [selectedSpot, findExistingExplorerSpot]);
 
-  // Load cached AI analysis when a spot is selected
+  // The active AI target — either the selected potential spot or the
+  // user's selected saved campsite. Both render the same AI assessment
+  // section, both cache by lat/lng coordinates.
+  const aiTarget = selectedSpot
+    ? { lat: selectedSpot.lat, lng: selectedSpot.lng }
+    : selectedCampsite
+      ? { lat: selectedCampsite.lat, lng: selectedCampsite.lng }
+      : null;
+
+  // Load cached AI analysis when an AI target is selected
   useEffect(() => {
-    if (!selectedSpot) {
+    if (!aiTarget) {
       setAiAnalysis(null);
       setAiError(null);
       setAiCheckingCache(false);
       return;
     }
 
-    const cacheKey = `${selectedSpot.lat.toFixed(5)},${selectedSpot.lng.toFixed(5)}`;
+    const cacheKey = `${aiTarget.lat.toFixed(5)},${aiTarget.lng.toFixed(5)}`;
     const cached = analysisCache.current.get(cacheKey);
     if (cached) {
       setAiAnalysis(cached);
@@ -690,10 +715,10 @@ const DispersedExplorer = () => {
     supabase
       .from('spot_analyses')
       .select('analysis')
-      .gte('lat', selectedSpot.lat - eps)
-      .lte('lat', selectedSpot.lat + eps)
-      .gte('lng', selectedSpot.lng - eps)
-      .lte('lng', selectedSpot.lng + eps)
+      .gte('lat', aiTarget.lat - eps)
+      .lte('lat', aiTarget.lat + eps)
+      .gte('lng', aiTarget.lng - eps)
+      .lte('lng', aiTarget.lng + eps)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -708,7 +733,7 @@ const DispersedExplorer = () => {
       });
 
     return () => { cancelled = true; };
-  }, [selectedSpot]);
+  }, [aiTarget?.lat, aiTarget?.lng]);
 
   // Helper to check if a point is within a restricted area
   // Restricted: National Parks, Tribal Lands
@@ -1661,17 +1686,11 @@ const DispersedExplorer = () => {
   const totalRoads = mvumRoads.length + osmTracks.length;
 
   const runSpotAnalysis = async (force: boolean = false) => {
-    if (!selectedSpot) return;
-    if (aiAnalysis && !force) return;
-    if (force) {
-      setAiAnalysis(null);
-      setAiError(null);
-    }
-    setAiAnalyzing(true);
-    setAiError(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('analyze-campsite', {
-        body: {
+    // Pull payload from whichever target is active (potential spot or
+    // user's saved campsite). Coords are the cache key; the rest is
+    // best-effort context the analyze-campsite function reads when it has it.
+    const body: Record<string, unknown> = selectedSpot
+      ? {
           lat: selectedSpot.lat,
           lng: selectedSpot.lng,
           name: selectedSpot.name,
@@ -1684,12 +1703,30 @@ const DispersedExplorer = () => {
           passengerReachable: selectedSpot.passengerReachable,
           highClearanceReachable: selectedSpot.highClearanceReachable,
           highClearance: selectedSpot.highClearance,
-          ...(force && { force: true }),
-        },
+        }
+      : selectedCampsite
+        ? {
+            lat: selectedCampsite.lat,
+            lng: selectedCampsite.lng,
+            name: selectedCampsite.name,
+            type: 'camp-site',
+          }
+        : null;
+    if (!body) return;
+    if (aiAnalysis && !force) return;
+    if (force) {
+      setAiAnalysis(null);
+      setAiError(null);
+    }
+    setAiAnalyzing(true);
+    setAiError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-campsite', {
+        body: { ...body, ...(force && { force: true }) },
       });
       if (error) throw error;
       setAiAnalysis(data.analysis);
-      analysisCache.current.set(`${selectedSpot.lat.toFixed(5)},${selectedSpot.lng.toFixed(5)}`, data.analysis);
+      analysisCache.current.set(`${(body.lat as number).toFixed(5)},${(body.lng as number).toFixed(5)}`, data.analysis);
     } catch (err: unknown) {
       setAiError(err instanceof Error ? err.message : 'Analysis failed');
     } finally {
@@ -2078,6 +2115,7 @@ const DispersedExplorer = () => {
               onAnalyze={() => runSpotAnalysis(false)}
               onReanalyze={() => runSpotAnalysis(true)}
               onDismissError={() => setAiError(null)}
+              onSave={handleSaveSpot}
               onConfirm={() => setConfirmDialogOpen(true)}
               onMarkForDelete={handleMarkForDelete}
               isMarkedForDelete={!!selectedSpot && removeIds.has(selectedSpot.id)}
@@ -2085,7 +2123,17 @@ const DispersedExplorer = () => {
           ) : selectedCampground ? (
             <CampgroundDetailPanel campground={selectedCampground} onBack={clearAllSelections} />
           ) : selectedCampsite ? (
-            <UserCampsiteDetailPanel campsite={selectedCampsite} onBack={clearAllSelections} />
+            <UserCampsiteDetailPanel
+              campsite={selectedCampsite}
+              onBack={clearAllSelections}
+              aiAnalysis={aiAnalysis}
+              aiAnalyzing={aiAnalyzing}
+              aiCheckingCache={aiCheckingCache}
+              aiError={aiError}
+              onAnalyze={() => runSpotAnalysis(false)}
+              onReanalyze={() => runSpotAnalysis(true)}
+              onDismissError={() => setAiError(null)}
+            />
           ) : selectedRoad ? (
             <RoadDetailPanel
               road={selectedRoad}

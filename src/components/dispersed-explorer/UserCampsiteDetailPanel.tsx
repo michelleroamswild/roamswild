@@ -12,13 +12,34 @@ import {
   DetailSection,
   DetailTag,
 } from './DetailPanelChrome';
+import { AiAssessmentSection } from './AiAssessmentSection';
+import type { SpotAIAnalysis } from './types';
 
 interface UserCampsiteDetailPanelProps {
   campsite: Campsite;
   onBack: () => void;
+  // AI assessment props (same shape as SpotDetailPanel) — optional so the
+  // panel still renders without them.
+  aiAnalysis?: SpotAIAnalysis | null;
+  aiAnalyzing?: boolean;
+  aiCheckingCache?: boolean;
+  aiError?: string | null;
+  onAnalyze?: () => void;
+  onReanalyze?: () => void;
+  onDismissError?: () => void;
 }
 
-export const UserCampsiteDetailPanel = ({ campsite, onBack }: UserCampsiteDetailPanelProps) => {
+export const UserCampsiteDetailPanel = ({
+  campsite,
+  onBack,
+  aiAnalysis,
+  aiAnalyzing,
+  aiCheckingCache,
+  aiError,
+  onAnalyze,
+  onReanalyze,
+  onDismissError,
+}: UserCampsiteDetailPanelProps) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopyCoords = () => {
@@ -76,6 +97,19 @@ export const UserCampsiteDetailPanel = ({ campsite, onBack }: UserCampsiteDetail
           <DetailSection title="Notes">
             <p className="text-[13px] text-ink leading-[1.55]">{campsite.description}</p>
           </DetailSection>
+        )}
+
+        {/* AI assessment — only renders when the parent passes the AI props */}
+        {onAnalyze && onReanalyze && onDismissError && (
+          <AiAssessmentSection
+            aiAnalysis={aiAnalysis ?? null}
+            aiAnalyzing={!!aiAnalyzing}
+            aiCheckingCache={!!aiCheckingCache}
+            aiError={aiError ?? null}
+            onAnalyze={onAnalyze}
+            onReanalyze={onReanalyze}
+            onDismissError={onDismissError}
+          />
         )}
       </DetailBody>
 

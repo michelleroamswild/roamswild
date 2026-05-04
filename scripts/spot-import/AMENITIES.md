@@ -146,6 +146,38 @@ enums, numbers.
 | `drinking_water` | use `water` enum |
 | `reservation` | use `reservation_required` boolean |
 
+## Canonical spot tags
+
+Separate axis from `amenities`. **Tags** are short, high-signal flags
+that any camping spot can carry — community contributors and the
+saved-spot owner pick from a fixed canonical vocab when annotating.
+Single source of truth: `src/lib/spot-tags.ts`.
+
+| Tag | Meaning |
+|---|---|
+| `4wd Only` | Final approach requires 4WD. |
+| `Bumpy Road` | Rough access; passable in HC vehicles but uncomfortable. |
+| `Great Starlink` | Confirmed unobstructed sky for Starlink. |
+| `High Clearance` | Final approach needs ground clearance, not 4WD. |
+| `Multiple Rigs` | Site can fit several vehicles / trailers. |
+| `Multiple spots in area` | One coordinate, multiple usable spots nearby. |
+| `Private` | Secluded — no neighbors visible / heard. |
+| `Some Starlink` | Partial sky — Starlink may work intermittently. |
+| `Unknown status` | Verification pending; data not confirmed. |
+| `Water access` | Stream / lake / spigot reachable on foot. |
+
+Tags are **not** the same as amenities:
+
+- `amenities.vehicle_required: '4wd'` is the structured field that
+  filter logic and the renderer key off; the `4wd Only` tag is the
+  human-friendly chip the contributor selects.
+- `amenities.water: 'potable'` answers "what kind of water is here";
+  the `Water access` tag answers "is there water nearby that you can
+  walk to."
+
+Where they overlap (vehicle / water), keep both — tags are the social
+flag, amenities are the structured fact.
+
 ## Examples
 
 ### Walk-up shower facility at a truck stop
