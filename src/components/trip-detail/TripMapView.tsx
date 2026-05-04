@@ -1,28 +1,10 @@
 import { useState } from 'react';
-import { DirectionsRenderer, InfoWindow } from '@react-google-maps/api';
-import { X } from '@phosphor-icons/react';
+import { DirectionsRenderer } from '@react-google-maps/api';
 import { GoogleMap } from '@/components/GoogleMap';
 import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { GeneratedTrip, TripConfig, TripStop } from '@/types/trip';
 import { createMarkerIcon, createSimpleMarkerIcon } from '@/utils/mapMarkers';
-
-// Resolve the data origin for a stop based on its id prefix. Returns null
-// for trip-generated anchors (start/end/destination/town/travel) where
-// "source" doesn't apply.
-const getStopSource = (stop: TripStop): string | null => {
-  const id = stop.id;
-  if (id.startsWith('ridb-')) return 'Recreation.gov';
-  if (id.startsWith('usfs-')) return 'US Forest Service';
-  if (id.startsWith('osm-dispersed-')) return 'OpenStreetMap (dispersed)';
-  if (id.startsWith('osm-')) return 'OpenStreetMap';
-  if (id.startsWith('hike-')) return 'Google Places';
-  // Trip-generated anchors carry no external data source.
-  if (/^(start-|end-|dest-|town-|travel-|explore-|return-)/.test(id)) return null;
-  // Camps left over after the prefix checks come from the community spots DB
-  // (raw Supabase UUIDs, no prefix).
-  if (stop.type === 'camp') return 'Community spots';
-  return null;
-};
+import { MapStopInfoWindow } from '@/components/trip-detail/MapStopInfoWindow';
 
 interface TripMapViewProps {
   tripConfig: TripConfig;
@@ -96,7 +78,7 @@ export const TripMapView = ({
             <AdvancedMarker
               map={mapInstance}
               position={(tripConfig.startLocation || tripConfig.baseLocation)!.coordinates}
-              content={createMarkerIcon('start')}
+              content={createMarkerIcon('start', { isActive: true })}
               title={
                 tripConfig.startLocation
                   ? `Start: ${tripConfig.startLocation.name}`
@@ -160,7 +142,7 @@ export const TripMapView = ({
                   key="trip-end-marker"
                   map={mapInstance}
                   position={endStop.coordinates}
-                  content={createMarkerIcon('end')}
+                  content={createMarkerIcon('end', { isActive: true })}
                   title={`End: ${endStop.name}`}
                 />
               );
@@ -185,74 +167,39 @@ export const TripMapView = ({
             return null;
           })()}
 
-          {(activeDay ? generatedTrip.days.find((d) => d.day === activeDay)?.stops || [] : allStops)
-            .filter((stop) => stop.type !== 'end')
-            .map((stop) => (
-              <AdvancedMarker
-                key={stop.id}
-                map={mapInstance}
-                position={stop.coordinates}
-                content={createMarkerIcon(stop.type, { isActive: !!activeDay })}
-                title={stop.name}
-                onClick={() => onSelectStop(stop)}
-              />
-            ))}
-
-          {selectedStop && (() => {
-            const source = getStopSource(selectedStop);
-            return (
-              <InfoWindow
-                position={selectedStop.coordinates}
-                onCloseClick={() => onSelectStop(null)}
-                options={{ pixelOffset: new google.maps.Size(0, -32), disableAutoPan: true }}
-              >
-                <div className="compact-info-window min-w-[220px] font-sans">
-                  <div className="flex items-start justify-between gap-2">
-                    <h4 className="text-[14px] font-semibold tracking-[-0.005em] text-ink leading-tight flex-1 min-w-0">
-                      {selectedStop.name}
-                    </h4>
-                    <button
-                      onClick={() => onSelectStop(null)}
-                      className="shrink-0 p-0.5 -mr-0.5 -mt-0.5 text-ink-3 hover:text-ink transition-colors"
-                      aria-label="Close"
-                    >
-                      <X className="w-3.5 h-3.5" weight="bold" />
-                    </button>
-                  </div>
-                  {selectedStop.description && (
-                    <p className="text-[12px] text-ink-3 mt-1 leading-[1.5]">{selectedStop.description}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-1.5 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
-                    <span>Day {selectedStop.day}</span>
-                    {selectedStop.duration && (
-                      <>
-                        <span>·</span>
-                        <span className="normal-case font-sans tracking-normal text-[12px]">
-                          {selectedStop.duration}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                  {source && (
-                    <p className="mt-1 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
-                      Source · <span className="text-ink-2">{source}</span>
-                    </p>
-                  )}
-                  <button
-                    onClick={() =>
-                      window.open(
-                        `https://www.google.com/maps/dir/?api=1&destination=${selectedStop.coordinates.lat},${selectedStop.coordinates.lng}`,
-                        '_blank',
-                      )
-                    }
-                    className="mt-2.5 w-full px-3 py-1.5 rounded-full bg-pine-6 text-cream dark:text-ink-pine text-[12px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 transition-colors"
-                  >
-                    Get directions
-                  </button>
-                </div>
-              </InfoWindow>
-            );
+          {(() => {
+            // Dedupe stops by coordinate so destination viewpoints and same-
+            // location follow-ups (the optional "Time in town" extra-day
+            // marker, or stale "explore-*" stops on older saved trips) don't
+            // stack two pins on the same point. First-seen wins, which keeps
+            // the canonical destination pin from the arrival day.
+            const stops = activeDay
+              ? generatedTrip.days.find((d) => d.day === activeDay)?.stops || []
+              : allStops;
+            const seen = new Set<string>();
+            return stops
+              .filter((stop) => {
+                if (stop.type === 'end') return false;
+                const key = `${stop.coordinates.lat.toFixed(5)},${stop.coordinates.lng.toFixed(5)}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              })
+              .map((stop) => (
+                <AdvancedMarker
+                  key={stop.id}
+                  map={mapInstance}
+                  position={stop.coordinates}
+                  content={createMarkerIcon(stop.type, { isActive: true })}
+                  title={stop.name}
+                  onClick={() => onSelectStop(stop)}
+                />
+              ));
           })()}
+
+          {selectedStop && (
+            <MapStopInfoWindow stop={selectedStop} onClose={() => onSelectStop(null)} />
+          )}
         </GoogleMap>
       </div>
     </div>
