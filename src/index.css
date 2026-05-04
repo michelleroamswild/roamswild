@@ -328,6 +328,15 @@
   font-family: "Manrope", sans-serif;
   z-index: 10000 !important;
   pointer-events: auto !important;
+  /* Wider than the input field so longer place names don't truncate.
+     Google sizes the container to match the input by default; this
+     forces a minimum so it always fits two-line addresses comfortably. */
+  min-width: 420px !important;
+}
+
+@media (max-width: 480px) {
+  /* Don't blow past the viewport on phones — fall back to input width. */
+  .pac-container { min-width: 0 !important; }
 }
 
 .pac-container::after {

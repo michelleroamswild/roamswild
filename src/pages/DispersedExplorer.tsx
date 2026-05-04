@@ -97,21 +97,6 @@ const DispersedExplorer = () => {
     window.addEventListener('storage', handler);
     return () => window.removeEventListener('storage', handler);
   }, []);
-  // Quick "Save spot" flow — bookmark only, no confirmation/notes dialog.
-  // The dialog version is still triggered by onConfirm → setConfirmDialogOpen.
-  const handleSaveSpot = useCallback(async () => {
-    const spot = selectedSpot;
-    if (!spot) return;
-    const result = await saveExplorerSpot(spot);
-    if (result) {
-      toast.success(`Saved "${result.name}"`, {
-        description: 'Added to your campsites.',
-      });
-    } else {
-      toast.error('Failed to save spot');
-    }
-  }, [selectedSpot, saveExplorerSpot]);
-
   const handleMarkForDelete = useCallback(() => {
     const id = selectedSpot?.id;
     if (!id) return;
@@ -205,6 +190,23 @@ const DispersedExplorer = () => {
   const [mapTypeId, setMapTypeId] = useState<MapType>('hybrid');
 
   const { findExistingExplorerSpot, getExplorerSpots, saveExplorerSpot, campsites, friendsCampsites } = useCampsites();
+
+  // Quick "Save spot" flow — bookmark only, no confirmation/notes dialog.
+  // The dialog version is still triggered by onConfirm → setConfirmDialogOpen.
+  // Defined here (after useCampsites) so saveExplorerSpot is in scope for
+  // the dependency array; placing it earlier hits the const TDZ.
+  const handleSaveSpot = useCallback(async () => {
+    const spot = selectedSpot;
+    if (!spot) return;
+    const result = await saveExplorerSpot(spot);
+    if (result) {
+      toast.success(`Saved "${result.name}"`, {
+        description: 'Added to your campsites.',
+      });
+    } else {
+      toast.error('Failed to save spot');
+    }
+  }, [selectedSpot, saveExplorerSpot]);
   const { getFriendById } = useFriends();
   const { user } = useAuth();
   const [explorerSpots, setExplorerSpots] = useState<Campsite[]>([]);
