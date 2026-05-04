@@ -6,6 +6,7 @@ import { MVUMRoad, OSMTrack, PotentialSpot, EstablishedCampground } from '@/hook
 import type { Campsite } from '@/types/campsite';
 import type { SelectedLocation } from '@/components/LocationSelector';
 import { LAND_OVERLAY_COLORS, bucketForAgency } from '@/lib/land-colors';
+import { typeLabel } from './SpotDetailPanel';
 
 type PublicLand = {
   id: string;

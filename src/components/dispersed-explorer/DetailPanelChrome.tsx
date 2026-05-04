@@ -60,7 +60,7 @@ export const DetailHero = ({
   eyebrow?: ReactNode;
   badge?: ReactNode;
 }) => (
-  <div className="flex items-start gap-3">
+  <div className="flex items-center gap-3">
     <div className={cn('w-12 h-12 rounded-[12px] flex items-center justify-center flex-shrink-0', iconBg, iconText)}>
       <Icon className="w-5 h-5" weight="regular" />
     </div>
