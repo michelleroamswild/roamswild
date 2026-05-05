@@ -602,11 +602,360 @@ def _fmt_coord(lat: Any, lng: Any) -> str:
         return "—"
 
 
+@app.get("/master", response_class=HTMLResponse)
+def master(
+    q: str = Query(""),
+    poi_type: str = Query(""),
+    region: str = Query(""),
+    contains_source: str = Query(""),
+    min_sources: int = Query(0),
+    min_photos: int = Query(0),
+    only_hidden_gem: str = Query(""),
+    only_locationscout: str = Query(""),
+    page: int = Query(1, ge=1),
+) -> str:
+    page_size = 50
+    offset = (page - 1) * page_size
+
+    where = ["1=1"]
+    params: dict[str, Any] = {"limit": page_size, "offset": offset}
+    if q:
+        where.append("m.canonical_name ILIKE :q")
+        params["q"] = f"%{q}%"
+    if poi_type:
+        where.append("m.poi_type = :poi_type")
+        params["poi_type"] = poi_type
+    if contains_source:
+        where.append("m.sources ? :contains_source")
+        params["contains_source"] = contains_source
+    if min_sources > 0:
+        where.append("m.source_count >= :min_sources")
+        params["min_sources"] = min_sources
+    if min_photos > 0:
+        where.append("m.photo_count >= :min_photos")
+        params["min_photos"] = min_photos
+    if only_hidden_gem == "1":
+        where.append("m.is_hidden_gem = TRUE")
+    if only_locationscout == "1":
+        where.append("m.locationscout_endorsed = TRUE")
+    if region:
+        where.append(
+            "EXISTS (SELECT 1 FROM pilot_regions r "
+            "WHERE r.name = :region AND ST_Contains(r.bounds, m.geom))"
+        )
+        params["region"] = region
+
+    where_clause = " AND ".join(where)
+
+    rows = _q(
+        f"""
+        SELECT m.id::text AS id,
+               m.canonical_name AS name,
+               m.poi_type,
+               m.source_count,
+               m.sources,
+               m.is_hidden_gem,
+               m.photo_count,
+               m.locationscout_endorsed,
+               m.metadata_tags->>'summary' AS summary,
+               (SELECT string_agg(r.name, ', ') FROM pilot_regions r
+                  WHERE ST_Contains(r.bounds, m.geom)) AS regions,
+               ST_Y(m.geom) AS lat,
+               ST_X(m.geom) AS lng
+        FROM master_places m
+        WHERE {where_clause}
+        ORDER BY m.source_count DESC, m.photo_count DESC, m.canonical_name
+        LIMIT :limit OFFSET :offset
+        """,
+        **params,
+    )
+
+    total_row = _q(
+        f"SELECT count(*) AS n FROM master_places m WHERE {where_clause}",
+        **{k: v for k, v in params.items() if k not in ("limit", "offset")},
+    )
+    total = total_row[0]["n"] if total_row else 0
+    pages = max(1, (total + page_size - 1) // page_size)
+
+    type_buckets = _q(
+        "SELECT poi_type, count(*) AS n FROM master_places GROUP BY poi_type ORDER BY n DESC"
+    )
+    region_buckets = _q(
+        """
+        SELECT r.name, count(*) AS n
+        FROM pilot_regions r
+        LEFT JOIN master_places m ON ST_Contains(r.bounds, m.geom)
+        GROUP BY r.name ORDER BY n DESC
+        """
+    )
+    source_buckets = _q(
+        """
+        SELECT src AS source, count(*) AS n
+        FROM master_places m, jsonb_array_elements_text(m.sources) src
+        GROUP BY src ORDER BY n DESC
+        """
+    )
+    overview = _q(
+        """
+        SELECT
+          (SELECT count(*) FROM master_places)                                            AS total,
+          (SELECT count(*) FROM master_places WHERE source_count >= 2)                    AS multi_source,
+          (SELECT count(*) FROM master_places WHERE source_count >= 3)                    AS three_plus,
+          (SELECT count(*) FROM master_places WHERE photo_count >= 5)                     AS photo_5plus,
+          (SELECT count(*) FROM master_places WHERE photo_count >= 20)                    AS photo_20plus,
+          (SELECT count(*) FROM master_places WHERE is_hidden_gem)                        AS hidden_gem,
+          (SELECT count(*) FROM master_places WHERE locationscout_endorsed)               AS locationscout
+        """
+    )[0]
+
+    return _render_master(
+        rows=rows, total=total, page=page, pages=pages,
+        q=q, poi_type=poi_type, region=region, contains_source=contains_source,
+        min_sources=min_sources, min_photos=min_photos,
+        only_hidden_gem=only_hidden_gem, only_locationscout=only_locationscout,
+        type_buckets=type_buckets, region_buckets=region_buckets,
+        source_buckets=source_buckets, overview=overview,
+    )
+
+
+def _render_master(
+    *,
+    rows: list[dict[str, Any]],
+    total: int,
+    page: int,
+    pages: int,
+    q: str,
+    poi_type: str,
+    region: str,
+    contains_source: str,
+    min_sources: int,
+    min_photos: int,
+    only_hidden_gem: str,
+    only_locationscout: str,
+    type_buckets: list[dict[str, Any]],
+    region_buckets: list[dict[str, Any]],
+    source_buckets: list[dict[str, Any]],
+    overview: dict[str, Any],
+) -> str:
+    head = f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moab Pilot · Master Places</title>
+<style>
+  :root {{
+    --bg: #f7f3ec; --paper: #fff; --line: #e3dccc;
+    --ink: #1d2218; --ink-2: #4a4d3f; --ink-3: #7a7d6e;
+    --pine: #2c4530; --water: #2c5871; --clay: #b56839; --sage: #6b7f4d; --cream: #faf6ed;
+  }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }}
+  header {{ padding: 20px 32px; background: var(--paper); border-bottom: 1px solid var(--line); }}
+  header h1 {{ margin: 0; font-size: 22px; letter-spacing: -0.02em; }}
+  header .sub {{ color: var(--ink-3); font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 4px; }}
+  nav {{ margin-top: 12px; display: flex; gap: 16px; }}
+  nav a {{ color: var(--ink-2); font-weight: 600; text-decoration: none; padding: 4px 0; border-bottom: 2px solid transparent; }}
+  nav a.active {{ color: var(--pine); border-color: var(--pine); }}
+  main {{ display: grid; grid-template-columns: 280px 1fr; gap: 20px; max-width: 1480px; margin: 0 auto; padding: 20px 32px 80px; }}
+  aside {{ background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; height: fit-content; position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow-y: auto; }}
+  aside h3 {{ margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; }}
+  aside .group {{ margin-bottom: 18px; }}
+  aside form input[type=text] {{ width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }}
+  aside form button {{ margin-top: 8px; padding: 6px 12px; background: var(--pine); color: var(--cream); border: 0; border-radius: 999px; font: 600 12px/1 inherit; letter-spacing: 0.04em; cursor: pointer; }}
+  .filter {{ display: block; padding: 4px 0; color: var(--ink-2); text-decoration: none; font-size: 13px; }}
+  .filter:hover {{ color: var(--pine); }}
+  .filter.active {{ color: var(--pine); font-weight: 600; }}
+  .filter .n {{ color: var(--ink-3); font-size: 11px; margin-left: 4px; }}
+  .reset {{ display: inline-block; margin-top: 6px; font-size: 12px; color: var(--clay); text-decoration: none; }}
+  section.results {{ background: var(--paper); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }}
+  .summary-bar {{ padding: 14px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }}
+  .summary-bar .count {{ font-weight: 600; }}
+  .summary-bar .pages a {{ display: inline-block; padding: 4px 10px; margin: 0 2px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink-2); text-decoration: none; font-size: 12px; }}
+  .summary-bar .pages a.active {{ background: var(--pine); color: var(--cream); border-color: var(--pine); }}
+  .overview {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; padding: 16px 20px; background: var(--cream); border-bottom: 1px solid var(--line); }}
+  .stat {{ font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }}
+  .stat .v {{ font-size: 18px; font-weight: 700; color: var(--ink); display: block; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+  th, td {{ text-align: left; padding: 9px 14px; vertical-align: top; }}
+  th {{ background: var(--cream); border-bottom: 1px solid var(--line); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-2); }}
+  tbody tr {{ border-bottom: 1px solid var(--line); }}
+  tbody tr:last-child {{ border-bottom: 0; }}
+  td.name {{ font-weight: 600; max-width: 280px; }}
+  td.regions {{ color: var(--ink-3); font-size: 12px; max-width: 200px; }}
+  td.coord {{ font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-3); }}
+  .pill {{ display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; margin-right: 4px; margin-bottom: 2px; }}
+  .pill.type {{ background: rgba(107, 127, 77, 0.18); color: var(--sage); }}
+  .pill.gem {{ background: rgba(181, 104, 57, 0.18); color: var(--clay); }}
+  .pill.source {{ background: rgba(44, 88, 113, 0.16); color: var(--water); font-size: 10px; font-weight: 500; }}
+  .pill.count {{ background: rgba(44, 69, 48, 0.18); color: var(--pine); }}
+  .pill.photo {{ background: rgba(181, 104, 57, 0.20); color: var(--clay); }}
+  .pill.ls {{ background: rgba(74, 77, 63, 0.16); color: var(--ink-2); }}
+</style></head><body>
+<header>
+  <h1>Moab Pilot · Master Places</h1>
+  <div class="sub">{settings.moab_lat}, {settings.moab_lng} · radius {settings.radius_mi} mi · deduplicated, multi-source-tagged</div>
+  <nav>
+    <a href="/">Inspection</a>
+    <a href="/trails">Trails</a>
+    <a href="/places">Raw Places</a>
+    <a href="/master" class="active">Master</a>
+  </nav>
+</header>
+<main>
+"""
+
+    sidebar = '<aside>'
+    sidebar += f"""
+    <div class="group">
+      <h3>Search name</h3>
+      <form method="get">
+        <input type="text" name="q" value="{_h(q)}" placeholder="mesa, slickrock, geyser…">
+        <input type="hidden" name="poi_type" value="{_h(poi_type)}">
+        <input type="hidden" name="region" value="{_h(region)}">
+        <input type="hidden" name="contains_source" value="{_h(contains_source)}">
+        <input type="hidden" name="min_sources" value="{min_sources}">
+        <input type="hidden" name="min_photos" value="{min_photos}">
+        <input type="hidden" name="only_hidden_gem" value="{_h(only_hidden_gem)}">
+        <input type="hidden" name="only_locationscout" value="{_h(only_locationscout)}">
+        <button type="submit">Filter</button>
+        <a href="/master" class="reset">reset all</a>
+      </form>
+    </div>
+    """
+
+    def _link(**kw: Any) -> str:
+        merged = dict(
+            q=q, poi_type=poi_type, region=region, contains_source=contains_source,
+            min_sources=min_sources, min_photos=min_photos,
+            only_hidden_gem=only_hidden_gem, only_locationscout=only_locationscout,
+        )
+        merged.update(kw)
+        parts: list[str] = []
+        for k, v in merged.items():
+            if k == "page":
+                if v and v > 1: parts.append(f"page={v}")
+            elif isinstance(v, int):
+                if v > 0: parts.append(f"{k}={v}")
+            elif v:
+                parts.append(f"{k}={_url(str(v))}")
+        return "/master" + (("?" + "&".join(parts)) if parts else "")
+
+    # Cross-source filter: # of sources
+    sidebar += '<div class="group"><h3>Sources confirming</h3>'
+    sidebar += f'<a class="filter{ " active" if min_sources == 0 else ""}" href="{_link(min_sources=0)}">Any</a>'
+    sidebar += f'<a class="filter{ " active" if min_sources == 2 else ""}" href="{_link(min_sources=2)}">2+ sources <span class="n">{overview.get("multi_source")}</span></a>'
+    sidebar += f'<a class="filter{ " active" if min_sources == 3 else ""}" href="{_link(min_sources=3)}">3+ sources <span class="n">{overview.get("three_plus")}</span></a>'
+    sidebar += "</div>"
+
+    # Source membership filter (which sources are present)
+    sidebar += '<div class="group"><h3>Includes source</h3>'
+    sidebar += f'<a class="filter{ " active" if not contains_source else ""}" href="{_link(contains_source="")}">Any</a>'
+    for b in source_buckets:
+        active = " active" if b["source"] == contains_source else ""
+        sidebar += f'<a class="filter{active}" href="{_link(contains_source=b["source"])}">{_h(b["source"])} <span class="n">{b["n"]}</span></a>'
+    sidebar += "</div>"
+
+    # Photographed
+    sidebar += '<div class="group"><h3>Photographed</h3>'
+    sidebar += f'<a class="filter{ " active" if min_photos == 0 else ""}" href="{_link(min_photos=0)}">Any</a>'
+    sidebar += f'<a class="filter{ " active" if min_photos == 5 else ""}" href="{_link(min_photos=5)}">5+ photos <span class="n">{overview.get("photo_5plus")}</span></a>'
+    sidebar += f'<a class="filter{ " active" if min_photos == 20 else ""}" href="{_link(min_photos=20)}">20+ photos <span class="n">{overview.get("photo_20plus")}</span></a>'
+    sidebar += "</div>"
+
+    # Endorsements
+    sidebar += '<div class="group"><h3>Endorsements</h3>'
+    sidebar += f'<a class="filter{ " active" if only_hidden_gem == "1" else ""}" href="{_link(only_hidden_gem="1" if only_hidden_gem != "1" else "")}">Hidden-gem flag <span class="n">{overview.get("hidden_gem")}</span></a>'
+    sidebar += f'<a class="filter{ " active" if only_locationscout == "1" else ""}" href="{_link(only_locationscout="1" if only_locationscout != "1" else "")}">Locationscout endorsed <span class="n">{overview.get("locationscout")}</span></a>'
+    sidebar += "</div>"
+
+    # Type
+    sidebar += '<div class="group"><h3>Type</h3>'
+    sidebar += f'<a class="filter{ " active" if not poi_type else ""}" href="{_link(poi_type="")}">All <span class="n">{overview.get("total")}</span></a>'
+    for b in type_buckets:
+        active = " active" if b["poi_type"] == poi_type else ""
+        sidebar += f'<a class="filter{active}" href="{_link(poi_type=b["poi_type"] or "")}">{_h(b["poi_type"] or "(unknown)")} <span class="n">{b["n"]}</span></a>'
+    sidebar += "</div>"
+
+    # Region
+    sidebar += '<div class="group"><h3>Region</h3>'
+    sidebar += f'<a class="filter{ " active" if not region else ""}" href="{_link(region="")}">All</a>'
+    for b in region_buckets:
+        if b["n"] == 0: continue
+        active = " active" if b["name"] == region else ""
+        sidebar += f'<a class="filter{active}" href="{_link(region=b["name"])}">{_h(b["name"])} <span class="n">{b["n"]}</span></a>'
+    sidebar += "</div>"
+    sidebar += "</aside>"
+
+    # Pagination
+    page_links = ""
+    for p in range(max(1, page - 4), min(pages, page + 4) + 1):
+        active = " active" if p == page else ""
+        page_links += f'<a class="{active.strip()}" href="{_link(page=p)}">{p}</a>'
+    if pages > page + 4:
+        page_links += f' <a href="{_link(page=pages)}">last ({pages})</a>'
+
+    overview_html = f"""
+<div class="overview">
+  <div class="stat"><span class="v">{overview.get('total')}</span>master places</div>
+  <div class="stat"><span class="v">{overview.get('multi_source')}</span>2+ sources</div>
+  <div class="stat"><span class="v">{overview.get('three_plus')}</span>3+ sources</div>
+  <div class="stat"><span class="v">{overview.get('photo_5plus')}</span>5+ photos</div>
+  <div class="stat"><span class="v">{overview.get('photo_20plus')}</span>20+ photos</div>
+  <div class="stat"><span class="v">{overview.get('hidden_gem')}</span>hidden gems</div>
+  <div class="stat"><span class="v">{overview.get('locationscout')}</span>locationscout</div>
+</div>
+"""
+
+    rows_html = ""
+    for r in rows:
+        srcs = r.get("sources") or []
+        src_pills = "".join(f'<span class="pill source">{_h(s)}</span>' for s in srcs)
+        photo_pill = f'<span class="pill photo">📷 {r["photo_count"]}</span>' if r.get("photo_count") else ""
+        gem_pill = '<span class="pill gem">gem</span>' if r.get("is_hidden_gem") else ''
+        ls_pill = '<span class="pill ls">📸 LS</span>' if r.get("locationscout_endorsed") else ''
+        summary = (r.get("summary") or "")[:140]
+
+        rows_html += f"""
+        <tr>
+          <td class="name">{_h(r['name'])} {gem_pill}{ls_pill}{photo_pill}<br>
+            {('<span style="color:var(--ink-3); font-size:11px;">' + _h(summary) + '</span>') if summary else ''}
+          </td>
+          <td><span class="pill type">{_h(r['poi_type'] or '—')}</span></td>
+          <td><span class="pill count">{r['source_count']}×</span><br>{src_pills}</td>
+          <td class="regions">{_h(r.get('regions') or '—')}</td>
+          <td class="coord">{_fmt_coord(r['lat'], r['lng'])}</td>
+        </tr>"""
+
+    table_html = f"""
+<section class="results">
+  {overview_html}
+  <div class="summary-bar">
+    <div class="count">{total} of {overview.get('total')} master places{('  ·  filtered') if (q or poi_type or region or contains_source or min_sources or min_photos or only_hidden_gem or only_locationscout) else ''}</div>
+    <div class="pages">{page_links}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th><th>Type</th><th>Sources</th><th>Region</th><th>Centroid</th>
+      </tr>
+    </thead>
+    <tbody>{rows_html or '<tr><td colspan="5">No master places match.</td></tr>'}</tbody>
+  </table>
+</section>
+"""
+
+    return head + sidebar + table_html + "</main></body></html>"
+
+
 @app.get("/places", response_class=HTMLResponse)
 def places(
     q: str = Query("", description="Name search."),
     poi_type: str = Query("", description="Filter by poi_type."),
     region: str = Query("", description="Filter by region name."),
+    source: str = Query("", description="Filter by source."),
+    cross_ref: str = Query("", description="'1' to show only rows confirmed by another source."),
+    endorsed_by: str = Query("", description="Filter by endorsement (e.g. 'locationscout', 'hidden_gem')."),
+    min_photos: int = Query(0, description="Min Wikimedia Commons photo count within 300m."),
     page: int = Query(1, ge=1),
 ) -> str:
     """Paginated raw view of named POIs (GNIS + others, excluding UGRC trails)."""
@@ -628,6 +977,21 @@ def places(
             "WHERE pr.poi_id = poi.id AND r.name = :region)"
         )
         params["region"] = region
+    if source:
+        where.append("poi.source = :source")
+        params["source"] = source
+    if cross_ref == "1":
+        where.append(
+            "(poi.metadata_tags ? 'cross_refs' "
+            "OR poi.metadata_tags ? 'cross_ref')"
+        )
+    if endorsed_by == "locationscout":
+        where.append("poi.metadata_tags ? 'locationscout'")
+    elif endorsed_by == "hidden_gem":
+        where.append("poi.is_hidden_gem = TRUE")
+    if min_photos > 0:
+        where.append("(poi.metadata_tags->'wikimedia'->>'photo_count')::int >= :min_photos")
+        params["min_photos"] = min_photos
 
     where_clause = " AND ".join(where)
 
@@ -641,10 +1005,13 @@ def places(
                poi.metadata_tags->>'gnis_county' AS county,
                poi.metadata_tags->>'gnis_feature_class' AS gnis_class,
                poi.metadata_tags->>'summary' AS summary,
-               poi.metadata_tags->'cross_ref'->>'matched_source' AS xref_source,
-               poi.metadata_tags->'cross_ref'->>'matched_name'   AS xref_name,
-               (poi.metadata_tags->'cross_ref'->>'distance_m')::float AS xref_dist,
-               (poi.metadata_tags->'cross_ref'->>'name_score')::int   AS xref_score,
+               COALESCE(
+                 poi.metadata_tags->'cross_refs',
+                 CASE WHEN poi.metadata_tags ? 'cross_ref'
+                      THEN jsonb_build_array(poi.metadata_tags->'cross_ref')
+                      ELSE '[]'::jsonb END
+               ) AS xrefs,
+               (poi.metadata_tags->'wikimedia'->>'photo_count')::int AS photo_count,
                poi.elevation_ft,
                (SELECT string_agg(r.name, ', ') FROM poi_region pr
                   JOIN pilot_regions r ON r.id = pr.region_id
@@ -653,7 +1020,10 @@ def places(
                ST_X(geom) AS lng
         FROM utah_poi poi
         WHERE {where_clause}
-        ORDER BY (poi.metadata_tags ? 'cross_ref') DESC, poi.name
+        ORDER BY
+          COALESCE((poi.metadata_tags->'wikimedia'->>'photo_count')::int, 0) DESC,
+          (poi.metadata_tags ? 'cross_refs' OR poi.metadata_tags ? 'cross_ref') DESC,
+          poi.name
         LIMIT :limit OFFSET :offset
         """,
         **params,
@@ -684,6 +1054,26 @@ def places(
         "GROUP BY source ORDER BY n DESC"
     )
 
+    endorsement_counts = _q(
+        """
+        SELECT
+          (SELECT count(*) FROM utah_poi
+            WHERE source != 'ugrc' AND metadata_tags ? 'locationscout')   AS locationscout,
+          (SELECT count(*) FROM utah_poi
+            WHERE source != 'ugrc' AND is_hidden_gem)                     AS hidden_gem,
+          (SELECT count(*) FROM snippets
+            WHERE source = 'locationscout' AND promoted_poi_id IS NULL)   AS locationscout_orphans,
+          (SELECT count(*) FROM utah_poi
+            WHERE source != 'ugrc' AND metadata_tags ? 'wikimedia')       AS with_photos,
+          (SELECT count(*) FROM utah_poi
+            WHERE source != 'ugrc'
+              AND (metadata_tags->'wikimedia'->>'photo_count')::int >= 5) AS with_5plus,
+          (SELECT count(*) FROM utah_poi
+            WHERE source != 'ugrc'
+              AND (metadata_tags->'wikimedia'->>'photo_count')::int >= 20) AS with_20plus
+        """
+    )[0]
+
     return _render_places(
         rows=rows,
         total=total,
@@ -692,9 +1082,14 @@ def places(
         q=q,
         poi_type=poi_type,
         region=region,
+        source=source,
+        cross_ref=cross_ref,
+        endorsed_by=endorsed_by,
+        min_photos=min_photos,
         type_buckets=type_buckets,
         region_buckets=region_buckets,
         source_buckets=source_buckets,
+        endorsement_counts=endorsement_counts,
     )
 
 
@@ -707,9 +1102,14 @@ def _render_places(
     q: str,
     poi_type: str,
     region: str,
+    source: str,
+    cross_ref: str,
+    endorsed_by: str,
+    min_photos: int,
     type_buckets: list[dict[str, Any]],
     region_buckets: list[dict[str, Any]],
     source_buckets: list[dict[str, Any]],
+    endorsement_counts: dict[str, Any],
 ) -> str:
     head = f"""<!doctype html>
 <html lang="en"><head>
@@ -759,6 +1159,7 @@ def _render_places(
   .pill.gem {{ background: rgba(181, 104, 57, 0.18); color: var(--clay); }}
   .pill.source {{ background: rgba(44, 88, 113, 0.16); color: var(--water); }}
   .pill.xref {{ background: rgba(44, 69, 48, 0.18); color: var(--pine); }}
+  .pill.photo {{ background: rgba(181, 104, 57, 0.20); color: var(--clay); }}
   .xref-detail {{ font-size: 11px; color: var(--ink-3); margin-top: 2px; }}
 </style></head><body>
 <header>
@@ -781,29 +1182,57 @@ def _render_places(
         <input type="text" name="q" value="{_h(q)}" placeholder="delicate, mesa, geyser…">
         <input type="hidden" name="poi_type" value="{_h(poi_type)}">
         <input type="hidden" name="region" value="{_h(region)}">
+        <input type="hidden" name="source" value="{_h(source)}">
+        <input type="hidden" name="cross_ref" value="{_h(cross_ref)}">
         <button type="submit">Filter</button>
         <a href="/places" class="reset">reset all</a>
       </form>
     </div>
     """
 
-    sidebar += '<div class="group"><h3>Type</h3>'
-    sidebar += f'<a class="filter{ " active" if not poi_type else ""}" href="{_places_link(region=region, q=q)}">All <span class="n">{sum(b["n"] for b in type_buckets)}</span></a>'
-    for b in type_buckets:
-        active = " active" if b["poi_type"] == poi_type else ""
-        sidebar += f'<a class="filter{active}" href="{_places_link(poi_type=b["poi_type"] or "", region=region, q=q)}">{_h(b["poi_type"] or "(unknown)")} <span class="n">{b["n"]}</span></a>'
+    sidebar += '<div class="group"><h3>Cross-source confirmation</h3>'
+    sidebar += f'<a class="filter{ " active" if cross_ref != "1" else ""}" href="{_places_link(poi_type=poi_type, region=region, source=source, endorsed_by=endorsed_by, min_photos=min_photos, q=q)}">All places</a>'
+    sidebar += f'<a class="filter{ " active" if cross_ref == "1" else ""}" href="{_places_link(poi_type=poi_type, region=region, source=source, endorsed_by=endorsed_by, min_photos=min_photos, q=q, cross_ref="1")}">Confirmed by another source</a>'
     sidebar += "</div>"
 
-    sidebar += '<div class="group"><h3>Region</h3>'
-    sidebar += f'<a class="filter{ " active" if not region else ""}" href="{_places_link(poi_type=poi_type, q=q)}">All</a>'
-    for b in region_buckets:
-        active = " active" if b["name"] == region else ""
-        sidebar += f'<a class="filter{active}" href="{_places_link(poi_type=poi_type, region=b["name"], q=q)}">{_h(b["name"])} <span class="n">{b["n"]}</span></a>'
+    sidebar += '<div class="group"><h3>Photographed</h3>'
+    sidebar += f'<a class="filter{ " active" if min_photos == 0 else ""}" href="{_places_link(poi_type=poi_type, region=region, source=source, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by)}">Any</a>'
+    sidebar += f'<a class="filter{ " active" if min_photos == 1 else ""}" href="{_places_link(poi_type=poi_type, region=region, source=source, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=1)}">Has Wikimedia photos <span class="n">{endorsement_counts.get("with_photos") or 0}</span></a>'
+    sidebar += f'<a class="filter{ " active" if min_photos == 5 else ""}" href="{_places_link(poi_type=poi_type, region=region, source=source, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=5)}">5+ photos <span class="n">{endorsement_counts.get("with_5plus") or 0}</span></a>'
+    sidebar += f'<a class="filter{ " active" if min_photos == 20 else ""}" href="{_places_link(poi_type=poi_type, region=region, source=source, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=20)}">20+ photos (very popular) <span class="n">{endorsement_counts.get("with_20plus") or 0}</span></a>'
+    sidebar += "</div>"
+
+    sidebar += '<div class="group"><h3>Endorsements</h3>'
+    sidebar += f'<a class="filter{ " active" if not endorsed_by else ""}" href="{_places_link(poi_type=poi_type, region=region, source=source, q=q, cross_ref=cross_ref, min_photos=min_photos)}">Any</a>'
+    sidebar += f'<a class="filter{ " active" if endorsed_by == "locationscout" else ""}" href="{_places_link(poi_type=poi_type, region=region, source=source, q=q, cross_ref=cross_ref, endorsed_by="locationscout", min_photos=min_photos)}">Locationscout endorsed <span class="n">{endorsement_counts.get("locationscout") or 0}</span></a>'
+    sidebar += f'<a class="filter{ " active" if endorsed_by == "hidden_gem" else ""}" href="{_places_link(poi_type=poi_type, region=region, source=source, q=q, cross_ref=cross_ref, endorsed_by="hidden_gem", min_photos=min_photos)}">Hidden-gem flag <span class="n">{endorsement_counts.get("hidden_gem") or 0}</span></a>'
+    orphans = endorsement_counts.get("locationscout_orphans") or 0
+    if orphans:
+        sidebar += (
+            f'<div class="filter" style="font-size:11px;color:var(--ink-3);margin-top:6px">'
+            f'+{orphans} locationscout listings without coords (in snippets — not on this page)</div>'
+        )
     sidebar += "</div>"
 
     sidebar += '<div class="group"><h3>Source</h3>'
+    sidebar += f'<a class="filter{ " active" if not source else ""}" href="{_places_link(poi_type=poi_type, region=region, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos)}">All <span class="n">{sum(b["n"] for b in source_buckets)}</span></a>'
     for b in source_buckets:
-        sidebar += f'<div class="filter">{_h(b["source"])} <span class="n">{b["n"]}</span></div>'
+        active = " active" if b["source"] == source else ""
+        sidebar += f'<a class="filter{active}" href="{_places_link(poi_type=poi_type, region=region, source=b["source"], q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos)}">{_h(b["source"])} <span class="n">{b["n"]}</span></a>'
+    sidebar += "</div>"
+
+    sidebar += '<div class="group"><h3>Type</h3>'
+    sidebar += f'<a class="filter{ " active" if not poi_type else ""}" href="{_places_link(region=region, source=source, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos)}">All <span class="n">{sum(b["n"] for b in type_buckets)}</span></a>'
+    for b in type_buckets:
+        active = " active" if b["poi_type"] == poi_type else ""
+        sidebar += f'<a class="filter{active}" href="{_places_link(poi_type=b["poi_type"] or "", region=region, source=source, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos)}">{_h(b["poi_type"] or "(unknown)")} <span class="n">{b["n"]}</span></a>'
+    sidebar += "</div>"
+
+    sidebar += '<div class="group"><h3>Region</h3>'
+    sidebar += f'<a class="filter{ " active" if not region else ""}" href="{_places_link(poi_type=poi_type, source=source, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos)}">All</a>'
+    for b in region_buckets:
+        active = " active" if b["name"] == region else ""
+        sidebar += f'<a class="filter{active}" href="{_places_link(poi_type=poi_type, region=b["name"], source=source, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos)}">{_h(b["name"])} <span class="n">{b["n"]}</span></a>'
     sidebar += "</div>"
 
     sidebar += "</aside>"
@@ -811,21 +1240,32 @@ def _render_places(
     page_links = ""
     for p in range(max(1, page - 4), min(pages, page + 4) + 1):
         active = " active" if p == page else ""
-        page_links += f'<a class="{active.strip()}" href="{_places_link(poi_type=poi_type, region=region, q=q, page=p)}">{p}</a>'
+        page_links += f'<a class="{active.strip()}" href="{_places_link(poi_type=poi_type, region=region, source=source, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos, page=p)}">{p}</a>'
     if pages > page + 4:
-        page_links += f' <a href="{_places_link(poi_type=poi_type, region=region, q=q, page=pages)}">last ({pages})</a>'
+        page_links += f' <a href="{_places_link(poi_type=poi_type, region=region, source=source, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos, page=pages)}">last ({pages})</a>'
+
+    def _xref_html(refs: list[dict[str, Any]] | None) -> str:
+        if not refs:
+            return ""
+        n = len(refs)
+        label = "✓ all 3 sources" if n >= 2 else f"✓ {refs[0].get('matched_source')}"
+        details = "<br>".join(
+            f"→ {_h(ref.get('matched_name'))} ({_h(ref.get('matched_source'))} · "
+            f"{ref.get('distance_m', '?')}m · {ref.get('name_score', '?')}%)"
+            for ref in refs
+        )
+        return f'<span class="pill xref">{label}</span><div class="xref-detail">{details}</div>'
 
     rows_html = "".join(
         f"""
         <tr>
-          <td class="name">{_h(r['name'])}{' <span class="pill gem">gem</span>' if r.get('is_hidden_gem') else ''}<br>
+          <td class="name">{_h(r['name'])}{' <span class="pill gem">gem</span>' if r.get('is_hidden_gem') else ''}{f' <span class="pill photo">📷 {r["photo_count"]}</span>' if r.get('photo_count') else ''}<br>
             <span style="color:var(--ink-3); font-size:11px;">{_h(r.get('gnis_class') or '')}</span>
           </td>
           <td><span class="pill type">{_h(r['poi_type'] or '—')}</span></td>
           <td>
             <span class="pill source">{_h(r['source'])}</span>
-            {('<span class="pill xref">✓ both</span>' if r.get('xref_source') else '')}
-            {(f'<div class="xref-detail">→ {_h(r["xref_name"])} ({_h(r["xref_source"])} · {r.get("xref_dist", "?")}m · {r.get("xref_score", "?")}%)</div>' if r.get('xref_source') else '')}
+            {_xref_html(r.get('xrefs'))}
           </td>
           <td class="regions">{_h(r.get('regions') or '—')}</td>
           <td>{_h(r.get('county') or '—')}</td>
@@ -856,11 +1296,30 @@ def _render_places(
     return head + sidebar + table_html + "</main></body></html>"
 
 
-def _places_link(*, poi_type: str = "", region: str = "", q: str = "", page: int = 1) -> str:
+def _places_link(
+    *,
+    poi_type: str = "",
+    region: str = "",
+    source: str = "",
+    cross_ref: str = "",
+    endorsed_by: str = "",
+    min_photos: int = 0,
+    q: str = "",
+    page: int = 1,
+) -> str:
     parts: list[str] = []
-    for k, v in (("q", q), ("poi_type", poi_type), ("region", region)):
+    for k, v in (
+        ("q", q),
+        ("poi_type", poi_type),
+        ("region", region),
+        ("source", source),
+        ("cross_ref", cross_ref),
+        ("endorsed_by", endorsed_by),
+    ):
         if v:
             parts.append(f"{k}={_url(v)}")
+    if min_photos > 0:
+        parts.append(f"min_photos={min_photos}")
     if page > 1:
         parts.append(f"page={page}")
     qs = ("?" + "&".join(parts)) if parts else ""

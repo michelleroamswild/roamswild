@@ -151,101 +151,114 @@ def ingest_osm(radius_mi: float | None = None) -> int:
     return kept
 
 
+GEO_SOURCES = ("gnis", "osm", "ugrc_osp", "nhd")
+
+
 def mark_cross_references(
-    distance_m: float = 250.0, name_threshold: int = 78
-) -> dict[str, int]:
-    """Find (GNIS, OSM) pairs within ``distance_m`` whose names fuzzy-match.
+    distance_m: float = 250.0,
+    name_threshold: int = 78,
+    sources: tuple[str, ...] = GEO_SOURCES,
+) -> dict[str, Any]:
+    """For each pair of geo sources, find rows within ``distance_m`` whose
+    names fuzzy-match and append a cross-reference entry on both sides.
 
-    Both rows are kept. Each side gets a ``metadata_tags.cross_ref`` block
-    pointing at the matched row on the other side (id, source, name, distance,
-    name-similarity score) so you can see at a glance which features are
-    confirmed by both sources.
-
-    Each row's cross_ref is reset at the start of the pass so re-running picks
-    up the latest neighborhood.
+    Each ``utah_poi.metadata_tags.cross_refs`` is an array of refs (one per
+    matching source) so a feature confirmed by GNIS + OSM + OSP carries two
+    refs. Re-running resets all cross_refs first.
     """
-    matched = 0
-    near_miss = 0
+    matched_pairs_by_pair: dict[str, int] = {}
+    near_miss_by_pair: dict[str, int] = {}
+    # poi_id -> list[ref dict] accumulator before bulk write.
+    refs_by_poi: dict[str, list[dict[str, Any]]] = {}
 
     with session_scope() as s:
-        # Reset prior cross_ref annotations so reruns reflect current data.
+        # Reset both old single-ref and new array forms so reruns are clean.
         s.execute(
             text(
-                "UPDATE utah_poi SET metadata_tags = metadata_tags - 'cross_ref' "
-                "WHERE source IN ('gnis','osm') AND metadata_tags ? 'cross_ref'"
-            )
+                "UPDATE utah_poi "
+                "SET metadata_tags = (metadata_tags - 'cross_ref') - 'cross_refs' "
+                "WHERE source = ANY(:sources) "
+                "AND (metadata_tags ? 'cross_ref' OR metadata_tags ? 'cross_refs')"
+            ),
+            {"sources": list(sources)},
         )
 
-        candidates = s.execute(
-            text(
-                """
-                SELECT gnis.id::text  AS gnis_id,
-                       gnis.name      AS gnis_name,
-                       gnis.poi_type  AS gnis_type,
-                       osm.id::text   AS osm_id,
-                       osm.name       AS osm_name,
-                       osm.poi_type   AS osm_type,
-                       ST_Distance(gnis.geom::geography, osm.geom::geography) AS dist_m
-                FROM utah_poi gnis
-                JOIN utah_poi osm ON
-                  osm.source = 'osm'
-                  AND ST_DWithin(gnis.geom::geography, osm.geom::geography, :dist)
-                WHERE gnis.source = 'gnis'
-                ORDER BY ST_Distance(gnis.geom::geography, osm.geom::geography)
-                """
-            ),
-            {"dist": distance_m},
-        ).mappings().all()
+        for i, src_a in enumerate(sources):
+            for src_b in sources[i + 1:]:
+                pair_key = f"{src_a}<->{src_b}"
+                rows = s.execute(
+                    text(
+                        """
+                        SELECT a.id::text AS a_id, a.name AS a_name, a.poi_type AS a_type,
+                               b.id::text AS b_id, b.name AS b_name, b.poi_type AS b_type,
+                               ST_Distance(a.geom::geography, b.geom::geography) AS dist_m
+                        FROM utah_poi a
+                        JOIN utah_poi b ON
+                          b.source = :src_b
+                          AND ST_DWithin(a.geom::geography, b.geom::geography, :dist)
+                        WHERE a.source = :src_a
+                        """
+                    ),
+                    {"src_a": src_a, "src_b": src_b, "dist": distance_m},
+                ).mappings().all()
 
-        for c in candidates:
-            score = int(fuzz.token_set_ratio(c["gnis_name"], c["osm_name"]))
-            if score < name_threshold:
-                near_miss += 1
-                continue
+                pair_matched = 0
+                pair_near = 0
+                for r in rows:
+                    score = int(fuzz.token_set_ratio(r["a_name"] or "", r["b_name"] or ""))
+                    if score < name_threshold:
+                        pair_near += 1
+                        continue
+                    dist = round(float(r["dist_m"]), 1)
+                    refs_by_poi.setdefault(r["a_id"], []).append(
+                        {
+                            "matched_id": r["b_id"],
+                            "matched_source": src_b,
+                            "matched_name": r["b_name"],
+                            "matched_poi_type": r["b_type"],
+                            "distance_m": dist,
+                            "name_score": score,
+                        }
+                    )
+                    refs_by_poi.setdefault(r["b_id"], []).append(
+                        {
+                            "matched_id": r["a_id"],
+                            "matched_source": src_a,
+                            "matched_name": r["a_name"],
+                            "matched_poi_type": r["a_type"],
+                            "distance_m": dist,
+                            "name_score": score,
+                        }
+                    )
+                    pair_matched += 1
 
-            gnis_ref = {
-                "matched_id": c["osm_id"],
-                "matched_source": "osm",
-                "matched_name": c["osm_name"],
-                "matched_poi_type": c["osm_type"],
-                "distance_m": round(float(c["dist_m"]), 1),
-                "name_score": score,
-            }
-            osm_ref = {
-                "matched_id": c["gnis_id"],
-                "matched_source": "gnis",
-                "matched_name": c["gnis_name"],
-                "matched_poi_type": c["gnis_type"],
-                "distance_m": round(float(c["dist_m"]), 1),
-                "name_score": score,
-            }
+                matched_pairs_by_pair[pair_key] = pair_matched
+                near_miss_by_pair[pair_key] = pair_near
 
+        # Bulk write the accumulated refs.
+        for poi_id, refs in refs_by_poi.items():
             s.execute(
                 text(
                     "UPDATE utah_poi "
-                    "SET metadata_tags = metadata_tags || jsonb_build_object('cross_ref', CAST(:ref AS jsonb)) "
+                    "SET metadata_tags = metadata_tags "
+                    "  || jsonb_build_object('cross_refs', CAST(:refs AS jsonb)) "
                     "WHERE id = CAST(:id AS uuid)"
                 ),
-                {"id": c["gnis_id"], "ref": _json_dump(gnis_ref)},
+                {"id": poi_id, "refs": _json_dump(refs)},
             )
-            s.execute(
-                text(
-                    "UPDATE utah_poi "
-                    "SET metadata_tags = metadata_tags || jsonb_build_object('cross_ref', CAST(:ref AS jsonb)) "
-                    "WHERE id = CAST(:id AS uuid)"
-                ),
-                {"id": c["osm_id"], "ref": _json_dump(osm_ref)},
-            )
-            matched += 1
 
-        gnis_total = s.execute(text("SELECT count(*) FROM utah_poi WHERE source = 'gnis'")).scalar_one()
-        osm_total = s.execute(text("SELECT count(*) FROM utah_poi WHERE source = 'osm'")).scalar_one()
+        totals = {
+            f"{src}_rows": s.execute(
+                text("SELECT count(*) FROM utah_poi WHERE source = :s"), {"s": src}
+            ).scalar_one()
+            for src in sources
+        }
 
     return {
-        "matched_pairs": matched,
-        "near_miss_proximity_only": near_miss,
-        "gnis_rows": gnis_total,
-        "osm_rows": osm_total,
+        "matched_pairs": matched_pairs_by_pair,
+        "near_miss_proximity_only": near_miss_by_pair,
+        "rows_with_cross_refs": len(refs_by_poi),
+        **totals,
     }
 
 

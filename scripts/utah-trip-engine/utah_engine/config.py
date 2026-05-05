@@ -26,5 +26,7 @@ class Settings(BaseSettings):
         alias="REDDIT_USER_AGENT",
     )
 
+    nps_api_key: str = Field(default="DEMO_KEY", alias="NPS_API_KEY")
+
 
 settings = Settings()

@@ -127,14 +127,86 @@ def ingest_seed(
     ),
     source: str = typer.Option("atlas_obscura", help="Source label written into utah_poi.source."),
     poi_type: str = typer.Option("hidden_gem", help="poi_type for all rows in the file."),
+    enforce_radius: bool = typer.Option(
+        True,
+        "--enforce-radius/--no-enforce-radius",
+        help="Skip rows outside RADIUS_MI from Moab. Disable for state-wide datasets.",
+    ),
 ) -> None:
     """Load a hand-curated POI list from a JSON seed file."""
     from pathlib import Path
 
     from utah_engine.seeded import ingest_seed_file
 
-    counts = ingest_seed_file(Path(file), source=source, poi_type=poi_type)
+    counts = ingest_seed_file(
+        Path(file), source=source, poi_type=poi_type, enforce_radius=enforce_radius
+    )
     typer.echo(f"Seed ingest from {file}:")
+    for k, v in counts.items():
+        typer.echo(f"  {k}: {v}")
+
+
+@ingest_app.command("wikimedia-photos")
+def ingest_wikimedia_photos(
+    radius_mi: float = typer.Option(None, help="Override RADIUS_MI from .env."),
+    cluster_radius_m: float = typer.Option(300.0, help="Max distance to associate a photo with a POI."),
+) -> None:
+    """Annotate POIs with Wikimedia Commons photo density (popularity signal)."""
+    from utah_engine.wikimedia import assign_to_pois, harvest_photos
+
+    typer.echo("Harvesting Wikimedia Commons photos in Moab radius…")
+    photos = harvest_photos(radius_mi=radius_mi)
+    typer.echo(f"Harvested {len(photos)} unique photos")
+    counts = assign_to_pois(photos, cluster_radius_m=cluster_radius_m)
+    typer.echo("Wikimedia photo annotation results:")
+    for k, v in counts.items():
+        typer.echo(f"  {k}: {v}")
+
+
+@ingest_app.command("nhd")
+def ingest_nhd_cmd(
+    radius_mi: float = typer.Option(None, help="Override RADIUS_MI from .env."),
+) -> None:
+    """Pull NHD named hydrography points (springs, falls, geysers)."""
+    from utah_engine.nhd import ingest_nhd
+
+    counts = ingest_nhd(radius_mi=radius_mi)
+    typer.echo(f"NHD ingest: kept {counts['kept']}, skipped {counts['skipped']}")
+
+
+@ingest_app.command("nps-places")
+def ingest_nps_places_cmd() -> None:
+    """Pull NPS in-park named POIs (overlooks, trailheads, scenic features)."""
+    from utah_engine.nps_places import ingest_nps_places
+
+    counts = ingest_nps_places()
+    typer.echo("NPS Places ingest:")
+    for k, v in counts.items():
+        typer.echo(f"  {k}: {v}")
+
+
+@ingest_app.command("mrds")
+def ingest_mrds_cmd(
+    radius_mi: float = typer.Option(None, help="Override RADIUS_MI from .env."),
+) -> None:
+    """Pull MRDS historical mines + ghost-town markers."""
+    from utah_engine.mrds import ingest_mrds
+
+    counts = ingest_mrds(radius_mi=radius_mi)
+    typer.echo("MRDS ingest:")
+    for k, v in counts.items():
+        typer.echo(f"  {k}: {v}")
+
+
+@ingest_app.command("wikivoyage")
+def ingest_wikivoyage_cmd(
+    radius_mi: float = typer.Option(None, help="Override RADIUS_MI from .env."),
+) -> None:
+    """Pull geo-tagged listings from Wikivoyage articles for Moab-area towns/parks."""
+    from utah_engine.wikivoyage import ingest_wikivoyage
+
+    counts = ingest_wikivoyage(radius_mi=radius_mi)
+    typer.echo("Wikivoyage ingest:")
     for k, v in counts.items():
         typer.echo(f"  {k}: {v}")
 
@@ -173,6 +245,20 @@ def ingest_osm(
 
     n = _run(radius_mi=radius_mi)
     typer.echo(f"OSM ingest: {n} features kept")
+
+
+@app.command("consolidate")
+def consolidate_master(
+    distance_m: float = typer.Option(300.0, help="Spatial cluster radius (meters)."),
+    name_threshold: int = typer.Option(78, help="rapidfuzz token_set_ratio threshold."),
+) -> None:
+    """Rebuild master_places: deduplicated, multi-source-aware POI table."""
+    from utah_engine.master import consolidate
+
+    counts = consolidate(distance_m=distance_m, name_threshold=name_threshold)
+    typer.echo("Master places rebuild:")
+    for k, v in counts.items():
+        typer.echo(f"  {k}: {v}")
 
 
 @app.command("cross-reference")
