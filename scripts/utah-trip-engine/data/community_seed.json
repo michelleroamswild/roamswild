@@ -1,0 +1,14 @@
+[
+  {
+    "slug": "morliver-peak",
+    "name": "Morliver Peak",
+    "lat": 38.39299,
+    "lng": -110.83482,
+    "elevation_ft": 4569,
+    "source_url": "https://www.google.com/maps/search/?api=1&query=38.39299,-110.83482",
+    "description": "Local-name viewpoint at 4,569 ft on Gaia GPS and Google Maps; not in GNIS/OSM/UGRC. Henry Mountains area, ~70 mi west of Moab.",
+    "tags": ["viewpoint", "local-name", "gaia", "henry-mountains"],
+    "_verified": true,
+    "_notes": "Coords from Gaia GPS as reported by user 2026-05-04. Outside the 50mi Moab radius; require --no-enforce-radius to ingest, or expand the pilot radius."
+  }
+]
