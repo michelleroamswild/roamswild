@@ -302,7 +302,7 @@ def _render(
 </section>
 """
 
-    return head + counts_html + matches_html + ambig_html + promoted_html + region_html + sample_html + "</main></body></html>"
+    return head + counts_html + matches_html + ambig_html + promoted_html + region_html + sample_html + "</main>" + _SIDEBAR_SCROLL_JS + "</body></html>"
 
 
 @app.get("/trails", response_class=HTMLResponse)
@@ -440,9 +440,8 @@ def _render_trails(
   main {{ display: grid; grid-template-columns: 280px 1fr; gap: 20px; max-width: 1480px; margin: 0 auto; padding: 20px 32px 80px; }}
   aside {{ background: var(--paper); border: 1px solid var(--line); border-radius: 12px;
     padding: 16px 18px; height: fit-content; position: sticky; top: 20px; }}
-  aside h3 {{ margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
-    color: var(--ink-3); font-weight: 600; }}
-  aside .group {{ margin-bottom: 18px; }}
+  aside h3 {{ margin: 0 0 10px; font-size: 14px; letter-spacing: -0.005em; color: var(--ink); font-weight: 700; }}
+  aside .group {{ margin-bottom: 22px; }}
   aside form input[type=text] {{ width: 100%; padding: 6px 10px; border: 1px solid var(--line);
     border-radius: 8px; font: inherit; }}
   aside form button {{ margin-top: 8px; padding: 6px 12px; background: var(--pine); color: var(--cream);
@@ -546,7 +545,7 @@ def _render_trails(
           <td>{_pill_or_dash(r.get('hike_diff'))}{_pill_or_dash(r.get('bike_diff'))}</td>
           <td class="regions">{_h(r.get('regions') or '—')}</td>
           <td>{_h(r.get('county') or '—')}</td>
-          <td class="coord">{_fmt_coord(r['lat'], r['lng'])}</td>
+          <td class="coord"><a href="https://www.google.com/maps?q={r['lat']},{r['lng']}" target="_blank" rel="noopener">{_fmt_coord(r['lat'], r['lng'])}</a></td>
         </tr>"""
         for r in rows
     )
@@ -569,7 +568,7 @@ def _render_trails(
 </section>
 """
 
-    return head + sidebar + table_html + "</main></body></html>"
+    return head + sidebar + table_html + "</main>" + _SIDEBAR_SCROLL_JS + "</body></html>"
 
 
 def _query_link(use: str = "", *, region: str = "", surface: str = "", q: str = "", page: int = 1) -> str:
@@ -612,6 +611,9 @@ def master(
     min_photos: int = Query(0),
     only_hidden_gem: str = Query(""),
     only_locationscout: str = Query(""),
+    crowdedness: str = Query(""),
+    activity: str = Query(""),
+    only_derived_gem: str = Query(""),
     page: int = Query(1, ge=1),
 ) -> str:
     page_size = 50
@@ -638,6 +640,14 @@ def master(
         where.append("m.is_hidden_gem = TRUE")
     if only_locationscout == "1":
         where.append("m.locationscout_endorsed = TRUE")
+    if crowdedness in ("low", "moderate", "high"):
+        where.append("m.metadata_tags->>'crowdedness' = :crowdedness")
+        params["crowdedness"] = crowdedness
+    if activity:
+        where.append("m.metadata_tags->'activity_tags' ? :activity")
+        params["activity"] = activity
+    if only_derived_gem == "1":
+        where.append("(m.metadata_tags->>'derived_gem')::boolean IS TRUE")
     if region:
         where.append(
             "EXISTS (SELECT 1 FROM pilot_regions r "
@@ -658,6 +668,14 @@ def master(
                m.photo_count,
                m.locationscout_endorsed,
                m.metadata_tags->>'summary' AS summary,
+               m.metadata_tags->'vision'->>'description' AS vision_description,
+               m.metadata_tags->'vision'->'best_time_of_day' AS best_time_of_day,
+               m.metadata_tags->'vision'->>'effort_to_reach' AS effort,
+               m.metadata_tags->>'crowdedness' AS crowdedness_score,
+               m.metadata_tags->'thumbnail'->>'thumb_url' AS thumb_url,
+               m.metadata_tags->'thumbnail'->>'credit' AS thumb_credit,
+               m.metadata_tags->'activity_tags' AS activity_tags,
+               (m.metadata_tags->>'derived_gem')::boolean AS derived_gem,
                (SELECT string_agg(r.name, ', ') FROM pilot_regions r
                   WHERE ST_Contains(r.bounds, m.geom)) AS regions,
                ST_Y(m.geom) AS lat,
@@ -704,17 +722,34 @@ def master(
           (SELECT count(*) FROM master_places WHERE photo_count >= 5)                     AS photo_5plus,
           (SELECT count(*) FROM master_places WHERE photo_count >= 20)                    AS photo_20plus,
           (SELECT count(*) FROM master_places WHERE is_hidden_gem)                        AS hidden_gem,
-          (SELECT count(*) FROM master_places WHERE locationscout_endorsed)               AS locationscout
+          (SELECT count(*) FROM master_places WHERE locationscout_endorsed)               AS locationscout,
+          (SELECT count(*) FROM master_places WHERE metadata_tags ? 'vision')             AS with_vision,
+          (SELECT count(*) FROM master_places WHERE metadata_tags->'thumbnail'->>'thumb_url' IS NOT NULL) AS with_thumbnail,
+          (SELECT count(*) FROM master_places WHERE metadata_tags->>'crowdedness' = 'low')  AS crowd_low,
+          (SELECT count(*) FROM master_places WHERE metadata_tags->>'crowdedness' = 'moderate') AS crowd_moderate,
+          (SELECT count(*) FROM master_places WHERE metadata_tags->>'crowdedness' = 'high') AS crowd_high,
+          (SELECT count(*) FROM master_places WHERE (metadata_tags->>'derived_gem')::boolean) AS derived_gem
         """
     )[0]
+
+    activity_buckets = _q(
+        """
+        SELECT activity AS tag, count(*) AS n
+        FROM master_places m, jsonb_array_elements_text(m.metadata_tags->'activity_tags') activity
+        GROUP BY activity ORDER BY n DESC LIMIT 20
+        """
+    )
 
     return _render_master(
         rows=rows, total=total, page=page, pages=pages,
         q=q, poi_type=poi_type, region=region, contains_source=contains_source,
         min_sources=min_sources, min_photos=min_photos,
         only_hidden_gem=only_hidden_gem, only_locationscout=only_locationscout,
+        crowdedness=crowdedness, activity=activity,
+        only_derived_gem=only_derived_gem,
         type_buckets=type_buckets, region_buckets=region_buckets,
-        source_buckets=source_buckets, overview=overview,
+        source_buckets=source_buckets, activity_buckets=activity_buckets,
+        overview=overview,
     )
 
 
@@ -732,9 +767,13 @@ def _render_master(
     min_photos: int,
     only_hidden_gem: str,
     only_locationscout: str,
+    crowdedness: str,
+    activity: str,
+    only_derived_gem: str,
     type_buckets: list[dict[str, Any]],
     region_buckets: list[dict[str, Any]],
     source_buckets: list[dict[str, Any]],
+    activity_buckets: list[dict[str, Any]],
     overview: dict[str, Any],
 ) -> str:
     head = f"""<!doctype html>
@@ -757,9 +796,9 @@ def _render_master(
   nav a {{ color: var(--ink-2); font-weight: 600; text-decoration: none; padding: 4px 0; border-bottom: 2px solid transparent; }}
   nav a.active {{ color: var(--pine); border-color: var(--pine); }}
   main {{ display: grid; grid-template-columns: 280px 1fr; gap: 20px; max-width: 1480px; margin: 0 auto; padding: 20px 32px 80px; }}
-  aside {{ background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; height: fit-content; position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow-y: auto; }}
-  aside h3 {{ margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; }}
-  aside .group {{ margin-bottom: 18px; }}
+  aside {{ background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; height: fit-content; position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow-y: auto; }}
+  aside h3 {{ margin: 0 0 10px; font-size: 14px; letter-spacing: -0.005em; color: var(--ink); font-weight: 700; }}
+  aside .group {{ margin-bottom: 22px; }}
   aside form input[type=text] {{ width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }}
   aside form button {{ margin-top: 8px; padding: 6px 12px; background: var(--pine); color: var(--cream); border: 0; border-radius: 999px; font: 600 12px/1 inherit; letter-spacing: 0.04em; cursor: pointer; }}
   .filter {{ display: block; padding: 4px 0; color: var(--ink-2); text-decoration: none; font-size: 13px; }}
@@ -790,6 +829,16 @@ def _render_master(
   .pill.count {{ background: rgba(44, 69, 48, 0.18); color: var(--pine); }}
   .pill.photo {{ background: rgba(181, 104, 57, 0.20); color: var(--clay); }}
   .pill.ls {{ background: rgba(74, 77, 63, 0.16); color: var(--ink-2); }}
+  .pill.activity {{ background: rgba(107, 127, 77, 0.10); color: var(--sage); font-size: 10px; font-weight: 500; }}
+  .pill.crowd-low {{ background: rgba(107, 127, 77, 0.18); color: var(--sage); }}
+  .pill.crowd-moderate {{ background: rgba(181, 104, 57, 0.18); color: var(--clay); }}
+  .pill.crowd-high {{ background: rgba(181, 104, 57, 0.30); color: var(--clay); }}
+  .pill.effort {{ background: rgba(44, 88, 113, 0.16); color: var(--water); }}
+  .pill.time {{ background: rgba(74, 77, 63, 0.10); color: var(--ink-2); font-size: 10px; }}
+  .thumb {{ width: 100px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }}
+  .thumb-cell {{ width: 110px; }}
+  .description {{ color: var(--ink-2); font-size: 12px; margin-top: 6px; line-height: 1.45; }}
+  .pill-row {{ margin-top: 6px; line-height: 1.8; }}
 </style></head><body>
 <header>
   <h1>Moab Pilot · Master Places</h1>
@@ -817,6 +866,9 @@ def _render_master(
         <input type="hidden" name="min_photos" value="{min_photos}">
         <input type="hidden" name="only_hidden_gem" value="{_h(only_hidden_gem)}">
         <input type="hidden" name="only_locationscout" value="{_h(only_locationscout)}">
+        <input type="hidden" name="crowdedness" value="{_h(crowdedness)}">
+        <input type="hidden" name="activity" value="{_h(activity)}">
+        <input type="hidden" name="only_derived_gem" value="{_h(only_derived_gem)}">
         <button type="submit">Filter</button>
         <a href="/master" class="reset">reset all</a>
       </form>
@@ -828,6 +880,8 @@ def _render_master(
             q=q, poi_type=poi_type, region=region, contains_source=contains_source,
             min_sources=min_sources, min_photos=min_photos,
             only_hidden_gem=only_hidden_gem, only_locationscout=only_locationscout,
+            crowdedness=crowdedness, activity=activity,
+            only_derived_gem=only_derived_gem,
         )
         merged.update(kw)
         parts: list[str] = []
@@ -852,7 +906,7 @@ def _render_master(
     sidebar += f'<a class="filter{ " active" if not contains_source else ""}" href="{_link(contains_source="")}">Any</a>'
     for b in source_buckets:
         active = " active" if b["source"] == contains_source else ""
-        sidebar += f'<a class="filter{active}" href="{_link(contains_source=b["source"])}">{_h(b["source"])} <span class="n">{b["n"]}</span></a>'
+        sidebar += f'<a class="filter{active}" href="{_link(contains_source=b["source"])}">{_h(_pretty(b["source"]))} <span class="n">{b["n"]}</span></a>'
     sidebar += "</div>"
 
     # Photographed
@@ -866,6 +920,23 @@ def _render_master(
     sidebar += '<div class="group"><h3>Endorsements</h3>'
     sidebar += f'<a class="filter{ " active" if only_hidden_gem == "1" else ""}" href="{_link(only_hidden_gem="1" if only_hidden_gem != "1" else "")}">Hidden-gem flag <span class="n">{overview.get("hidden_gem")}</span></a>'
     sidebar += f'<a class="filter{ " active" if only_locationscout == "1" else ""}" href="{_link(only_locationscout="1" if only_locationscout != "1" else "")}">Locationscout endorsed <span class="n">{overview.get("locationscout")}</span></a>'
+    sidebar += f'<a class="filter{ " active" if only_derived_gem == "1" else ""}" href="{_link(only_derived_gem="1" if only_derived_gem != "1" else "")}">Likely hidden gem (derived) <span class="n">{overview.get("derived_gem")}</span></a>'
+    sidebar += "</div>"
+
+    # Crowdedness
+    sidebar += '<div class="group"><h3>Crowdedness</h3>'
+    sidebar += f'<a class="filter{ " active" if not crowdedness else ""}" href="{_link(crowdedness="")}">Any</a>'
+    for level, count_key in (("low", "crowd_low"), ("moderate", "crowd_moderate"), ("high", "crowd_high")):
+        active = " active" if crowdedness == level else ""
+        sidebar += f'<a class="filter{active}" href="{_link(crowdedness=level)}">{level.title()} <span class="n">{overview.get(count_key)}</span></a>'
+    sidebar += "</div>"
+
+    # Activity
+    sidebar += '<div class="group"><h3>Activity</h3>'
+    sidebar += f'<a class="filter{ " active" if not activity else ""}" href="{_link(activity="")}">Any</a>'
+    for b in activity_buckets[:14]:
+        active = " active" if b["tag"] == activity else ""
+        sidebar += f'<a class="filter{active}" href="{_link(activity=b["tag"])}">{_h(_pretty(b["tag"]))} <span class="n">{b["n"]}</span></a>'
     sidebar += "</div>"
 
     # Type
@@ -873,7 +944,7 @@ def _render_master(
     sidebar += f'<a class="filter{ " active" if not poi_type else ""}" href="{_link(poi_type="")}">All <span class="n">{overview.get("total")}</span></a>'
     for b in type_buckets:
         active = " active" if b["poi_type"] == poi_type else ""
-        sidebar += f'<a class="filter{active}" href="{_link(poi_type=b["poi_type"] or "")}">{_h(b["poi_type"] or "(unknown)")} <span class="n">{b["n"]}</span></a>'
+        sidebar += f'<a class="filter{active}" href="{_link(poi_type=b["poi_type"] or "")}">{_h(_pretty(b["poi_type"]) or "(unknown)")} <span class="n">{b["n"]}</span></a>'
     sidebar += "</div>"
 
     # Region
@@ -903,48 +974,70 @@ def _render_master(
   <div class="stat"><span class="v">{overview.get('photo_20plus')}</span>20+ photos</div>
   <div class="stat"><span class="v">{overview.get('hidden_gem')}</span>hidden gems</div>
   <div class="stat"><span class="v">{overview.get('locationscout')}</span>locationscout</div>
+  <div class="stat"><span class="v">{overview.get('with_thumbnail')}</span>with photo</div>
+  <div class="stat"><span class="v">{overview.get('with_vision')}</span>vision-enriched</div>
 </div>
 """
 
     rows_html = ""
     for r in rows:
         srcs = r.get("sources") or []
-        src_pills = "".join(f'<span class="pill source">{_h(s)}</span>' for s in srcs)
+        src_pills = "".join(f'<span class="pill source">{_h(_pretty(s))}</span>' for s in srcs)
         photo_pill = f'<span class="pill photo">📷 {r["photo_count"]}</span>' if r.get("photo_count") else ""
-        gem_pill = '<span class="pill gem">gem</span>' if r.get("is_hidden_gem") else ''
+        gem_pill = '<span class="pill gem">curator gem</span>' if r.get("is_hidden_gem") else ''
+        derived_gem_pill = '<span class="pill gem">derived gem</span>' if r.get("derived_gem") else ''
         ls_pill = '<span class="pill ls">📸 LS</span>' if r.get("locationscout_endorsed") else ''
-        summary = (r.get("summary") or "")[:140]
+        crowd = r.get("crowdedness_score") or ""
+        crowd_pill = f'<span class="pill crowd-{crowd}">Crowd: {crowd.title()}</span>' if crowd else ''
+        effort = r.get("effort") or ""
+        effort_pill = f'<span class="pill effort">{_pretty(effort)}</span>' if effort else ''
+        best_times = r.get("best_time_of_day") or []
+        time_pills = "".join(f'<span class="pill time">{_h(_pretty(t))}</span>' for t in best_times)
+        activity_tags = r.get("activity_tags") or []
+        activity_pills = "".join(f'<span class="pill activity">{_h(_pretty(t))}</span>' for t in activity_tags[:8])
+        description = (r.get("vision_description") or r.get("summary") or "")[:280]
+        thumb_url = r.get("thumb_url")
+        thumb_cell = (
+            f'<td class="thumb-cell"><img class="thumb" src="{_h(thumb_url)}" alt=""></td>'
+            if thumb_url
+            else '<td class="thumb-cell"></td>'
+        )
 
         rows_html += f"""
         <tr>
-          <td class="name">{_h(r['name'])} {gem_pill}{ls_pill}{photo_pill}<br>
-            {('<span style="color:var(--ink-3); font-size:11px;">' + _h(summary) + '</span>') if summary else ''}
+          {thumb_cell}
+          <td class="name">{_h(r['name'])} {gem_pill}{derived_gem_pill}{ls_pill}{photo_pill}
+            {('<div class="description">' + _h(description) + '</div>') if description else ''}
+            <div class="pill-row">
+              <span class="pill type">{_h(_pretty(r['poi_type']) or '—')}</span>
+              {effort_pill}{crowd_pill}{time_pills}
+            </div>
+            <div class="pill-row">{activity_pills}</div>
           </td>
-          <td><span class="pill type">{_h(r['poi_type'] or '—')}</span></td>
           <td><span class="pill count">{r['source_count']}×</span><br>{src_pills}</td>
           <td class="regions">{_h(r.get('regions') or '—')}</td>
-          <td class="coord">{_fmt_coord(r['lat'], r['lng'])}</td>
+          <td class="coord"><a href="https://www.google.com/maps?q={r['lat']},{r['lng']}" target="_blank" rel="noopener">{_fmt_coord(r['lat'], r['lng'])}</a></td>
         </tr>"""
 
     table_html = f"""
 <section class="results">
   {overview_html}
   <div class="summary-bar">
-    <div class="count">{total} of {overview.get('total')} master places{('  ·  filtered') if (q or poi_type or region or contains_source or min_sources or min_photos or only_hidden_gem or only_locationscout) else ''}</div>
+    <div class="count">{total} of {overview.get('total')} master places{('  ·  filtered') if (q or poi_type or region or contains_source or min_sources or min_photos or only_hidden_gem or only_locationscout or crowdedness or activity) else ''}</div>
     <div class="pages">{page_links}</div>
   </div>
   <table>
     <thead>
       <tr>
-        <th>Name</th><th>Type</th><th>Sources</th><th>Region</th><th>Centroid</th>
+        <th></th><th>Place</th><th>Sources</th><th>Region</th><th>Centroid</th>
       </tr>
     </thead>
-    <tbody>{rows_html or '<tr><td colspan="5">No master places match.</td></tr>'}</tbody>
+    <tbody>{rows_html or '<tr><td colspan="5">No master places match this filter.</td></tr>'}</tbody>
   </table>
 </section>
 """
 
-    return head + sidebar + table_html + "</main></body></html>"
+    return head + sidebar + table_html + "</main>" + _SIDEBAR_SCROLL_JS + "</body></html>"
 
 
 @app.get("/places", response_class=HTMLResponse)
@@ -1132,7 +1225,7 @@ def _render_places(
   nav a.active {{ color: var(--pine); border-color: var(--pine); }}
   main {{ display: grid; grid-template-columns: 280px 1fr; gap: 20px; max-width: 1480px; margin: 0 auto; padding: 20px 32px 80px; }}
   aside {{ background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; height: fit-content; position: sticky; top: 20px; }}
-  aside h3 {{ margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; }}
+  aside h3 {{ margin: 0 0 10px; font-size: 14px; letter-spacing: -0.005em; color: var(--ink); font-weight: 700; }}
   aside .group {{ margin-bottom: 18px; }}
   aside form input[type=text] {{ width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }}
   aside form button {{ margin-top: 8px; padding: 6px 12px; background: var(--pine); color: var(--cream); border: 0; border-radius: 999px; font: 600 12px/1 inherit; letter-spacing: 0.04em; cursor: pointer; }}
@@ -1218,14 +1311,14 @@ def _render_places(
     sidebar += f'<a class="filter{ " active" if not source else ""}" href="{_places_link(poi_type=poi_type, region=region, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos)}">All <span class="n">{sum(b["n"] for b in source_buckets)}</span></a>'
     for b in source_buckets:
         active = " active" if b["source"] == source else ""
-        sidebar += f'<a class="filter{active}" href="{_places_link(poi_type=poi_type, region=region, source=b["source"], q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos)}">{_h(b["source"])} <span class="n">{b["n"]}</span></a>'
+        sidebar += f'<a class="filter{active}" href="{_places_link(poi_type=poi_type, region=region, source=b["source"], q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos)}">{_h(_pretty(b["source"]))} <span class="n">{b["n"]}</span></a>'
     sidebar += "</div>"
 
     sidebar += '<div class="group"><h3>Type</h3>'
     sidebar += f'<a class="filter{ " active" if not poi_type else ""}" href="{_places_link(region=region, source=source, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos)}">All <span class="n">{sum(b["n"] for b in type_buckets)}</span></a>'
     for b in type_buckets:
         active = " active" if b["poi_type"] == poi_type else ""
-        sidebar += f'<a class="filter{active}" href="{_places_link(poi_type=b["poi_type"] or "", region=region, source=source, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos)}">{_h(b["poi_type"] or "(unknown)")} <span class="n">{b["n"]}</span></a>'
+        sidebar += f'<a class="filter{active}" href="{_places_link(poi_type=b["poi_type"] or "", region=region, source=source, q=q, cross_ref=cross_ref, endorsed_by=endorsed_by, min_photos=min_photos)}">{_h(_pretty(b["poi_type"]) or "(unknown)")} <span class="n">{b["n"]}</span></a>'
     sidebar += "</div>"
 
     sidebar += '<div class="group"><h3>Region</h3>'
@@ -1262,7 +1355,7 @@ def _render_places(
           <td class="name">{_h(r['name'])}{' <span class="pill gem">gem</span>' if r.get('is_hidden_gem') else ''}{f' <span class="pill photo">📷 {r["photo_count"]}</span>' if r.get('photo_count') else ''}<br>
             <span style="color:var(--ink-3); font-size:11px;">{_h(r.get('gnis_class') or '')}</span>
           </td>
-          <td><span class="pill type">{_h(r['poi_type'] or '—')}</span></td>
+          <td><span class="pill type">{_h(_pretty(r['poi_type']) or '—')}</span></td>
           <td>
             <span class="pill source">{_h(r['source'])}</span>
             {_xref_html(r.get('xrefs'))}
@@ -1270,7 +1363,7 @@ def _render_places(
           <td class="regions">{_h(r.get('regions') or '—')}</td>
           <td>{_h(r.get('county') or '—')}</td>
           <td>{_h(r.get('elevation_ft') or '—')}</td>
-          <td class="coord">{_fmt_coord(r['lat'], r['lng'])}</td>
+          <td class="coord"><a href="https://www.google.com/maps?q={r['lat']},{r['lng']}" target="_blank" rel="noopener">{_fmt_coord(r['lat'], r['lng'])}</a></td>
         </tr>"""
         for r in rows
     )
@@ -1293,7 +1386,7 @@ def _render_places(
 </section>
 """
 
-    return head + sidebar + table_html + "</main></body></html>"
+    return head + sidebar + table_html + "</main>" + _SIDEBAR_SCROLL_JS + "</body></html>"
 
 
 def _places_link(
@@ -1324,6 +1417,66 @@ def _places_link(
         parts.append(f"page={page}")
     qs = ("?" + "&".join(parts)) if parts else ""
     return f"/places{qs}"
+
+
+_SOURCE_LABELS: dict[str, str] = {
+    "gnis": "GNIS",
+    "osm": "OSM",
+    "ugrc": "UGRC",
+    "ugrc_osp": "UGRC OSP",
+    "nhd": "NHD",
+    "nps": "NPS",
+    "mrds": "MRDS",
+    "wikivoyage": "Wikivoyage",
+    "wikimedia": "Wikimedia",
+    "atlas_obscura": "Atlas Obscura",
+    "darksky": "Dark Sky",
+    "locationscout": "Locationscout",
+    "reddit:r/Moab": "Reddit · r/Moab",
+    "reddit:r/overlanding": "Reddit · r/overlanding",
+    "reddit:r/Utah": "Reddit · r/Utah",
+    "reddit:r/CampingandHiking": "Reddit · r/CampingAndHiking",
+    "reddit:r/hiking": "Reddit · r/hiking",
+}
+
+
+_SIDEBAR_SCROLL_JS = """
+<script>
+(function () {
+  var aside = document.querySelector('aside');
+  if (!aside) return;
+  var key = 'sidebarScrollTop:' + location.pathname;
+  // Restore — wait one tick so layout settles.
+  requestAnimationFrame(function () {
+    var saved = parseInt(sessionStorage.getItem(key) || '0', 10);
+    if (saved > 0) aside.scrollTop = saved;
+  });
+  // Save on scroll (throttled).
+  var t;
+  aside.addEventListener('scroll', function () {
+    clearTimeout(t);
+    t = setTimeout(function () {
+      sessionStorage.setItem(key, String(aside.scrollTop));
+    }, 80);
+  }, { passive: true });
+})();
+</script>
+"""
+
+
+def _pretty(value: Any) -> str:
+    """Display-friendly label: source enums get the canonical capitalization,
+    everything else gets snake_case → Title Case."""
+    if value is None or value == "":
+        return ""
+    s = str(value)
+    if s in _SOURCE_LABELS:
+        return _SOURCE_LABELS[s]
+    if ":" in s or "/" in s:
+        return s
+    if any(c.isupper() for c in s) and "_" not in s:
+        return s
+    return s.replace("_", " ").replace("-", " ").strip().title()
 
 
 def _h(value: Any) -> str:

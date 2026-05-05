@@ -247,6 +247,37 @@ def ingest_osm(
     typer.echo(f"OSM ingest: {n} features kept")
 
 
+@app.command("enrich-master")
+def enrich_master(
+    min_sources_for_vision: int = typer.Option(
+        3, help="Only run vision LLM on master_places with source_count >= this."
+    ),
+    skip_vision: bool = typer.Option(False, "--skip-vision", help="Skip the paid vision pass."),
+) -> None:
+    """Run all Tier 1 enrichment + Tier 3a vision pass over master_places."""
+    from utah_engine import master_enrichment as me
+
+    print("[1/7] Reddit-snippet cross-link…")
+    typer.echo(f"  {me.link_reddit_signals()}")
+    print("[2/7] Activity tags…")
+    typer.echo(f"  {me.derive_activity_tags()}")
+    print("[3/7] Crowdedness heuristic…")
+    typer.echo(f"  {me.compute_crowdedness()}")
+    print("[4/7] Wikimedia thumbnails…")
+    typer.echo(f"  {me.resolve_thumbnails()}")
+    print("[5/7] Sun ephemeris…")
+    typer.echo(f"  {me.compute_sun_ephemeris()}")
+    print("[6/7] Nearby spots…")
+    typer.echo(f"  {me.compute_nearby()}")
+    print("[6b] Derived hidden-gem signal…")
+    typer.echo(f"  {me.compute_derived_gems()}")
+    if skip_vision:
+        typer.echo("[7/7] Vision LLM — skipped (--skip-vision).")
+    else:
+        print(f"[7/7] Vision LLM (source_count >= {min_sources_for_vision})…")
+        typer.echo(f"  {me.enrich_with_vision(only_min_sources=min_sources_for_vision)}")
+
+
 @app.command("consolidate")
 def consolidate_master(
     distance_m: float = typer.Option(300.0, help="Spatial cluster radius (meters)."),
