@@ -135,6 +135,61 @@ Managing agency: {manager}
 New name:"""
 
 
+# Utility-specific prompt — water sources, laundromats, showers. Different
+# from camping because:
+#   - Most names are real businesses/parks; KEEP unless truly generic.
+#   - No "— Agency" suffix (these aren't on managed public land).
+#   - Strip price/condition suffixes ("- $0.25/gal", "- OK", "- NICE").
+#   - Strip mid-word truncations and complete from description.
+UTILITY_PROMPT_TEMPLATE = """Rewrite this {kind_label} location's name into a clean directory entry that reads like a real place name.
+
+Most of these names are already real businesses, parks, or landmarks. KEEP an existing real name when present and only fix it if needed:
+  - Strip price/condition suffixes: "- $0.25/gal", "- OK", "- NICE", "($1)", "(free)", "Per Gallon", quality words.
+  - Strip mid-word truncations and complete the name using the description: "New Brighton State Beach Outdoor Sh" → "New Brighton State Beach Outdoor Showers".
+  - Strip vague prefixes like "The Best", "Cheap", "Random" unless part of the real name.
+
+ONLY replace the name when the original is generic and uninformative. Generic examples: "Rest Area", "Laundromat", "Shower", "Water", "Spot", "Site", "Location", "Place", a single street name with no business attached. In those cases, look at the DESCRIPTION for a real identifier in priority order:
+  1. A specific business/chain name (Shell, Walmart, Maverik, KOA, Truck stop name, named park).
+  2. A landmark or park name.
+  3. The street + town: "Main St (Reno)".
+
+DO NOT append " — BLM/USFS/Agency". Utilities aren't on managed public land.
+Output ONLY the new name on one line. Max 60 chars. No quotes, no preamble.
+
+Examples:
+
+Original: "Circle K"
+Description: A potable water dispenser is located here.
+→ Circle K
+
+Original: "The Water Mill - $ 0.25 Per Gallon"
+Description: A standard filtered water dispenser is located here.
+→ The Water Mill
+
+Original: "Rest Area"
+Description: A free water source is available at this rest area, accessible via a 30-meter hose. Located off I-80 near Truckee.
+→ I-80 Rest Area near Truckee
+
+Original: "Laundromat at Shell Station"
+Description: A small laundromat with three washers and two dryers, attached to a Shell station on Highway 40 in Reno.
+→ Shell Station Laundromat (Reno)
+
+Original: "New Brighton State Beach Outdoor Sh"
+Description: The shower facility offers cold water and is located within New Brighton State Beach.
+→ New Brighton State Beach Outdoor Showers
+
+Original: "Bonham Street Laundromat"
+Description: A simple laundromat with coin-operated machines.
+→ Bonham Street Laundromat
+
+Now rewrite this entry:
+
+Original: "{name}"
+Description: {description}
+
+New name:"""
+
+
 def call_ollama(prompt: str) -> str:
     body = json.dumps({
         'model': MODEL, 'prompt': prompt, 'stream': False,
@@ -180,9 +235,43 @@ PRESERVE_UPPER = {
 # When the output starts with any of these, post_clean_name discards it and
 # uses the fallback (original name).
 PROMPT_LEAK_PREFIXES = re.compile(
-    r'^(based on|looking at|scanning|first[, ]|since (?:the|this|it)|'
-    r"i[' ]?ll |i will |let[' ]?s |to (?:rewrite|determine)|"
-    r"the (?:original|name) (?:is|appears)|here[' ]?s |here is )",
+    r'^(?:'
+    r'based on|looking at|scanning|first[, ]|'
+    # "Since X is..." classification reasoning — broaden to catch quoted names
+    r'since\s|because\s|'
+    # Single-letter classification labels: "A) ..." / "B) ..."
+    r'[ABab]\)\s|'
+    # First-person reasoning
+    r"i[' ]?ll |i will |i would |let[' ]?s |to (?:rewrite|determine)|"
+    # Direct prompt echoes
+    r"the (?:original|name) (?:is|appears|\")|here(?:[' ]?s| is) |"
+    r"strip (?:price|the|trailing|reviewer|this|that|all)|"
+    r"keep an existing|rewrite (?:this|the)|look (?:at|for) the|"
+    # Bare classification statements
+    r'(?:original )?name (?:is )?classified as|"\w[^"]*" (?:is|doesn)|'
+    # The model sometimes leads with a parenthetical assumption
+    r'\(assuming\s'
+    r')',
+    re.IGNORECASE,
+)
+
+# Phrases that should NEVER appear in a real name — dead-giveaway echoes of
+# the prompt template. If any of these substrings show up, post_clean_name
+# discards the output and uses the fallback.
+PROMPT_LEAK_SUBSTRINGS = re.compile(
+    r'(?:'
+    r'is generic|real (?:place|business|landmark)(?: name| identifier)|'
+    r'place identifier|description for|original name|'
+    r'condition suffix|vague prefix|'
+    # Classification framework leaks
+    r'user commentary|real place identifier|'
+    r"fit into (?:either )?category|doesn'?t (?:fit|identify)|"
+    r'(?:is|was) classified as|would classify|'
+    r"not a (?:real|specific) place|"
+    # Trailing prompt leftovers
+    r'\(no public land unit|managing agency identified|'
+    r'(?:not|state or federal) (?:on|managed by) (?:public|BLM|USFS)'
+    r')',
     re.IGNORECASE,
 )
 ALLCAPS_TOKEN = re.compile(r'\b[A-Z]{3,}\b')
@@ -208,7 +297,9 @@ def post_clean_name(name: str, fallback: str = '') -> str:
     if not name: return fallback or name
     s = name.strip()
     # Discard prompt-leak / reasoning-aloud outputs in favor of the fallback.
-    if PROMPT_LEAK_PREFIXES.match(s):
+    # Catch both leading phrases ("Based on...") and giveaway substrings
+    # ("...is generic", "real place name") that only appear in echoed prompts.
+    if PROMPT_LEAK_PREFIXES.match(s) or PROMPT_LEAK_SUBSTRINGS.search(s):
         return (fallback or s).strip()
     s = ARROW_RE.sub('', s)
     for p in NAME_SUFFIX_TRIM:
@@ -230,18 +321,28 @@ def post_clean_name(name: str, fallback: str = '') -> str:
 
 # ---- DB ops ------------------------------------------------------------
 
-# Camping kinds — utilities (water/laundromat/shower) skip the rewrite
-# because the prompt is camping-specific (forces "Place — Agency" output)
-# and produces hallucinations on utility rows.
-CAMPING_KINDS = {'informal_camping', 'dispersed_camping'}
+# Per-scope kind filters. The two prompts produce very different outputs
+# (camping forces "Place — Agency"; utility keeps real business names) so
+# scope must match the prompt being used.
+SCOPE_KINDS = {
+    'camping': {'informal_camping', 'dispersed_camping'},
+    'utility': {'water', 'laundromat', 'shower'},
+}
+KIND_LABELS = {
+    'water': 'water source',
+    'laundromat': 'laundromat',
+    'shower': 'shower',
+}
 
 
-def fetch_pending(limit: Optional[int] = None) -> list:
-    """Camping ai_summarized rows on prod that haven't been v2-rewritten yet."""
+def fetch_pending(scope: str, limit: Optional[int] = None) -> list:
+    """ai_summarized rows on prod that haven't been v2-rewritten yet, scoped
+    to camping or utility kinds."""
     out = []
     offset = 0
     cap = limit if limit and limit > 0 else None
-    kind_filter = '&kind=in.(' + ','.join(CAMPING_KINDS) + ')'
+    kinds = SCOPE_KINDS[scope]
+    kind_filter = '&kind=in.(' + ','.join(kinds) + ')'
     while True:
         page_limit = PAGE_SIZE if cap is None else min(PAGE_SIZE, cap - len(out))
         if page_limit <= 0:
@@ -296,18 +397,21 @@ def update_row(spot_id: str, new_name: str, original_name: str, extra: dict):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--scope', choices=['camping', 'utility'], default='camping',
+                        help='Which kinds + prompt to use. camping=informal/dispersed_camping (default); utility=water/laundromat/shower.')
     parser.add_argument('--limit', type=int, default=0,
                         help='Stop after N rows (smoke test). 0 = all.')
     parser.add_argument('--dry-run', action='store_true',
                         help='Call Ollama, log proposed rename, do NOT write to DB.')
     args = parser.parse_args()
 
-    print(f'Fetching pending camping rows from {PROD_URL}...', flush=True)
+    print(f'Scope: {args.scope}  ({", ".join(sorted(SCOPE_KINDS[args.scope]))})', flush=True)
+    print(f'Fetching pending rows from {PROD_URL}...', flush=True)
     print(f'(Will patch both prod and dev: {DEV_URL})', flush=True)
-    rows = fetch_pending(limit=args.limit)
+    rows = fetch_pending(args.scope, limit=args.limit)
     print(f'  Got {len(rows)} rows to process.', flush=True)
     if not rows:
-        print('Nothing to do — all camping rows already have name_rewritten_v2=true.')
+        print(f'Nothing to do — all {args.scope} rows already have name_rewritten_v2=true.')
         return
 
     started = time.time()
@@ -321,15 +425,23 @@ def main():
         manager  = short_agency(r.get('public_land_manager'))
         unit     = r.get('public_land_unit') or 'unknown'
         desc     = (r.get('description') or '').strip()
+        kind     = r.get('kind', '') or ''
         if len(desc) > 600:
             desc = desc[:600] + '…'
 
-        prompt = PROMPT_TEMPLATE.format(
-            name=original or '(no name)',
-            description=desc or '(none)',
-            manager=manager or 'unknown',
-            unit=unit,
-        )
+        if args.scope == 'utility':
+            prompt = UTILITY_PROMPT_TEMPLATE.format(
+                kind_label=KIND_LABELS.get(kind, kind),
+                name=original or '(no name)',
+                description=desc or '(none)',
+            )
+        else:
+            prompt = PROMPT_TEMPLATE.format(
+                name=original or '(no name)',
+                description=desc or '(none)',
+                manager=manager or 'unknown',
+                unit=unit,
+            )
 
         try:
             raw_new = call_ollama(prompt)
@@ -340,7 +452,18 @@ def main():
             errors += 1
 
         if cleaned == original:
+            # The LLM tried but produced no useful change (or its output got
+            # filtered as a prompt leak). Mark name_rewritten_v2 = true anyway
+            # so future runs of THIS script skip the row — saves another
+            # ~1s/row of fruitless Ollama calls. A future v3 prompt would use
+            # a different marker.
             skipped += 1
+            if not args.dry_run:
+                ok, p_err, d_err = update_row(spot_id, original, original, r.get('extra') or {})
+                if not ok:
+                    errors += 1
+                    if p_err: print(f'  [prod err skip-mark {spot_id[:8]}]: {p_err}', flush=True)
+                    if d_err: print(f'  [dev err  skip-mark {spot_id[:8]}]: {d_err}', flush=True)
         else:
             if args.dry_run:
                 print(f'  [{i+1}/{len(rows)}] {spot_id[:8]}  "{original}" → "{cleaned}"', flush=True)
