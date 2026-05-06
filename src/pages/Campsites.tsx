@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { InfoWindow } from '@react-google-maps/api';
 import { GoogleMap } from '@/components/GoogleMap';
 import { MapControls } from '@/components/MapControls';
 import { CampsiteClusterer } from '@/components/CampsiteClusterer';
@@ -248,6 +249,34 @@ const Campsites = () => {
                 }}
                 selectedCampsiteId={selectedCampsiteId}
               />
+              {/* Map popover — anchored to the selected pin. Mirrors the
+                  explorer's compact-info-window pattern. Click the X (or
+                  the back link in the side panel) to dismiss. */}
+              {selectedCampsite && (
+                <InfoWindow
+                  position={{ lat: selectedCampsite.lat, lng: selectedCampsite.lng }}
+                  onCloseClick={() => setSelectedCampsiteId(null)}
+                  options={{ pixelOffset: new google.maps.Size(0, -28), disableAutoPan: true }}
+                >
+                  <div className="compact-info-window min-w-[200px]">
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="font-semibold text-gray-900 text-sm leading-tight flex-1 min-w-0">
+                        {selectedCampsite.name || 'Unnamed campsite'}
+                      </h4>
+                      <button
+                        onClick={() => setSelectedCampsiteId(null)}
+                        className="shrink-0 p-0.5 -mr-0.5 -mt-0.5 text-gray-400 hover:text-gray-700 transition-colors"
+                        aria-label="Close"
+                      >
+                        <X className="w-3.5 h-3.5" weight="bold" />
+                      </button>
+                    </div>
+                    <p className="text-gray-500 text-xs mt-0.5 capitalize">
+                      {selectedCampsite.type || 'Campsite'}
+                    </p>
+                  </div>
+                </InfoWindow>
+              )}
             </GoogleMap>
             {/* Zoom controls — bottom-right. The wrapper's auto-controls
                 live top-right; mapControls={false} disables those so the
