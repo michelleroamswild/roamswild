@@ -79,10 +79,20 @@ class RedditScraper(AbstractScraper):
     source: str = "reddit"
     min_interval_s: float = 1.5  # polite to reddit's public endpoints
 
-    def __init__(self, subs: tuple[str, ...] | None = None, limit_per_sub: int = 100) -> None:
+    def __init__(
+        self,
+        subs: tuple[str, ...] | None = None,
+        limit_per_sub: int = 100,
+        gazetteer: tuple[str, ...] | None = None,
+    ) -> None:
         super().__init__()
         self.subs = subs or DEFAULT_SUBS
         self.limit_per_sub = limit_per_sub
+        # Region-specific gazetteer overrides the Moab default. Auto-merged with
+        # POI + region names from the DB at run time.
+        self._hand_gazetteer: frozenset[str] = (
+            frozenset(t.lower() for t in gazetteer) if gazetteer else _HAND_GAZETTEER
+        )
         self._gazetteer_re: re.Pattern[str] | None = None
 
     # ------------------------------------------------------------------
@@ -105,7 +115,7 @@ class RedditScraper(AbstractScraper):
     # ------------------------------------------------------------------
 
     def _load_gazetteer(self) -> set[str]:
-        terms: set[str] = set(_HAND_GAZETTEER)
+        terms: set[str] = set(self._hand_gazetteer)
 
         with session_scope() as s:
             for (name,) in s.execute(select(UtahPOI.name)).all():

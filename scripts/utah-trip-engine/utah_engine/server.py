@@ -831,6 +831,13 @@ def _render_master(
   .pill.ls {{ background: rgba(74, 77, 63, 0.16); color: var(--ink-2); }}
   .pill.activity {{ background: rgba(107, 127, 77, 0.10); color: var(--sage); font-size: 10px; font-weight: 500; }}
   .pill.crowd-low {{ background: rgba(107, 127, 77, 0.18); color: var(--sage); }}
+  .active-strip {{ margin: 0 0 22px; padding: 10px 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; }}
+  .active-strip h3 {{ margin: 0 0 8px !important; font-size: 12px !important; font-weight: 700; }}
+  .active-chip {{ display: inline-flex; align-items: center; gap: 4px; margin: 2px 4px 2px 0; padding: 3px 8px; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; font-size: 11px; text-decoration: none; }}
+  .active-chip:hover {{ border-color: var(--clay); color: var(--clay); }}
+  .active-chip .lab {{ color: var(--ink-3); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 2px; }}
+  .active-chip .x {{ color: var(--ink-3); font-weight: 700; margin-left: 2px; }}
+  .clear-all {{ display: inline-block; margin-top: 6px; font-size: 11px; color: var(--clay); text-decoration: none; }}
   .pill.crowd-moderate {{ background: rgba(181, 104, 57, 0.18); color: var(--clay); }}
   .pill.crowd-high {{ background: rgba(181, 104, 57, 0.30); color: var(--clay); }}
   .pill.effort {{ background: rgba(44, 88, 113, 0.16); color: var(--water); }}
@@ -854,26 +861,6 @@ def _render_master(
 """
 
     sidebar = '<aside>'
-    sidebar += f"""
-    <div class="group">
-      <h3>Search name</h3>
-      <form method="get">
-        <input type="text" name="q" value="{_h(q)}" placeholder="mesa, slickrock, geyser…">
-        <input type="hidden" name="poi_type" value="{_h(poi_type)}">
-        <input type="hidden" name="region" value="{_h(region)}">
-        <input type="hidden" name="contains_source" value="{_h(contains_source)}">
-        <input type="hidden" name="min_sources" value="{min_sources}">
-        <input type="hidden" name="min_photos" value="{min_photos}">
-        <input type="hidden" name="only_hidden_gem" value="{_h(only_hidden_gem)}">
-        <input type="hidden" name="only_locationscout" value="{_h(only_locationscout)}">
-        <input type="hidden" name="crowdedness" value="{_h(crowdedness)}">
-        <input type="hidden" name="activity" value="{_h(activity)}">
-        <input type="hidden" name="only_derived_gem" value="{_h(only_derived_gem)}">
-        <button type="submit">Filter</button>
-        <a href="/master" class="reset">reset all</a>
-      </form>
-    </div>
-    """
 
     def _link(**kw: Any) -> str:
         merged = dict(
@@ -893,6 +880,65 @@ def _render_master(
             elif v:
                 parts.append(f"{k}={_url(str(v))}")
         return "/master" + (("?" + "&".join(parts)) if parts else "")
+
+    # Active-filter chips at the top
+    active_chips: list[tuple[str, str, str]] = []  # (label, value, link_to_remove)
+    if q:
+        active_chips.append(("Search", q, _link(q="")))
+    if poi_type:
+        active_chips.append(("Type", _pretty(poi_type), _link(poi_type="")))
+    if region:
+        active_chips.append(("Region", region, _link(region="")))
+    if contains_source:
+        active_chips.append(("Source", _pretty(contains_source), _link(contains_source="")))
+    if min_sources > 0:
+        active_chips.append(("Sources", f"{min_sources}+", _link(min_sources=0)))
+    if min_photos > 0:
+        active_chips.append(("Photos", f"{min_photos}+", _link(min_photos=0)))
+    if only_hidden_gem == "1":
+        active_chips.append(("Endorsement", "Curator gem", _link(only_hidden_gem="")))
+    if only_locationscout == "1":
+        active_chips.append(("Endorsement", "Locationscout", _link(only_locationscout="")))
+    if only_derived_gem == "1":
+        active_chips.append(("Endorsement", "Derived gem", _link(only_derived_gem="")))
+    if crowdedness:
+        active_chips.append(("Crowd", crowdedness.title(), _link(crowdedness="")))
+    if activity:
+        active_chips.append(("Activity", _pretty(activity), _link(activity="")))
+
+    if active_chips:
+        chips_html = "".join(
+            f'<a class="active-chip" href="{href}" title="Remove">'
+            f'<span class="lab">{_h(lab)}</span>{_h(val)}<span class="x">×</span></a>'
+            for lab, val, href in active_chips
+        )
+        sidebar += (
+            '<div class="active-strip">'
+            f'<h3>Active filters ({len(active_chips)})</h3>'
+            f'{chips_html}'
+            '<br><a class="clear-all" href="/master">Clear all</a>'
+            '</div>'
+        )
+
+    sidebar += f"""
+    <div class="group">
+      <h3>Search name</h3>
+      <form method="get">
+        <input type="text" name="q" value="{_h(q)}" placeholder="mesa, slickrock, geyser…">
+        <input type="hidden" name="poi_type" value="{_h(poi_type)}">
+        <input type="hidden" name="region" value="{_h(region)}">
+        <input type="hidden" name="contains_source" value="{_h(contains_source)}">
+        <input type="hidden" name="min_sources" value="{min_sources}">
+        <input type="hidden" name="min_photos" value="{min_photos}">
+        <input type="hidden" name="only_hidden_gem" value="{_h(only_hidden_gem)}">
+        <input type="hidden" name="only_locationscout" value="{_h(only_locationscout)}">
+        <input type="hidden" name="crowdedness" value="{_h(crowdedness)}">
+        <input type="hidden" name="activity" value="{_h(activity)}">
+        <input type="hidden" name="only_derived_gem" value="{_h(only_derived_gem)}">
+        <button type="submit">Filter</button>
+      </form>
+    </div>
+    """
 
     # Cross-source filter: # of sources
     sidebar += '<div class="group"><h3>Sources confirming</h3>'
@@ -1443,22 +1489,52 @@ _SOURCE_LABELS: dict[str, str] = {
 _SIDEBAR_SCROLL_JS = """
 <script>
 (function () {
+  // Preserve BOTH window scroll and any internal aside scroll across nav.
+  // The sidebar uses position:sticky so most filter clicks cause window
+  // scroll to drift; we save+restore both axes so users land where they
+  // were after a filter click.
+  var key = 'scrollState:' + location.pathname;
   var aside = document.querySelector('aside');
-  if (!aside) return;
-  var key = 'sidebarScrollTop:' + location.pathname;
-  // Restore — wait one tick so layout settles.
-  requestAnimationFrame(function () {
-    var saved = parseInt(sessionStorage.getItem(key) || '0', 10);
-    if (saved > 0) aside.scrollTop = saved;
-  });
-  // Save on scroll (throttled).
+
+  function save() {
+    try {
+      sessionStorage.setItem(key, JSON.stringify({
+        win: window.scrollY || window.pageYOffset || 0,
+        aside: aside ? aside.scrollTop : 0,
+      }));
+    } catch (_) {}
+  }
+
+  // Restore. Use a couple of frames so the layout has settled, but do
+  // it before paint where we can.
+  function restore() {
+    try {
+      var raw = sessionStorage.getItem(key);
+      if (!raw) return;
+      var s = JSON.parse(raw);
+      if (s && typeof s.win === 'number') {
+        window.scrollTo(0, s.win);
+      }
+      if (aside && s && typeof s.aside === 'number') {
+        aside.scrollTop = s.aside;
+      }
+    } catch (_) {}
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', restore);
+  } else {
+    restore();
+  }
+  // Some browsers paint then layout-shift; restore again next frame.
+  requestAnimationFrame(restore);
+
   var t;
-  aside.addEventListener('scroll', function () {
-    clearTimeout(t);
-    t = setTimeout(function () {
-      sessionStorage.setItem(key, String(aside.scrollTop));
-    }, 80);
-  }, { passive: true });
+  function defer() { clearTimeout(t); t = setTimeout(save, 80); }
+  window.addEventListener('scroll', defer, { passive: true });
+  if (aside) aside.addEventListener('scroll', defer, { passive: true });
+  // Capture the most recent position even if throttled save hasn't fired.
+  window.addEventListener('beforeunload', save);
+  window.addEventListener('pagehide', save);
 })();
 </script>
 """

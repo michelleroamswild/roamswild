@@ -30,3 +30,16 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def set_active_region(lat: float, lng: float, radius_mi: float) -> None:
+    """Override the in-process anchor so a single CLI run can target a non-Moab region.
+
+    Modules read ``settings.moab_lat`` / ``settings.moab_lng`` / ``settings.radius_mi``
+    at call time. Mutating the singleton before any ingester runs is the lowest-risk
+    way to repoint the pipeline without threading an anchor parameter through every
+    module. The field names stay ``moab_*`` for backward compatibility.
+    """
+    settings.moab_lat = lat
+    settings.moab_lng = lng
+    settings.radius_mi = radius_mi

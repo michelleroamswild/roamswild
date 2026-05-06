@@ -11,8 +11,23 @@ import sys
 import typer
 from sqlalchemy import text
 
-from utah_engine.config import settings
+from utah_engine.config import set_active_region, settings
 from utah_engine.db import session_scope
+from utah_engine.region_config import RegionConfig, get_region
+
+
+def _apply_region(region_key: str | None) -> RegionConfig | None:
+    """If `region_key` is set, load its config and repoint settings to its anchor.
+
+    Returns the loaded RegionConfig (or None when no region was requested) so
+    callers can pull source-specific lists (NPS park codes, Reddit subs, etc.).
+    """
+    if not region_key:
+        return None
+    rc = get_region(region_key)
+    set_active_region(rc.anchor_lat, rc.anchor_lng, rc.radius_mi)
+    typer.echo(f"[region] {rc.key} — {rc.name} @ {rc.anchor_lat:.4f},{rc.anchor_lng:.4f} r={rc.radius_mi}mi")
+    return rc
 
 app = typer.Typer(help="RoamsWild Utah trip-engine pilot (Moab, 50mi radius).")
 ingest_app = typer.Typer(help="Pull authoritative geo data.")
@@ -163,6 +178,19 @@ def ingest_wikimedia_photos(
         typer.echo(f"  {k}: {v}")
 
 
+@ingest_app.command("nrhp")
+def ingest_nrhp_cmd(
+    radius_mi: float = typer.Option(None, help="Override RADIUS_MI from .env."),
+) -> None:
+    """Pull NRHP (National Register of Historic Places) Utah listings."""
+    from utah_engine.nrhp import ingest_nrhp
+
+    counts = ingest_nrhp(radius_mi=radius_mi)
+    typer.echo("NRHP ingest:")
+    for k, v in counts.items():
+        typer.echo(f"  {k}: {v}")
+
+
 @ingest_app.command("nhd")
 def ingest_nhd_cmd(
     radius_mi: float = typer.Option(None, help="Override RADIUS_MI from .env."),
@@ -175,11 +203,17 @@ def ingest_nhd_cmd(
 
 
 @ingest_app.command("nps-places")
-def ingest_nps_places_cmd() -> None:
+def ingest_nps_places_cmd(
+    region: str = typer.Option(None, help="Region key (from data/regions.yaml). Overrides default park codes."),
+) -> None:
     """Pull NPS in-park named POIs (overlooks, trailheads, scenic features)."""
     from utah_engine.nps_places import ingest_nps_places
 
-    counts = ingest_nps_places()
+    rc = _apply_region(region)
+    if rc and rc.nps_park_codes:
+        counts = ingest_nps_places(park_codes=tuple(rc.nps_park_codes))
+    else:
+        counts = ingest_nps_places()
     typer.echo("NPS Places ingest:")
     for k, v in counts.items():
         typer.echo(f"  {k}: {v}")
@@ -201,11 +235,16 @@ def ingest_mrds_cmd(
 @ingest_app.command("wikivoyage")
 def ingest_wikivoyage_cmd(
     radius_mi: float = typer.Option(None, help="Override RADIUS_MI from .env."),
+    region: str = typer.Option(None, help="Region key (from data/regions.yaml). Overrides default articles."),
 ) -> None:
-    """Pull geo-tagged listings from Wikivoyage articles for Moab-area towns/parks."""
+    """Pull geo-tagged listings from Wikivoyage articles."""
     from utah_engine.wikivoyage import ingest_wikivoyage
 
-    counts = ingest_wikivoyage(radius_mi=radius_mi)
+    rc = _apply_region(region)
+    if rc and rc.wikivoyage_articles:
+        counts = ingest_wikivoyage(radius_mi=radius_mi, articles=tuple(rc.wikivoyage_articles))
+    else:
+        counts = ingest_wikivoyage(radius_mi=radius_mi)
     typer.echo("Wikivoyage ingest:")
     for k, v in counts.items():
         typer.echo(f"  {k}: {v}")
@@ -336,13 +375,19 @@ def scrape_reddit(
         help="Comma-separated subreddit names (no r/ prefix).",
     ),
     limit: int = typer.Option(100, help="Posts per subreddit."),
+    region: str = typer.Option(None, help="Region key (from data/regions.yaml). Overrides subs/gazetteer."),
 ) -> None:
-    """Pull Moab-mentioning posts from configured subreddits."""
+    """Pull region-mentioning posts from configured subreddits."""
     from utah_engine.scrapers.base import persist_snippets
     from utah_engine.scrapers.reddit import RedditScraper
 
-    sub_tuple = tuple(s.strip().lstrip("r/") for s in subs.split(",") if s.strip())
-    scraper = RedditScraper(subs=sub_tuple, limit_per_sub=limit)
+    rc = _apply_region(region)
+    if rc and rc.reddit_subs:
+        sub_tuple = tuple(rc.reddit_subs)
+    else:
+        sub_tuple = tuple(s.strip().lstrip("r/") for s in subs.split(",") if s.strip())
+    gazetteer = tuple(rc.reddit_gazetteer) if rc and rc.reddit_gazetteer else None
+    scraper = RedditScraper(subs=sub_tuple, limit_per_sub=limit, gazetteer=gazetteer)
     new, updated = persist_snippets(scraper.run())
     typer.echo(f"Reddit scrape: {new} new, {updated} updated")
 
@@ -441,6 +486,265 @@ def seasons() -> None:
 def run_all() -> None:
     """End-to-end pilot pass with summary report."""
     raise NotImplementedError("run-all not yet implemented.")
+
+
+# ---------------------------------------------------------------------------
+# Multi-region orchestration
+# ---------------------------------------------------------------------------
+
+
+@app.command("regions-list")
+def regions_list() -> None:
+    """List configured regions from data/regions.yaml."""
+    from utah_engine.region_config import load_regions
+
+    regions = load_regions()
+    if not regions:
+        typer.echo("No regions configured.")
+        return
+    typer.echo(f"{len(regions)} region(s):")
+    for key, rc in regions.items():
+        typer.echo(
+            f"  {key:<14} {rc.name:<30} state={rc.state} "
+            f"anchor={rc.anchor_lat:.3f},{rc.anchor_lng:.3f} r={rc.radius_mi}mi "
+            f"sources={len(rc.enabled_sources)}"
+        )
+
+
+@app.command("cleanup")
+def cleanup_region(
+    region: str = typer.Option(..., help="Region key. Limits deletes to this region's radius."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print counts only, don't delete."),
+) -> None:
+    """Delete utah_poi rows with noise poi_types inside the region radius."""
+    from sqlalchemy import text
+
+    from utah_engine.region_config import default_cleanup_spec
+
+    rc = _apply_region(region)
+    if rc is None:
+        raise typer.BadParameter("region required")
+    spec = default_cleanup_spec()
+    radius_m = rc.radius_mi * 1609.34
+
+    sql_count = text(
+        """
+        SELECT poi_type, COUNT(*) AS n
+        FROM utah_poi
+        WHERE poi_type = ANY(:types)
+          AND ST_DWithin(
+            geom::geography,
+            ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+            :radius_m
+          )
+        GROUP BY poi_type
+        ORDER BY n DESC
+        """
+    )
+    sql_delete = text(
+        """
+        DELETE FROM utah_poi
+        WHERE poi_type = ANY(:types)
+          AND ST_DWithin(
+            geom::geography,
+            ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+            :radius_m
+          )
+        """
+    )
+    params = {
+        "types": list(spec.delete_poi_types),
+        "lat": rc.anchor_lat,
+        "lng": rc.anchor_lng,
+        "radius_m": radius_m,
+    }
+    with session_scope() as s:
+        rows = s.execute(sql_count, params).all()
+        total = sum(n for _, n in rows)
+        typer.echo(f"[{rc.key}] {total} rows match cleanup spec across {len(rows)} poi_types")
+        for poi_type, n in rows:
+            typer.echo(f"  {poi_type}: {n}")
+        if dry_run or total == 0:
+            return
+        if not typer.confirm(f"Delete {total} rows?", default=False):
+            typer.echo("Aborted.")
+            return
+        s.execute(sql_delete, params)
+    typer.echo(f"Deleted {total} rows.")
+
+
+@app.command("run-region")
+def run_region(
+    region: str = typer.Argument(..., help="Region key from data/regions.yaml."),
+    skip_vision: bool = typer.Option(False, "--skip-vision", help="Skip the paid vision LLM pass."),
+    skip_enrich: bool = typer.Option(False, "--skip-enrich", help="Skip the snippet-enrichment LLM pass."),
+    cleanup: bool = typer.Option(True, "--cleanup/--no-cleanup", help="Run cleanup spec after consolidation."),
+) -> None:
+    """End-to-end pipeline for a region.
+
+    Reads `data/regions.yaml`, repoints the in-process anchor, runs every
+    enabled source, then prefilter → enrich → match → classify → link-regions
+    → consolidate → cleanup → enrich-master.
+
+    Sources flagged Utah-only (`ugrc`, `regions`, `osp`, `locationscout`) are
+    skipped automatically when `state != UT`.
+    """
+    rc = _apply_region(region)
+    if rc is None:
+        raise typer.BadParameter("region required")
+
+    enabled = set(rc.enabled_sources) if rc.enabled_sources else None
+
+    def _on(source: str) -> bool:
+        if enabled is None:
+            return True
+        return source in enabled
+
+    utah_only = {"ugrc", "regions", "osp", "locationscout"}
+
+    # ---- Ingest sources ----
+    if _on("ugrc") and rc.is_utah:
+        from utah_engine.ugrc import ingest_ugrc as _ugrc
+        typer.echo("[ingest] ugrc")
+        _ugrc(radius_mi=None, limit=0)
+    if _on("regions") and rc.is_utah:
+        from utah_engine.regions import ingest_regions as _regions
+        typer.echo("[ingest] regions")
+        _regions()
+    if _on("osp") and rc.is_utah:
+        from utah_engine.ugrc_osp import ingest_open_source_places as _osp
+        typer.echo("[ingest] osp")
+        _osp(radius_mi=None)
+    if _on("gnis"):
+        from utah_engine.gnis import ingest_gnis as _gnis
+        typer.echo("[ingest] gnis")
+        _gnis(radius_mi=None, limit=0)
+    if _on("osm"):
+        from utah_engine.osm import ingest_osm as _osm
+        typer.echo("[ingest] osm")
+        _osm(radius_mi=None)
+    if _on("nhd"):
+        from utah_engine.nhd import ingest_nhd as _nhd
+        typer.echo("[ingest] nhd")
+        _nhd(radius_mi=None)
+    if _on("nps-places") and rc.nps_park_codes:
+        from utah_engine.nps_places import ingest_nps_places as _nps
+        typer.echo(f"[ingest] nps-places ({len(rc.nps_park_codes)} parks)")
+        _nps(park_codes=tuple(rc.nps_park_codes))
+    if _on("nrhp"):
+        from utah_engine.nrhp import ingest_nrhp as _nrhp
+        typer.echo("[ingest] nrhp")
+        _nrhp(radius_mi=None)
+    if _on("mrds"):
+        from utah_engine.mrds import ingest_mrds as _mrds
+        typer.echo("[ingest] mrds")
+        _mrds(radius_mi=None)
+    if _on("reddit") and rc.reddit_subs:
+        from utah_engine.scrapers.base import persist_snippets
+        from utah_engine.scrapers.reddit import RedditScraper
+        typer.echo(f"[scrape] reddit ({len(rc.reddit_subs)} subs)")
+        scraper = RedditScraper(
+            subs=tuple(rc.reddit_subs),
+            limit_per_sub=100,
+            gazetteer=tuple(rc.reddit_gazetteer) if rc.reddit_gazetteer else None,
+        )
+        persist_snippets(scraper.run())
+    if _on("wikivoyage") and rc.wikivoyage_articles:
+        from utah_engine.wikivoyage import ingest_wikivoyage as _wv
+        typer.echo(f"[ingest] wikivoyage ({len(rc.wikivoyage_articles)} articles)")
+        _wv(radius_mi=None, articles=tuple(rc.wikivoyage_articles))
+    if _on("wikimedia"):
+        from utah_engine.wikimedia import assign_to_pois, harvest_photos
+        typer.echo("[ingest] wikimedia photos")
+        photos = harvest_photos(radius_mi=None)
+        assign_to_pois(photos)
+    for source_key, path in rc.seed_files.items():
+        flag = f"seed:{source_key}"
+        if not _on(flag):
+            continue
+        from pathlib import Path
+        from utah_engine.seeded import ingest_seed_file
+        typer.echo(f"[ingest] {flag} ← {path}")
+        ingest_seed_file(Path(path), source=source_key, poi_type="hidden_gem")
+    if _on("locationscout") and rc.is_utah:
+        from utah_engine.scrapers.locationscout import apply_endorsements, harvest_listings
+        typer.echo("[ingest] locationscout (endorsement layer)")
+        apply_endorsements(harvest_listings(max_pages=50))
+
+    # Skip-source warnings for UT-only sources outside Utah
+    if not rc.is_utah:
+        for s in utah_only:
+            if _on(s):
+                typer.echo(f"[skip] {s} — Utah-only source skipped for state={rc.state}")
+
+    # ---- Pipeline stages ----
+    typer.echo("[stage] prefilter")
+    from utah_engine.prefilter import run_prefilter
+    run_prefilter()
+
+    if not skip_enrich:
+        typer.echo("[stage] enrich")
+        from utah_engine.enrichment import enrich_pending
+        enrich_pending(batch=50, dry_run=False)
+
+    typer.echo("[stage] match")
+    from utah_engine.matcher import run_matcher
+    run_matcher(threshold=80, radius_km=5.0)
+
+    typer.echo("[stage] classify")
+    from utah_engine.classifier import run_classifier
+    run_classifier()
+
+    typer.echo("[stage] link-regions")
+    from utah_engine.region_link import link_pois_to_regions
+    link_pois_to_regions()
+
+    typer.echo("[stage] consolidate")
+    from utah_engine.master import consolidate
+    consolidate(distance_m=300.0, name_threshold=78)
+
+    if cleanup:
+        typer.echo("[stage] cleanup")
+        from sqlalchemy import text
+        from utah_engine.region_config import default_cleanup_spec
+        spec = default_cleanup_spec()
+        with session_scope() as s:
+            n = s.execute(
+                text(
+                    """
+                    DELETE FROM utah_poi
+                    WHERE poi_type = ANY(:types)
+                      AND ST_DWithin(
+                        geom::geography,
+                        ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                        :radius_m
+                      )
+                    """
+                ),
+                {
+                    "types": list(spec.delete_poi_types),
+                    "lat": rc.anchor_lat,
+                    "lng": rc.anchor_lng,
+                    "radius_m": rc.radius_mi * 1609.34,
+                },
+            ).rowcount
+            typer.echo(f"  deleted {n} noise rows")
+        typer.echo("[stage] consolidate (post-cleanup)")
+        consolidate(distance_m=300.0, name_threshold=78)
+
+    typer.echo("[stage] enrich-master")
+    from utah_engine import master_enrichment as me
+    me.link_reddit_signals()
+    me.derive_activity_tags()
+    me.compute_crowdedness()
+    me.resolve_thumbnails()
+    me.compute_sun_ephemeris()
+    me.compute_nearby()
+    me.compute_derived_gems()
+    if not skip_vision:
+        me.enrich_with_vision(only_min_sources=3)
+
+    typer.echo(f"[done] {rc.key}")
 
 
 if __name__ == "__main__":
