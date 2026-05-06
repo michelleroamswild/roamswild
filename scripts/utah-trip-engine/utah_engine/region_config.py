@@ -107,6 +107,11 @@ DEFAULT_CLEANUP_POI_TYPES: list[str] = [
     # Round 4: generic terrain that doesn't read as a destination
     "valley", "flat", "basin", "river_bend", "bench", "plain", "slope",
     "car_wash", "river_bar",
+    # Round 5: MRDS mining sites overwhelm non-Utah regions (3k+ in
+    # JT/Gold Beach combined). Most are tiny historic prospects, not
+    # destinations. Ghost towns + named historic mining districts
+    # already get carried by GNIS / NRHP.
+    "mine_site",
 ]
 
 

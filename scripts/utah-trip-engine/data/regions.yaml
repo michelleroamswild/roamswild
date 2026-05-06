@@ -129,45 +129,151 @@ regions:
       atlas_obscura: data/atlas_obscura_seed.json
       darksky: data/darksky_seed.json
 
+  joshua_tree:
+    name: "Joshua Tree, California"
+    state: CA
+    # Park's geographic center. 50mi radius covers JT, 29 Palms, Yucca
+    # Valley, Pioneertown, Big Morongo, north end of Salton Sea, Idyllwild.
+    anchor: [33.8734, -115.9010]
+    radius_mi: 50
+    enabled_sources:
+      - gnis
+      - osm
+      - nhd
+      - nps-places
+      - nrhp
+      - mrds
+      - reddit
+      - wikivoyage
+      - wikimedia
+      # ugrc, regions, osp, locationscout — Utah-only, auto-skipped
+    nps_park_codes:
+      - jotr     # Joshua Tree NP
+    reddit_subs:
+      - joshuatree
+      - socalhiking
+      - California
+      - overlanding
+      - CampingandHiking
+      - hiking
+    reddit_gazetteer:
+      - joshua tree
+      - jtree
+      - hidden valley
+      - jumbo rocks
+      - keys view
+      - skull rock
+      - arch rock
+      - barker dam
+      - ryan mountain
+      - 49 palms
+      - forty-nine palms
+      - lost horse
+      - cottonwood
+      - black rock
+      - indian cove
+      - white tank
+      - twentynine palms
+      - 29 palms
+      - yucca valley
+      - pioneertown
+      - big morongo
+      - wonderland of rocks
+      - queen valley
+      - pinto basin
+      - cholla cactus garden
+      - mastodon peak
+      - lost palms
+      - idyllwild
+      - palm springs
+    wikivoyage_articles:
+      - Joshua Tree National Park
+      - Twentynine Palms
+      - Pioneertown
+      - Yucca Valley
+      - Palm Springs
+      - Idyllwild
+    seed_files: {}
+
+  gold_beach:
+    name: "Gold Beach, Oregon"
+    state: OR
+    # Sits on the southern Oregon coast. 50mi radius covers Bandon →
+    # Brookings on the coast, Wild Rogue / Kalmiopsis Wilderness inland,
+    # and the north edge of Redwood NP (CA).
+    anchor: [42.4072, -124.4203]
+    radius_mi: 50
+    enabled_sources:
+      - gnis
+      - osm
+      - nhd
+      - nps-places
+      - nrhp
+      - mrds
+      - reddit
+      - wikivoyage
+      - wikimedia
+    nps_park_codes:
+      - redw     # Redwood NP/SP — south end of radius
+    reddit_subs:
+      - oregon
+      - PNW
+      - OregonCoast
+      - CampingandHiking
+      - hiking
+      - overlanding
+    reddit_gazetteer:
+      - gold beach
+      - brookings
+      - bandon
+      - port orford
+      - cape blanco
+      - cape sebastian
+      - cape ferrelo
+      - samuel boardman
+      - boardman corridor
+      - rogue river
+      - wild rogue
+      - kalmiopsis
+      - redwood
+      - smith river
+      - harris beach
+      - hunter creek
+      - pistol river
+      - agness
+      - illahe
+      - secret beach
+      - lone ranch
+      - natural bridges
+      - thomas creek bridge
+      - arch rock
+      - prehistoric gardens
+      - otter point
+      - indian sands
+      - china creek
+      - whaleshead
+      - meyers creek
+    wikivoyage_articles:
+      - Gold Beach
+      - Brookings
+      - Bandon
+      - Port Orford
+      - Crescent City
+      - Oregon Coast
+    seed_files: {}
+
   # ---------------------------------------------------------------------------
-  # Template for adding a new region. Uncomment + edit. Once filled in, run:
-  #   python main.py run-region <key>
+  # Template for adding a new region. Copy this block, change the key
+  # + values, run `python main.py run-region <key>`.
   # ---------------------------------------------------------------------------
-  # joshua_tree:
-  #   name: "Joshua Tree, California"
-  #   state: CA
-  #   anchor: [34.05, -116.25]
+  # _template:
+  #   name: "Region Name, State"
+  #   state: XX
+  #   anchor: [lat, lng]
   #   radius_mi: 50
-  #   enabled_sources:
-  #     - gnis
-  #     - osm
-  #     - nhd
-  #     - nps-places
-  #     - nrhp
-  #     - mrds
-  #     - reddit
-  #     - wikivoyage
-  #     - wikimedia
-  #     # ugrc, regions, osp removed — Utah-specific
-  #     # locationscout: deferred until we generalise its index walker
-  #   nps_park_codes:
-  #     - jotr     # Joshua Tree NP
-  #     - moja     # Mojave National Preserve
-  #     - cabr     # (example, far)
-  #   reddit_subs:
-  #     - joshuatree
-  #     - California
-  #     - overlanding
-  #     - CampingandHiking
-  #   reddit_gazetteer:
-  #     - joshua tree
-  #     - hidden valley
-  #     - jumbo rocks
-  #     - keys view
-  #     - pioneertown
-  #   wikivoyage_articles:
-  #     - Joshua Tree National Park
-  #     - Twentynine Palms
-  #     - Pioneertown
-  #     - Yucca Valley
+  #   enabled_sources: [gnis, osm, nhd, nps-places, nrhp, mrds, reddit, wikivoyage, wikimedia]
+  #   nps_park_codes: []
+  #   reddit_subs: []
+  #   reddit_gazetteer: []
+  #   wikivoyage_articles: []
   #   seed_files: {}
