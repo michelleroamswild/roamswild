@@ -31,6 +31,7 @@ import {
 import { GoogleMap } from '@/components/GoogleMap';
 import { MapControls } from '@/components/MapControls';
 import { CampsiteClusterer } from '@/components/CampsiteClusterer';
+import { UserCampsiteDetailPanel } from '@/components/dispersed-explorer/UserCampsiteDetailPanel';
 import { useCampsites } from '@/context/CampsitesContext';
 import { useFriends } from '@/context/FriendsContext';
 import { toast } from 'sonner';
@@ -89,6 +90,14 @@ const Campsites = () => {
   const [filterHasNotes, setFilterHasNotes] = useState(false);
   const [selectedCampsiteId, setSelectedCampsiteId] = useState<string | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+
+  // Resolve selected campsite from the current set so the right-rail detail
+  // panel renders the matching row. Falls back to null when nothing's
+  // selected — the list view shows in that case.
+  const selectedCampsite = useMemo(
+    () => (selectedCampsiteId ? campsites.find((c) => c.id === selectedCampsiteId) ?? null : null),
+    [selectedCampsiteId, campsites],
+  );
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -232,8 +241,10 @@ const Campsites = () => {
                 map={mapRef.current}
                 campsites={displayedCampsites}
                 onCampsiteClick={(campsite) => {
+                  // Open detail in side panel instead of navigating away.
+                  // Direct-link via /campsites/:id still works through the
+                  // route — that page renders the same content full-screen.
                   setSelectedCampsiteId(campsite.id);
-                  navigate(`/campsites/${campsite.id}`);
                 }}
                 selectedCampsiteId={selectedCampsiteId}
               />
@@ -246,7 +257,19 @@ const Campsites = () => {
             </div>
           </div>
 
-          {/* List section */}
+          {/* Right rail — switches between the list view (default) and a
+              detail panel when a campsite is selected. The detail panel
+              reuses the explorer's UserCampsiteDetailPanel so the visual
+              language matches; back button clears the selection and brings
+              the list back. */}
+          {selectedCampsite ? (
+            <div className="bg-cream dark:bg-paper-2 lg:h-[calc(100vh-80px)] lg:overflow-hidden border-l border-line">
+              <UserCampsiteDetailPanel
+                campsite={selectedCampsite}
+                onBack={() => setSelectedCampsiteId(null)}
+              />
+            </div>
+          ) : (
           <div className="bg-paper lg:h-[calc(100vh-80px)] lg:overflow-y-auto">
             <div className="px-5 py-6 space-y-5">
               {/* Page intro card — same pattern as the trip detail "Your trip" header */}
@@ -469,7 +492,7 @@ const Campsites = () => {
                         getFriendById(campsite.userId)?.email ||
                         'Friend'
                       }
-                      onClick={() => navigate(`/campsites/${campsite.id}`)}
+                      onClick={() => setSelectedCampsiteId(campsite.id)}
                       onDelete={(e) => handleDeleteClick(e, campsite.id, campsite.name)}
                     />
                   ))}
@@ -477,6 +500,7 @@ const Campsites = () => {
               )}
             </div>
           </div>
+          )}
         </div>
       </main>
 
