@@ -32,6 +32,10 @@ export interface TripDestination {
   // user-picked entries in `activities` are used.
   aiActivities?: boolean;
   activities?: DestinationActivity[];
+  // When true, extra days at this destination get a "town time" activity stop
+  // (walk the town, food, shops). Off by default — the destination is just an
+  // anchor and extra-day timelines stay activity + camp.
+  exploreTown?: boolean;
 }
 
 export interface TripStop {
@@ -134,4 +138,11 @@ export interface GeneratedTrip {
   // Cached photo hotspots
   cachedPhotoHotspots?: CachedPhotoHotspot[];
   photoHotspotsHash?: string; // Hash of search points to detect when to refetch
+  // Set when the wizard reordered destinations to avoid backtracking. Stored
+  // for the UI to surface a "we reordered your stops" notice. Names only —
+  // we don't need to round-trip ids/coords for the notice.
+  reorderedDestinations?: {
+    original: string[];
+    optimized: string[];
+  };
 }

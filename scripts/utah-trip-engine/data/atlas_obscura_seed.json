@@ -1,0 +1,84 @@
+[
+  {
+    "slug": "false-kiva",
+    "name": "False Kiva",
+    "lat": 38.421108,
+    "lng": -109.908656,
+    "atlas_obscura_url": "https://www.atlasobscura.com/places/false-kiva",
+    "description": "This now-protected stone circle in Canyonlands is an archeological mystery and a stellar viewpoint.",
+    "tags": ["archaeology", "viewpoint", "canyonlands"],
+    "_verified": true,
+    "_notes": "Coords pulled from atlas-obscura JSON-LD on 2026-05-04 (verified via Playwright fetch before Cloudflare lock-out)."
+  },
+  {
+    "slug": "mesa-arch",
+    "name": "Mesa Arch",
+    "lat": 38.388889,
+    "lng": -109.866944,
+    "atlas_obscura_url": "https://www.atlasobscura.com/places/mesa-arch",
+    "description": "An iconic sunrise photography spot in Canyonlands' Island in the Sky district.",
+    "tags": ["arch", "viewpoint", "photography", "sunrise", "canyonlands"],
+    "_verified": false,
+    "_notes": "Approximate coords from external map references; confirm next time atlas-obscura is reachable."
+  },
+  {
+    "slug": "newspaper-rock-petroglyphs",
+    "name": "Newspaper Rock Petroglyphs",
+    "lat": 37.985556,
+    "lng": -109.518333,
+    "atlas_obscura_url": "https://www.atlasobscura.com/places/newspaper-rock-petroglyphs",
+    "description": "A 200-square-foot rock panel covered with one of the largest concentrations of petroglyphs in North America, spanning 2,000 years of indigenous history.",
+    "tags": ["petroglyph", "archaeology", "scenic byway", "bears ears"],
+    "_verified": false
+  },
+  {
+    "slug": "wilson-arch",
+    "name": "Wilson Arch",
+    "lat": 38.323333,
+    "lng": -109.421389,
+    "atlas_obscura_url": "https://www.atlasobscura.com/places/wilson-arch",
+    "description": "A roadside arch right off US-191 south of Moab, easily climbed for sweeping La Sal views.",
+    "tags": ["arch", "roadside", "viewpoint", "easy access"],
+    "_verified": false
+  },
+  {
+    "slug": "fisher-towers",
+    "name": "Fisher Towers",
+    "lat": 38.717778,
+    "lng": -109.310833,
+    "atlas_obscura_url": "https://www.atlasobscura.com/places/fisher-towers",
+    "description": "Towering 900-foot sandstone pillars that draw climbers and sunset photographers along the Colorado River north of Moab.",
+    "tags": ["pillar", "climbing", "photography", "sunset", "colorado river"],
+    "_verified": false
+  },
+  {
+    "slug": "crystal-geyser",
+    "name": "Crystal Geyser",
+    "lat": 38.937778,
+    "lng": -110.135,
+    "atlas_obscura_url": "https://www.atlasobscura.com/places/crystal-geyser",
+    "description": "A rare cold-water geyser on the Green River that erupts on an unpredictable schedule, formed by an abandoned 1930s drilling project.",
+    "tags": ["geyser", "weird", "river", "green river"],
+    "_verified": false
+  },
+  {
+    "slug": "corona-arch",
+    "name": "Corona Arch",
+    "lat": 38.578056,
+    "lng": -109.628611,
+    "atlas_obscura_url": "https://www.atlasobscura.com/places/corona-arch",
+    "description": "A massive sandstone arch reached by a moderate hike with cable and ladder sections — once notorious for rope-swinging.",
+    "tags": ["arch", "hike", "viewpoint", "potash road"],
+    "_verified": false
+  },
+  {
+    "slug": "grandstaff-canyon",
+    "name": "Grandstaff Canyon (Morning Glory Bridge)",
+    "lat": 38.609,
+    "lng": -109.505,
+    "atlas_obscura_url": "https://www.atlasobscura.com/places/grandstaff-canyon",
+    "description": "A shaded creek-side canyon hike outside Moab leading to the sixth-longest natural rock span in the United States.",
+    "tags": ["canyon", "creek", "natural bridge", "shaded", "hike"],
+    "_verified": false
+  }
+]

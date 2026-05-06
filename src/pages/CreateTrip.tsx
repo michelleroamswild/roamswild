@@ -14,6 +14,7 @@ import { useWizard, WizardStep } from "@/hooks/use-wizard";
 import { useTripDraft, TripWizardState } from "@/hooks/use-trip-draft";
 import { TripConfig, TripDestination, LodgingType, PacePreference, TravelStyle, GeoBounds, DestinationActivity } from "@/types/trip";
 import { getTripUrl } from "@/utils/slugify";
+import { optimizePath } from "@/utils/optimize-path";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +52,7 @@ interface LocationData {
   bounds?: GeoBounds;
   aiActivities?: boolean;
   activities?: DestinationActivity[];
+  exploreTown?: boolean;
 }
 
 // Wireframe flow — flat 3-step list. Build-method + manual day-by-day live
@@ -494,19 +496,36 @@ const CreateTrip = () => {
       coordinates: { lat: effectiveStart.lat, lng: effectiveStart.lng },
     };
 
+    // Reorder the user's destinations along the shortest path so a
+    // Crater Lake → Cannon Beach → Bend entry doesn't zig-zag. The start
+    // location is always the anchor; the end is whatever the trip terminates
+    // at (start for round trips, endLocation if set, else open-ended). The
+    // user-set endLocation is appended below and is NOT permuted.
+    const originalDestinations = destinations;
+    const optimizationEnd = returnToStart
+      ? { lat: effectiveStart.lat, lng: effectiveStart.lng }
+      : endLocation
+        ? { lat: endLocation.lat, lng: endLocation.lng }
+        : undefined;
+    const { ordered: optimizedDestinations, reordered: didReorder } = optimizePath({
+      start: { lat: effectiveStart.lat, lng: effectiveStart.lng },
+      destinations: originalDestinations,
+      end: optimizationEnd,
+    });
+
     // Auto-distribute remaining days across destinations the user didn't
     // explicitly assign (days = 0 / undefined). Round-trip costs 1 travel
     // day; the remainder is the activity budget.
     const travelDays = returnToStart && startLocation ? 1 : 0;
-    const totalSpecified = destinations.reduce((sum, d) => sum + (d.days || 0), 0);
-    const unsetCount = destinations.filter(d => !d.days).length;
+    const totalSpecified = optimizedDestinations.reduce((sum, d) => sum + (d.days || 0), 0);
+    const unsetCount = optimizedDestinations.filter(d => !d.days).length;
     const remaining = Math.max(0, duration[0] - travelDays - totalSpecified);
     const baseDistribution = unsetCount > 0 ? Math.floor(remaining / unsetCount) : 0;
     let leftover = unsetCount > 0 ? remaining - baseDistribution * unsetCount : 0;
 
     // Build destinations as TripDestination[]
     // All destinations are included (even if first one is also used as start)
-    const tripDestinations: TripDestination[] = destinations.map(dest => {
+    const tripDestinations: TripDestination[] = optimizedDestinations.map(dest => {
       const explicitDays = dest.days && dest.days > 0 ? dest.days : undefined;
       const distributedDays = explicitDays ?? (baseDistribution + (leftover-- > 0 ? 1 : 0));
       return {
@@ -521,6 +540,7 @@ const CreateTrip = () => {
         // Wireframe: every destination inherits the global activities mode.
         aiActivities: activitiesMode === 'ai',
         ...(dest.activities && dest.activities.length > 0 && { activities: dest.activities }),
+        ...(dest.exploreTown && { exploreTown: true }),
       };
     });
 
@@ -535,8 +555,9 @@ const CreateTrip = () => {
       });
     }
 
-    // Generate trip name if not provided
-    const lastDest = destinations[destinations.length - 1];
+    // Generate trip name if not provided. Use the optimized order so the
+    // generated name reflects the actual end of the route.
+    const lastDest = optimizedDestinations[optimizedDestinations.length - 1];
     const generatedName = tripName.trim() ||
       (startLocation
         ? `${startLocation.name} to ${lastDest.name}`
@@ -587,6 +608,12 @@ const CreateTrip = () => {
       const trip = await generateTrip(tripConfig);
 
       if (trip) {
+        if (didReorder) {
+          trip.reorderedDestinations = {
+            original: originalDestinations.map(d => d.name),
+            optimized: optimizedDestinations.map(d => d.name),
+          };
+        }
         setGeneratedTrip(trip);
         // Persist to Supabase so /trip/<slug> survives a reload. saveTrip
         // updates generatedTrip with the DB-generated id when it inserts.

@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: utah-engine-pg
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: utah_engine
+    ports:
+      # Non-default port so it doesn't clash with the project's local Supabase on 54322.
+      - "54350:5432"
+    volumes:
+      - utah_engine_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d utah_engine"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  utah_engine_pgdata:

@@ -36,6 +36,7 @@ import { AlternativeHikesModal } from '@/components/AlternativeHikesModal';
 import { AlternativeCampsitesModal } from '@/components/AlternativeCampsitesModal';
 import { AddStopModal } from '@/components/AddStopModal';
 import { createMarkerIcon } from '@/utils/mapMarkers';
+import { MapStopInfoWindow } from '@/components/trip-detail/MapStopInfoWindow';
 import { estimateDayTime } from '@/utils/tripValidation';
 import { getAllTrailsUrl, estimateTrailLength } from '@/utils/hikeUtils';
 import { getTripSlug, getTripUrl, getDayUrl } from '@/utils/slugify';
@@ -120,6 +121,14 @@ const DayDetail = () => {
   const navigate = useNavigate();
   const { generatedTrip, loadSavedTripBySlug, updateTripStop, removeTripStop, addTripStop } = useTrip();
 
+  // Match TripMapView's cream route stroke — readable on satellite imagery
+  // in both themes. Falls back to a static value during SSR.
+  const routeStrokeColor = `hsl(${
+    typeof window !== 'undefined'
+      ? getComputedStyle(document.documentElement).getPropertyValue('--cream').trim() || '45 56% 95%'
+      : '45 56% 95%'
+  })`;
+
   const [mapsLoaded, setMapsLoaded] = useState(false);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
@@ -127,6 +136,7 @@ const DayDetail = () => {
   const [selectedHikeForSwap, setSelectedHikeForSwap] = useState<TripStop | null>(null);
   const [campsiteModalOpen, setCampsiteModalOpen] = useState(false);
   const [selectedCampsiteForSwap, setSelectedCampsiteForSwap] = useState<TripStop | null>(null);
+  const [selectedStop, setSelectedStop] = useState<TripStop | null>(null);
   const [addStopModalOpen, setAddStopModalOpen] = useState(false);
   const [weather, setWeather] = useState<WeatherForecast | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -430,7 +440,7 @@ const DayDetail = () => {
                     options={{
                       suppressMarkers: true,
                       polylineOptions: {
-                        strokeColor: '#3a4a2a',
+                        strokeColor: routeStrokeColor,
                         strokeWeight: 5,
                         strokeOpacity: 1,
                       },
@@ -442,20 +452,40 @@ const DayDetail = () => {
                   <AdvancedMarker
                     map={mapInstance}
                     position={(generatedTrip.config.startLocation || generatedTrip.config.baseLocation)!.coordinates}
-                    content={createMarkerIcon('start', { isActive: true, size: 36 })}
+                    content={createMarkerIcon('start', { isActive: true })}
                     title={(generatedTrip.config.startLocation || generatedTrip.config.baseLocation)!.name}
                   />
                 )}
 
-                {day.stops.map((stop) => (
-                  <AdvancedMarker
-                    key={stop.id}
-                    map={mapInstance}
-                    position={stop.coordinates}
-                    content={createMarkerIcon(stop.type, { isActive: true, size: 36 })}
-                    title={stop.name}
-                  />
-                ))}
+                {(() => {
+                  // Dedupe markers at the same coord so destination viewpoints
+                  // and same-location follow-ups (the optional "Time in town"
+                  // extra-day marker, or stale "explore-*" stops on older
+                  // saved trips) don't stack two pins on one point.
+                  const seen = new Set<string>();
+                  return day.stops
+                    .filter((stop) => {
+                      if (stop.type === 'end') return false;
+                      const key = `${stop.coordinates.lat.toFixed(5)},${stop.coordinates.lng.toFixed(5)}`;
+                      if (seen.has(key)) return false;
+                      seen.add(key);
+                      return true;
+                    })
+                    .map((stop) => (
+                      <AdvancedMarker
+                        key={stop.id}
+                        map={mapInstance}
+                        position={stop.coordinates}
+                        content={createMarkerIcon(stop.type, { isActive: true })}
+                        title={stop.name}
+                        onClick={() => setSelectedStop(stop)}
+                      />
+                    ));
+                })()}
+
+                {selectedStop && (
+                  <MapStopInfoWindow stop={selectedStop} onClose={() => setSelectedStop(null)} />
+                )}
               </GoogleMap>
 
               {/* Floating route info card */}

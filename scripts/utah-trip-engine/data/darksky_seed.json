@@ -1,0 +1,68 @@
+[
+  {
+    "slug": "canyonlands-dark-sky",
+    "name": "Canyonlands Dark Sky Park",
+    "lat": 38.32762,
+    "lng": -109.87848,
+    "atlas_obscura_url": "https://darksky.org/places/canyonlands-national-park/",
+    "description": "IDA-certified International Dark Sky Park (2015). Among the darkest skies in the contiguous US; central panel of the Colorado Plateau dark sky cluster.",
+    "tags": ["dark sky", "stargazing", "astrophotography", "ida certified"],
+    "_verified": true,
+    "_notes": "Centroid is approximate (Island in the Sky). Certification: 2015. Park polygon already in pilot_regions; this row gives the recommendation engine a discoverable POI."
+  },
+  {
+    "slug": "dead-horse-point-dark-sky",
+    "name": "Dead Horse Point Dark Sky Park",
+    "lat": 38.4825,
+    "lng": -109.7414,
+    "atlas_obscura_url": "https://darksky.org/places/dead-horse-point-state-park/",
+    "description": "IDA-certified International Dark Sky Park (2016). Sweeping Colorado River canyon overlook with exceptional dark skies; right outside Canyonlands.",
+    "tags": ["dark sky", "stargazing", "astrophotography", "state park"],
+    "_verified": true,
+    "_notes": "Certification: 2016."
+  },
+  {
+    "slug": "natural-bridges-dark-sky",
+    "name": "Natural Bridges Dark Sky Park",
+    "lat": 37.6105,
+    "lng": -110.0123,
+    "atlas_obscura_url": "https://darksky.org/places/natural-bridges-national-monument/",
+    "description": "First IDA-certified International Dark Sky Park in the world (2007); Bortle 2 skies. Three natural bridges visible by day; world-class night sky.",
+    "tags": ["dark sky", "stargazing", "astrophotography", "natural bridges", "first dark sky park"],
+    "_verified": true,
+    "_notes": "Original 2007 certification. Just outside the strict 50mi radius (~64mi) but pilot-relevant."
+  },
+  {
+    "slug": "hovenweep-dark-sky",
+    "name": "Hovenweep Dark Sky Park",
+    "lat": 37.385,
+    "lng": -109.0765,
+    "atlas_obscura_url": "https://darksky.org/places/hovenweep-national-monument/",
+    "description": "IDA-certified International Dark Sky Park (2014). Ancestral Puebloan archaeology by day, exceptional dark skies by night; remote and uncrowded.",
+    "tags": ["dark sky", "stargazing", "archaeology", "ancestral puebloan"],
+    "_verified": true,
+    "_notes": "Certification: 2014. Outside the strict 50mi radius but pilot-relevant."
+  },
+  {
+    "slug": "goosenecks-dark-sky",
+    "name": "Goosenecks Dark Sky Park",
+    "lat": 37.1737,
+    "lng": -109.9269,
+    "atlas_obscura_url": "https://darksky.org/places/goosenecks-state-park/",
+    "description": "IDA-certified International Dark Sky Park (2017). Tightly meandering San Juan River entrenched 1,000 ft below the rim; minimal light pollution.",
+    "tags": ["dark sky", "stargazing", "san juan river", "state park"],
+    "_verified": true,
+    "_notes": "Certification: 2017. Outside Moab radius but pilot-relevant."
+  },
+  {
+    "slug": "rainbow-bridge-dark-sky",
+    "name": "Rainbow Bridge Dark Sky Park",
+    "lat": 37.0775,
+    "lng": -110.964,
+    "atlas_obscura_url": "https://darksky.org/places/rainbow-bridge-national-monument/",
+    "description": "IDA-certified Dark Sky Sanctuary (2019). World's largest known natural bridge; reachable only by boat or long backcountry hike. Sacred to Diné, Hopi, Paiute.",
+    "tags": ["dark sky sanctuary", "stargazing", "natural bridge", "remote"],
+    "_verified": true,
+    "_notes": "Certification: 2019. Far outside Moab radius (~120mi) but a known cluster member."
+  }
+]

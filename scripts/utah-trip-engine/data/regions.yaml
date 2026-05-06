@@ -1,0 +1,279 @@
+# RoamsWild outdoor-data pilot — region config
+#
+# Each entry is a region the pipeline can ingest + enrich. Run any region with
+#   python main.py run-region <key> [--skip-vision]
+#
+# Required fields:
+#   name        Human-readable region name
+#   state       Two-letter state code (e.g. UT, CO, CA). Used to skip state-
+#               restricted sources (UGRC, UGRC OSP, locationscout) when the
+#               region is outside that state.
+#   anchor      [lat, lng]
+#   radius_mi   Pull-radius around the anchor (typically 50)
+#
+# Optional fields:
+#   enabled_sources    Subset of available ingesters to run. Default: all
+#                      that work for the region's state.
+#   nps_park_codes     NPS Developer API park codes (e.g. arch, cany, glca,
+#                      grca, zion, brca, romo, yose). Look up at
+#                      https://developer.nps.gov/api/v1/parks
+#   reddit_subs        Subreddits to scrape for community signal.
+#   reddit_gazetteer   Hand-curated landmark names to use as a Reddit-post
+#                      relevance filter (in addition to UGRC trail names +
+#                      region polygons that get auto-loaded).
+#   wikivoyage_articles  Wikivoyage page titles to scrape for {{listing}}
+#                        templates. Should cover the towns / parks /
+#                        notable sub-areas that travelers reference.
+#   seed_files         Per-source curated JSON seeds (Atlas Obscura, Dark
+#                      Sky, etc.). Paths relative to the project root.
+#
+# To add a new region: copy the `moab` block, change the name/state/anchor,
+# tune the lists, and run `python main.py run-region <new_key>`.
+# ============================================================================
+
+regions:
+
+  moab:
+    name: "Moab, Utah"
+    state: UT
+    anchor: [38.5733, -109.5498]
+    radius_mi: 50
+    enabled_sources:
+      - ugrc           # UT-only — trails layer (TrailsAndPathways)
+      - regions        # UT-only — NPS / BLM / state-park polygons via UGRC catalog
+      - osp            # UT-only — UGRC OpenSourcePlaces (cleaned OSM)
+      - gnis           # National — USGS Geographic Names
+      - osm            # National — Overpass natural/tourism/historic features
+      - nhd            # National — USGS hydrography points (springs, falls)
+      - nps-places     # National — NPS Developer API in-park POIs
+      - nrhp           # National — National Register of Historic Places
+      - mrds           # National — USGS mining / historic settlement markers
+      - reddit         # National — community signal
+      - wikivoyage     # International — travel-listing snippets
+      - locationscout  # National — photographer endorsement layer (currently
+                       # only walks the Utah index page; refactor needed for
+                       # multi-state)
+      - wikimedia      # International — Wikimedia Commons photo density
+      - seed:atlas_obscura
+      - seed:darksky
+    nps_park_codes:
+      - arch    # Arches
+      - cany    # Canyonlands
+      - glca    # Glen Canyon NRA
+      - nabr    # Natural Bridges NM
+      - hove    # Hovenweep NM
+      - cebr    # Cedar Breaks NM (mostly outside radius; harmless)
+    reddit_subs:
+      - Moab
+      - overlanding
+      - Utah
+      - CampingandHiking
+      - hiking
+    reddit_gazetteer:
+      # Hand-curated landmarks. Auto-merged with UGRC trail names + region
+      # polygon names at ingest time.
+      - moab
+      - arches
+      - canyonlands
+      - dead horse
+      - la sal
+      - la sals
+      - sand flats
+      - indian creek
+      - bears ears
+      - castle valley
+      - fisher towers
+      - onion creek
+      - mill creek
+      - white rim
+      - the maze
+      - the needles
+      - island in the sky
+      - slickrock
+      - hells revenge
+      - fins and things
+      - poison spider
+      - steel bender
+      - top of the world
+      - gemini bridges
+      - klondike bluffs
+      - negro bill
+      - grandstaff
+      - corona arch
+      - delicate arch
+      - landscape arch
+      - mesa arch
+      - false kiva
+      - professor valley
+      - potash road
+      - shafer trail
+      - cathedral valley
+      - san rafael swell
+      - goblin valley
+      - newspaper rock
+    wikivoyage_articles:
+      - Moab
+      - Arches National Park
+      - Canyonlands National Park
+      - Bears Ears National Monument
+      - Glen Canyon National Recreation Area
+      - Dead Horse Point State Park
+      - Indian Creek (Utah)
+      - Castle Valley
+      - Green River (Utah)
+      - Monticello (Utah)
+      - Blanding
+      - Bluff (Utah)
+      - La Sal
+    seed_files:
+      atlas_obscura: data/atlas_obscura_seed.json
+      darksky: data/darksky_seed.json
+
+  joshua_tree:
+    name: "Joshua Tree, California"
+    state: CA
+    # Park's geographic center. 50mi radius covers JT, 29 Palms, Yucca
+    # Valley, Pioneertown, Big Morongo, north end of Salton Sea, Idyllwild.
+    anchor: [33.8734, -115.9010]
+    radius_mi: 50
+    enabled_sources:
+      - gnis
+      - osm
+      - nhd
+      - nps-places
+      - nrhp
+      - mrds
+      - reddit
+      - wikivoyage
+      - wikimedia
+      # ugrc, regions, osp, locationscout — Utah-only, auto-skipped
+    nps_park_codes:
+      - jotr     # Joshua Tree NP
+    reddit_subs:
+      - joshuatree
+      - socalhiking
+      - California
+      - overlanding
+      - CampingandHiking
+      - hiking
+    reddit_gazetteer:
+      - joshua tree
+      - jtree
+      - hidden valley
+      - jumbo rocks
+      - keys view
+      - skull rock
+      - arch rock
+      - barker dam
+      - ryan mountain
+      - 49 palms
+      - forty-nine palms
+      - lost horse
+      - cottonwood
+      - black rock
+      - indian cove
+      - white tank
+      - twentynine palms
+      - 29 palms
+      - yucca valley
+      - pioneertown
+      - big morongo
+      - wonderland of rocks
+      - queen valley
+      - pinto basin
+      - cholla cactus garden
+      - mastodon peak
+      - lost palms
+      - idyllwild
+      - palm springs
+    wikivoyage_articles:
+      - Joshua Tree National Park
+      - Twentynine Palms
+      - Pioneertown
+      - Yucca Valley
+      - Palm Springs
+      - Idyllwild
+    seed_files: {}
+
+  gold_beach:
+    name: "Gold Beach, Oregon"
+    state: OR
+    # Sits on the southern Oregon coast. 50mi radius covers Bandon →
+    # Brookings on the coast, Wild Rogue / Kalmiopsis Wilderness inland,
+    # and the north edge of Redwood NP (CA).
+    anchor: [42.4072, -124.4203]
+    radius_mi: 50
+    enabled_sources:
+      - gnis
+      - osm
+      - nhd
+      - nps-places
+      - nrhp
+      - mrds
+      - reddit
+      - wikivoyage
+      - wikimedia
+    nps_park_codes:
+      - redw     # Redwood NP/SP — south end of radius
+    reddit_subs:
+      - oregon
+      - PNW
+      - OregonCoast
+      - CampingandHiking
+      - hiking
+      - overlanding
+    reddit_gazetteer:
+      - gold beach
+      - brookings
+      - bandon
+      - port orford
+      - cape blanco
+      - cape sebastian
+      - cape ferrelo
+      - samuel boardman
+      - boardman corridor
+      - rogue river
+      - wild rogue
+      - kalmiopsis
+      - redwood
+      - smith river
+      - harris beach
+      - hunter creek
+      - pistol river
+      - agness
+      - illahe
+      - secret beach
+      - lone ranch
+      - natural bridges
+      - thomas creek bridge
+      - arch rock
+      - prehistoric gardens
+      - otter point
+      - indian sands
+      - china creek
+      - whaleshead
+      - meyers creek
+    wikivoyage_articles:
+      - Gold Beach
+      - Brookings
+      - Bandon
+      - Port Orford
+      - Crescent City
+      - Oregon Coast
+    seed_files: {}
+
+  # ---------------------------------------------------------------------------
+  # Template for adding a new region. Copy this block, change the key
+  # + values, run `python main.py run-region <key>`.
+  # ---------------------------------------------------------------------------
+  # _template:
+  #   name: "Region Name, State"
+  #   state: XX
+  #   anchor: [lat, lng]
+  #   radius_mi: 50
+  #   enabled_sources: [gnis, osm, nhd, nps-places, nrhp, mrds, reddit, wikivoyage, wikimedia]
+  #   nps_park_codes: []
+  #   reddit_subs: []
+  #   reddit_gazetteer: []
+  #   wikivoyage_articles: []
+  #   seed_files: {}

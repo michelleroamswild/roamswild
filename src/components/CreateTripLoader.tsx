@@ -9,6 +9,39 @@ interface CreateTripLoaderProps {
   destinations?: Array<{ name: string }>;
 }
 
+// Wraps each character in a span with a staggered wave-letter animation so
+// the headline reads like wind moving across the text — subtle, ambient.
+// Spaces use a non-breaking space so the inline-block flow doesn't collapse.
+const WaveText = ({ text }: { text: string }) => (
+  <>
+    {Array.from(text).map((char, i) => (
+      <span
+        key={`${char}-${i}`}
+        className="inline-block animate-wave-letter"
+        style={{ animationDelay: `${i * 0.06}s` }}
+      >
+        {char === ' ' ? ' ' : char}
+      </span>
+    ))}
+  </>
+);
+
+// Three dots that fade in sequentially after the heading lands, then loop —
+// reads as "…still working" without a literal spinner string.
+const BuildingDots = () => (
+  <span className="inline-block">
+    {[0, 0.22, 0.44].map((delay, i) => (
+      <span
+        key={i}
+        className="inline-block animate-dot-in"
+        style={{ animationDelay: `${delay}s` }}
+      >
+        .
+      </span>
+    ))}
+  </span>
+);
+
 // Cycles through scene-of-work states with rotating accent colors from the
 // redesign palette (water/pine/sage/clay).
 const STAGES = [
@@ -41,8 +74,9 @@ export function CreateTripLoader({
     <div className="fixed inset-0 z-[60] bg-cream dark:bg-paper text-ink font-sans flex flex-col items-center justify-center px-6 text-center">
       <Mono className="text-pine-6">{headline}</Mono>
 
-      <h2 className="font-sans font-bold tracking-[-0.025em] text-ink text-[28px] md:text-[40px] leading-[1.05] mt-3 max-w-[640px]">
-        {heroTitle}.
+      <h2 className="font-sans font-bold tracking-[-0.025em] text-ink text-[28px] md:text-[40px] leading-[1.15] mt-3 max-w-[640px]">
+        <WaveText text={heroTitle} />
+        <BuildingDots />
       </h2>
 
       {destChain && (

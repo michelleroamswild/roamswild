@@ -24,6 +24,7 @@ interface LocationData {
   bounds?: GeoBounds;
   aiActivities?: boolean;
   activities?: DestinationActivity[];
+  exploreTown?: boolean;
 }
 
 interface StepDestinationsProps {
@@ -113,6 +114,10 @@ export function StepDestinations({
 
   const handleToggleAiActivities = (id: string, aiActivities: boolean) => {
     setDestinations(destinations.map((d) => (d.id === id ? { ...d, aiActivities } : d)));
+  };
+
+  const handleToggleExploreTown = (id: string, exploreTown: boolean) => {
+    setDestinations(destinations.map((d) => (d.id === id ? { ...d, exploreTown } : d)));
   };
 
   const handleDragStart = (index: number) => setDraggedIndex(index);
@@ -262,6 +267,7 @@ export function StepDestinations({
               const canDecrease = currentDays > 0;
               const dragging = draggedIndex === index;
               const aiActivities = dest.aiActivities ?? true;
+              const exploreTown = dest.exploreTown ?? false;
               return (
                 <div
                   key={dest.id}
@@ -346,6 +352,32 @@ export function StepDestinations({
                         accent="clay"
                       />
                     </div>
+                  </div>
+
+                  {/* Explore-town toggle — opt-in town time on extra days */}
+                  <div className="px-3 pb-3 -mt-1">
+                    <label className="ml-7 flex items-center gap-2.5 cursor-pointer select-none w-fit">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={exploreTown}
+                        onClick={() => handleToggleExploreTown(dest.id, !exploreTown)}
+                        className={cn(
+                          'relative inline-flex h-4 w-7 items-center rounded-full transition-colors flex-shrink-0',
+                          exploreTown ? 'bg-pine-6' : 'bg-ink-3/30',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'inline-block h-3 w-3 rounded-full bg-cream dark:bg-paper-2 transform transition-transform shadow-sm',
+                            exploreTown ? 'translate-x-3.5' : 'translate-x-0.5',
+                          )}
+                        />
+                      </button>
+                      <span className="text-[12px] text-ink-2">
+                        Spend time in town on extra days
+                      </span>
+                    </label>
                   </div>
                 </div>
               );

@@ -235,6 +235,36 @@ const TripDetail = () => {
     });
   };
 
+  const handleRegenerateFromScratch = async () => {
+    if (!generatedTrip) return;
+    const ok = window.confirm(
+      'Regenerate this trip from scratch? All day customizations (swapped hikes, campsites, removed stops) will be lost.'
+    );
+    if (!ok) return;
+
+    toast.loading('Regenerating trip from scratch...', { id: 'regenerating' });
+    try {
+      const fresh = await generateTrip(tripConfig);
+      if (!fresh) {
+        toast.error('Failed to regenerate trip', { id: 'regenerating' });
+        return;
+      }
+      const replaced = {
+        ...fresh,
+        id: generatedTrip.id,
+        config: tripConfig,
+        // The reorder happened on first creation — preserve the notice so
+        // regenerating doesn't make it disappear.
+        reorderedDestinations: generatedTrip.reorderedDestinations,
+      };
+      setGeneratedTrip(replaced);
+      if (isSaved) await saveTrip(replaced);
+      toast.success(`Trip regenerated (${replaced.days.length} days)`, { id: 'regenerating' });
+    } catch (err) {
+      toast.error('Failed to regenerate trip', { id: 'regenerating' });
+    }
+  };
+
   const handleOpenDateEdit = () => {
     if (generatedTrip && tripConfig.startDate) {
       const [year, month, day] = tripConfig.startDate.split('-').map(Number);
@@ -1148,6 +1178,7 @@ const TripDetail = () => {
         <TripDetailHeader
           tripName={tripConfig.name}
           totalDays={generatedTrip.days.length}
+          requestedDuration={tripConfig.duration}
           totalDistance={generatedTrip.totalDistance}
           collaborators={collaborators}
           isSaved={isSaved}
@@ -1156,6 +1187,9 @@ const TripDetail = () => {
           onOpenShare={() => setShareModalOpen(true)}
           onUnsave={handleUnsaveTrip}
           onSave={handleSaveTrip}
+          onRegenerateFromScratch={handleRegenerateFromScratch}
+          regenerating={regenerating}
+          reorderedDestinations={generatedTrip.reorderedDestinations}
         />
 
         <TripTimelineStrip

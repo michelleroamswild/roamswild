@@ -191,6 +191,10 @@ export default function IoTest() {
     camping: false, established: false, stealth: false, water: false, showers: false, laundromats: false,
   });
   const [reviewKeys, setReviewKeys] = useState<Set<string>>(new Set());
+  // Map<row_key, ['title:lowercase_lead', 'desc:placeholder_text', ...]> —
+  // populated alongside reviewKeys from the same review-list.json. Lets the
+  // list renderer surface WHY each row was flagged without a second query.
+  const [reviewIssues, setReviewIssues] = useState<Map<string, string[]>>(new Map());
   const [reviewMode, setReviewMode] = useState(false);
   // "Newly imported" mode: when on, scope the visible layers to spots
   // whose `extra.ai_review_pending === true` flag is set. The import
@@ -249,14 +253,37 @@ export default function IoTest() {
   const [showRemoved, setShowRemoved] = useState(false);
   const [satellite, setSatellite] = useState(true);
 
-  // Load review list (entries flagged by Stage 22 weird-entry scan)
+  // Per-kind count from the review-list — used to render the kind filter
+  // chips in the header banner when review mode is on.
+  const [reviewKindCounts, setReviewKindCounts] = useState<Record<string, number>>({});
+
+  // Load review list — entries flagged by scan_weird_db.py with per-row
+  // issue tags so the list view can show WHY each spot was flagged.
+  // Schema: [{spot_id, lat, lng, kind, issues: ['title:lowercase_lead', ...]}]
+  // (Older [{lat, lng}]-only files still load, just without issue tags.)
   useEffect(() => {
     fetch('/test-data/review-list.json')
       .then((r) => (r.ok ? r.json() : []))
-      .then((list: { lat: number; lng: number }[]) => {
-        setReviewKeys(new Set(list.map((e) => reviewKey(e.lat, e.lng))));
+      .then((list: Array<{ lat: number; lng: number; kind?: string; issues?: string[] }>) => {
+        const keys = new Set<string>();
+        const issuesByKey = new Map<string, string[]>();
+        const kindCounts: Record<string, number> = {};
+        for (const e of list) {
+          const k = reviewKey(e.lat, e.lng);
+          keys.add(k);
+          if (e.issues && e.issues.length) issuesByKey.set(k, e.issues);
+          const kind = e.kind || '';
+          if (kind) kindCounts[kind] = (kindCounts[kind] || 0) + 1;
+        }
+        setReviewKeys(keys);
+        setReviewIssues(issuesByKey);
+        setReviewKindCounts(kindCounts);
       })
-      .catch(() => setReviewKeys(new Set()));
+      .catch(() => {
+        setReviewKeys(new Set());
+        setReviewIssues(new Map());
+        setReviewKindCounts({});
+      });
   }, []);
 
   useEffect(() => {
@@ -498,11 +525,35 @@ export default function IoTest() {
           <button
             onClick={() => setReviewMode((v) => !v)}
             className={ctlBtn(reviewMode)}
-            title="Show only entries flagged as possibly weird by the Stage 22 scan"
+            title="Show only entries flagged as possibly weird by scan_weird_db.py"
           >
             <FlagBanner className="w-3 h-3" weight="regular" />
             Review {reviewMode ? 'on' : 'off'} ({reviewKeys.size})
           </button>
+          {/* Per-kind filter chips for the review list. Click a chip to toggle
+              its corresponding LAYER on/off — that's how the existing layer
+              system already filters by kind. The chips just surface the
+              flagged-per-kind counts so it's obvious what's available. */}
+          {reviewMode && Object.keys(reviewKindCounts).length > 0 && LAYERS.map((layer) => {
+            const kindForLayer = layer.kinds[0];
+            const flaggedInKind = reviewKindCounts[kindForLayer] || 0;
+            if (flaggedInKind === 0) return null;
+            const on = enabled[layer.key];
+            return (
+              <button
+                key={`review-kind-${layer.key}`}
+                onClick={() => setEnabled((p) => ({ ...p, [layer.key]: !p[layer.key] }))}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-sans font-medium transition-colors border',
+                  on ? 'bg-ember/10 border-ember/30 text-ember' : 'bg-transparent border-line text-ink-3 opacity-60',
+                )}
+                title={`${flaggedInKind} flagged ${layer.label.toLowerCase()} — click to toggle`}
+              >
+                <span>{layer.label}</span>
+                <Mono>{flaggedInKind}</Mono>
+              </button>
+            );
+          })}
           <button
             onClick={() => setSatellite((v) => !v)}
             className={ctlBtn(satellite)}
@@ -746,6 +797,36 @@ export default function IoTest() {
                   </div>
 
                   <AmenityRow spot={s} />
+
+                  {/* Why this row was flagged. Each tag is "scope:pattern" —
+                      e.g. "title:lowercase_lead", "desc:placeholder_text".
+                      Tag color = scope, pattern is the human-readable bit. */}
+                  {(() => {
+                    const issues = reviewIssues.get(s._key);
+                    if (!issues || issues.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {issues.map((tag) => {
+                          const [scope, name] = tag.split(':');
+                          const isTitle = scope === 'title';
+                          return (
+                            <span
+                              key={tag}
+                              className={cn(
+                                'px-1.5 py-0.5 rounded text-[10px] font-medium',
+                                isTitle
+                                  ? 'bg-ember/10 text-ember'
+                                  : 'bg-clay/10 text-clay-7',
+                              )}
+                              title={`${scope}: ${name}`}
+                            >
+                              {scope}:{name?.replace(/_/g, ' ')}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
 
                   {s.description && (
                     <div className="mt-2">

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { DirectionsRenderer, InfoWindow } from '@react-google-maps/api';
+import { DirectionsRenderer } from '@react-google-maps/api';
 import { GoogleMap } from '@/components/GoogleMap';
 import { AdvancedMarker } from '@/components/AdvancedMarker';
 import { GeneratedTrip, TripConfig, TripStop } from '@/types/trip';
 import { createMarkerIcon, createSimpleMarkerIcon } from '@/utils/mapMarkers';
+import { MapStopInfoWindow } from '@/components/trip-detail/MapStopInfoWindow';
 
 interface TripMapViewProps {
   tripConfig: TripConfig;
@@ -77,7 +78,7 @@ export const TripMapView = ({
             <AdvancedMarker
               map={mapInstance}
               position={(tripConfig.startLocation || tripConfig.baseLocation)!.coordinates}
-              content={createMarkerIcon('start')}
+              content={createMarkerIcon('start', { isActive: true })}
               title={
                 tripConfig.startLocation
                   ? `Start: ${tripConfig.startLocation.name}`
@@ -141,7 +142,7 @@ export const TripMapView = ({
                   key="trip-end-marker"
                   map={mapInstance}
                   position={endStop.coordinates}
-                  content={createMarkerIcon('end')}
+                  content={createMarkerIcon('end', { isActive: true })}
                   title={`End: ${endStop.name}`}
                 />
               );
@@ -166,56 +167,38 @@ export const TripMapView = ({
             return null;
           })()}
 
-          {(activeDay ? generatedTrip.days.find((d) => d.day === activeDay)?.stops || [] : allStops)
-            .filter((stop) => stop.type !== 'end')
-            .map((stop) => (
-              <AdvancedMarker
-                key={stop.id}
-                map={mapInstance}
-                position={stop.coordinates}
-                content={createMarkerIcon(stop.type, { isActive: !!activeDay })}
-                title={stop.name}
-                onClick={() => onSelectStop(stop)}
-              />
-            ))}
+          {(() => {
+            // Dedupe stops by coordinate so destination viewpoints and same-
+            // location follow-ups (the optional "Time in town" extra-day
+            // marker, or stale "explore-*" stops on older saved trips) don't
+            // stack two pins on the same point. First-seen wins, which keeps
+            // the canonical destination pin from the arrival day.
+            const stops = activeDay
+              ? generatedTrip.days.find((d) => d.day === activeDay)?.stops || []
+              : allStops;
+            const seen = new Set<string>();
+            return stops
+              .filter((stop) => {
+                if (stop.type === 'end') return false;
+                const key = `${stop.coordinates.lat.toFixed(5)},${stop.coordinates.lng.toFixed(5)}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              })
+              .map((stop) => (
+                <AdvancedMarker
+                  key={stop.id}
+                  map={mapInstance}
+                  position={stop.coordinates}
+                  content={createMarkerIcon(stop.type, { isActive: true })}
+                  title={stop.name}
+                  onClick={() => onSelectStop(stop)}
+                />
+              ));
+          })()}
 
           {selectedStop && (
-            <InfoWindow
-              position={selectedStop.coordinates}
-              onCloseClick={() => onSelectStop(null)}
-              options={{ pixelOffset: new google.maps.Size(0, -32) }}
-            >
-              <div className="p-1 min-w-[200px] font-sans">
-                <h4 className="text-[14px] font-semibold tracking-[-0.005em] text-ink">
-                  {selectedStop.name}
-                </h4>
-                {selectedStop.description && (
-                  <p className="text-[12px] text-ink-3 mt-1 leading-[1.5]">{selectedStop.description}</p>
-                )}
-                <div className="flex items-center gap-2 mt-1.5 mb-2.5 text-[11px] font-mono uppercase tracking-[0.10em] text-ink-3">
-                  <span>Day {selectedStop.day}</span>
-                  {selectedStop.duration && (
-                    <>
-                      <span>·</span>
-                      <span className="normal-case font-sans tracking-normal text-[12px]">
-                        {selectedStop.duration}
-                      </span>
-                    </>
-                  )}
-                </div>
-                <button
-                  onClick={() =>
-                    window.open(
-                      `https://www.google.com/maps/dir/?api=1&destination=${selectedStop.coordinates.lat},${selectedStop.coordinates.lng}`,
-                      '_blank',
-                    )
-                  }
-                  className="w-full px-3 py-1.5 rounded-full bg-pine-6 text-cream dark:text-ink-pine text-[12px] font-sans font-semibold tracking-[0.01em] hover:bg-pine-5 transition-colors"
-                >
-                  Get directions
-                </button>
-              </div>
-            </InfoWindow>
+            <MapStopInfoWindow stop={selectedStop} onClose={() => onSelectStop(null)} />
           )}
         </GoogleMap>
       </div>

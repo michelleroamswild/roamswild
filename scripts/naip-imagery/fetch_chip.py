@@ -40,13 +40,19 @@ from rio_tiler.io import Reader
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 ENV_PATH = PROJECT_ROOT / '.env'
+ENV_PROD_PATH = PROJECT_ROOT / '.env.production'
 
 # Microsoft Planetary Computer hosts NAIP for free (no requester-pays, no egress
 # fees). We sign asset URLs with planetary_computer.sign() to get a short-lived
 # SAS token that lets rio-tiler/rasterio read the COG over HTTPS.
 STAC_URL = 'https://planetarycomputer.microsoft.com/api/stac/v1'
 NAIP_COLLECTION = 'naip'
-SUPABASE_URL = 'https://ioseedbzvogywztbtgjd.supabase.co'
+
+# Dev is the primary read source (existence checks, spot lookup). Inserts go
+# to BOTH dev and prod so a single backfill run keeps the two in lockstep —
+# avoids a separate sync pass after each NAIP batch.
+SUPABASE_URL      = 'https://ioseedbzvogywztbtgjd.supabase.co'
+PROD_SUPABASE_URL = 'https://folbzyweiiklcdleldfa.supabase.co'
 
 CHIP_RADIUS_M = 250          # ~500m square chip
 CHIP_PX = 1024
@@ -62,6 +68,25 @@ def load_env():
             m = pat.match(line.rstrip())
             if m:
                 os.environ.setdefault(m.group(1), m.group(2))
+
+
+def load_prod_service_key() -> str:
+    """Read SUPABASE_SERVICE_ROLE_KEY from .env.production for the second
+    write target. Cached in os.environ['PROD_SERVICE_ROLE_KEY']. Required
+    only when ENABLE_PROD_DUAL_WRITE is unset (default: dual-write is on)
+    or when explicitly POSTing to prod."""
+    if 'PROD_SERVICE_ROLE_KEY' in os.environ:
+        return os.environ['PROD_SERVICE_ROLE_KEY']
+    if not ENV_PROD_PATH.exists():
+        sys.exit(f'No .env.production at {ENV_PROD_PATH} (needed for dual-write)')
+    pat = re.compile(r'^\s*SUPABASE_SERVICE_ROLE_KEY\s*=\s*"?([^"\n]*?)"?\s*$')
+    with open(ENV_PROD_PATH) as f:
+        for line in f:
+            m = pat.match(line.rstrip())
+            if m:
+                os.environ['PROD_SERVICE_ROLE_KEY'] = m.group(1)
+                return m.group(1)
+    sys.exit('SUPABASE_SERVICE_ROLE_KEY missing from .env.production')
 
 
 def http_get(url, headers):
@@ -229,12 +254,18 @@ def upload_to_r2(jpeg_bytes, storage_key):
 
 
 def insert_spot_image(spot_id, storage_url, storage_key, item, size, supa_key, pin_baked=False):
-    """Insert a spot_images row for a freshly-uploaded NAIP chip.
+    """Insert a spot_images row for a freshly-uploaded NAIP chip into BOTH
+    dev and prod. The R2 chip is shared, so each DB just gets a metadata
+    pointer to the same storage URL.
 
     `pin_baked` records whether the centered location pin is rendered into
     the JPEG pixels. Default False — new chips are raw imagery and the pin
     is overlaid client-side. Set True only for legacy/regenerate flows
     that still bake the pin in.
+
+    Returns the dev-side status code (200/201). Logs to stderr if prod
+    insert fails so the dev write isn't silently de-synced; we deliberately
+    don't raise — a one-off prod failure shouldn't kill a long backfill.
     """
     taken = item.datetime
     if taken is None:
@@ -253,7 +284,8 @@ def insert_spot_image(spot_id, storage_url, storage_key, item, size, supa_key, p
         'satellite_size': f'{size[0]}x{size[1]}',
         'metadata': {'pin_baked': bool(pin_baked)},
     }
-    return http_post(
+
+    dev_status = http_post(
         f'{SUPABASE_URL}/rest/v1/spot_images',
         {
             'apikey': supa_key,
@@ -263,6 +295,28 @@ def insert_spot_image(spot_id, storage_url, storage_key, item, size, supa_key, p
         },
         body,
     )
+
+    # Dual-write to prod. Same row payload — spot_id is identical across
+    # dev/prod after the 2026-05-04 migration. Failures here log but don't
+    # raise; backfill continues.
+    try:
+        prod_key = load_prod_service_key()
+        prod_status = http_post(
+            f'{PROD_SUPABASE_URL}/rest/v1/spot_images',
+            {
+                'apikey': prod_key,
+                'Authorization': f'Bearer {prod_key}',
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal',
+            },
+            body,
+        )
+        if prod_status >= 400:
+            sys.stderr.write(f'[NAIP dual-write] prod insert failed for spot {spot_id}: status {prod_status}\n')
+    except Exception as exc:
+        sys.stderr.write(f'[NAIP dual-write] prod insert exception for spot {spot_id}: {exc}\n')
+
+    return dev_status
 
 
 def main():
