@@ -1038,14 +1038,19 @@ const DispersedExplorer = () => {
       // Same Set is read by AdminSpotReview's bulk-delete button.
       if (removeIds.has(spot.id)) return false;
 
-      // Restricted-area check applies to ALL spots, including community.
-      // No dispersed camping allowed inside National Parks / State Parks.
-      if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
-
-      // Heuristic gates (false-dead-end, near-campground, score gate,
-      // dedup) apply ONLY to algorithmically-derived spots. Vouched-for
-      // data (Known / Community / Utilities) bypasses all of them.
+      // Vouched-for data bypasses EVERY downstream gate:
+      //   - Utilities (water / shower / laundromat) are omnipresent and
+      //     not bound by dispersed-camping rules — a water spigot in a
+      //     state park visitor center is a real spot, not a violation.
+      //   - Known / Community / Informal sites were already filtered for
+      //     legitimacy at import time; re-checking here drops legit rows.
+      // ALL of these short-circuit before restricted-area / polygon /
+      // false-dead-end / dedup checks.
       if (!isAlgorithmicDerived(spot)) return true;
+
+      // Restricted-area check applies only to algorithmic derived spots
+      // (which we can't trust about being inside a National Park boundary).
+      if (isWithinRestrictedArea(spot.lat, spot.lng)) return false;
 
       // First check: filter out false dead-ends (actually intersections)
       // This matches the logic in use-dispersed-roads.ts for Full mode
