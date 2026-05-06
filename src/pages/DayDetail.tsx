@@ -25,6 +25,7 @@ import {
   Wind,
   SpinnerGap,
   Camera,
+  Sparkle,
 } from '@phosphor-icons/react';
 import { useTrip } from '@/context/TripContext';
 import { GoogleMap } from '@/components/GoogleMap';
@@ -35,6 +36,7 @@ import { toast } from 'sonner';
 import { AlternativeHikesModal } from '@/components/AlternativeHikesModal';
 import { AlternativeCampsitesModal } from '@/components/AlternativeCampsitesModal';
 import { AddStopModal } from '@/components/AddStopModal';
+import { SuggestPoiModal } from '@/components/SuggestPoiModal';
 import { createMarkerIcon } from '@/utils/mapMarkers';
 import { MapStopInfoWindow } from '@/components/trip-detail/MapStopInfoWindow';
 import { estimateDayTime } from '@/utils/tripValidation';
@@ -138,6 +140,7 @@ const DayDetail = () => {
   const [selectedCampsiteForSwap, setSelectedCampsiteForSwap] = useState<TripStop | null>(null);
   const [selectedStop, setSelectedStop] = useState<TripStop | null>(null);
   const [addStopModalOpen, setAddStopModalOpen] = useState(false);
+  const [suggestPoiModalOpen, setSuggestPoiModalOpen] = useState(false);
   const [weather, setWeather] = useState<WeatherForecast | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [endLocationName, setEndLocationName] = useState<string | null>(null);
@@ -602,12 +605,18 @@ const DayDetail = () => {
 
               {/* Stops */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <Mono className="text-ink-2">Stops</Mono>
-                  <Pill variant="ghost" sm mono={false} onClick={() => setAddStopModalOpen(true)}>
-                    <Plus className="w-3.5 h-3.5" weight="bold" />
-                    Add hike
-                  </Pill>
+                  <div className="flex items-center gap-2">
+                    <Pill variant="ghost" sm mono={false} onClick={() => setSuggestPoiModalOpen(true)}>
+                      <Sparkle className="w-3.5 h-3.5" weight="bold" />
+                      Suggest
+                    </Pill>
+                    <Pill variant="ghost" sm mono={false} onClick={() => setAddStopModalOpen(true)}>
+                      <Plus className="w-3.5 h-3.5" weight="bold" />
+                      Add hike
+                    </Pill>
+                  </div>
                 </div>
 
                 {day.stops.length === 0 ? (
@@ -783,6 +792,14 @@ const DayDetail = () => {
         onAddStop={handleAddStop}
       />
 
+      <SuggestPoiModal
+        isOpen={suggestPoiModalOpen}
+        onClose={() => setSuggestPoiModalOpen(false)}
+        trip={generatedTrip}
+        day={day}
+        onAddStop={handleAddStop}
+      />
+
       {selectedCampsiteForSwap && (
         <AlternativeCampsitesModal
           isOpen={campsiteModalOpen}
@@ -794,6 +811,7 @@ const DayDetail = () => {
           searchLat={selectedCampsiteForSwap.coordinates.lat}
           searchLng={selectedCampsiteForSwap.coordinates.lng}
           onSelectCampsite={handleSwapCampsite}
+          tripConfig={generatedTrip.config}
         />
       )}
     </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { X, CloudCheck, SpinnerGap } from "@phosphor-icons/react";
+import { X, CloudCheck, SpinnerGap, Sparkle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Mono, Pill } from "@/components/redesign";
 import { WizardProgress } from "@/components/wizard/WizardProgress";
@@ -102,6 +102,8 @@ const CreateTrip = () => {
   // surfaced UI for these is dormant until the wireframe is fleshed out).
   const [activities, setActivities] = useState<string[]>(["hiking"]);
   const [offroadVehicle, setOffroadVehicle] = useState<'4wd-high' | 'awd-medium'>('4wd-high');
+  const [hikingDifficulty, setHikingDifficulty] = useState<'easy' | 'moderate' | 'hard'>('moderate');
+  const [bikingDifficulty, setBikingDifficulty] = useState<'easy' | 'moderate' | 'hard'>('moderate');
   const [pacePreference, setPacePreference] = useState<PacePreference>('moderate');
 
   // Route prefs
@@ -134,12 +136,14 @@ const CreateTrip = () => {
     baseCampMode,
     activities,
     offroadVehicle,
+    hikingDifficulty,
+    bikingDifficulty,
     pacePreference,
     travelStyle,
     maxDrivingHours,
     activitiesMode,
     manualDays: [],
-  }), [tripName, startLocation, endLocation, returnToStart, duration, startDate, destinations, globalLodging, baseCampMode, activities, offroadVehicle, pacePreference, travelStyle, maxDrivingHours, activitiesMode]);
+  }), [tripName, startLocation, endLocation, returnToStart, duration, startDate, destinations, globalLodging, baseCampMode, activities, offroadVehicle, hikingDifficulty, bikingDifficulty, pacePreference, travelStyle, maxDrivingHours, activitiesMode]);
 
   // Restore state from draft
   const restoreFromDraft = useCallback((draftData: typeof draft) => {
@@ -157,6 +161,8 @@ const CreateTrip = () => {
     setBaseCampMode(state.baseCampMode ?? false);
     setActivities(state.activities || ['hiking']);
     setOffroadVehicle(state.offroadVehicle || '4wd-high');
+    setHikingDifficulty(state.hikingDifficulty || 'moderate');
+    setBikingDifficulty(state.bikingDifficulty || 'moderate');
     setPacePreference(state.pacePreference || 'moderate');
     setMaxDrivingHours(state.maxDrivingHours || 6);
     setActivitiesMode(state.activitiesMode || 'ai');
@@ -478,6 +484,78 @@ const CreateTrip = () => {
     }
   };
 
+  // Dev shortcut: skip the wizard and generate a hardcoded St. George → Moab
+  // 6-day trip so we can exercise the POI suggestion flow against the Moab
+  // POIs already loaded in Dev Supabase.
+  const handleGenerateMoabTrip = async () => {
+    const baseName = 'Moab Test Trip';
+    let candidate = baseName;
+    let suffix = 2;
+    while (tripNameExists(candidate)) {
+      candidate = `${baseName} ${suffix++}`;
+    }
+
+    const start: TripDestination = {
+      id: 'dev-st-george',
+      placeId: 'dev-st-george',
+      name: 'St. George, UT',
+      address: 'St. George, UT',
+      coordinates: { lat: 37.0965, lng: -113.5684 },
+    };
+    const moab: TripDestination = {
+      id: 'dev-moab',
+      placeId: 'dev-moab',
+      name: 'Moab, UT',
+      address: 'Moab, UT',
+      coordinates: { lat: 38.5733, lng: -109.5498 },
+      daysAtDestination: 5,
+      aiActivities: true,
+    };
+
+    const tripConfig: TripConfig = {
+      name: candidate,
+      duration: 6,
+      startLocation: start,
+      destinations: [moab],
+      returnToStart: true,
+      sameCampsite: false,
+      activitiesPerDay: 1,
+      vehicleType: 'suv',
+      lodgingPreference: 'dispersed',
+      activities: ['hiking', 'photography'],
+      hikingDifficulty: 'moderate',
+      hikingPreference: 'daily',
+      pacePreference: 'moderate',
+      travelStyle: 'direct',
+      maxDrivingHoursPerDay: 6,
+      dailyStartTime: '08:00',
+      returnToCampTime: '18:00',
+    };
+
+    try {
+      const trip = await generateTrip(tripConfig);
+      if (!trip) {
+        toast.error('Failed to generate Moab trip', {
+          description: generatorError || 'Please try again',
+        });
+        return;
+      }
+      setGeneratedTrip(trip);
+      try {
+        await saveTrip(trip);
+      } catch (saveErr) {
+        console.warn('Failed to persist Moab test trip:', saveErr);
+      }
+      deleteDraft();
+      toast.success('Moab test trip created', { description: candidate });
+      navigate(getTripUrl(trip.config.name));
+    } catch (err) {
+      toast.error('Failed to generate Moab trip', {
+        description: err instanceof Error ? err.message : 'Please try again',
+      });
+    }
+  };
+
   const handleCreateTrip = async () => {
     if (destinations.length === 0) {
       toast.error("Please add at least one destination");
@@ -588,6 +666,8 @@ const CreateTrip = () => {
       lodgingPreference: globalLodging,
       activities: activities as any[],
       offroadVehicleType: activities.includes('offroading') ? offroadVehicle : undefined,
+      hikingDifficulty: activities.includes('hiking') ? hikingDifficulty : undefined,
+      bikingDifficulty: activities.includes('biking') ? bikingDifficulty : undefined,
       hikingPreference: activities.includes('hiking') ? 'daily' : 'none',
       startDate: startDateStr,
       endDate: endDateStr,
@@ -685,6 +765,10 @@ const CreateTrip = () => {
             setMode={setActivitiesMode}
             activities={activities}
             setActivities={setActivities}
+            hikingDifficulty={hikingDifficulty}
+            setHikingDifficulty={setHikingDifficulty}
+            bikingDifficulty={bikingDifficulty}
+            setBikingDifficulty={setBikingDifficulty}
           />
         );
       default:
@@ -716,6 +800,20 @@ const CreateTrip = () => {
                 </h1>
               </div>
             </div>
+
+            {/* Dev shortcut: skip the wizard and bootstrap a Moab test trip. */}
+            {import.meta.env.DEV && (
+              <Pill
+                variant="ghost"
+                sm
+                mono={false}
+                onClick={handleGenerateMoabTrip}
+                disabled={generating}
+              >
+                <Sparkle className="w-3.5 h-3.5" weight="bold" />
+                Moab test trip
+              </Pill>
+            )}
 
             {/* Draft save indicator */}
             {draftSaving ? (

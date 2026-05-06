@@ -12,6 +12,7 @@ import {
 } from '@phosphor-icons/react';
 import { TripStop } from '@/types/trip';
 import { getAllTrailsUrl } from '@/utils/hikeUtils';
+import { getDrivingInfo } from '@/utils/drivingInfo';
 import { Mono } from '@/components/redesign';
 import { cn } from '@/lib/utils';
 
@@ -36,78 +37,6 @@ interface HikeOption {
   placeId?: string;
   distance?: number;
   drivingMinutes?: number;
-}
-
-interface DrivingInfo {
-  distanceMiles: number;
-  durationMinutes: number;
-  isReachable: boolean;
-}
-
-async function getDrivingInfo(
-  originLat: number,
-  originLng: number,
-  destLat: number,
-  destLng: number,
-  destName?: string
-): Promise<DrivingInfo> {
-  const R = 3959;
-  const dLat = (destLat - originLat) * (Math.PI / 180);
-  const dLng = (destLng - originLng) * (Math.PI / 180);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(originLat * (Math.PI / 180)) *
-      Math.cos(destLat * (Math.PI / 180)) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const straightLineDistance = R * c;
-  const estimatedRoadDistance = straightLineDistance * 2.5;
-
-  const fallback: DrivingInfo = {
-    distanceMiles: estimatedRoadDistance,
-    durationMinutes: Math.round((estimatedRoadDistance / 30) * 60),
-    isReachable: true,
-  };
-
-  if (!window.google?.maps) {
-    console.log(`[AddStopModal] Google Maps not loaded, using fallback for ${destName}`);
-    return fallback;
-  }
-
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      console.log(`[AddStopModal] Timeout for ${destName}, using fallback: ${Math.round(estimatedRoadDistance)} mi`);
-      resolve(fallback);
-    }, 8000);
-
-    try {
-      const directionsService = new google.maps.DirectionsService();
-      directionsService.route(
-        {
-          origin: { lat: originLat, lng: originLng },
-          destination: { lat: destLat, lng: destLng },
-          travelMode: google.maps.TravelMode.DRIVING,
-        },
-        (result, status) => {
-          clearTimeout(timeout);
-          if (status === google.maps.DirectionsStatus.OK && result?.routes[0]?.legs[0]) {
-            const leg = result.routes[0].legs[0];
-            const miles = (leg.distance?.value || 0) / 1609.34;
-            const mins = (leg.duration?.value || 0) / 60;
-            resolve({ distanceMiles: miles, durationMinutes: mins, isReachable: true });
-          } else if (status === google.maps.DirectionsStatus.ZERO_RESULTS) {
-            resolve({ ...fallback, isReachable: false });
-          } else {
-            resolve(fallback);
-          }
-        }
-      );
-    } catch {
-      clearTimeout(timeout);
-      resolve(fallback);
-    }
-  });
 }
 
 async function fetchNearbyHikes(

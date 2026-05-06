@@ -25,6 +25,24 @@ session. What's left is hosting the Python worker.
   (slow) or get bulk-enqueued by the admin tool above (fast, once the
   worker is up). Either way, blocked on the worker rollout below.
 
+## Route-difficulty tagging on POIs + spots
+
+The trip planner picks campsites and POIs by haversine + a coarse road-factor
+heuristic, which is wildly wrong in canyon terrain (Moab) — a site "1.5 mi
+from anchor" can be a 30+ minute drive around the rim. The auto-gen now
+re-ranks the top haversine candidates with a real Google Directions call,
+but that's a band-aid. The real fix is in the data:
+
+- **Pipeline-side**: tag each `points_of_interest` and `spots` row with
+  driving difficulty signals — surface category, 4WD-only, access road
+  smoothness, "passenger-reachable" boolean, and ideally a precomputed
+  trailhead lat/lng for backcountry POIs. The `spots` table already has
+  some of this in `extra.access_road` / `extra.access_difficulty` /
+  `extra.is_passenger_reachable`; POIs don't yet.
+- **Read-time**: scorer should treat the difficulty as a hard gate when
+  vehicle ≠ 4WD, and as a tiebreaker otherwise. Removes the need for
+  per-pick Google Directions calls in the common case.
+
 ## Spot-quality filters rebuild
 
 Tracked in auto-memory (`memory/project_spot_quality_filters.md`). Derived

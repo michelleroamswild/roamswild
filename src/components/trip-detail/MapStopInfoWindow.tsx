@@ -53,6 +53,17 @@ export const MapStopInfoWindow = ({ stop, onClose }: MapStopInfoWindowProps) => 
           </p>
         )}
         <button
+          onClick={() => {
+            navigator.clipboard?.writeText(
+              `${stop.coordinates.lat.toFixed(5)}, ${stop.coordinates.lng.toFixed(5)}`,
+            );
+          }}
+          title="Click to copy"
+          className="mt-1 text-[11px] font-mono tracking-[0.05em] text-ink-3 hover:text-ink transition-colors block"
+        >
+          {stop.coordinates.lat.toFixed(5)}, {stop.coordinates.lng.toFixed(5)}
+        </button>
+        <button
           onClick={() =>
             window.open(
               `https://www.google.com/maps/dir/?api=1&destination=${stop.coordinates.lat},${stop.coordinates.lng}`,

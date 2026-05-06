@@ -49,6 +49,8 @@ export interface TripWizardState {
   baseCampMode: boolean;
   activities: string[];
   offroadVehicle: '4wd-high' | 'awd-medium';
+  hikingDifficulty?: 'easy' | 'moderate' | 'hard';
+  bikingDifficulty?: 'easy' | 'moderate' | 'hard';
   pacePreference: PacePreference;
   travelStyle: TravelStyle;
   maxDrivingHours: number;

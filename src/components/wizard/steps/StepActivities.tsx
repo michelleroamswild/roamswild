@@ -1,6 +1,7 @@
-import { Sparkle, PencilSimple, Check, Mountains, Camera, Jeep } from "@phosphor-icons/react";
+import { Sparkle, PencilSimple, Check, Mountains, Camera, Jeep, Drop, Car, Bicycle } from "@phosphor-icons/react";
 import { Mono } from "@/components/redesign";
 import { cn } from "@/lib/utils";
+import type { DifficultyLevel } from "@/types/trip";
 
 export type ActivitiesMode = 'ai' | 'manual';
 
@@ -9,6 +10,10 @@ interface StepActivitiesProps {
   setMode: (mode: ActivitiesMode) => void;
   activities: string[];
   setActivities: (activities: string[]) => void;
+  hikingDifficulty: DifficultyLevel;
+  setHikingDifficulty: (level: DifficultyLevel) => void;
+  bikingDifficulty: DifficultyLevel;
+  setBikingDifficulty: (level: DifficultyLevel) => void;
 }
 
 type AccentName = 'water' | 'clay' | 'sage' | 'ember';
@@ -29,26 +34,77 @@ const MODE_OPTIONS: Array<{
   {
     id: 'ai',
     title: 'Surprise me',
-    description: 'AI picks the highlights at each destination — hikes, viewpoints, towns.',
+    description: 'We pick the best fits for each day from our local POI database — ranked by location, time fit, and your skill level.',
     icon: Sparkle,
     accent: 'water',
   },
   {
     id: 'manual',
     title: "I'll choose",
-    description: 'Pick activities yourself from suggestions for each destination.',
+    description: "Browse ranked suggestions per day and pick yourself.",
     icon: PencilSimple,
     accent: 'clay',
   },
 ];
 
 const ACTIVITY_TYPES: Array<{ id: string; label: string; description: string; icon: typeof Mountains; accent: AccentName }> = [
-  { id: 'hiking',      label: 'Hiking',      description: 'Find trails near your route — easy strolls to summit pushes.', icon: Mountains, accent: 'sage' },
-  { id: 'photography', label: 'Photography', description: 'Surface scenic viewpoints and golden-hour-friendly stops.',     icon: Camera,    accent: 'ember' },
-  { id: 'offroading',  label: 'Offroading',  description: 'Find OHV trails and high-clearance routes along the way.',      icon: Jeep,      accent: 'clay' },
+  { id: 'hiking',         label: 'Hiking',         description: 'Trails near your route — easy strolls to summit pushes.',           icon: Mountains, accent: 'sage' },
+  { id: 'biking',         label: 'Biking',         description: 'Mountain bike singletrack and gravel rides along the way.',         icon: Bicycle,   accent: 'sage' },
+  { id: 'photography',    label: 'Photography',    description: 'Scenic viewpoints and golden-hour-friendly stops.',                  icon: Camera,    accent: 'ember' },
+  { id: 'offroading',     label: 'Offroading',     description: 'OHV trails and high-clearance routes along the way.',                icon: Jeep,      accent: 'clay' },
+  { id: 'water',          label: 'Water',          description: 'Lakes, swimming holes, beaches, river access points.',               icon: Drop,      accent: 'water' },
+  { id: 'scenic_driving', label: 'Scenic driving', description: 'Designated scenic byways and panoramic pull-offs along your route.', icon: Car,       accent: 'clay' },
 ];
 
-export function StepActivities({ mode, setMode, activities, setActivities }: StepActivitiesProps) {
+const DIFFICULTY_OPTIONS: Array<{ id: DifficultyLevel; label: string; description: string }> = [
+  { id: 'easy',     label: 'Easy',     description: 'Flat or rolling, well-marked, family-friendly.' },
+  { id: 'moderate', label: 'Moderate', description: 'Some climbing, technical sections, longer days.' },
+  { id: 'hard',     label: 'Hard',     description: 'Steep, exposed, or all-day efforts.' },
+];
+
+function DifficultyPicker({
+  label,
+  value,
+  onChange,
+}: { label: string; value: DifficultyLevel; onChange: (v: DifficultyLevel) => void }) {
+  return (
+    <div className="mt-3 ml-14 space-y-2">
+      <Mono className="text-ink-3 text-[11px] block">{label}</Mono>
+      <div className="grid grid-cols-3 gap-2">
+        {DIFFICULTY_OPTIONS.map((opt) => {
+          const selected = value === opt.id;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => onChange(opt.id)}
+              className={cn(
+                'p-3 rounded-[10px] border text-left transition-all',
+                selected
+                  ? 'border-sage bg-sage/[0.06]'
+                  : 'border-line bg-white dark:bg-paper-2 hover:border-ink-3/40',
+              )}
+            >
+              <div className="text-[13px] font-sans font-semibold text-ink">{opt.label}</div>
+              <div className="text-[11px] text-ink-3 mt-0.5 leading-[1.4]">{opt.description}</div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function StepActivities({
+  mode,
+  setMode,
+  activities,
+  setActivities,
+  hikingDifficulty,
+  setHikingDifficulty,
+  bikingDifficulty,
+  setBikingDifficulty,
+}: StepActivitiesProps) {
   const toggleActivity = (id: string, checked: boolean) => {
     if (checked) setActivities([...activities, id]);
     else setActivities(activities.filter((x) => x !== id));
@@ -74,33 +130,48 @@ export function StepActivities({ mode, setMode, activities, setActivities }: Ste
             const a = ACCENT[accent];
             const selected = activities.includes(id);
             return (
-              <label
-                key={id}
-                className={cn(
-                  'flex items-start gap-4 p-4 rounded-[14px] border bg-white dark:bg-paper-2 cursor-pointer transition-all',
-                  selected ? `${a.selectedBorder} ${a.selectedBg}` : 'border-line hover:border-ink-3/40',
+              <div key={id}>
+                <label
+                  className={cn(
+                    'flex items-start gap-4 p-4 rounded-[14px] border bg-white dark:bg-paper-2 cursor-pointer transition-all',
+                    selected ? `${a.selectedBorder} ${a.selectedBg}` : 'border-line hover:border-ink-3/40',
+                  )}
+                >
+                  <div className={cn('w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0', a.iconBg, a.iconText)}>
+                    <Icon className="w-5 h-5" weight="regular" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">{label}</div>
+                    <p className="text-[13px] text-ink-3 mt-0.5 leading-[1.5]">{description}</p>
+                  </div>
+                  <div className={cn(
+                    'w-5 h-5 rounded-[5px] border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-colors',
+                    selected ? a.dot : 'border-ink-3/40 bg-transparent',
+                  )}>
+                    {selected && <Check className="w-3 h-3 text-cream" weight="bold" />}
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={(e) => toggleActivity(id, e.target.checked)}
+                    className="sr-only"
+                  />
+                </label>
+                {selected && id === 'hiking' && (
+                  <DifficultyPicker
+                    label="Hiking level"
+                    value={hikingDifficulty}
+                    onChange={setHikingDifficulty}
+                  />
                 )}
-              >
-                <div className={cn('w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0', a.iconBg, a.iconText)}>
-                  <Icon className="w-5 h-5" weight="regular" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-sans font-semibold tracking-[-0.005em] text-ink">{label}</div>
-                  <p className="text-[13px] text-ink-3 mt-0.5 leading-[1.5]">{description}</p>
-                </div>
-                <div className={cn(
-                  'w-5 h-5 rounded-[5px] border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-colors',
-                  selected ? a.dot : 'border-ink-3/40 bg-transparent',
-                )}>
-                  {selected && <Check className="w-3 h-3 text-cream" weight="bold" />}
-                </div>
-                <input
-                  type="checkbox"
-                  checked={selected}
-                  onChange={(e) => toggleActivity(id, e.target.checked)}
-                  className="sr-only"
-                />
-              </label>
+                {selected && id === 'biking' && (
+                  <DifficultyPicker
+                    label="Biking level"
+                    value={bikingDifficulty}
+                    onChange={setBikingDifficulty}
+                  />
+                )}
+              </div>
             );
           })}
         </div>

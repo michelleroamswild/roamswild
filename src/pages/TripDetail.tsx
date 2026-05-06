@@ -1324,19 +1324,24 @@ const TripDetail = () => {
           searchLat={selectedCampsiteForSwap.coordinates.lat}
           searchLng={selectedCampsiteForSwap.coordinates.lng}
           onSelectCampsite={handleSwapCampsite}
-          tripStartDate={tripConfig.startDate ? (() => {
-            // Calculate the specific date for this campsite's day
-            const [year, month, day] = tripConfig.startDate!.split('-').map(Number);
-            const date = new Date(year, month - 1, day + (selectedCampsiteForSwap.day || 1) - 1);
-            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-          })() : undefined}
-          tripDuration={1}
-          lodgingPreference={
-            // If user clicked "Search for established campgrounds" on a no-dispersed marker, force campground search
-            selectedCampsiteForSwap.id === 'no-dispersed-found' || selectedCampsiteForSwap.note === 'NO_DISPERSED_SITES_FOUND'
-              ? 'campground'
-              : tripConfig.lodgingPreference
-          }
+          tripConfig={(() => {
+            const dayStartDate = tripConfig.startDate ? (() => {
+              const [year, month, day] = tripConfig.startDate!.split('-').map(Number);
+              const date = new Date(year, month - 1, day + (selectedCampsiteForSwap.day || 1) - 1);
+              return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            })() : undefined;
+            // Force campground search when the user explicitly asked for it
+            // from a no-dispersed marker.
+            const forceCampground =
+              selectedCampsiteForSwap.id === 'no-dispersed-found' ||
+              selectedCampsiteForSwap.note === 'NO_DISPERSED_SITES_FOUND';
+            return {
+              ...tripConfig,
+              startDate: dayStartDate,
+              duration: 1,
+              lodgingPreference: forceCampground ? 'campground' : tripConfig.lodgingPreference,
+            };
+          })()}
         />
       )}
 

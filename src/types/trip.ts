@@ -69,7 +69,19 @@ export interface TripDay {
 
 export type VehicleType = 'sedan' | 'suv' | '4wd' | 'rv';
 export type LodgingType = 'dispersed' | 'campground' | 'cabin' | 'hotel' | 'mixed' | 'other';
-export type ActivityType = 'hiking' | 'biking' | 'climbing' | 'fishing' | 'photography' | 'wildlife' | 'offroading';
+export type ActivityType =
+  | 'hiking'
+  | 'biking'
+  | 'climbing'
+  | 'fishing'
+  | 'photography'
+  | 'wildlife'
+  | 'offroading'
+  | 'water'
+  | 'scenic_driving';
+// Self-rated difficulty level. Maps to UGRC difficulty (Easy/Moderate/Difficult)
+// and OSM sac_scale: easy=T1, moderate=T2-T3, hard=T4+.
+export type DifficultyLevel = 'easy' | 'moderate' | 'hard';
 export type PacePreference = 'relaxed' | 'moderate' | 'packed';
 // Direct = drive straight, minimal detours. Scenic = find cool stops along
 // the way. Surfaced when total drive is long enough to matter.
@@ -102,6 +114,11 @@ export interface TripConfig {
   destinationLodging?: DestinationLodging[]; // Per-destination lodging when useSameLodgingType is false
   activities?: ActivityType[];
   offroadVehicleType?: '4wd-high' | 'awd-medium'; // Vehicle capability for offroading
+  // Per-activity difficulty self-rating, used by the POI scorer to gate
+  // candidates by user fit. Only set when the corresponding activity is
+  // selected. Default = 'moderate'.
+  hikingDifficulty?: DifficultyLevel;
+  bikingDifficulty?: DifficultyLevel;
   // Hiking preferences
   hikingPreference?: 'none' | 'surprise' | 'daily'; // none = no hikes, surprise = AI picks best days, daily = hike every day
   // Advanced options
