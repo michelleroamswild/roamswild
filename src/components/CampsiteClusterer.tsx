@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markerclusterer';
 import type { Campsite } from '@/types/campsite';
-import { createSimpleMarkerIcon } from '@/utils/mapMarkers';
 
 // Migrated from deprecated google.maps.Marker → google.maps.marker.AdvancedMarkerElement.
 
@@ -12,14 +11,33 @@ interface CampsiteClustererProps {
   selectedCampsiteId: string | null;
 }
 
+// Match the explorer's "my campsite" pin style (DispersedMap.buildCirclePin).
+// Solid plum --pin-mine fill, cream stroke for normal, ink stroke for active.
+const PIN_MINE = 'hsl(295 32% 42%)';
+
+const buildPinContent = (isActive: boolean): HTMLElement => {
+  const scale = isActive ? 12 : 9;
+  const diameter = scale * 2;
+  const strokeWidth = isActive ? 2.5 : 2;
+  const strokeColor = isActive ? '#3f3e2c' : 'hsl(36 23% 97%)';
+  const div = document.createElement('div');
+  div.style.width = `${diameter}px`;
+  div.style.height = `${diameter}px`;
+  div.style.borderRadius = '50%';
+  div.style.backgroundColor = PIN_MINE;
+  div.style.border = `${strokeWidth}px solid ${strokeColor}`;
+  div.style.cursor = 'pointer';
+  return div;
+};
+
 const buildClusterContent = (count: number): HTMLElement => {
   const size = Math.min(24 + Math.log2(count) * 8, 56);
   const div = document.createElement('div');
   div.style.width = `${size}px`;
   div.style.height = `${size}px`;
   div.style.borderRadius = '50%';
-  div.style.backgroundColor = '#a855f7';
-  div.style.border = '2px solid #ffffff';
+  div.style.backgroundColor = PIN_MINE;
+  div.style.border = '2px solid hsl(36 23% 97%)';
   div.style.display = 'flex';
   div.style.alignItems = 'center';
   div.style.justifyContent = 'center';
@@ -27,7 +45,6 @@ const buildClusterContent = (count: number): HTMLElement => {
   div.style.fontFamily = 'Manrope, sans-serif';
   div.style.fontSize = size > 40 ? '14px' : '12px';
   div.style.fontWeight = '700';
-  div.style.opacity = '0.9';
   div.style.cursor = 'pointer';
   div.textContent = String(count);
   return div;
@@ -82,10 +99,7 @@ export function CampsiteClusterer({
         const marker = new google.maps.marker.AdvancedMarkerElement({
           position: { lat: campsite.lat, lng: campsite.lng },
           title: campsite.name,
-          content: createSimpleMarkerIcon('camp', {
-            isActive: isSelected,
-            size: isSelected ? 10 : 8,
-          }),
+          content: buildPinContent(isSelected),
           zIndex: isSelected ? 1000 : 1,
         });
 
@@ -120,10 +134,7 @@ export function CampsiteClusterer({
   useEffect(() => {
     markersRef.current.forEach((marker, id) => {
       const isSelected = selectedCampsiteId === id;
-      marker.content = createSimpleMarkerIcon('camp', {
-        isActive: isSelected,
-        size: isSelected ? 10 : 8,
-      });
+      marker.content = buildPinContent(isSelected);
       marker.zIndex = isSelected ? 1000 : 1;
     });
   }, [selectedCampsiteId]);

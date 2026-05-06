@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { GoogleMap } from '@/components/GoogleMap';
+import { MapControls } from '@/components/MapControls';
 import { CampsiteClusterer } from '@/components/CampsiteClusterer';
 import { useCampsites } from '@/context/CampsitesContext';
 import { useFriends } from '@/context/FriendsContext';
@@ -218,12 +219,14 @@ const Campsites = () => {
       <main className="w-full">
         <div className="grid lg:grid-cols-2">
           {/* Map — sticky on lg, hidden on mobile */}
-          <div className="hidden lg:block h-[calc(100vh-80px)] sticky top-[80px]">
+          <div className="hidden lg:block h-[calc(100vh-80px)] sticky top-[80px] relative">
             <GoogleMap
               center={mapCenter}
               zoom={displayedCampsites.length === 1 ? 12 : 5}
               className="w-full h-full"
               onLoad={onMapLoad}
+              options={{ mapTypeId: 'hybrid' }}
+              mapControls={false}
             >
               <CampsiteClusterer
                 map={mapRef.current}
@@ -235,6 +238,12 @@ const Campsites = () => {
                 selectedCampsiteId={selectedCampsiteId}
               />
             </GoogleMap>
+            {/* Zoom controls — bottom-right. The wrapper's auto-controls
+                live top-right; mapControls={false} disables those so the
+                explicit ones below can take over. */}
+            <div className="absolute bottom-3 right-3 z-10">
+              <MapControls map={mapRef.current} showZoom />
+            </div>
           </div>
 
           {/* List section */}
